@@ -649,19 +649,40 @@ export class World {
     this.scene.add(p)
   }
 
-  /** satın alınan (henüz betonsuz) arsayı kesikli sınırla işaretle */
+  /** satın alınan (henüz betonsuz) arsayı ahşap kazık + ip sınırla işaretle */
   markOwned(c: number, r: number) {
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]
     const g = new THREE.Group()
-    const mat = new THREE.MeshLambertMaterial({ color: 0xf5f4ef, transparent: true, opacity: 0.75 })
-    const dash = (px: number, py: number, w: number, d: number) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat)
-      m.position.set(px, py, 0.03)
+    const rope = new THREE.MeshLambertMaterial({ color: 0xe0b13e })
+    const stake = (px: number, py: number) => cyl(0.07, 0.65, 0x8a6a48, px, py, 0.32, 'z', g)
+    // köşe + ara kazıklar
+    const xs: number[] = []
+    for (let x = x0 + 0.3; x <= x1 - 0.29; x += (x1 - x0 - 0.6) / 3) xs.push(x)
+    const ys: number[] = []
+    for (let y = y0 + 0.3; y <= y1 - 0.29; y += (y1 - y0 - 0.6) / 3) ys.push(y)
+    for (const x of xs) { stake(x, y0 + 0.3); stake(x, y1 - 0.3) }
+    for (const y of ys) { stake(x0 + 0.3, y); stake(x1 - 0.3, y) }
+    // gergin ip (ince sarı şerit)
+    const line = (px: number, py: number, w: number, d: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, d, 0.03), rope)
+      m.position.set(px, py, 0.55)
       g.add(m)
     }
-    for (let x = x0 + 0.8; x < x1 - 0.4; x += 1.6) { dash(x, y0 + 0.1, 0.9, 0.12); dash(x, y1 - 0.1, 0.9, 0.12) }
-    for (let y = y0 + 0.8; y < y1 - 0.4; y += 1.6) { dash(x0 + 0.1, y, 0.12, 0.9); dash(x1 - 0.1, y, 0.12, 0.9) }
+    line((x0 + x1) / 2, y0 + 0.3, x1 - x0 - 0.6, 0.05)
+    line((x0 + x1) / 2, y1 - 0.3, x1 - x0 - 0.6, 0.05)
+    line(x0 + 0.3, (y0 + y1) / 2, 0.05, y1 - y0 - 0.6)
+    line(x1 - 0.3, (y0 + y1) / 2, 0.05, y1 - y0 - 0.6)
+    // köşede küçük "SAHİBİNDEN ALINDI" kazığı yerine tabela çivisi
+    const plate = canvasPanel(1.1, 0.5, 220, 100, (ctx, w, h) => {
+      ctx.fillStyle = '#f5f4ef'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 14); ctx.fill()
+      ctx.strokeStyle = '#27a05a'; ctx.lineWidth = 7; ctx.stroke()
+      ctx.fillStyle = '#27a05a'; ctx.font = '800 36px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('ARSAN', w / 2, h / 2 + 2)
+    })
+    plate.position.set(x0 + 0.6, y0 + 0.9, 0.9)
+    g.add(plate)
     this.scene.add(g)
   }
 
@@ -685,6 +706,11 @@ export class World {
       j.position.set(jx, (y0 + y1) / 2, 0.02)
       this.scene.add(j)
     }
+    // her betonlu arsaya çevre bordürü (yola bakan kenar hariç: col0 doğu, col3 batı)
+    if (c !== 3) box(0.18, d - 0.1, 0.13, 0xd8dbde, x0 + 0.1, (y0 + y1) / 2, 0.065, this.scene)
+    if (c !== 0) box(0.18, d - 0.1, 0.13, 0xd8dbde, x1 - 0.1, (y0 + y1) / 2, 0.065, this.scene)
+    box(w - 0.1, 0.18, 0.13, 0xd8dbde, (x0 + x1) / 2, y0 + 0.1, 0.065, this.scene)
+    box(w - 0.1, 0.18, 0.13, 0xd8dbde, (x0 + x1) / 2, y1 - 0.1, 0.065, this.scene)
     // istasyon kolonunun yol tarafı özel: rampa + bordür + lamba
     if (c === 0 && r === 0) {
       this.makeApron(APRON_SOUTH_Y)
@@ -701,6 +727,49 @@ export class World {
   rotateBuilding(id: string, rot: number) {
     const b = this.buildings.find(x => x.id === id)
     if (b) (b.group as THREE.Group).rotation.z = rot * Math.PI / 2
+  }
+
+  /** kart görselleri için özel örnek modeller (build fonksiyonu olmayan kalemler) */
+  thumbSource(id: string): THREE.Group | null {
+    if (id === 'sign' && this.signGroup) {
+      const g = this.signGroup.clone(true)
+      g.position.set(0, 0, 0)
+      return g
+    }
+    if (id === 'tank') {
+      const g = this.tankGroup.clone(true)
+      g.position.set(0, 0, 0)
+      g.traverse(o => { if ((o as THREE.Sprite).isSprite) o.visible = false })
+      return g
+    }
+    if (id === 'grid') {
+      const g = new THREE.Group()
+      cyl(0.1, 3.6, 0x59616b, 0, 0, 1.8, 'z', g)
+      box(1.7, 0.13, 0.13, 0x59616b, 0, 0, 3.2, g)
+      box(1.2, 0.11, 0.11, 0x59616b, 0, 0, 2.6, g)
+      for (const sx of [-0.6, 0.6]) cyl(0.04, 0.5, 0x2b2f33, sx, 0, 2.95, 'z', g)
+      box(0.5, 0.35, 0.7, 0xc7ccd1, 0, 0, 0.35, g)
+      return g
+    }
+    if (id === 'land' || id === 'pave') {
+      const g = new THREE.Group()
+      const mat = id === 'land' ? lam(0x86b06a) : this.concreteMat
+      const tile = new THREE.Mesh(new THREE.BoxGeometry(4.4, 4.4, 0.3), mat)
+      tile.position.z = 0.15
+      tile.castShadow = true
+      g.add(tile)
+      if (id === 'land') {
+        buildTreeProc(1.1, 1.1, 0.7, g)
+        const board = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.7), lam(0xf0f0ec))
+        board.position.set(-1, -1, 0.95)
+        g.add(board)
+        cyl(0.06, 0.7, 0x8a6a48, -1, -1, 0.55, 'z', g)
+      } else {
+        for (const k of [-1.1, 0, 1.1]) box(4.2, 0.06, 0.02, 0x7e858d, 0, k, 0.31, g)
+      }
+      return g
+    }
+    return null
   }
 
   /** yerleştirme önizlemesi: az önce kurulan binayı kayıttan düşüp grubunu döndürür */
@@ -1149,20 +1218,20 @@ export class World {
   }
 
   buildParking(pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(-2.2, 1.2)
+    const at = pos ?? new THREE.Vector2(0.4, -0.2)
     const g = new THREE.Group()
-    const pad = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 3.8), lam(0x6b7480))
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 3.1), lam(0x6b7480))
     pad.position.z = 0.02
     pad.receiveShadow = true
     g.add(pad)
-    // çizgili park yerleri (4 kapasite)
+    // çizgili park yerleri (4 kapasite, kompakt)
     for (let i = 0; i <= 4; i++) {
-      const line = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 3.4), lam(0xe8e4d8))
-      line.position.set(-2.3 + i * 1.15, 0, 0.03)
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 2.8), lam(0xe8e4d8))
+      line.position.set(-2.04 + i * 1.02, 0, 0.03)
       g.add(line)
     }
     for (let i = 0; i < 4; i++) {
-      box(0.7, 0.14, 0.1, 0xd8dbde, -1.72 + i * 1.15, -1.5, 0.05, g) // teker stoperi
+      box(0.62, 0.13, 0.1, 0xd8dbde, -1.53 + i * 1.02, -1.2, 0.05, g) // teker stoperi
     }
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
@@ -1176,7 +1245,7 @@ export class World {
     const g = b.group as THREE.Group
     g.updateMatrixWorld(true)
     return [0, 1, 2, 3].map(i => {
-      const local = new THREE.Vector3(-1.72 + i * 1.15, -0.2, 0)
+      const local = new THREE.Vector3(-1.53 + i * 1.02, -0.1, 0)
       return local.applyMatrix4(g.matrixWorld)
     })
   }

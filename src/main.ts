@@ -424,7 +424,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   truckpark: () => ({ w: 8, d: 6 }),
   airwater: () => ({ w: 1.6, d: 2 }),
   selfwash: () => ({ w: 5.5, d: 7 }),
-  parking: () => ({ w: 5.5, d: 4 }),
+  parking: () => ({ w: 4.6, d: 3.2 }),
 }
 
 /** taşıma bedeli: kuruluş maliyetinin ~%70'i */
@@ -512,13 +512,13 @@ function rebuildFromState() {
 
 function fixedObstacles(): Rect[] {
   const r: Rect[] = [
-    { cx: 4.1, cy: 0, w: 3.0, d: 48 },      // servis şeridi (araç yolu)
-    { cx: -4.4, cy: -5.4, w: 5.6, d: 6.6 }, // yakıt tankları
-    { cx: -5.0, cy: 4.5, w: 4.8, d: 5.4 },  // ofis
-    { cx: 4.0, cy: -11.5, w: 2.6, d: 3.8 }, // tabela
+    { cx: 4.2, cy: 0, w: 2.6, d: 48 },       // servis şeridi (araç yolu)
+    { cx: -4.55, cy: -5.4, w: 5.0, d: 6.2 }, // yakıt tankları
+    { cx: -5.0, cy: 4.5, w: 4.6, d: 5.0 },   // ofis
+    { cx: 4.0, cy: -11.5, w: 2.4, d: 3.4 },  // tabela
   ]
-  for (let i = 0; i < state.pumps; i++) r.push({ cx: 0.9, cy: PUMP_SLOTS_POS[i].y, w: 4.6, d: 4.2 })
-  for (let i = 0; i < state.evChargers; i++) r.push({ cx: 1.2, cy: EV_SLOTS_POS[i].y, w: 4.2, d: 2.8 })
+  for (let i = 0; i < state.pumps; i++) r.push({ cx: 0.9, cy: PUMP_SLOTS_POS[i].y, w: 4.4, d: 4.0 })
+  for (let i = 0; i < state.evChargers; i++) r.push({ cx: 1.2, cy: EV_SLOTS_POS[i].y, w: 4.0, d: 2.6 })
   return r
 }
 
@@ -569,6 +569,86 @@ function makePreview(id: string): THREE.Group | null {
   })
   return g
 }
+
+// ---- Kart görselleri: gerçek 3D modellerin PNG render'ları ----
+let thumbRenderer: THREE.WebGLRenderer | null = null
+const thumbCache = new Map<string, string>()
+
+function thumbKey(id: string): string {
+  if (id === 'market') return `market-${Math.min(state.marketLevel + 1, 2)}`
+  if (id === 'toilet') return `toilet-${Math.min(state.toiletLevel + 1, 2)}`
+  if (id === 'battery') return `battery-${Math.min(state.batteryLevel + 1, 3)}`
+  if (id === 'sign') return `sign-${Math.min(state.signLevel, 3)}`
+  return id
+}
+
+function buildThumbSubject(id: string): THREE.Group | null {
+  const special = world.thumbSource(id)
+  if (special) return special
+  if (id === 'pump') {
+    const i = Math.min(state.pumps, 3)
+    world.addPump(i)
+    const g = world.detachPreview(`pump-${i}`)
+    if (g) world.scene.remove(g)
+    return g
+  }
+  if (id === 'evcharger') {
+    const i = Math.min(state.evChargers, 3)
+    world.addEvCharger(i)
+    const g = world.detachPreview(`charger-${i}`)
+    if (g) world.scene.remove(g)
+    return g
+  }
+  if (id in PLACEABLE) {
+    const bump = id === 'market' ? 'marketLevel' : id === 'toilet' ? 'toiletLevel' : id === 'battery' ? 'batteryLevel' : null
+    let orig = 0
+    if (bump) {
+      orig = (state as any)[bump]
+      ;(state as any)[bump] = Math.min(orig + 1, id === 'battery' ? 3 : 2)
+    }
+    buildVisual(id, new THREE.Vector2(0, 0))
+    if (bump) (state as any)[bump] = orig
+    const g = world.detachPreview(id)
+    if (g) world.scene.remove(g)
+    return g
+  }
+  return null
+}
+
+function getThumbnail(id: string): string | null {
+  const key = thumbKey(id)
+  const hit = thumbCache.get(key)
+  if (hit) return hit
+  const subject = buildThumbSubject(id)
+  if (!subject) return null
+  subject.traverse(o => { if ((o as THREE.Sprite).isSprite) o.visible = false })
+  if (!thumbRenderer) {
+    thumbRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
+    thumbRenderer.setSize(240, 180)
+    thumbRenderer.toneMapping = THREE.ACESFilmicToneMapping
+    thumbRenderer.toneMappingExposure = 1.15
+  }
+  const sc = new THREE.Scene()
+  sc.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.35))
+  const sun = new THREE.DirectionalLight(0xfff0d8, 2.4)
+  sun.position.set(8, -5, 11)
+  sc.add(sun)
+  sc.add(subject)
+  const bb = new THREE.Box3().setFromObject(subject)
+  const center = bb.getCenter(new THREE.Vector3())
+  const size = bb.getSize(new THREE.Vector3())
+  const r = Math.max(size.x, size.y, size.z) * 0.6 + 0.5
+  const cam = new THREE.OrthographicCamera(-r * 1.33, r * 1.33, r, -r, 0.1, 200)
+  cam.up.set(0, 0, 1)
+  cam.position.copy(center).add(new THREE.Vector3(1, 2, 1).normalize().multiplyScalar(40))
+  cam.lookAt(center)
+  thumbRenderer.render(sc, cam)
+  const url = thumbRenderer.domElement.toDataURL('image/png')
+  thumbCache.set(key, url)
+  sc.remove(subject)
+  return url
+}
+ui.getThumb = getThumbnail
 
 /** ayak izi hücre çizgileri — kareler net görünsün */
 function footprintGrid(w: number, d: number): THREE.LineSegments {
@@ -1040,12 +1120,22 @@ const raycaster = new THREE.Raycaster()
 const pointer = new THREE.Vector2()
 let downX = 0, downY = 0, lastX = 0, lastY = 0, isDown = false, isDrag = false
 
+let grabPoint: THREE.Vector3 | null = null
+
+function groundPointAt(clientX: number, clientY: number): THREE.Vector3 | null {
+  pointer.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1)
+  raycaster.setFromCamera(pointer, camera)
+  const pt = new THREE.Vector3()
+  return raycaster.ray.intersectPlane(groundPlane, pt) ? pt : null
+}
+
 renderer.domElement.addEventListener('pointerdown', e => {
   // kamera kaydırma yalnızca sol tuşla; sağ tık sadece iptal işidir
   if (e.button !== 0) { isDown = false; return }
   isDown = true; isDrag = false
   downX = lastX = e.clientX
   downY = lastY = e.clientY
+  grabPoint = groundPointAt(e.clientX, e.clientY)
 })
 window.addEventListener('pointermove', e => {
   // yerleştirme / arsa seçim hayaleti imleci takip eder
@@ -1082,15 +1172,17 @@ window.addEventListener('pointermove', e => {
   }
   if (!isDown) return
   // sol tuş bırakılmış ama pointerup kaçmışsa (ör. sağ tık menüsü araya girdi) sürüklemeyi kes
-  if ((e.buttons & 1) === 0) { isDown = false; isDrag = false; return }
-  const dx = e.clientX - lastX
-  const dy = e.clientY - lastY
+  if ((e.buttons & 1) === 0) { isDown = false; isDrag = false; grabPoint = null; return }
   lastX = e.clientX; lastY = e.clientY
   if (Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > 8) isDrag = true
-  if (isDrag) {
-    const wpp = VIEW / window.innerHeight / camera.zoom
-    camX = Math.max(-34, Math.min(50, camX + (0.894 * dx + 0.447 * dy) * wpp))
-    camY = Math.max(-26, Math.min(26, camY + (-0.447 * dx + 0.894 * dy) * wpp))
+  if (isDrag && grabPoint) {
+    // kavrama: bastığın zemin noktası imlecin altında kalsın
+    const cur = groundPointAt(e.clientX, e.clientY)
+    if (cur) {
+      camX = Math.max(-34, Math.min(50, camX + grabPoint.x - cur.x))
+      camY = Math.max(-26, Math.min(26, camY + grabPoint.y - cur.y))
+      updateCamera()
+    }
   }
 })
 window.addEventListener('pointerup', e => {

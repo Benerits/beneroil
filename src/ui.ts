@@ -51,7 +51,7 @@ const DIMS: Record<string, (s: GameState) => string> = {
   restaurant: () => '6×6',
   truckpark: () => '8×6',
   airwater: () => '2×2',
-  parking: () => '6×4',
+  parking: () => '5×3',
   land: () => '12×14+',
 }
 
@@ -79,6 +79,8 @@ export class UI {
   onReset: () => void = () => {}
   onToggleClosed: () => void = () => {}
   batteryKwh: () => number = () => 0
+  /** gerçek 3D modelin PNG render'ı (main bağlar) */
+  getThumb: (id: string) => string | null = () => null
 
   private money = el<HTMLSpanElement>('money')
   private day = el<HTMLSpanElement>('day')
@@ -242,7 +244,8 @@ export class UI {
     if (car.kind === 'ev') {
       this.fuelCtl.style.display = 'none'
       this.evCtl.style.display = 'block'
-      this.demand.textContent = `Elektrikli araç · İstek: ${car.demandKwh} kWh`
+      this.demand.innerHTML = `<span class="dlabel">MÜŞTERİ İSTEĞİ</span>` +
+        `<span class="fpill" style="background:#1fa8bc">ELEKTRİK</span><span class="damt">${car.demandKwh} kWh</span>`
       const have = this.batteryKwh()
       const enough = have >= car.demandKwh
       this.chargeBtn.disabled = !enough
@@ -255,7 +258,9 @@ export class UI {
 
     this.fuelCtl.style.display = 'block'
     this.evCtl.style.display = 'none'
-    this.demand.textContent = `Müşteri isteği: ₺${car.demandAmount} ${FUEL_LABEL[car.demandType]}`
+    const fc = car.demandType === 'benzin' ? '#27a05a' : car.demandType === 'dizel' ? '#e8862e' : '#2f6fed'
+    this.demand.innerHTML = `<span class="dlabel">MÜŞTERİ İSTEĞİ</span>` +
+      `<span class="fpill" style="background:${fc}">${FUEL_LABEL[car.demandType]}</span><span class="damt">₺${car.demandAmount}</span>`
     this.nozBenzin.classList.toggle('sel', car.nozzle === 'benzin')
     this.nozDizel.classList.toggle('sel', car.nozzle === 'dizel')
     this.nozLpg.classList.toggle('sel', car.nozzle === 'lpg')
@@ -324,24 +329,28 @@ export class UI {
       return
     }
     const rows = getShopItems(state).filter(r => CATEGORY_MAP[r.id] === this.shopCat)
-    this.shopList.innerHTML = rows.map(r => {
-      const cls = r.status === 'maxed' ? 'shoprow maxed' : 'shoprow'
+    this.shopList.innerHTML = '<div class="shopgrid">' + rows.map(r => {
+      const cls = r.status === 'maxed' ? 'card maxed' : r.status === 'locked' ? 'card locked' : 'card'
       let btn: string
-      if (r.status === 'maxed') btn = `<button class="btn sbuy" disabled>MAKS</button>`
-      else if (r.status === 'locked') btn = `<button class="btn sbuy" disabled>KİLİTLİ</button>`
+      if (r.status === 'maxed') btn = `<button class="btn cbuy" disabled>MAKS</button>`
+      else if (r.status === 'locked') btn = `<button class="btn cbuy" disabled>KİLİTLİ</button>`
       else {
         const afford = state.money >= (r.cost ?? 0)
-        btn = `<button class="btn sbuy ${afford ? 'good' : ''}" data-buy="${r.id}" ${afford ? '' : 'disabled'}>₺${r.cost?.toLocaleString('tr-TR')}</button>`
+        btn = `<button class="btn cbuy ${afford ? 'good' : ''}" data-buy="${r.id}" ${afford ? '' : 'disabled'}>₺${r.cost?.toLocaleString('tr-TR')}</button>`
       }
+      const thumb = this.getThumb(r.id)
+      const visual = thumb
+        ? `<img src="${thumb}" alt="">`
+        : `<span style="color:#7a8290">${icon(r.icon, 'ic cbig')}</span>`
       const lock = r.status === 'locked' ? `<div class="slock">${stripEmoji(r.note)}</div>` : ''
       const dims = DIMS[r.id] ? `<span class="stat-badge dim">${DIMS[r.id](state)}</span>` : ''
       return `<div class="${cls}">
-        ${sicon(r.id, r.icon)}
-        <div class="sinfo">
-          <div class="st">${stripEmoji(r.title)} <span class="stat-badge">${stripEmoji(r.stat)}</span>${dims}</div>
-          <div class="sd">${stripEmoji(r.desc)}</div>${lock}
-        </div>${btn}</div>`
-    }).join('')
+        <div class="cthumb">${visual}</div>
+        <div class="cname">${stripEmoji(r.title)}</div>
+        <div class="cbadges"><span class="stat-badge">${stripEmoji(r.stat)}</span>${dims}</div>
+        <div class="cdesc">${stripEmoji(r.desc)}</div>${lock}
+        ${btn}</div>`
+    }).join('') + '</div>'
   }
 
   update(state: GameState, dt: number) {
