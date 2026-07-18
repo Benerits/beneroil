@@ -200,6 +200,8 @@ export class Car {
   /** EV: kademeli şarj sürüyor */
   charging = false
   chargedKwh = 0
+  /** EV: şarjı bitti ama tesisleri gezmeye gitti — üniteyi işgal ediyor */
+  squatting = false
   /** aracın gizli yakıt ihtiyacı (litre) — tipine göre: binek/SUV/kamyon */
   hiddenNeedL = 30
   slotIndex = -1
@@ -550,6 +552,8 @@ export interface CarManagerOpts {
   /** taşınabilir giriş/çıkış kapı y koordinatları */
   gateInY: () => number
   gateOutY: () => number
+  /** işgalci yüzünden şarj bulamayıp giden EV müşterisi */
+  onEvTurnedAway?: () => void
   onCarReady: (car: Car) => void
   onCarLost: (car: Car) => void
 }
@@ -733,7 +737,10 @@ export class CarManager {
       for (let i = 0; i < this.opts.evCount(); i++) {
         if (!this.evOcc[i] && !this.opts.isChargerBroken(i)) { slot = i; break }
       }
-      if (slot < 0) return // şarj yeri yok, yoluna devam
+      if (slot < 0) {
+        if (this.evOcc.some(x => x?.squatting)) this.opts.onEvTurnedAway?.()
+        return // şarj yeri yok, yoluna devam
+      }
       this.evOcc[slot] = car
       car.slotIndex = slot
       car.phase = 'driving'

@@ -324,15 +324,19 @@ export class UI {
       this.setHtml(this.demand, `<span class="dlabel">MÜŞTERİ İSTEĞİ</span>` +
         `<span class="fpill" style="background:#1fa8bc">ELEKTRİK</span><span class="damt">${car.demandKwh} kWh</span>`)
       const have = this.batteryKwh()
-      this.chargeBtn.disabled = car.charging
-      this.setText(this.chargeBtn, car.charging
-        ? `ŞARJ OLUYOR — ${Math.floor(car.chargedKwh)}/${car.demandKwh} kWh`
-        : `ŞARJ BAŞLAT (${car.demandKwh} kWh)`)
-      this.setText(this.evNote, car.charging
-        ? 'Depodan araca enerji akıyor... depo seviyesi akış hızını belirler.'
-        : have < 1
-          ? `Bataryada enerji yok (${Math.floor(have)} kWh) — dolmasını bekle.`
-          : `Depoda ${Math.floor(have)} kWh hazır — şarjı başlat.`)
+      this.chargeBtn.disabled = car.charging || car.squatting
+      this.setText(this.chargeBtn, car.squatting
+        ? 'MOLADA — ünite işgal altında'
+        : car.charging
+          ? `ŞARJ OLUYOR — ${Math.floor(car.chargedKwh)}/${car.demandKwh} kWh`
+          : `ŞARJ BAŞLAT (${car.demandKwh} kWh)`)
+      this.setText(this.evNote, car.squatting
+        ? 'Şarj bitti ama müşteri tesislerde geziyor — MÜŞTERİYİ GÖNDER ile uğurla, yoksa yeni EV müşterileri kaçar!'
+        : car.charging
+          ? 'Depodan araca enerji akıyor... depo seviyesi akış hızını belirler.'
+          : have < 1
+            ? `Bataryada enerji yok (${Math.floor(have)} kWh) — dolmasını bekle.`
+            : `Depoda ${Math.floor(have)} kWh hazır — şarjı başlat.`)
       return
     }
 

@@ -108,6 +108,8 @@ export class GameState {
   elecPrice = EV_PRICE_PER_KWH
   /** tuvalet kullanım ücreti (0 = ücretsiz) */
   toiletFee = 0
+  /** otomatik şarj açık olan üniteler */
+  autoChargers = new Set<number>()
   /** tesis bazında bugünkü ciro (gün dönümünde sıfırlanır) */
   facDaily: Record<string, number> = {}
   /** ömür boyu istatistikler */
@@ -591,6 +593,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.tanks = { ...s.tanks }
   out.stats = { ...s.stats, liters: { ...s.stats.liters } }
   out.facDaily = { ...s.facDaily }
+  out.autoChargers = [...s.autoChargers]
   out.prices = { ...s.prices }
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
   out.pendingCash = { ...s.pendingCash }
@@ -611,6 +614,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.hasSelfWash && !s.selfWashCount) s.selfWashCount = 1
   if (data.tanks && typeof data.tanks === 'object') Object.assign(s.tanks, data.tanks)
   if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
+  if (Array.isArray(data.autoChargers)) s.autoChargers = new Set((data.autoChargers as number[]).filter(n => Number.isInteger(n)))
   const st = data.stats as { liters?: Record<string, number> } & Record<string, number> | undefined
   if (st && typeof st === 'object') {
     for (const k of ['served', 'lost', 'kwh', 'revenue'] as const) {

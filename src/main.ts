@@ -142,6 +142,7 @@ ui.tankerStatus = () => {
   return parts
 }
 const tankers: { t: Tanker; fuel: FuelType; slot: number }[] = []
+let evTurnAwayT = 0
 let exploding = false
 let selectedBuilding: string | null = null
 let cardRefreshT = 0
@@ -167,6 +168,14 @@ const cars = new CarManager(world.scene, modelLib, {
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
   onCarReady: car => { if (!ui.activeCar) ui.selectCar(car) },
+  onEvTurnedAway: () => {
+    if (evTurnAwayT > 0) return
+    evTurnAwayT = 4
+    state.stats.lost++
+    state.addRep(-0.3)
+    audio.miss()
+    ui.toast('EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!', 'bad', true)
+  },
   onCarLost: car => {
     state.stats.lost++
     ui.toast('Müşteri beklemekten sıkıldı ve gitti!', 'bad', true)
@@ -310,7 +319,7 @@ function personMesh(): THREE.Group {
   return g
 }
 
-function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number }) {
+function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number; squat?: boolean }) {
   const start = car.group.position.clone().add(new THREE.Vector3(0.8, -0.6, 0))
   start.z = 0
   const stops = data.visits
@@ -337,7 +346,7 @@ function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number }) {
       }
       state.addRep((score - 3.3) * 0.08)
       car.showFeedback(emojiFor(score))
-      cars.releaseCar(car)
+      if (!data.squat) cars.releaseCar(car) // işgalci: oyuncu GÖNDER diyene kadar kalır
       pendingVisits.delete(car)
     },
   })
@@ -475,6 +484,13 @@ function wrongFuel(car: Car) {
 // ---- EV şarj ----
 
 ui.onDismiss = car => {
+  if (car.squatting) {
+    car.squatting = false
+    cars.releaseCar(car)
+    ui.toast('Molacı uğurlandı — şarj yeri boşaldı.', 'good')
+    if (ui.activeCar === car) ui.selectCar(nextServableCar())
+    return
+  }
   if (car.phase !== 'atPump' || car.filling || car.filled > 0) return
   state.addRep(-0.1)
   car.showFeedback('😐')
@@ -486,16 +502,19 @@ ui.onDismiss = car => {
 /** batarya deposu seviyesine göre araca akış hızı (kWh/sn) */
 const DISCHARGE_RATE = [0, 15, 25, 40]
 
-ui.onChargeEV = car => {
-  if (car.phase !== 'atPump' || car.charging) return
+function startCharging(car: Car, auto = false) {
+  if (car.phase !== 'atPump' || car.charging || car.squatting) return
   if (state.dieselRunning() && Math.random() < 0.35) {
     car.demandKwh = Math.ceil(car.demandKwh / 2)
     ui.toast('🔊 Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!', 'bad')
   }
   car.charging = true
   car.beingServed = true
-  if (state.battery < 1) ui.toast('Depo şu an boş — üretim geldikçe şarj yavaş akacak.', '')
+  if (auto) ui.toast('Otomatik şarj başladı.', '', true)
+  else if (state.battery < 1) ui.toast('Depo şu an boş — üretim geldikçe şarj yavaş akacak.', '')
 }
+
+ui.onChargeEV = car => startCharging(car)
 
 /** kademeli EV şarjı: depo → araç akışı */
 function tickEvCharging(dt: number) {
@@ -518,7 +537,18 @@ function tickEvCharging(dt: number) {
       let score = 4.5
       if (c.patienceFrac < 0.4) score -= 1.5
       ui.toast(`⚡ ${c.demandKwh} kWh şarj tamamlandı: +₺${revenue}`, 'good')
-      concludeService(c, score)
+      const anyFacility = state.marketLevel > 0 || state.toiletLevel > 0 || state.hasCoffee || state.hasRestaurant
+      if (anyFacility && Math.random() < 0.35) {
+        // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
+        c.squatting = true
+        c.beingServed = true
+        c.setCounter('MOLADA')
+        const visits = facilityVisits(c)
+        spawnWalkerFor(c, { visits, score, squat: true })
+        ui.toast('Müşteri şarj bitince tesislere takıldı — araca tıklayıp GÖNDER, yoksa yeni EV müşterileri kaçar!', 'bad')
+      } else {
+        concludeService(c, score)
+      }
     }
   }
 }
@@ -1262,6 +1292,17 @@ if (isFullMode) {
 }
 
 ui.onMaint = id => {
+  if (id.startsWith('auto-charger-')) {
+    const i = parseInt(id.slice(13))
+    if (state.autoChargers.has(i)) state.autoChargers.delete(i)
+    else state.autoChargers.add(i)
+    ui.toast(state.autoChargers.has(i)
+      ? `DC Şarj #${i + 1}: otomatik şarj AÇIK — EV'ler sormadan şarj alır.`
+      : `DC Şarj #${i + 1}: otomatik şarj kapalı.`, 'good')
+    refreshBuildingCard()
+    persist()
+    return
+  }
   if (id === 'toilet-fee') {
     state.toiletFee = state.toiletFee === 0 ? 5 : state.toiletFee === 5 ? 10 : 0
     ui.toast(state.toiletFee === 0 ? 'Tuvalet artık ücretsiz.' : `Tuvalet ücreti: ₺${state.toiletFee}`, 'good')
@@ -1387,7 +1428,9 @@ function buildingCard(id: string): BuildingCard | null {
         ['Şarj süresi', 'Anında'],
         ['Satış', `₺${state.elecPrice}/kWh`],
       ],
-      action: broken ? { label: '🔧 Tamir Et — ₺1.000', maintId: `fix-charger-${i}` } : undefined,
+      action: broken
+        ? { label: '🔧 Tamir Et — ₺1.000', maintId: `fix-charger-${i}` }
+        : { label: `Otomatik Şarj: ${state.autoChargers.has(i) ? 'AÇIK' : 'KAPALI'} — değiştir`, maintId: `auto-charger-${i}` },
     }
   }
   switch (id) {
@@ -1959,6 +2002,14 @@ function frame() {
   audio.setDiesel(state.dieselRunning() && !state.closed)
   audio.setPump(cars.cars.some(c => c.filling && c.phase === 'atPump' && !c.wrongFuelHandled))
   Car.solids = hardRects()
+  evTurnAwayT = Math.max(0, evTurnAwayT - dt)
+  // otomatik şarj: işaretli ünitelere yanaşan EV kendiliğinden başlar
+  for (const c of cars.cars) {
+    if (c.kind === 'ev' && c.phase === 'atPump' && !c.charging && !c.squatting
+      && c.chargedKwh === 0 && c.slotIndex >= 0 && state.autoChargers.has(c.slotIndex)) {
+      startCharging(c, true)
+    }
+  }
   tickEvCharging(dt)
   syncHoses()
   updateCamera()
