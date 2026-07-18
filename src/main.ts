@@ -1063,8 +1063,10 @@ ui.onCardClose = () => {
   world.setSelected(null)
 }
 
-ui.onReset = () => {
+ui.onReset = async () => {
   localStorage.removeItem(SAVE_KEY)
+  // buluttaki kaydı da sıfırla — yoksa yenileyince eski harita geri gelir
+  if (auth.loggedIn()) await auth.pushSave(null).catch(() => {})
   location.reload()
 }
 
@@ -1458,7 +1460,8 @@ function frame() {
 
   if (state.exploded) {
     exploding = true
-    localStorage.removeItem(SAVE_KEY) // her şey sıfırlanır
+    localStorage.removeItem(SAVE_KEY) // her şey sıfırlanır (bulut dahil)
+    if (auth.loggedIn()) auth.pushSave(null).catch(() => {})
     audio.boom()
     ui.showBoom()
     setTimeout(() => location.reload(), 3500)
