@@ -632,7 +632,7 @@ function fixedObstacles(skipId = ''): Rect[] {
     { cx: 4.0, cy: -11.5, w: 2.4, d: 3.4 },  // tabela
   ]
   if (skipId !== 'tank')
-    r.push({ cx: world.tankAnchor.x + 1.1, cy: world.tankAnchor.y + 1.2, w: 5.6, d: 6.4 })
+    r.push({ cx: world.tankAnchor.x + 0.9, cy: world.tankAnchor.y + 0.9, w: 4.4, d: 4.4 })
   if (skipId !== 'office') {
     const of = world.buildings.find(b => b.id === 'office')
     if (of) r.push({ cx: of.group.position.x, cy: of.group.position.y, w: 4.6, d: 5.0 })
@@ -841,7 +841,7 @@ function makeGhost(w: number, d: number): THREE.Mesh {
 function footprintOf(id: string, move = false): { w: number; d: number; grass?: boolean } | null {
   if (id.startsWith('pump-')) return { w: 4.4, d: 4.0 }
   if (id.startsWith('charger-')) return { w: 4.0, d: 2.6 }
-  if (id === 'tank') return { w: 5.6, d: 6.4 }
+  if (id === 'tank') return { w: 4.2, d: 4.2 }
   return id in PLACEABLE ? PLACEABLE[id](move) : null
 }
 
