@@ -112,6 +112,8 @@ export class GameState {
   autoChargers = new Set<number>()
   /** tesis bazında bugünkü ciro (gün dönümünde sıfırlanır) */
   facDaily: Record<string, number> = {}
+  /** tesis bazında ömür boyu ciro (istatistik için, sıfırlanmaz) */
+  facTotal: Record<string, number> = {}
   /** ömür boyu istatistikler */
   stats = {
     served: 0, lost: 0, kwh: 0, revenue: 0,
@@ -392,11 +394,13 @@ export class GameState {
   facEarn(id: string, amt: number) {
     this.money += amt
     this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
+    this.facTotal[id] = (this.facTotal[id] ?? 0) + amt
   }
 
   /** tesise para biriktir (kumbara dolarsa haber ver) */
   addPending(id: string, amt: number, name: string) {
     this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
+    this.facTotal[id] = (this.facTotal[id] ?? 0) + amt
     const cap = 600
     const cur = this.pendingCash[id] ?? 0
     this.pendingCash[id] = Math.min(cap, cur + amt)
@@ -593,6 +597,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.tanks = { ...s.tanks }
   out.stats = { ...s.stats, liters: { ...s.stats.liters } }
   out.facDaily = { ...s.facDaily }
+  out.facTotal = { ...s.facTotal }
   out.autoChargers = [...s.autoChargers]
   out.prices = { ...s.prices }
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
@@ -614,6 +619,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.hasSelfWash && !s.selfWashCount) s.selfWashCount = 1
   if (data.tanks && typeof data.tanks === 'object') Object.assign(s.tanks, data.tanks)
   if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
+  if (data.facTotal && typeof data.facTotal === 'object') Object.assign(s.facTotal, data.facTotal)
   if (Array.isArray(data.autoChargers)) s.autoChargers = new Set((data.autoChargers as number[]).filter(n => Number.isInteger(n)))
   const st = data.stats as { liters?: Record<string, number> } & Record<string, number> | undefined
   if (st && typeof st === 'object') {
