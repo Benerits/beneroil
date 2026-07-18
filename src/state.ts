@@ -73,6 +73,8 @@ const URANIUM_DRAIN_PER_S = 100 / 300 // tam yük ~5 dakika sürer
 export class GameState {
   money = 4000
   reputation = 3.0
+  /** tabeladaki istasyon adı — hesaba bağlı, kayıtla gezer */
+  stationName = 'BENZİNLİK'
 
   /** yakıt türü başına ayrı yer altı tankı */
   tanks: Record<FuelType, number> = { benzin: 250, dizel: 150, lpg: 100 }
@@ -515,7 +517,7 @@ export function checkAchievements(s: GameState) {
 // ---- Kayıt ----
 
 const SAVE_FIELDS = [
-  'money', 'reputation', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
+  'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'hasSolar', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasAirWater', 'hasSelfWash', 'hasParking',
   'solarDirt', 'smrWear', 'uranium', 'day', 'dayStartMoney', 'closed',

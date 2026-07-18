@@ -1084,14 +1084,23 @@ const nameInput = document.getElementById('stname') as HTMLInputElement
 
 function applyStationName(name: string, silent = false) {
   world.setStationName(name)
-  localStorage.setItem('benzinlik-station-name', world.stationName)
+  state.stationName = world.stationName // hesaba bağlı: bulut kaydıyla gezer
   nameInput.value = world.stationName
   document.title = `${world.stationName} — Benzinlik`
-  if (!silent) ui.toast(`🪧 Tabela güncellendi: ${world.stationName}`, 'good')
+  if (!silent) {
+    ui.toast(`Tabela güncellendi: ${world.stationName}`, 'good')
+    persist()
+  }
 }
 
-const savedName = localStorage.getItem('benzinlik-station-name')
-applyStationName(!savedName || savedName === 'OPET' ? 'BENZİNLİK' : savedName, true)
+// eski tarayıcı-geneli isim kaydından hesaba göç (bir kereye mahsus)
+const legacyName = localStorage.getItem('benzinlik-station-name')
+applyStationName(
+  state.stationName && state.stationName !== 'BENZİNLİK'
+    ? state.stationName
+    : (legacyName && legacyName !== 'OPET' ? legacyName : 'BENZİNLİK'),
+  true,
+)
 ui.onRename = name => applyStationName(name)
 
 // ---- Bina bilgi kartları ----
