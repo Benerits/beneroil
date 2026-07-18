@@ -556,7 +556,7 @@ function tickEvCharging(dt: number) {
       if (c.patienceFrac < 0.4) score -= 1.5
       ui.toast(`⚡ ${c.demandKwh} kWh şarj tamamlandı: +₺${revenue}`, 'good')
       const anyFacility = state.marketLevel > 0 || state.toiletLevel > 0 || state.hasCoffee || state.hasRestaurant
-      if (anyFacility && Math.random() < 0.35) {
+      if (anyFacility && Math.random() < 0.12) {
         // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
         c.squatting = true
         c.beingServed = true
