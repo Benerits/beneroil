@@ -167,6 +167,12 @@ const cars = new CarManager(world.scene, modelLib, {
   evSlot: i => world.evSlots[i],
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
+  truckSpots: () => world.getTruckSpots(),
+  onTruckParked: () => {
+    const fee = 40 + Math.round(Math.random() * 40)
+    state.addPending('truckpark', fee, 'Tır parkı')
+    ui.toast(`Tır park etti: ₺${fee} kumbarada`, 'good', true)
+  },
   onCarReady: car => { if (!ui.activeCar) ui.selectCar(car) },
   onEvTurnedAway: () => {
     if (evTurnAwayT > 0) return
@@ -418,6 +424,18 @@ function trackDaily() {
 }
 
 function concludeService(car: Car, score: number) {
+  if (car.isTruck && state.hasTruckPark && car.phase === 'atPump' && Math.random() < 0.45) {
+    trackDaily()
+    state.addRep((score - 3.3) * 0.1)
+    car.showFeedback(emojiFor(score))
+    car.hideBubble()
+    car.filling = false
+    car.beingServed = false
+    if (ui.activeCar === car) ui.selectCar(nextServableCar())
+    if (cars.sendTruckToParkFromPump(car)) return
+    cars.releaseCar(car)
+    return
+  }
   trackDaily()
   score += missingPenalty(car) + vehicleServices(car)
   const visits = facilityVisits(car)

@@ -202,6 +202,11 @@ export class Car {
   chargedKwh = 0
   /** EV: şarjı bitti ama tesisleri gezmeye gitti — üniteyi işgal ediyor */
   squatting = false
+  /** tır/kamyonet mi (dizel ağırlıklı, tır parkını kullanır) */
+  isTruck = false
+  wantsTruckPark = false
+  truckSlot = -1
+  stayT = 0
   /** aracın gizli yakıt ihtiyacı (litre) — tipine göre: binek/SUV/kamyon */
   hiddenNeedL = 30
   slotIndex = -1
@@ -251,6 +256,7 @@ export class Car {
       const name = CAR_FILES[idx] ?? 'sedan'
       const cap = /van|delivery|truck/.test(name) ? 110 : /suv/.test(name) ? 65 : 45
       this.hiddenNeedL = Math.round(cap * (0.55 + Math.random() * 0.35))
+      this.isTruck = /truck|delivery/.test(name)
     } else {
       const kinds: BodyKind[] = ['sedan', 'sedan', 'hatch', 'hatch', 'suv']
       const bk = kinds[Math.floor(Math.random() * kinds.length)]
@@ -259,7 +265,9 @@ export class Car {
     }
     this.group.userData.car = this
     const fr = Math.random()
-    this.demandType = fr < 0.4 ? 'benzin' : fr < 0.8 ? 'dizel' : 'lpg'
+    this.demandType = this.isTruck && Math.random() < 0.85
+      ? 'dizel'
+      : fr < 0.4 ? 'benzin' : fr < 0.8 ? 'dizel' : 'lpg'
     this.demandAmount = DEMAND_AMOUNTS[Math.floor(Math.random() * DEMAND_AMOUNTS.length)]
     this.demandLiters = this.demandAmount / this.prices[this.demandType]
     this.demandKwh = 20 + Math.floor(Math.random() * 9) * 5 // 20..60
@@ -554,6 +562,10 @@ export interface CarManagerOpts {
   gateOutY: () => number
   /** işgalci yüzünden şarj bulamayıp giden EV müşterisi */
   onEvTurnedAway?: () => void
+  /** tır parkı noktaları */
+  truckSpots: () => THREE.Vector3[]
+  /** tır park ücreti tahsilatı */
+  onTruckParked?: (car: Car) => void
   onCarReady: (car: Car) => void
   onCarLost: (car: Car) => void
 }
@@ -681,6 +693,10 @@ export class CarManager {
     }
 
     for (const car of this.cars) {
+      if (car.truckSlot >= 0 && car.phase === 'parked') {
+        car.stayT -= dt
+        if (car.stayT <= 0) this.leaveTruckPark(car)
+      }
       car.update(dt)
       if ((car.phase === 'waiting' || car.phase === 'atPump') && car.patience <= 0 && !car.beingServed) {
         car.showFeedback('😡')
@@ -711,6 +727,7 @@ export class CarManager {
       car.group.rotation.z = Math.PI / 2
       car.setPath([new THREE.Vector3(LANE_NEAR, 44, 0)])
       car.wantsEnter = Math.random() < this.opts.entryChance()
+      car.wantsTruckPark = car.isTruck && Math.random() < 0.4
     } else {
       car.group.position.set(LANE_FAR, 40, 0)
       car.group.rotation.z = -Math.PI / 2
@@ -730,8 +747,60 @@ export class CarManager {
     ]
   }
 
+  /** tıra boş tır parkı yeri bul ve gönder; başarılıysa true */
+  sendTruckToPark(car: Car): boolean {
+    const spots = this.opts.truckSpots()
+    if (!spots.length) return false
+    while (this.truckOcc.length < spots.length) this.truckOcc.push(null)
+    let si = -1
+    for (let i = 0; i < spots.length; i++) if (!this.truckOcc[i]) { si = i; break }
+    if (si < 0) return false
+    this.truckOcc[si] = car
+    car.truckSlot = si
+    car.phase = 'toPark'
+    const spot = spots[si]
+    const from = car.group.position
+    const path: THREE.Vector3[] = []
+    if (from.x > 5) { // yoldan geliyor: kapıdan gir
+      path.push(new THREE.Vector3(LANE_NEAR, this.opts.gateInY() - 3.5, 0))
+      path.push(new THREE.Vector3(4.2, this.opts.gateInY(), 0))
+    }
+    path.push(new THREE.Vector3(4.0, spot.y, 0))
+    path.push(spot.clone())
+    car.setPath(path, () => {
+      car.phase = 'parked'
+      car.stayT = 14 + Math.random() * 18
+      this.opts.onTruckParked?.(car)
+    })
+    return true
+  }
+
+  /** pompadaki tırı slotu boşaltarak tır parkına yollar */
+  sendTruckToParkFromPump(car: Car): boolean {
+    if (car.slotIndex >= 0) {
+      if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
+      else this.pumpOcc[car.slotIndex] = null
+      car.slotIndex = -1
+    }
+    return this.sendTruckToPark(car)
+  }
+
+  private leaveTruckPark(car: Car) {
+    if (car.truckSlot >= 0) this.truckOcc[car.truckSlot] = null
+    car.truckSlot = -1
+    car.phase = 'leaving'
+    car.setPath([
+      new THREE.Vector3(4.2, this.opts.gateOutY(), 0),
+      new THREE.Vector3(LANE_NEAR, this.opts.gateOutY() + 4, 0),
+      new THREE.Vector3(LANE_NEAR, 44, 0),
+    ])
+  }
+
+  private truckOcc: (Car | null)[] = []
+
   private tryEnter(car: Car) {
     if (this.opts.entryChance() <= 0) return // istasyon kapalı: kimse girmez
+    if (car.wantsTruckPark && car.truckSlot < 0 && this.sendTruckToPark(car)) return
     if (car.kind === 'ev') {
       let slot = -1
       for (let i = 0; i < this.opts.evCount(); i++) {

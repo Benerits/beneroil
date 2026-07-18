@@ -1508,6 +1508,15 @@ export class World {
     return spots
   }
 
+  /** tır parkının dünya koordinatındaki park noktaları */
+  getTruckSpots(): THREE.Vector3[] {
+    const b = this.buildings.find(x => x.id === 'truckpark')
+    if (!b) return []
+    const g = b.group as THREE.Group
+    g.updateMatrixWorld(true)
+    return [-2.3, 0, 2.3].map(lx => new THREE.Vector3(lx, -1.0, 0).applyMatrix4(g.matrixWorld))
+  }
+
   buildAirWater(pos?: THREE.Vector2, regId = 'airwater') {
     const at = pos ?? new THREE.Vector2(-4.5, 0.2)
     const g = new THREE.Group()
