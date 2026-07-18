@@ -111,6 +111,12 @@
     #infocard .stat .v.bad { color: var(--red); }
     #infocard .stat .v.good { color: var(--green-dark); }
     #infocard .baction { width: 100%; margin-top: 9px; padding: 10px; justify-content: center; }
+    .prow { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px solid var(--line);
+            font-size: 12.5px; font-weight: 800; }
+    .prow .pl { flex: 1; }
+    .prow .pc { font-size: 10px; color: var(--muted); font-weight: 700; }
+    .prow .pv { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; }
+    .pbtn { padding: 3px 10px; font-size: 14px; line-height: 1; }
 
     /* ---------- Modallar ---------- */
     .backdrop { position: fixed; inset: 0; background: rgba(24, 32, 42, .45); z-index: 30;
@@ -337,6 +343,7 @@
     <div class="body">
       <div class="bdesc" id="binfo-desc"></div>
       <div id="binfo-stats"></div>
+      <div id="binfo-prices"></div>
       <button class="btn danger baction" id="binfo-action" style="display:none">Tamir</button>
       <button class="btn baction" id="binfo-move" style="display:none">Taşı</button>
     </div>

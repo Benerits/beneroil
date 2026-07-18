@@ -176,8 +176,11 @@ export class Car {
   private feedback: THREE.Sprite | null = null
   private feedbackT = 0
 
-  constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind) {
+  private prices: Record<FuelType, number>
+
+  constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE) {
     this.kind = kind
+    this.prices = { ...prices }
     if (kind === 'ev') {
       if (lib?.evCar) {
         this.group = cloneModel(lib.evCar)
@@ -205,7 +208,7 @@ export class Car {
     const fr = Math.random()
     this.demandType = fr < 0.4 ? 'benzin' : fr < 0.8 ? 'dizel' : 'lpg'
     this.demandAmount = DEMAND_AMOUNTS[Math.floor(Math.random() * DEMAND_AMOUNTS.length)]
-    this.demandLiters = this.demandAmount / FUEL_PRICE[this.demandType]
+    this.demandLiters = this.demandAmount / this.prices[this.demandType]
     this.demandKwh = 20 + Math.floor(Math.random() * 9) * 5 // 20..60
     this.maxPatience = kind === 'ev' ? 45 : 75
     this.patience = this.maxPatience
@@ -231,7 +234,7 @@ export class Car {
   }
 
   get filledValue(): number {
-    return this.nozzle ? this.filled * FUEL_PRICE[this.nozzle] : 0
+    return this.nozzle ? this.filled * this.prices[this.nozzle] : 0
   }
 
   get patienceFrac(): number {
@@ -313,16 +316,9 @@ export class Car {
     if ((this.phase === 'waiting' || this.phase === 'atPump') && !this.beingServed) {
       this.patience -= dt
     }
-    const p = this.patienceFrac
-    // bar yalnızca sabır gerçekten işlerken görünsün — balonun altında başıboş çizgi olmasın
-    const showBar = this.barsOn && !this.beingServed && p <= 0.97
-      && (this.phase === 'waiting' || this.phase === 'atPump')
-    this.patienceBg.visible = showBar
-    this.patienceFill.visible = showBar
-    this.patienceFill.scale.x = 1.5 * p
-    this.patienceFill.position.x = -(1.5 * (1 - p)) / 2
-    const color = p > 0.5 ? 0x4dc36b : p > 0.25 ? 0xe0b13e : 0xd64545
-    ;(this.patienceFill.material as THREE.SpriteMaterial).color.setHex(color)
+    // sabır mekaniği görünmez işler: araç üstünde bar gösterilmez
+    this.patienceBg.visible = false
+    this.patienceFill.visible = false
 
     if (this.feedback) {
       this.feedbackT -= dt
@@ -447,6 +443,8 @@ export interface CarManagerOpts {
   parkSpots: () => THREE.Vector3[]
   /** araçların kaçınacağı ek engeller (ör. tanker) */
   extraObstacles: () => THREE.Vector3[]
+  /** güncel satış fiyatları (oyuncu belirler) */
+  prices: () => Record<FuelType, number>
   onCarReady: (car: Car) => void
   onCarLost: (car: Car) => void
 }
@@ -565,7 +563,7 @@ export class CarManager {
 
   private spawnTransit(lane: 'near' | 'far') {
     const isEv = Math.random() < this.opts.evShare()
-    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel')
+    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices())
     car.lane = lane
     car.phase = 'transit'
     if (lane === 'near') {

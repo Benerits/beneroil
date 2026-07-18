@@ -22,6 +22,8 @@ export interface BuildingCard {
   stats: [string, string, ('' | 'good' | 'bad')?][]
   action?: { label: string; maintId: string }
   move?: { label: string; id: string }
+  /** ofis kartı: yakıt satış fiyatı kontrolleri */
+  priceRows?: { f: FuelType; label: string; price: number; cost: number; canDown: boolean; canUp: boolean }[]
 }
 
 /** ikon kutusu renkleri — her kalem kendi kimliğinde */
@@ -80,6 +82,7 @@ export class UI {
   onMove: (id: string) => void = () => {}
   onReset: () => void = () => {}
   onToggleClosed: () => void = () => {}
+  onPriceChange: (f: FuelType, delta: number) => void = () => {}
   onLogin: (email: string, pass: string) => void = () => {}
   onRegister: (email: string, pass: string) => void = () => {}
   onLogout: () => void = () => {}
@@ -248,6 +251,10 @@ export class UI {
     this.infoMove.addEventListener('click', () => {
       if (this.currentMove) this.onMove(this.currentMove)
     })
+    el<HTMLDivElement>('binfo-prices').addEventListener('click', e => {
+      const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
+      if (btn) this.onPriceChange(btn.dataset.pf as FuelType, Number(btn.dataset.pd))
+    })
 
     // mağaza tıklamaları
     this.shopList.addEventListener('click', e => {
@@ -326,6 +333,11 @@ export class UI {
     el<HTMLDivElement>('binfo-desc').textContent = stripEmoji(card.desc)
     el<HTMLDivElement>('binfo-stats').innerHTML = card.stats.map(([k, v, cls]) =>
       `<div class="stat"><span class="k">${stripEmoji(k)}</span><span class="v ${cls ?? ''}">${stripEmoji(v)}</span></div>`).join('')
+    el<HTMLDivElement>('binfo-prices').innerHTML = (card.priceRows ?? []).map(r =>
+      `<div class="prow"><span class="pl">${r.label}</span><span class="pc">alış ₺${r.cost}</span>` +
+      `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>` +
+      `<span class="pv">₺${r.price.toFixed(1)}</span>` +
+      `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
     if (card.action) {
       this.infoAction.style.display = 'flex'
       this.infoAction.textContent = stripEmoji(card.action.label)

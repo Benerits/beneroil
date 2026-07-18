@@ -233,6 +233,7 @@ export interface Building {
 export class World {
   scene = new THREE.Scene()
   stationName = 'BENZİNLİK'
+  private priceView: [number, number, number] = [10, 9, 6]
   buildings: Building[] = []
   private closedFlag = false
   private signLevel = 0
@@ -526,6 +527,12 @@ export class World {
     bales(52, -20, 3)
     pond(-36, -30 + 60, 4) // kuzeybatı gölet (y=30)
     pond(30, -30, 3.2)
+  }
+
+  /** oyuncu fiyat değiştirince tabela güncellenir */
+  setPrices(benzin: number, dizel: number, lpg: number) {
+    this.priceView = [benzin, dizel, lpg]
+    this.setSign(this.signLevel)
   }
 
   /** istasyon kapalı/açık — tabela yeniden çizilir */
@@ -924,11 +931,11 @@ export class World {
       ctx.fillText(this.stationName, W / 2, 44)
       ctx.fillStyle = '#1c2530'; ctx.font = '700 29px -apple-system, sans-serif'
       ctx.textAlign = 'left'; ctx.fillText('BENZİN', 18, 122)
-      ctx.textAlign = 'right'; ctx.fillText('10.0', W - 18, 122)
+      ctx.textAlign = 'right'; ctx.fillText(this.priceView[0].toFixed(1), W - 18, 122)
       ctx.textAlign = 'left'; ctx.fillText('DİZEL', 18, 168)
-      ctx.textAlign = 'right'; ctx.fillText('9.0', W - 18, 168)
+      ctx.textAlign = 'right'; ctx.fillText(this.priceView[1].toFixed(1), W - 18, 168)
       ctx.textAlign = 'left'; ctx.fillText('LPG', 18, 214)
-      ctx.textAlign = 'right'; ctx.fillText('6.0', W - 18, 214)
+      ctx.textAlign = 'right'; ctx.fillText(this.priceView[2].toFixed(1), W - 18, 214)
       if (this.closedFlag) {
         ctx.fillStyle = '#d64545'
         ctx.fillRect(0, 238, W, 50)

@@ -103,6 +103,9 @@ function sanitizeSave(save) {
     for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 600, 0)
   }
   if (typeof s.stationName === 'string') s.stationName = s.stationName.slice(0, 14)
+  if (s.prices && typeof s.prices === 'object') {
+    for (const k of ['benzin', 'dizel', 'lpg']) s.prices[k] = clamp(s.prices[k], 1, 30, 10)
+  }
   if (Array.isArray(save.placedRects) && save.placedRects.length > 64) save.placedRects = save.placedRects.slice(0, 64)
   if (Array.isArray(s.ownedParcels) && s.ownedParcels.length > 18) s.ownedParcels = s.ownedParcels.slice(0, 18)
   if (Array.isArray(s.achievements) && s.achievements.length > 32) s.achievements = s.achievements.slice(0, 32)

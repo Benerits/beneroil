@@ -4,7 +4,7 @@ import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY,
-  EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST,
+  EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
 } from './state'
 import { loadModels, loadStatics } from './models'
@@ -153,6 +153,7 @@ const cars = new CarManager(world.scene, modelLib, {
   isChargerBroken: i => state.brokenChargers.has(i),
   parkSpots: () => world.getParkingSpots(),
   extraObstacles: () => tankers.map(x => x.t.group.position),
+  prices: () => state.prices,
   onCarReady: car => { if (!ui.activeCar) ui.selectCar(car) },
   onCarLost: car => {
     ui.toast('Müşteri beklemekten sıkıldı ve gitti!', 'bad', true)
@@ -407,8 +408,9 @@ function finishSale(car: Car) {
   if (car.patienceFrac > 0.6) score += 0.5
   else if (car.patienceFrac < 0.25) score -= 1
 
-  if (spill > 0.3) {
-    const penalty = Math.round(spill * SPILL_PENALTY_PER_L)
+  if (spill > 1) {
+    // ufak taşmalar dert değil; anlamlı döküntüye anlamlı ceza
+    const penalty = Math.max(5, Math.round(spill * SPILL_PENALTY_PER_L))
     state.money -= penalty
     score -= 0.8
     ui.toast(`Taşan yakıt cezası: -₺${penalty}`, 'bad')
@@ -1106,6 +1108,19 @@ applyStationName(
 )
 ui.onRename = name => applyStationName(name)
 
+// kâr marjı ayarı (ofis kartından): alış sabit, satışı oyuncu belirler
+function syncSignPrices() {
+  world.setPrices(state.prices.benzin, state.prices.dizel, state.prices.lpg)
+}
+syncSignPrices()
+ui.onPriceChange = (f, delta) => {
+  const [lo, hi] = priceBounds(f)
+  state.prices[f] = Math.min(hi, Math.max(lo, Math.round((state.prices[f] + delta) * 2) / 2))
+  syncSignPrices()
+  refreshBuildingCard()
+  persist()
+}
+
 // ---- Bina bilgi kartları ----
 
 function buildingCard(id: string): BuildingCard | null {
@@ -1140,16 +1155,24 @@ function buildingCard(id: string): BuildingCard | null {
     }
   }
   switch (id) {
-    case 'office':
+    case 'office': {
+      const fx = Math.round((state.priceDemandFactor() - 1) * 100)
       return {
-        icon: 'i-office', name: 'Ofis',
-        desc: 'İstasyonun yönetim binası. Burada sen varsın — her işe tek başına yetişiyorsun.',
+        icon: 'i-office', name: 'Ofis — Fiyat Yönetimi',
+        desc: 'Alış fiyatı sabittir; satış fiyatını sen belirlersin. Marjı açtıkça litre başı kazanç artar ama müşteri kaçar.',
         stats: [
-          ['Pompa', `${state.pumps}`],
-          ['Şarj ünitesi', `${state.evChargers}`],
-          ['İtibar', `${state.reputation.toFixed(1)} ⭐`],
+          ['Müşteri etkisi', `${fx >= 0 ? '+' : ''}${fx}%`, fx >= 0 ? 'good' : 'bad'],
+          ['İtibar', state.reputation.toFixed(1)],
         ],
+        priceRows: (['benzin', 'dizel', 'lpg'] as FuelType[]).map(f => {
+          const [lo, hi] = priceBounds(f)
+          return {
+            f, label: FUEL_LABEL[f], price: state.prices[f], cost: FUEL_COST[f],
+            canDown: state.prices[f] > lo, canUp: state.prices[f] < hi,
+          }
+        }),
       }
+    }
     case 'tank':
       return {
         icon: 'i-tank', name: 'Yakıt Tankı',

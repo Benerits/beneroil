@@ -6,6 +6,10 @@ export const FUEL_LABEL: Record<FuelType, string> = { benzin: 'BENZİN', dizel: 
 export const FUEL_COST: Record<FuelType, number> = { benzin: 6.5, dizel: 6, lpg: 4 }
 /** her yeni hesabın açılış bakiyesi */
 export const START_MONEY = 5000
+/** satış fiyatı oyuncuya ait: [min, max] sınırları (alış sabit) */
+export function priceBounds(f: FuelType): [number, number] {
+  return [Math.ceil(FUEL_COST[f]), Math.round(FUEL_COST[f] * 2.2)]
+}
 export const ORDER_ETA = 25 // saniye
 export const FILL_RATE = 7 // L/sn
 export const SPILL_PENALTY_PER_L = 3
@@ -77,6 +81,8 @@ export class GameState {
   reputation = 3.0
   /** tabeladaki istasyon adı — hesaba bağlı, kayıtla gezer */
   stationName = 'BENZİNLİK'
+  /** oyuncunun belirlediği satış fiyatları (alış FUEL_COST'ta sabit) */
+  prices: Record<FuelType, number> = { ...FUEL_PRICE }
 
   /** yakıt türü başına ayrı yer altı tankı */
   tanks: Record<FuelType, number> = { benzin: 250, dizel: 150, lpg: 100 }
@@ -300,9 +306,20 @@ export class GameState {
   }
 
   /** yoldan geçen bir aracın istasyona girme olasılığı */
+  /** kâr marjı müşteri iştahını belirler: ucuzsan akın, kazıkçıysan kaçış */
+  priceDemandFactor(): number {
+    let sum = 0
+    for (const f of FUELS) {
+      const baseMargin = FUEL_PRICE[f] - FUEL_COST[f]
+      sum += (this.prices[f] - FUEL_COST[f]) / baseMargin
+    }
+    const factor = sum / FUELS.length // 1 = varsayılan marj
+    return Math.min(1.3, Math.max(0.5, 1.3 - 0.3 * factor))
+  }
+
   entryChance() {
     if (this.closed) return 0
-    const boost = this.promo?.type === 'rush' ? 1.5 : 1
+    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor()
     const c = boost * (0.32 + 0.1 * this.signLevel + 0.05 * (this.reputation - 3))
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
       + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
@@ -530,6 +547,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const f of SAVE_FIELDS) out[f] = (s as any)[f]
   out.tanks = { ...s.tanks }
+  out.prices = { ...s.prices }
   out.pendingCash = { ...s.pendingCash }
   out.ownedParcels = [...s.ownedParcels]
   out.pavedParcels = [...s.pavedParcels]
@@ -542,6 +560,13 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
     if (f in data) (s as any)[f] = data[f]
   }
   if (data.tanks && typeof data.tanks === 'object') Object.assign(s.tanks, data.tanks)
+  if (data.prices && typeof data.prices === 'object') {
+    Object.assign(s.prices, data.prices)
+    for (const f of FUELS) {
+      const [lo, hi] = priceBounds(f)
+      s.prices[f] = Math.min(hi, Math.max(lo, Number(s.prices[f]) || FUEL_PRICE[f]))
+    }
+  }
   if (data.pendingCash && typeof data.pendingCash === 'object') s.pendingCash = { ...(data.pendingCash as Record<string, number>) }
   if (Array.isArray(data.ownedParcels)) s.ownedParcels = new Set(data.ownedParcels as string[])
   if (Array.isArray(data.pavedParcels)) s.pavedParcels = new Set(data.pavedParcels as string[])
