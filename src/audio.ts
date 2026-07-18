@@ -9,6 +9,49 @@ class AudioMan {
   private musicTimer: number | null = null
   private bar = 0
   sfxOn = localStorage.getItem('benzinlik-sfx') !== '0'
+  private dieselNodes: { gain: GainNode; stop: () => void } | null = null
+
+  /** dizel jeneratör motor gürültüsü — çalışırken sürekli döner, bizi de rahatsız eder */
+  setDiesel(on: boolean) {
+    if (!this.ctx || !this.master) return
+    const want = on && this.sfxOn
+    if (want && !this.dieselNodes) {
+      const ctx = this.ctx
+      const gain = ctx.createGain()
+      gain.gain.value = 0
+      gain.gain.linearRampToValueAtTime(0.055, ctx.currentTime + 0.8)
+      gain.connect(this.master)
+      // alçak devirli motor: testere dişi + hafif detune ikinci osilatör
+      const osc1 = ctx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = 52
+      const osc2 = ctx.createOscillator(); osc2.type = 'square'; osc2.frequency.value = 104.7
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320; lp.Q.value = 1.2
+      // silindir vuruntusu: LFO ile genlik titremesi
+      const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 13
+      const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.35
+      const vGain = ctx.createGain(); vGain.gain.value = 0.7
+      lfo.connect(lfoGain); lfoGain.connect(vGain.gain)
+      // egzoz hışırtısı: filtreli gürültü
+      const nbuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
+      const nd = nbuf.getChannelData(0)
+      for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * 0.4
+      const noise = ctx.createBufferSource(); noise.buffer = nbuf; noise.loop = true
+      const nlp = ctx.createBiquadFilter(); nlp.type = 'bandpass'; nlp.frequency.value = 190; nlp.Q.value = 0.8
+      const nGain = ctx.createGain(); nGain.gain.value = 0.5
+      osc1.connect(lp); osc2.connect(lp); lp.connect(vGain); vGain.connect(gain)
+      noise.connect(nlp); nlp.connect(nGain); nGain.connect(gain)
+      osc1.start(); osc2.start(); lfo.start(); noise.start()
+      this.dieselNodes = {
+        gain,
+        stop: () => {
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5)
+          setTimeout(() => { osc1.stop(); osc2.stop(); lfo.stop(); noise.stop(); gain.disconnect() }, 600)
+        },
+      }
+    } else if (!want && this.dieselNodes) {
+      this.dieselNodes.stop()
+      this.dieselNodes = null
+    }
+  }
   musicOn = localStorage.getItem('benzinlik-music') !== '0'
 
   ensure() {

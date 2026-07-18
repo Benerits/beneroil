@@ -87,6 +87,8 @@ export class UI {
   onToggleClosed: () => void = () => {}
   onPriceChange: (f: FuelType | 'elec', delta: number) => void = () => {}
   private lastHudKey = ''
+  private setText(e: HTMLElement, v: string) { if (e.textContent !== v) e.textContent = v }
+  private setDisp(e: HTMLElement, v: string) { if (e.style.display !== v) e.style.display = v }
   onLogin: (email: string, pass: string) => void = () => {}
   onRegister: (email: string, pass: string) => void = () => {}
   onLogout: () => void = () => {}
@@ -453,20 +455,20 @@ export class UI {
   }
 
   update(state: GameState, dt: number) {
-    this.money.textContent = Math.round(state.money).toLocaleString('tr-TR')
-    this.day.textContent = `${state.day}`
-    this.rep.textContent = state.reputation.toFixed(1)
-    el<HTMLSpanElement>('quest').textContent = state.dailyDone ? 'TAMAM' : `${state.dailyServed}/15`
+    this.setText(this.money, Math.round(state.money).toLocaleString('tr-TR'))
+    this.setText(this.day, `${state.day}`)
+    this.setText(this.rep, state.reputation.toFixed(1))
+    this.setText(el<HTMLSpanElement>('quest'), state.dailyDone ? 'TAMAM' : `${state.dailyServed}/15`)
     const ts = this.tankerStatus()
     const tpanel = el<HTMLDivElement>('tankerpanel')
-    tpanel.style.display = ts.length ? 'flex' : 'none'
+    this.setDisp(tpanel, ts.length ? 'flex' : 'none')
     if (ts.length) {
       tpanel.innerHTML = ts.map(t =>
         `<div class="trow">${icon('i-truck')} <span>${t}</span></div>`).join('')
     }
-    el<HTMLDivElement>('acc-email').textContent = this.accountEmail ?? '—'
-    el<HTMLDivElement>('acc-streak').textContent = `Giriş serisi: ${state.loginStreak} gün · Oyun günü: ${state.day}`
-    el<HTMLDivElement>('acc-ach').textContent = `Başarımlar: ${state.achievements.size}/8 · Görev: ${state.dailyDone ? 'tamamlandı' : state.dailyServed + '/15'}`
+    this.setText(el<HTMLDivElement>('acc-email'), this.accountEmail ?? '—')
+    this.setText(el<HTMLDivElement>('acc-streak'), `Giriş serisi: ${state.loginStreak} gün · Oyun günü: ${state.day}`)
+    this.setText(el<HTMLDivElement>('acc-ach'), `Başarımlar: ${state.achievements.size}/8 · Görev: ${state.dailyDone ? 'tamamlandı' : state.dailyServed + '/15'}`)
 
     // yakıt türü başına tank barları + sipariş modalı satırları
     let anyLow = false
@@ -474,35 +476,33 @@ export class UI {
       const lvl = state.tanks[f]
       if (lvl < state.tankCapacity * 0.15) anyLow = true
       el<HTMLDivElement>(`fill-${f}`).style.width = `${(lvl / state.tankCapacity) * 100}%`
-      el<HTMLSpanElement>(`lvl-${f}`).textContent = `${Math.round(lvl)}L`
+      this.setText(el<HTMLSpanElement>(`lvl-${f}`), `${Math.round(lvl)}L`)
       const o = state.orders[f]
       const need = state.orderNeed(f)
       const btn = el<HTMLButtonElement>(`fbtn-${f}`)
       const info = el<HTMLDivElement>(`fneed-${f}`)
       if (o.pending) {
-        info.textContent = `Tanker yolda — ${Math.ceil(o.eta)} sn`
-        btn.textContent = 'Yolda'
+        this.setText(info, `Tanker yolda — ${Math.ceil(o.eta)} sn`)
+        this.setText(btn, 'Yolda')
         btn.disabled = true
       } else if (need < 100) {
-        info.textContent = 'Tank dolu'
-        btn.textContent = 'Dolu'
+        this.setText(info, 'Tank dolu')
+        this.setText(btn, 'Dolu')
         btn.disabled = true
       } else {
-        info.textContent = `${Math.round(state.tanks[f])} / ${state.tankCapacity}L — ${need}L eksik`
-        btn.textContent = `₺${state.orderCost(f).toLocaleString('tr-TR')}`
+        this.setText(info, `${Math.round(state.tanks[f])} / ${state.tankCapacity}L — ${need}L eksik`)
+        this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }
     }
 
-    this.closeLabel.textContent = state.closed ? 'KAPALI' : 'Açık'
+    this.setText(this.closeLabel, state.closed ? 'KAPALI' : 'Açık')
 
     if (state.batteryLevel > 0) {
-      this.battChip.style.display = 'flex'
+      this.setDisp(this.battChip, 'flex')
       this.battFill.style.width = `${(state.battery / state.batteryCapacity) * 100}%`
-      this.battKwh.textContent = `${Math.floor(state.battery)}/${state.batteryCapacity}`
+      this.setText(this.battKwh, `${Math.floor(state.battery)}/${state.batteryCapacity}`)
     }
-
-    this.orderLabel.textContent = 'Yakıt Siparişi'
 
     const maintCount = getMaintenanceItems(state).filter(m => !m.disabled).length
     // sınıflar yalnızca durum DEĞİŞİNCE yazılır — her karede toggle gölge flash'ı yapıyordu
@@ -515,11 +515,11 @@ export class UI {
       this.shopBtn.classList.toggle('danger', maintCount > 0)
       this.shopBtn.classList.toggle('primary', maintCount === 0)
     }
-    this.maintBadge.style.display = maintCount > 0 ? 'inline-block' : 'none'
-    this.maintBadge.textContent = `${maintCount}`
+    this.setDisp(this.maintBadge, maintCount > 0 ? 'inline-block' : 'none')
+    this.setText(this.maintBadge, `${maintCount}`)
     const dot = el<HTMLSpanElement>('shopdot')
-    dot.style.display = maintCount > 0 ? 'flex' : 'none'
-    dot.textContent = `${maintCount}`
+    this.setDisp(dot, maintCount > 0 ? 'flex' : 'none')
+    this.setText(dot, `${maintCount}`)
 
     if (this.shopOpen) {
       this.shopRenderT -= dt

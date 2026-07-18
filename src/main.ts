@@ -1774,6 +1774,7 @@ function frame() {
   updateWalkers(dt)
 
   world.update(dt)
+  audio.setDiesel(state.dieselRunning() && !state.closed)
   syncHoses()
   updateCamera()
   ui.update(state, dt)
