@@ -509,6 +509,17 @@ export class CarManager {
         }
       }
     }
+    // trafik kuralı: şeride çıkacak araç, yaklaşan akan trafiğe YOL VERİR
+    for (const c of this.cars) {
+      if (c.hold || c.phase !== 'leaving') continue
+      const p = c.group.position
+      const inMergeZone = p.x > 3.9 && p.x < LANE_NEAR - 0.25
+      if (!inMergeZone) continue
+      const oncoming = this.cars.some(o => o !== c && o.phase === 'transit' && o.lane === 'near'
+        && o.group.position.y > p.y - 10.5 && o.group.position.y < p.y + 1.5)
+      if (oncoming) c.hold = true
+    }
+
     // karşılıklı kilitlenme: ikisi de birbirini bekliyorsa biri yol alır
     for (const [c, o] of blockers) {
       if (blockers.get(o) === c && c.hold && o.hold) o.hold = false

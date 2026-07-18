@@ -1586,6 +1586,13 @@ function frame() {
     for (const c of cars.cars) {
       if (c.phase !== 'gone' && check(c.group.position, 3.8, 1.6)) return true
     }
+    // tanker de şeride çıkarken yaklaşan trafiğe yol verir
+    if (pos.x > 3.8 && pos.x < 6.7 && dir.x > 0.3) {
+      for (const c of cars.cars) {
+        if (c.phase === 'transit' && c.lane === 'near'
+          && c.group.position.y > pos.y - 12 && c.group.position.y < pos.y + 2) return true
+      }
+    }
     // tankerler birbirinin içinden GEÇMEZ: öndeki tanker varsa kuyrukta bekle
     for (const x of tankers) {
       if (x.t !== self && check(x.t.group.position, 5.2, 2.0)) return true
