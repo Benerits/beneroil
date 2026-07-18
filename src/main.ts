@@ -510,7 +510,8 @@ const placedPos: Record<string, [number, number]> = {}
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
 
 // ---- Kayıt sistemi ----
-const SAVE_KEY = 'benzinlik-save-v1'
+// yerel kayıt HESABA özel: farklı hesaplar birbirinin dünyasını asla görmez
+const SAVE_KEY = 'benzinlik-save-v1:' + (auth.currentEmail() ?? 'guest')
 
 let lastRemotePush = 0
 
@@ -947,13 +948,10 @@ ui.syncAccount(auth.currentEmail())
 // ---- Zorunlu giriş kapısı: hesap yoksa oyun oynanmaz ----
 async function doLogin(email: string, pass: string) {
   await auth.login(email, pass)
-  const remote = await auth.pullSave().catch(() => null)
-  if (!remote) await auth.pushSave(savePayload()).catch(() => {})
   location.reload()
 }
 async function doRegister(email: string, pass: string) {
   await auth.register(email, pass)
-  await auth.pushSave(savePayload()).catch(() => {})
   location.reload()
 }
 
@@ -1005,8 +1003,6 @@ document.getElementById('authgate')?.remove()
 ui.onLogin = async (email, pass) => {
   try {
     await auth.login(email, pass)
-    const remote = await auth.pullSave().catch(() => null)
-    if (!remote) await auth.pushSave(savePayload()).catch(() => {})
     location.reload()
   } catch (err) {
     ui.toast((err as Error).message, 'bad')
@@ -1015,9 +1011,7 @@ ui.onLogin = async (email, pass) => {
 ui.onRegister = async (email, pass) => {
   try {
     await auth.register(email, pass)
-    await auth.pushSave(savePayload()).catch(() => {})
-    ui.toast('Hesap oluşturuldu — kaydın artık bulutta!', 'good')
-    ui.syncAccount(auth.currentEmail())
+    location.reload()
   } catch (err) {
     ui.toast((err as Error).message, 'bad')
   }
