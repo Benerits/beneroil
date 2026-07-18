@@ -495,6 +495,7 @@ function tickEvCharging(dt: number) {
     const give = Math.min(need, cap * dt, state.battery)
     state.battery = Math.max(0, state.battery - give)
     c.chargedKwh += give
+    c.setCounter(`⚡ ${Math.floor(c.chargedKwh)} kWh · kalan ${Math.max(0, Math.ceil(c.demandKwh - c.chargedKwh))}`)
     if (c.chargedKwh >= c.demandKwh - 0.001) {
       c.charging = false
       const revenue = Math.round(c.demandKwh * state.elecPrice)
@@ -1877,6 +1878,7 @@ function frame() {
     const amount = Math.min(FILL_RATE * dt, state.tanks[c.nozzle])
     c.filled += amount
     state.tanks[c.nozzle] -= amount
+    c.setCounter(`${c.filled.toFixed(1)}L · ₺${c.filledValue.toFixed(0)}`)
     if (c.nozzle !== c.demandType && c.filled > 1.5) {
       wrongFuel(c)
     } else if (c.fullMode ? c.filled >= c.hiddenNeedL : c.filledValue >= c.targetAmount) {

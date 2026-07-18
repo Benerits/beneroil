@@ -244,16 +244,20 @@ export class UI {
       const amt = Math.floor(Number(this.amount.value))
       if (!car || !car.nozzle || !(amt > 0) || car.filling || car.filled > 0) return
       this.onStart(car, amt)
-      this.refreshPanel()
+      this.selectCar(null) // kutucuk kapanır, sayaç aracın üzerinde akar
     })
     el<HTMLButtonElement>('fullbtn').addEventListener('click', () => {
       const car = this.activeCar
       if (!car || !car.nozzle || car.filling || car.filled > 0) return
       this.onStartFull(car)
-      this.refreshPanel()
+      this.selectCar(null)
     })
     this.chargeBtn.addEventListener('click', () => {
-      if (this.activeCar?.kind === 'ev') this.onChargeEV(this.activeCar)
+      if (this.activeCar?.kind === 'ev') {
+        const car = this.activeCar
+        this.onChargeEV(car)
+        if (car.charging) this.selectCar(null)
+      }
     })
     el<HTMLButtonElement>('dismissbtn').addEventListener('click', () => {
       if (this.activeCar) this.onDismiss(this.activeCar)

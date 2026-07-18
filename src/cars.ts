@@ -96,6 +96,36 @@ function buildCarMesh(kind: BodyKind, color: number): THREE.Group {
   return g
 }
 
+function liveSprite(text: string, accent: string): { sp: THREE.Sprite; set: (t: string) => void } {
+  const c = document.createElement('canvas')
+  c.width = 512; c.height = 192
+  const ctx = c.getContext('2d')!
+  const draw = (t: string) => {
+    ctx.clearRect(0, 0, 512, 192)
+    ctx.fillStyle = 'rgba(255,255,255,0.96)'
+    ctx.strokeStyle = accent
+    ctx.lineWidth = 14
+    ctx.beginPath()
+    ctx.roundRect(8, 8, 496, 176, 40)
+    ctx.fill(); ctx.stroke()
+    ctx.fillStyle = '#1c2530'
+    let fs = 76
+    ctx.font = `800 ${fs}px -apple-system, sans-serif`
+    while (fs > 34 && ctx.measureText(t).width > 448) {
+      fs -= 4
+      ctx.font = `800 ${fs}px -apple-system, sans-serif`
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(t, 256, 100)
+  }
+  draw(text)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, color: 0xdedede }))
+  sp.scale.set(2.6, 0.98, 1)
+  return { sp, set: (t: string) => { draw(t); tex.needsUpdate = true } }
+}
+
 function textSprite(text: string, accent: string): THREE.Sprite {
   const c = document.createElement('canvas')
   c.width = 512; c.height = 192
@@ -286,22 +316,30 @@ export class Car {
     return d.lengthSq() < 1e-6 ? null : d.normalize()
   }
 
+  private bubbleSet: ((t: string) => void) | null = null
+
   showBubble() {
     if (this.bubble) return
+    let made: { sp: THREE.Sprite; set: (t: string) => void }
     if (this.kind === 'ev') {
-      this.bubble = textSprite(`⚡ ${this.demandKwh} kWh`, '#35c7d6')
+      made = liveSprite(`⚡ ${this.demandKwh} kWh`, '#35c7d6')
     } else {
       const accent = this.demandType === 'benzin' ? '#27a05a' : this.demandType === 'dizel' ? '#e8862e' : '#2f6fed'
-      this.bubble = textSprite(this.wantsFull
+      made = liveSprite(this.wantsFull
         ? `FULLE ${FUEL_LABEL[this.demandType]}`
         : `₺${this.demandAmount} ${FUEL_LABEL[this.demandType]}`, accent)
     }
+    this.bubble = made.sp
+    this.bubbleSet = made.set
     this.bubble.position.z = 2.85
     this.group.add(this.bubble)
   }
 
+  /** dolum/şarj sırasında balonu canlı sayaca çevirir */
+  setCounter(t: string) { this.bubbleSet?.(t) }
+
   hideBubble() {
-    if (this.bubble) { this.group.remove(this.bubble); this.bubble = null }
+    if (this.bubble) { this.group.remove(this.bubble); this.bubble = null; this.bubbleSet = null }
   }
 
   showFeedback(emoji: string) {
