@@ -702,7 +702,7 @@ function getThumbnail(id: string): string | null {
   subject.traverse(o => { if ((o as THREE.Sprite).isSprite) o.visible = false })
   if (!thumbRenderer) {
     thumbRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
-    thumbRenderer.setSize(240, 180)
+    thumbRenderer.setSize(300, 300)
     thumbRenderer.toneMapping = THREE.ACESFilmicToneMapping
     thumbRenderer.toneMappingExposure = 1.15
   }
@@ -715,8 +715,8 @@ function getThumbnail(id: string): string | null {
   const bb = new THREE.Box3().setFromObject(subject)
   const center = bb.getCenter(new THREE.Vector3())
   const size = bb.getSize(new THREE.Vector3())
-  const r = Math.max(size.x, size.y, size.z) * 0.6 + 0.5
-  const cam = new THREE.OrthographicCamera(-r * 1.33, r * 1.33, r, -r, 0.1, 200)
+  const r = Math.max(size.x, size.y, size.z) * 0.56 + 0.35
+  const cam = new THREE.OrthographicCamera(-r * 1.05, r * 1.05, r * 1.05, -r * 1.05, 0.1, 200)
   cam.up.set(0, 0, 1)
   cam.position.copy(center).add(new THREE.Vector3(1, 2, 1).normalize().multiplyScalar(40))
   cam.lookAt(center)

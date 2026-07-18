@@ -141,24 +141,25 @@
                                       border: 2.5px solid var(--paper-2); }
     .mbody::-webkit-scrollbar-thumb:hover { background: rgba(34, 48, 60, .52); }
 
-    /* mağaza kartları */
-    .shopgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+    /* mağaza kartları: 3 sütun, büyük görsel, dikey akış */
+    .shopgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .card { background: #fff; border: 1.5px solid var(--line); border-bottom: 2.5px solid var(--edge);
-            border-radius: var(--r-md); padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+            border-radius: var(--r-md); padding: 6px; display: flex; flex-direction: column; gap: 4px; }
     .card.maxed { opacity: .55; }
     .card.locked .cthumb { filter: grayscale(.8) opacity(.65); }
-    .cthumb { height: 88px; background: linear-gradient(180deg, #eef3f7, var(--paper-2));
+    .cthumb { height: 108px; background: linear-gradient(180deg, #eef4f8, var(--paper-2));
               border: 1px solid var(--line); border-radius: var(--r-sm); display: flex;
               align-items: center; justify-content: center; overflow: hidden; }
-    .cthumb img { max-width: 96%; max-height: 96%; object-fit: contain; }
-    .ic.cbig { width: 34px; height: 34px; }
-    .cname { font-size: 12.5px; font-weight: 800; line-height: 1.15; min-height: 28px;
+    .cthumb img { width: 100%; height: 100%; object-fit: contain; }
+    .ic.cbig { width: 36px; height: 36px; }
+    .cname { font-size: 11.5px; font-weight: 800; line-height: 1.12; min-height: 26px;
              display: flex; align-items: center; }
-    .cbadges { display: flex; gap: 4px; flex-wrap: wrap; }
-    .cdesc { font-size: 10.5px; color: var(--muted); font-weight: 600; line-height: 1.3;
+    .cbadges { display: flex; gap: 3px; flex-wrap: wrap; }
+    .cbadges .stat-badge { font-size: 9px; padding: 1px 6px; }
+    .cdesc { font-size: 9.5px; color: var(--muted); font-weight: 600; line-height: 1.3;
              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-             min-height: 27px; }
-    .cbuy { width: 100%; justify-content: center; padding: 8px; font-size: 12.5px;
+             min-height: 24px; }
+    .cbuy { width: 100%; justify-content: center; padding: 7px 4px; font-size: 11.5px;
             font-variant-numeric: tabular-nums; margin-top: auto; }
 
     /* servis paneli istek başlığı */
@@ -273,6 +274,7 @@
     <symbol id="i-clean" viewBox="0 0 24 24"><path d="M11 4.5 12.3 8l3.5 1.3-3.5 1.3L11 14l-1.3-3.4L6.2 9.3 9.7 8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M17.5 13.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
     <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3.5v17M3.5 12h17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.2 6.3 12 3.5l2.8 2.8M9.2 17.7l2.8 2.8 2.8-2.8M6.3 9.2 3.5 12l2.8 2.8M17.7 9.2l2.8 2.8-2.8 2.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-office" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 8h2.5M13.5 8H16M9 12h2.5M13.5 12H16M10.5 20.5v-4h3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   </svg>
 
   <div class="hud">
@@ -288,6 +290,7 @@
     <button id="closebtn" class="btn"><svg class="ic"><use href="#i-power"/></svg><span id="closelabel">Açık</span></button>
     <button id="orderbtn" class="btn warn"><svg class="ic"><use href="#i-truck"/></svg><span id="orderlabel">Yakıt Siparişi</span></button>
     <button id="shopbtn" class="btn primary"><svg class="ic"><use href="#i-build"/></svg><span id="shoplabel">İnşaat</span></button>
+    <button id="accbtn" class="btn" title="Hesabım"><svg class="ic" style="margin:0"><use href="#i-user"/></svg></button>
     <button id="setbtn" class="btn" title="Ayarlar"><svg class="ic" style="margin:0"><use href="#i-gear"/></svg></button>
   </div>
 
@@ -380,6 +383,26 @@
           <button class="btn sbuy primary" id="fbtn-lpg">Sipariş</button>
         </div>
         <div class="sd" style="text-align:center; padding:6px 0 2px">Her yakıtın tankeri ayrı gelir ve ayrı boşaltır — üçüne de sen yetişeceksin.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="backdrop" id="accwrap">
+    <div class="modal" style="height:auto; max-height:84vh">
+      <div class="mhead">
+        <h3>Hesabım</h3>
+        <button class="mclose" data-close="accwrap"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="mbody">
+        <div class="shoprow"><div class="sicon" style="color:var(--red);background:#d645451c;border-color:#d6454544"><svg class="ic"><use href="#i-user"/></svg></div>
+          <div class="sinfo"><div class="st" id="acc-email">—</div><div class="sd">Kaydın buluta senkronlanıyor (10 sn'de bir)</div></div></div>
+        <div class="shoprow"><div class="sicon" style="color:var(--orange);background:#e8862e1c;border-color:#e8862e44"><svg class="ic"><use href="#i-cal"/></svg></div>
+          <div class="sinfo"><div class="st" id="acc-streak">—</div><div class="sd">Her gün gir, seri büyüsün — bonus artar</div></div></div>
+        <div class="shoprow"><div class="sicon" style="color:var(--green);background:#27a05a1c;border-color:#27a05a44"><svg class="ic"><use href="#i-star"/></svg></div>
+          <div class="sinfo"><div class="st" id="acc-ach">—</div><div class="sd">Başarımlar oynadıkça açılır</div></div></div>
+        <div class="row" style="display:flex; gap:8px; margin-top:4px">
+          <button id="acclogout" class="btn danger" style="flex:1; justify-content:center">Çıkış Yap</button>
+        </div>
       </div>
     </div>
   </div>

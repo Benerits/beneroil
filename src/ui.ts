@@ -133,6 +133,10 @@ export class UI {
       el<HTMLButtonElement>(`fbtn-${f}`).addEventListener('click', () => this.onOrderFuel(f))
     }
     this.closeBtn.addEventListener('click', () => this.onToggleClosed())
+    const accWrap = el<HTMLDivElement>('accwrap')
+    el<HTMLButtonElement>('accbtn').addEventListener('click', () => accWrap.classList.add('show'))
+    accWrap.addEventListener('pointerdown', e => { if (e.target === accWrap) accWrap.classList.remove('show') })
+    el<HTMLButtonElement>('acclogout').addEventListener('click', () => this.onLogout())
 
     // modallar
     const setWrap = el<HTMLDivElement>('setwrap')
@@ -339,8 +343,11 @@ export class UI {
     this.infoCard.classList.add('show')
   }
 
+  private accountEmail: string | null = null
+
   /** hesap durumunu ayarlar panelinde göster */
   syncAccount(email: string | null) {
+    this.accountEmail = email
     el<HTMLDivElement>('accstatus').textContent = email
       ? `Giriş yapıldı: ${email} — kaydın buluta senkronlanıyor.`
       : 'Giriş yapılmadı — misafir modundasın (kayıt sadece bu tarayıcıda).'
@@ -408,6 +415,9 @@ export class UI {
     this.day.textContent = `${state.day}`
     this.rep.textContent = state.reputation.toFixed(1)
     el<HTMLSpanElement>('quest').textContent = state.dailyDone ? 'TAMAM' : `${state.dailyServed}/15`
+    el<HTMLDivElement>('acc-email').textContent = this.accountEmail ?? 'Misafir'
+    el<HTMLDivElement>('acc-streak').textContent = `Giriş serisi: ${state.loginStreak} gün · Oyun günü: ${state.day}`
+    el<HTMLDivElement>('acc-ach').textContent = `Başarımlar: ${state.achievements.size}/8 · Görev: ${state.dailyDone ? 'tamamlandı' : state.dailyServed + '/15'}`
 
     // yakıt türü başına tank barları + sipariş modalı satırları
     let anyLow = false
