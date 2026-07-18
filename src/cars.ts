@@ -412,7 +412,8 @@ export class Tanker {
     this.path = [
       new THREE.Vector3(LANE_NEAR, inY - 3.5, 0),
       new THREE.Vector3(4.2, inY, 0),
-      new THREE.Vector3(target.x + 3.2, parkY, 0),
+      new THREE.Vector3(4.2, parkY, 0), // önce şerit boyunca hizaya gel
+      new THREE.Vector3(target.x + 3.2, parkY, 0), // sonra düz batıya park
     ]
   }
 
@@ -450,8 +451,8 @@ export class Tanker {
         this.unloading = false
         this.leaving = true
         this.path = [
-          new THREE.Vector3(3.6, -4.5, 0),
-          new THREE.Vector3(4.2, this.outY, 0),
+          new THREE.Vector3(4.2, this.group.position.y, 0), // düz doğuya, şeride çık
+          new THREE.Vector3(4.2, this.outY, 0),             // şerit boyunca çıkışa
           new THREE.Vector3(LANE_NEAR, this.outY + 4, 0),
           new THREE.Vector3(LANE_NEAR, 44, 0),
         ]
@@ -663,6 +664,7 @@ export class CarManager {
   }
 
   private tryEnter(car: Car) {
+    if (this.opts.entryChance() <= 0) return // istasyon kapalı: kimse girmez
     if (car.kind === 'ev') {
       let slot = -1
       for (let i = 0; i < this.opts.evCount(); i++) {

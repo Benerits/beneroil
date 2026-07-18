@@ -600,7 +600,7 @@ function applySaveData(d: Record<string, unknown>) {
   hydrateState(state, (d.s ?? {}) as Record<string, unknown>)
   Object.assign(placedPos, (d.placedPos ?? {}) as Record<string, [number, number]>)
   Object.assign(placedRot, (d.placedRot ?? {}) as Record<string, number>)
-  if (Array.isArray(d.placedRects)) placedRects.push(...(d.placedRects as (Rect & { id: string })[]))
+  if (Array.isArray(d.placedRects)) placedRects.push(...(d.placedRects as (Rect & { id: string })[]).filter(r => r.id !== 'gatein' && r.id !== 'gateout'))
 }
 
 /** kayıttan gelen state'e göre sahneyi yeniden kurar */
@@ -670,7 +670,7 @@ function rebuildFromState() {
 
 function fixedObstacles(skipId = ''): Rect[] {
   const r: Rect[] = [
-    { cx: 4.2, cy: 0, w: 2.6, d: 48 },       // servis şeridi (araç yolu)
+    { cx: 4.3, cy: 0, w: 2.0, d: 48 },       // servis şeridi (araç yolu, daraltıldı)
     { cx: 4.0, cy: -11.5, w: 2.4, d: 3.4 },  // tabela
   ]
   if (skipId !== 'tank')
@@ -978,8 +978,10 @@ function confirmPlacement() {
   placedRot[p.id] = p.rot
   const i = placedRects.findIndex(r => r.id === p.id)
   if (i >= 0) placedRects.splice(i, 1)
-  const odd = p.rot % 2 === 1
-  placedRects.push({ id: p.id, cx: p.cx, cy: p.cy, w: odd ? p.d : p.w, d: odd ? p.w : p.d })
+  if (p.id !== 'gatein' && p.id !== 'gateout') {
+    const odd = p.rot % 2 === 1
+    placedRects.push({ id: p.id, cx: p.cx, cy: p.cy, w: odd ? p.d : p.w, d: odd ? p.w : p.d })
+  }
   cancelPlacement()
   persist()
 }
