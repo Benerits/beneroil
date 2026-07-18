@@ -438,6 +438,7 @@ export class World {
       rock.rotation.z = rx * 2.1
       rock.castShadow = true
       s.add(rock)
+      this.decor.push({ obj: rock, x: rx, y: ry })
     }
     const flowerColors = [0xe8e6e1, 0xf2c14e, 0xe08bb0]
     for (const [fx, fy] of [[-9.8, -11.4], [-8.4, 14.2], [12.9, -17.6], [11.8, 12.4], [-11.2, 1.2],
@@ -447,6 +448,7 @@ export class World {
         const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), fm)
         p.position.set(fx + Math.sin(k * 2.4 + fx) * 0.5, fy + Math.cos(k * 1.9 + fy) * 0.5, 0.09)
         s.add(p)
+        this.decor.push({ obj: p, x: p.position.x, y: p.position.y })
       }
     }
 
@@ -722,8 +724,13 @@ export class World {
       t.rotation.z = Math.random() * Math.PI * 2
       t.traverse(m => { m.castShadow = true })
       this.scene.add(t)
+      this.decor.push({ obj: t, x, y })
     } else {
-      buildTreeProc(x, y, scale, this.scene)
+      const g = new THREE.Group()
+      buildTreeProc(0, 0, scale, g)
+      g.position.set(x, y, 0)
+      this.scene.add(g)
+      this.decor.push({ obj: g, x, y })
     }
   }
 
@@ -757,6 +764,8 @@ export class World {
   }
 
   private ownedMarks = new Map<string, THREE.Group>()
+  /** arsalara denk gelebilecek doğal dekor (ağaç/taş/çiçek) — beton dökülünce temizlenir */
+  private decor: { obj: THREE.Object3D; x: number; y: number }[] = []
 
   /** satın alınan (henüz betonsuz) arsayı ahşap kazık + ip sınırla işaretle */
   markOwned(c: number, r: number) {
@@ -802,6 +811,15 @@ export class World {
     if (mark) {
       this.scene.remove(mark)
       this.ownedMarks.delete(`${c},${r}`)
+    }
+    {
+      const [dx0, dx1] = PARCEL_COLS[c]
+      const [dy0, dy1] = PARCEL_ROWS[r]
+      this.decor = this.decor.filter(d => {
+        const inside = d.x >= dx0 && d.x <= dx1 && d.y >= dy0 && d.y <= dy1
+        if (inside) this.scene.remove(d.obj)
+        return !inside
+      })
     }
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]

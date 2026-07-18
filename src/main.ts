@@ -1118,8 +1118,8 @@ ui.onRename = name => applyStationName(name)
 
 
 // tek seferlik: patronun betonları söküldü, parası iade (mekanik testi için)
-if (!isFullMode && auth.currentEmail() === 'oguz@benerits.com' && !localStorage.getItem('benzinlik-refund-1')) {
-  localStorage.setItem('benzinlik-refund-1', '1')
+if (!isFullMode && auth.currentEmail() === 'oguz@benerits.com' && !localStorage.getItem('benzinlik-refund-2')) {
+  localStorage.setItem('benzinlik-refund-2', '1')
   const extra = [...state.pavedParcels].filter(k => k !== '0,1')
   if (extra.length > 0) {
     for (const k of extra) state.pavedParcels.delete(k)
