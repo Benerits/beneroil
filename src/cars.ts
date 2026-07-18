@@ -1,0 +1,570 @@
+import * as THREE from 'three'
+import { FuelType, FUEL_LABEL, FUEL_PRICE } from './state'
+import { ROAD_X, LANE_NEAR, LANE_FAR, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
+
+const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
+const CAR_SPEED = 7
+const DEMAND_AMOUNTS = [100, 150, 200, 250, 300, 400]
+const DECISION_Y = -26 // yakın şeritte istasyona girme kararının verildiği nokta
+
+export type CarPhase = 'transit' | 'driving' | 'waiting' | 'atPump' | 'leaving' | 'gone'
+export type CarKind = 'fuel' | 'ev'
+type BodyKind = 'sedan' | 'hatch' | 'suv'
+
+const lam = (color: number) => new THREE.MeshLambertMaterial({ color })
+
+function shapeFrom(points: [number, number][]): THREE.Shape {
+  const s = new THREE.Shape()
+  s.moveTo(points[0][0], points[0][1])
+  for (let i = 1; i < points.length; i++) s.lineTo(points[i][0], points[i][1])
+  s.closePath()
+  return s
+}
+
+interface CarSpec {
+  body: [number, number][]
+  cabin: [number, number][]
+  width: number
+  wheelR: number
+  wheelX: number
+  front: number
+  rear: number
+}
+
+const SPECS: Record<BodyKind, CarSpec> = {
+  sedan: {
+    body: [[-1.25, 0.2], [1.22, 0.2], [1.34, 0.35], [1.3, 0.62], [-1.22, 0.68], [-1.32, 0.45]],
+    cabin: [[0.55, 0.66], [0.28, 1.05], [-0.45, 1.08], [-0.85, 0.68]],
+    width: 1.1, wheelR: 0.27, wheelX: 0.8, front: 1.34, rear: -1.32,
+  },
+  hatch: {
+    body: [[-1.0, 0.2], [1.0, 0.2], [1.12, 0.35], [1.08, 0.6], [-1.02, 0.68], [-1.1, 0.4]],
+    cabin: [[0.4, 0.64], [0.15, 1.05], [-0.68, 1.06], [-0.96, 0.66]],
+    width: 1.05, wheelR: 0.25, wheelX: 0.62, front: 1.12, rear: -1.1,
+  },
+  suv: {
+    body: [[-1.2, 0.28], [1.2, 0.28], [1.32, 0.45], [1.28, 0.75], [-1.22, 0.8], [-1.3, 0.5]],
+    cabin: [[0.5, 0.78], [0.3, 1.25], [-0.82, 1.28], [-1.08, 0.8]],
+    width: 1.2, wheelR: 0.31, wheelX: 0.8, front: 1.32, rear: -1.3,
+  },
+}
+
+function extrude(points: [number, number][], width: number, color: number): THREE.Mesh {
+  const geo = new THREE.ExtrudeGeometry(shapeFrom(points), {
+    depth: width, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 2, steps: 1,
+  })
+  geo.translate(0, 0, -width / 2)
+  const m = new THREE.Mesh(geo, lam(color))
+  m.rotation.x = Math.PI / 2
+  m.castShadow = true
+  return m
+}
+
+function buildCarMesh(kind: BodyKind, color: number): THREE.Group {
+  const g = new THREE.Group()
+  const spec = SPECS[kind]
+  g.add(extrude(spec.body, spec.width, color))
+  g.add(extrude(spec.cabin, spec.width * 0.78, 0x394c60))
+  const tire = new THREE.CylinderGeometry(spec.wheelR, spec.wheelR, 0.2, 16)
+  const hub = new THREE.CylinderGeometry(spec.wheelR * 0.45, spec.wheelR * 0.45, 0.22, 10)
+  for (const wx of [spec.wheelX, -spec.wheelX]) for (const wy of [spec.width / 2, -spec.width / 2]) {
+    const t = new THREE.Mesh(tire, lam(0x22262a))
+    t.position.set(wx, wy, spec.wheelR)
+    t.castShadow = true
+    g.add(t)
+    const h = new THREE.Mesh(hub, lam(0xc8ccd0))
+    h.position.set(wx, wy, spec.wheelR)
+    g.add(h)
+  }
+  const bumpZ = kind === 'suv' ? 0.38 : 0.3
+  for (const x of [spec.front - 0.02, spec.rear + 0.02]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.1, spec.width * 0.92, 0.14), lam(0x2e343a))
+    b.position.set(x, 0, bumpZ)
+    g.add(b)
+  }
+  const lightZ = kind === 'suv' ? 0.6 : 0.5
+  for (const sy of [0.32, -0.32]) {
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.1),
+      new THREE.MeshLambertMaterial({ color: 0xfff2c9, emissive: 0xfff2c9, emissiveIntensity: 0.5 }))
+    head.position.set(spec.front, sy * spec.width, lightZ)
+    g.add(head)
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.09),
+      new THREE.MeshLambertMaterial({ color: 0xd64545, emissive: 0xd64545, emissiveIntensity: 0.4 }))
+    tail.position.set(spec.rear, sy * spec.width, lightZ + 0.04)
+    g.add(tail)
+  }
+  return g
+}
+
+function textSprite(text: string, accent: string): THREE.Sprite {
+  const c = document.createElement('canvas')
+  c.width = 512; c.height = 192
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = 'rgba(255,255,255,0.96)'
+  ctx.strokeStyle = accent
+  ctx.lineWidth = 14
+  ctx.beginPath()
+  ctx.roundRect(8, 8, 496, 176, 40)
+  ctx.fill(); ctx.stroke()
+  ctx.fillStyle = '#1c2530'
+  ctx.font = '800 76px -apple-system, sans-serif'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(text, 256, 100)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  sp.scale.set(2.6, 0.98, 1)
+  return sp
+}
+
+function emojiSprite(emoji: string): THREE.Sprite {
+  const c = document.createElement('canvas')
+  c.width = 128; c.height = 128
+  const ctx = c.getContext('2d')!
+  ctx.font = '100px -apple-system, sans-serif'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(emoji, 64, 70)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  sp.scale.set(1.15, 1.15, 1)
+  return sp
+}
+
+import { ModelLib, cloneModel } from './models'
+
+export class Car {
+  group: THREE.Group
+  kind: CarKind
+  demandType: FuelType
+  demandAmount: number
+  demandLiters: number
+  demandKwh: number
+  maxPatience: number
+  patience: number
+  phase: CarPhase = 'transit'
+  lane: 'near' | 'far' | null = null
+  wantsEnter = false
+  converted = false
+  wantsMarket: boolean
+  wantsToilet: boolean
+  filled = 0
+  nozzle: FuelType | null = null
+  targetAmount = 0
+  slotIndex = -1
+  wrongFuelHandled = false
+  beingServed = false
+
+  private path: THREE.Vector3[] = []
+  private onArrive: (() => void) | null = null
+  private bubble: THREE.Sprite | null = null
+  private patienceBg: THREE.Sprite
+  private patienceFill: THREE.Sprite
+  private feedback: THREE.Sprite | null = null
+  private feedbackT = 0
+
+  constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind) {
+    this.kind = kind
+    if (kind === 'ev') {
+      this.group = lib?.evCar ? cloneModel(lib.evCar) : buildCarMesh('hatch', 0x35c7d6)
+    } else if (lib && lib.cars.length > 0) {
+      this.group = cloneModel(lib.cars[Math.floor(Math.random() * lib.cars.length)])
+    } else {
+      const kinds: BodyKind[] = ['sedan', 'sedan', 'hatch', 'hatch', 'suv']
+      const bk = kinds[Math.floor(Math.random() * kinds.length)]
+      this.group = buildCarMesh(bk, CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)])
+    }
+    this.group.userData.car = this
+    this.demandType = Math.random() < 0.5 ? 'benzin' : 'dizel'
+    this.demandAmount = DEMAND_AMOUNTS[Math.floor(Math.random() * DEMAND_AMOUNTS.length)]
+    this.demandLiters = this.demandAmount / FUEL_PRICE[this.demandType]
+    this.demandKwh = 20 + Math.floor(Math.random() * 9) * 5 // 20..60
+    this.maxPatience = kind === 'ev' ? 25 : 40
+    this.patience = this.maxPatience
+    this.wantsMarket = Math.random() < 0.35
+    this.wantsToilet = Math.random() < 0.3
+    scene.add(this.group)
+
+    const mkBar = (c: number, z: number) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ color: c, depthTest: false }))
+      sp.scale.set(1.5, 0.16, 1)
+      sp.position.z = z
+      sp.visible = false
+      this.group.add(sp)
+      return sp
+    }
+    this.patienceBg = mkBar(0x1c2530, 2.0)
+    this.patienceFill = mkBar(0x4dc36b, 2.01)
+  }
+
+  get filledValue(): number {
+    return this.nozzle ? this.filled * FUEL_PRICE[this.nozzle] : 0
+  }
+
+  get patienceFrac(): number {
+    return Math.max(0, this.patience) / this.maxPatience
+  }
+
+  setPath(points: THREE.Vector3[], onArrive?: () => void) {
+    this.path = points.map(p => p.clone())
+    this.onArrive = onArrive ?? null
+  }
+
+  showBars() {
+    this.patienceBg.visible = true
+    this.patienceFill.visible = true
+  }
+
+  hideBars() {
+    this.patienceBg.visible = false
+    this.patienceFill.visible = false
+  }
+
+  showBubble() {
+    if (this.bubble) return
+    if (this.kind === 'ev') {
+      this.bubble = textSprite(`⚡ ${this.demandKwh} kWh`, '#35c7d6')
+    } else {
+      const accent = this.demandType === 'benzin' ? '#27a05a' : '#e8862e'
+      this.bubble = textSprite(`₺${this.demandAmount} ${FUEL_LABEL[this.demandType]}`, accent)
+    }
+    this.bubble.position.z = 2.85
+    this.group.add(this.bubble)
+  }
+
+  hideBubble() {
+    if (this.bubble) { this.group.remove(this.bubble); this.bubble = null }
+  }
+
+  showFeedback(emoji: string) {
+    if (this.feedback) this.group.remove(this.feedback)
+    this.feedback = emojiSprite(emoji)
+    this.feedback.position.z = 2.6
+    this.group.add(this.feedback)
+    this.feedbackT = 2.5
+  }
+
+  update(dt: number) {
+    if (this.path.length > 0) {
+      const pos = this.group.position
+      const target = this.path[0]
+      const d = new THREE.Vector3().subVectors(target, pos)
+      d.z = 0
+      const dist = d.length()
+      const step = CAR_SPEED * dt
+      if (dist <= step) {
+        pos.copy(target)
+        this.path.shift()
+        if (this.path.length === 0 && this.onArrive) {
+          const cb = this.onArrive
+          this.onArrive = null
+          cb()
+        }
+      } else {
+        d.normalize()
+        pos.addScaledVector(d, step)
+        const targetYaw = Math.atan2(d.y, d.x)
+        let diff = targetYaw - this.group.rotation.z
+        while (diff > Math.PI) diff -= Math.PI * 2
+        while (diff < -Math.PI) diff += Math.PI * 2
+        this.group.rotation.z += diff * Math.min(1, dt * 8)
+      }
+    }
+
+    if ((this.phase === 'waiting' || this.phase === 'atPump') && !this.beingServed) {
+      this.patience -= dt
+    }
+    const p = this.patienceFrac
+    this.patienceFill.scale.x = 1.5 * p
+    this.patienceFill.position.x = -(1.5 * (1 - p)) / 2
+    const color = p > 0.5 ? 0x4dc36b : p > 0.25 ? 0xe0b13e : 0xd64545
+    ;(this.patienceFill.material as THREE.SpriteMaterial).color.setHex(color)
+
+    if (this.feedback) {
+      this.feedbackT -= dt
+      this.feedback.position.z += dt * 0.3
+      if (this.feedbackT <= 0) {
+        this.group.remove(this.feedback)
+        this.feedback = null
+      }
+    }
+  }
+
+  dispose(scene: THREE.Scene) {
+    scene.remove(this.group)
+    this.phase = 'gone'
+  }
+}
+
+/** Sipariş gelince tank dolduran tanker kamyonu */
+export class Tanker {
+  group: THREE.Group
+  private path: THREE.Vector3[] = []
+  private stayTimer = 0
+  private leaving = false
+  done = false
+  unloading = false
+
+  constructor(scene: THREE.Scene, lib: ModelLib | null) {
+    let g: THREE.Group
+    if (lib?.tankerBase) {
+      g = new THREE.Group()
+      g.add(cloneModel(lib.tankerBase))
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.5, 16), lam(0xc4cdd4))
+      tank.rotation.z = Math.PI / 2
+      tank.position.set(-0.55, 0, 0.95)
+      tank.castShadow = true
+      g.add(tank)
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.15, 10), lam(0x8f979e))
+      cap.rotation.x = Math.PI / 2
+      cap.position.set(-0.55, 0, 1.5)
+      g.add(cap)
+      g.scale.setScalar(1.5)
+    } else {
+      g = new THREE.Group()
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.5, 1.5), lam(0xd64545))
+      cab.position.set(1.9, 0, 0.95); cab.castShadow = true; g.add(cab)
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 3.4, 18), lam(0xc4cdd4))
+      tank.rotation.z = Math.PI / 2
+      tank.position.set(-0.6, 0, 1.15); tank.castShadow = true; g.add(tank)
+      const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.4, 0.3), lam(0x2b2f33))
+      chassis.position.set(0, 0, 0.45); g.add(chassis)
+      const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.25, 14)
+      for (const wx of [1.9, 0.2, -1.6]) for (const wy of [0.72, -0.72]) {
+        const w = new THREE.Mesh(wheelGeo, lam(0x22262a))
+        w.position.set(wx, wy, 0.32); g.add(w)
+      }
+    }
+    g.position.set(ROAD_X, -44, 0)
+    scene.add(g)
+    this.group = g
+    this.path = [
+      new THREE.Vector3(LANE_NEAR, APRON_IN_Y - 3.5, 0),
+      new THREE.Vector3(4.2, APRON_IN_Y, 0),
+      new THREE.Vector3(TANK_POS.x + 3.2, TANK_POS.y, 0),
+    ]
+  }
+
+  update(dt: number): boolean {
+    let delivered = false
+    if (this.path.length > 0) {
+      const pos = this.group.position
+      const target = this.path[0]
+      const d = new THREE.Vector3().subVectors(target, pos)
+      const dist = d.length()
+      const step = 8 * dt
+      if (dist <= step) {
+        pos.copy(target)
+        this.path.shift()
+        if (this.path.length === 0 && !this.leaving) {
+          this.stayTimer = 4
+          this.unloading = true
+        }
+      } else {
+        d.normalize()
+        pos.addScaledVector(d, step)
+        this.group.rotation.z = Math.atan2(d.y, d.x)
+      }
+    } else if (!this.leaving) {
+      this.stayTimer -= dt
+      if (this.stayTimer <= 0) {
+        delivered = true
+        this.unloading = false
+        this.leaving = true
+        this.path = [
+          new THREE.Vector3(3.6, -4.5, 0),
+          new THREE.Vector3(4.2, APRON_OUT_Y, 0),
+          new THREE.Vector3(LANE_NEAR, APRON_OUT_Y + 4, 0),
+          new THREE.Vector3(LANE_NEAR, 44, 0),
+        ]
+      }
+    } else {
+      this.done = true
+    }
+    return delivered
+  }
+}
+
+const WAIT_SPOTS = [new THREE.Vector3(3.6, -6.5, 0), new THREE.Vector3(3.6, -9.5, 0)]
+
+export interface CarManagerOpts {
+  pumpCount: () => number
+  evCount: () => number
+  entryChance: () => number
+  evShare: () => number
+  isPumpBroken: (i: number) => boolean
+  isChargerBroken: (i: number) => boolean
+  onCarReady: (car: Car) => void
+  onCarLost: (car: Car) => void
+}
+
+export class CarManager {
+  cars: Car[] = []
+  private nearTimer = 1
+  private farTimer = 2.5
+  private pumpOcc: (Car | null)[] = [null, null, null, null]
+  private evOcc: (Car | null)[] = [null, null, null, null]
+
+  constructor(private scene: THREE.Scene, private lib: ModelLib | null,
+              private opts: CarManagerOpts) {}
+
+  update(dt: number) {
+    // yoldan geçen trafik
+    this.nearTimer -= dt
+    this.farTimer -= dt
+    const transitCount = this.cars.filter(c => c.phase === 'transit').length
+    if (this.nearTimer <= 0 && transitCount < 18) {
+      this.spawnTransit('near')
+      this.nearTimer = 1.5 + Math.random() * 1.8
+    }
+    if (this.farTimer <= 0 && transitCount < 18) {
+      this.spawnTransit('far')
+      this.farTimer = 2.0 + Math.random() * 2.4
+    }
+
+    // giriş kararı
+    for (const car of this.cars) {
+      if (car.phase === 'transit' && car.lane === 'near' && !car.converted
+          && car.group.position.y > DECISION_Y) {
+        car.converted = true
+        if (car.wantsEnter) this.tryEnter(car)
+      }
+    }
+
+    // bekleyen yakıt müşterilerini boş (ve sağlam) pompaya yolla
+    for (let i = 0; i < this.opts.pumpCount(); i++) {
+      if (this.pumpOcc[i] || this.opts.isPumpBroken(i)) continue
+      const waiting = this.cars.find(c => c.phase === 'waiting' && c.slotIndex === -1 && c.patience > 0)
+      if (waiting) this.sendToSlot(waiting, i)
+    }
+
+    for (const car of this.cars) {
+      car.update(dt)
+      if ((car.phase === 'waiting' || car.phase === 'atPump') && car.patience <= 0 && !car.beingServed) {
+        car.showFeedback('😡')
+        this.releaseCar(car)
+        this.onLost(car)
+      }
+    }
+
+    this.cars = this.cars.filter(c => {
+      if (c.phase === 'gone') return false
+      if ((c.phase === 'transit' || c.phase === 'leaving') && Math.abs(c.group.position.y) > 42) {
+        c.dispose(this.scene)
+        return false
+      }
+      return true
+    })
+  }
+
+  private onLost(car: Car) { this.opts.onCarLost(car) }
+
+  private spawnTransit(lane: 'near' | 'far') {
+    const isEv = Math.random() < this.opts.evShare()
+    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel')
+    car.lane = lane
+    car.phase = 'transit'
+    if (lane === 'near') {
+      car.group.position.set(LANE_NEAR, -44, 0)
+      car.group.rotation.z = Math.PI / 2
+      car.setPath([new THREE.Vector3(LANE_NEAR, 44, 0)])
+      car.wantsEnter = Math.random() < this.opts.entryChance()
+    } else {
+      car.group.position.set(LANE_FAR, 44, 0)
+      car.group.rotation.z = -Math.PI / 2
+      car.setPath([new THREE.Vector3(LANE_FAR, -44, 0)])
+    }
+    this.cars.push(car)
+  }
+
+  /** rampadan girip hedef noktaya giden yol */
+  private entryPath(p: THREE.Vector3): THREE.Vector3[] {
+    const apronY = p.y < -10 ? APRON_SOUTH_Y : APRON_IN_Y
+    return [
+      new THREE.Vector3(LANE_NEAR, apronY - 3.5, 0),
+      new THREE.Vector3(4.2, apronY, 0),
+      new THREE.Vector3(3.2, p.y - 2.5, 0),
+      p.clone(),
+    ]
+  }
+
+  private tryEnter(car: Car) {
+    if (car.kind === 'ev') {
+      let slot = -1
+      for (let i = 0; i < this.opts.evCount(); i++) {
+        if (!this.evOcc[i] && !this.opts.isChargerBroken(i)) { slot = i; break }
+      }
+      if (slot < 0) return // şarj yeri yok, yoluna devam
+      this.evOcc[slot] = car
+      car.slotIndex = slot
+      car.phase = 'driving'
+      car.setPath(this.entryPath(EV_SLOTS_POS[slot]), () => this.arriveAtSlot(car))
+      car.showBars()
+      return
+    }
+    // yakıt müşterisi
+    let slot = -1
+    for (let i = 0; i < this.opts.pumpCount(); i++) {
+      if (!this.pumpOcc[i] && !this.opts.isPumpBroken(i)) { slot = i; break }
+    }
+    if (slot >= 0) {
+      this.pumpOcc[slot] = car
+      car.slotIndex = slot
+      car.phase = 'driving'
+      car.setPath(this.entryPath(PUMP_SLOTS_POS[slot]), () => this.arriveAtSlot(car))
+      car.showBars()
+      return
+    }
+    const waitingCount = this.cars.filter(c => c.phase === 'waiting' && c.slotIndex === -1).length
+    if (waitingCount < WAIT_SPOTS.length) {
+      const spot = WAIT_SPOTS[waitingCount]
+      car.phase = 'driving'
+      car.setPath([
+        new THREE.Vector3(LANE_NEAR, APRON_IN_Y - 3.5, 0),
+        new THREE.Vector3(4.2, APRON_IN_Y, 0),
+        spot,
+      ], () => {
+        car.phase = 'waiting'
+      })
+      car.showBars()
+    }
+    // yer yoksa araba yoluna devam eder (kaçan müşteri)
+  }
+
+  private arriveAtSlot(car: Car) {
+    car.phase = 'atPump'
+    car.group.rotation.z = Math.PI / 2
+    car.showBubble()
+    this.opts.onCarReady(car)
+  }
+
+  private sendToSlot(car: Car, slot: number) {
+    this.pumpOcc[slot] = car
+    car.slotIndex = slot
+    car.phase = 'driving'
+    const p = PUMP_SLOTS_POS[slot]
+    car.setPath([
+      new THREE.Vector3(3.2, p.y - 2.5, 0),
+      p,
+    ], () => this.arriveAtSlot(car))
+  }
+
+  releaseCar(car: Car) {
+    if (car.slotIndex >= 0) {
+      if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
+      else this.pumpOcc[car.slotIndex] = null
+    }
+    car.slotIndex = -1
+    car.phase = 'leaving'
+    car.beingServed = false
+    car.hideBubble()
+    car.hideBars()
+    const y = car.group.position.y
+    car.setPath([
+      new THREE.Vector3(3.4, Math.min(y + 3, APRON_OUT_Y - 1.8), 0),
+      new THREE.Vector3(4.2, APRON_OUT_Y, 0),
+      new THREE.Vector3(LANE_NEAR, APRON_OUT_Y + 4, 0),
+      new THREE.Vector3(LANE_NEAR, 44, 0),
+    ])
+  }
+}

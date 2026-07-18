@@ -1,0 +1,42 @@
+{
+  "style": "Style: clean stylized mobile game asset, flat vibrant colors with subtle shading, crisp edges, no text, no watermark, single subject centered, isolated on a plain solid #00FF00 green background, similar to Kenney / Supercell art style.",
+  "assets": [
+    {
+      "name": "ground_asphalt",
+      "noStyle": true,
+      "prompt": "Perfectly seamless tileable texture of dark gray asphalt road surface, top-down orthographic view, fine grain with tiny speckles and very subtle cracks, flat even lighting, no shadows, no objects, no markings, stylized look for a cartoon mobile game, edges must tile seamlessly."
+    },
+    {
+      "name": "ground_concrete",
+      "noStyle": true,
+      "prompt": "Perfectly seamless tileable texture of light gray concrete gas station forecourt, top-down orthographic view, subtle stains and speckles, flat even lighting, no shadows, no objects, no joints or lines, stylized look for a cartoon mobile game, edges must tile seamlessly."
+    },
+    {
+      "name": "ground_grass",
+      "noStyle": true,
+      "prompt": "Perfectly seamless tileable texture of dense short stylized lawn grass, very fine high-frequency blade detail, muted sage green tones around #86b06a with subtle darker patches #79a25e, top-down orthographic view, absolutely uniform flat lighting, no border, no frame, no vignette, edges must continue seamlessly, cartoon mobile game style."
+    },
+    {
+      "name": "decal_oil",
+      "noStyle": true,
+      "prompt": "Single dark oil stain splat viewed from directly above, one irregular blob with a few small satellite drips, dark brown-black semi-glossy, centered on a pure white background, no shadows, no text, stylized cartoon mobile game decal."
+    },
+    {
+      "name": "icon_benzin",
+      "prompt": "A green circular badge icon of a fuel pump nozzle, flat game UI style, bold and readable at small size."
+    },
+    {
+      "name": "icon_dizel",
+      "prompt": "An orange circular badge icon of a fuel pump nozzle, flat game UI style, bold and readable at small size."
+    },
+    {
+      "name": "icon_ev",
+      "prompt": "A cyan circular badge icon of a lightning bolt over a car silhouette, flat game UI style, bold and readable at small size."
+    },
+    {
+      "name": "app_icon",
+      "noStyle": true,
+      "prompt": "iOS app icon, rounded square filling the frame, cute stylized gas station scene: red fuel pump in front, small white station building behind, warm sky, bold saturated colors, Supercell mobile game art style, no text, no watermark."
+    }
+  ]
+}

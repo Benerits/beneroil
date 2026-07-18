@@ -1,0 +1,788 @@
+import * as THREE from 'three'
+import { StaticLib, fitModel } from './models'
+
+// Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
+// Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
+// Yol arsadan ayrı: arada yeşil bant (x 5..5.9) ve giriş/çıkış rampaları var.
+
+export const ROAD_X = 7.9
+export const LANE_NEAR = 6.95
+export const LANE_FAR = 8.85
+export const PUMP_SLOTS_POS = [
+  new THREE.Vector3(1.8, -2.2, 0), new THREE.Vector3(1.8, 2.2, 0),
+  new THREE.Vector3(1.8, -14, 0), new THREE.Vector3(1.8, -18, 0),
+]
+export const EV_SLOTS_POS = [
+  new THREE.Vector3(1.8, 6.2, 0), new THREE.Vector3(1.8, 8.8, 0),
+  new THREE.Vector3(1.8, -11.8, 0), new THREE.Vector3(1.8, -21.5, 0),
+]
+export const TANK_POS = new THREE.Vector3(-5.5, -6.5, 0)
+/** araçların kullandığı giriş/çıkış rampaları */
+export const APRON_IN_Y = -8
+export const APRON_OUT_Y = 8
+export const APRON_SOUTH_Y = -16
+
+const lam = (color: number) => new THREE.MeshLambertMaterial({ color })
+
+function glow(color: number, intensity: number) {
+  return new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: intensity })
+}
+
+function box(w: number, d: number, h: number, color: number, x: number, y: number, z: number, parent: THREE.Object3D,
+             mat?: THREE.Material) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, d, h), mat ?? lam(color))
+  m.position.set(x, y, z)
+  m.castShadow = true
+  m.receiveShadow = true
+  parent.add(m)
+  return m
+}
+
+function cyl(r: number, len: number, color: number, x: number, y: number, z: number, axis: 'x' | 'y' | 'z', parent: THREE.Object3D) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 16), lam(color))
+  if (axis === 'x') m.rotation.z = Math.PI / 2
+  if (axis === 'z') m.rotation.x = Math.PI / 2
+  m.position.set(x, y, z)
+  m.castShadow = true
+  parent.add(m)
+  return m
+}
+
+/** dir yönüne bakan (varsayılan +x), canvas'a çizilmiş pano */
+function canvasPanel(w: number, h: number, px: number, py: number,
+                     draw: (ctx: CanvasRenderingContext2D, W: number, H: number) => void,
+                     dir?: THREE.Vector3): THREE.Mesh {
+  const c = document.createElement('canvas')
+  c.width = px; c.height = py
+  draw(c.getContext('2d')!, px, py)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ map: tex, transparent: true }))
+  m.lookAt(dir ?? new THREE.Vector3(1, 0, 0))
+  return m
+}
+
+/** koyu pill üstüne beyaz yazı — bina isim etiketi */
+function labelSprite(text: string): THREE.Sprite {
+  const c = document.createElement('canvas')
+  c.width = 384; c.height = 96
+  const ctx = c.getContext('2d')!
+  let fs = 44
+  ctx.font = `800 ${fs}px -apple-system, sans-serif`
+  while (fs > 22 && ctx.measureText(text).width > 330) {
+    fs -= 2
+    ctx.font = `800 ${fs}px -apple-system, sans-serif`
+  }
+  const w = ctx.measureText(text).width + 56
+  const x0 = (384 - w) / 2
+  ctx.fillStyle = 'rgba(13, 18, 26, 0.88)'
+  ctx.beginPath(); ctx.roundRect(x0, 14, w, 68, 34); ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 3; ctx.stroke()
+  ctx.fillStyle = '#eef3f9'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(text, 192, 50)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  sp.scale.set(2.5, 0.62, 1)
+  return sp
+}
+
+/** kırmızı uyarı pill'i — tıklanınca tamir/bakım yapılır */
+function warnSprite(text: string, maintId: string): THREE.Sprite {
+  const c = document.createElement('canvas')
+  c.width = 448; c.height = 104
+  const ctx = c.getContext('2d')!
+  let fs = 46
+  ctx.font = `800 ${fs}px -apple-system, sans-serif`
+  while (fs > 24 && ctx.measureText(text).width > 380) {
+    fs -= 2
+    ctx.font = `800 ${fs}px -apple-system, sans-serif`
+  }
+  const w = ctx.measureText(text).width + 60
+  const x0 = (448 - w) / 2
+  ctx.fillStyle = '#e5484d'
+  ctx.beginPath(); ctx.roundRect(x0, 12, w, 80, 40); ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(text, 224, 54)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  sp.scale.set(3.1, 0.72, 1)
+  sp.userData.warnFor = maintId
+  return sp
+}
+
+/** hafif benekli zemin dokusu (AI dokusu yüklenemezse yedek) */
+function noiseTex(base: string, specks: [string, number][], repeat: number): THREE.Texture {
+  const size = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = base
+  ctx.fillRect(0, 0, size, size)
+  for (const [color, count] of specks) {
+    ctx.fillStyle = color
+    for (let i = 0; i < count; i++) {
+      ctx.globalAlpha = 0.2 + Math.random() * 0.35
+      const r = 0.6 + Math.random() * 1.8
+      ctx.fillRect(Math.random() * size, Math.random() * size, r, r)
+    }
+  }
+  ctx.globalAlpha = 1
+  const t = new THREE.CanvasTexture(c)
+  t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.repeat.set(repeat, repeat)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
+interface NightMat { mat: THREE.MeshLambertMaterial; day: number; night: number; owner: string }
+
+function buildPumpMesh(nightMats: NightMat[]): THREE.Group {
+  const g = new THREE.Group()
+  box(0.8, 1.15, 0.1, 0x8f979e, 0, 0, 0.05, g)
+  box(0.6, 0.95, 1.3, 0xe04848, 0, 0, 0.75, g)
+  box(0.64, 0.99, 0.1, 0xc23b3b, 0, 0, 1.45, g)
+  box(0.62, 0.97, 0.16, 0xf0f0ec, 0, 0, 0.5, g)
+  box(0.05, 0.66, 0.46, 0x1c2530, 0.3, 0, 1.12, g)
+  const screen = glow(0xa8dcf0, 0.55)
+  box(0.03, 0.54, 0.34, 0xa8dcf0, 0.33, 0, 1.12, g, screen)
+  nightMats.push({ mat: screen, day: 0.55, night: 1.5, owner: 'pump' })
+  for (const [sy, c] of [[0.52, 0x2fa05a], [-0.52, 0xe8862e]] as const) {
+    box(0.34, 0.08, 0.5, 0x2b2f33, 0, sy, 1.0, g)
+    box(0.12, 0.1, 0.3, c, 0.12, sy, 1.05, g)
+    cyl(0.03, 0.35, 0x23272b, -0.1, sy, 0.8, 'z', g)
+  }
+  return g
+}
+
+function buildTreeProc(x: number, y: number, scale: number, parent: THREE.Object3D) {
+  const g = new THREE.Group()
+  cyl(0.14, 0.9, 0x7a5738, 0, 0, 0.45, 'z', g)
+  const f1 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.85, 1), lam(0x5f9e4e))
+  f1.position.z = 1.4; f1.castShadow = true; g.add(f1)
+  const f2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), lam(0x6fb35a))
+  f2.position.set(0.25, 0.2, 1.95); f2.castShadow = true; g.add(f2)
+  g.position.set(x, y, 0)
+  g.scale.setScalar(scale)
+  parent.add(g)
+}
+
+function buildLampProc(x: number, y: number, parent: THREE.Object3D) {
+  const g = new THREE.Group()
+  cyl(0.06, 3.0, 0x59616b, 0, 0, 1.5, 'z', g)
+  box(0.5, 0.14, 0.08, 0x59616b, 0.28, 0, 3.0, g)
+  box(0.3, 0.2, 0.1, 0xfff3c4, 0.5, 0, 2.97, g, glow(0xfff3c4, 1.0))
+  g.position.set(x, y, 0)
+  parent.add(g)
+}
+
+function stain(x: number, y: number, r: number, parent: THREE.Object3D) {
+  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 18),
+    new THREE.MeshLambertMaterial({ color: 0x2b2f33, transparent: true, opacity: 0.16 }))
+  m.position.set(x, y, 0.03)
+  parent.add(m)
+}
+
+export interface Building {
+  id: string
+  name: string
+  group: THREE.Object3D
+  label: THREE.Sprite
+  warn: THREE.Sprite | null
+  warnText: string | null
+  labelZ: number
+}
+
+export class World {
+  scene = new THREE.Scene()
+  stationName = 'BENZİNLİK'
+  buildings: Building[] = []
+  private signLevel = 0
+  private signGroup: THREE.Group | null = null
+  private marketGroup: THREE.Group | null = null
+  private toiletGroup: THREE.Group | null = null
+  private batteryGroup: THREE.Group | null = null
+  private tankGroup: THREE.Group
+  private saleBoards: Record<'north' | 'south', THREE.Group | null> = { north: null, south: null }
+  private concreteMat: THREE.MeshLambertMaterial
+  private nightMats: NightMat[] = []
+  private sun: THREE.DirectionalLight
+  private hemi: THREE.HemisphereLight
+  private grid: THREE.GridHelper
+  private batteryPos = new THREE.Vector2(-2.5, 8.2)
+
+  constructor(private statics: StaticLib | null) {
+    const s = this.scene
+    s.background = new THREE.Color(0xbfe0ee)
+
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.1)
+    s.add(this.hemi)
+    const sun = new THREE.DirectionalLight(0xfff0d8, 2.2)
+    this.sun = sun
+    sun.position.set(18, -12, 26)
+    sun.castShadow = true
+    sun.shadow.mapSize.set(2048, 2048)
+    const cam = sun.shadow.camera
+    cam.left = -30; cam.right = 30; cam.top = 30; cam.bottom = -30; cam.far = 90
+    s.add(sun)
+
+    // yerleştirme modu grid'i (1 birimlik kareler)
+    this.grid = new THREE.GridHelper(60, 60, 0xffffff, 0xffffff)
+    this.grid.rotation.x = Math.PI / 2
+    this.grid.position.z = 0.04
+    ;(this.grid.material as THREE.Material).transparent = true
+    ;(this.grid.material as THREE.Material).opacity = 0.14
+    this.grid.visible = false
+    s.add(this.grid)
+
+    // dokulu zeminler: nano banana PNG'leri; yüklenemezse prosedürel benek
+    const aiGround = (url: string, rx: number, ry: number, fallback: THREE.Texture) => {
+      const mat = new THREE.MeshLambertMaterial({ map: fallback })
+      new THREE.TextureLoader().load(url, t => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping
+        t.repeat.set(rx, ry)
+        t.colorSpace = THREE.SRGBColorSpace
+        mat.map = t
+        mat.needsUpdate = true
+      }, undefined, () => {})
+      return mat
+    }
+    const grassMat = aiGround('/gen/ground_grass.png', 18, 20,
+      noiseTex('#86b06a', [['#79a25e', 900], ['#93bd77', 900], ['#6d9454', 300]], 30))
+    this.concreteMat = aiGround('/gen/ground_concrete.png', 2.5, 4.5,
+      noiseTex('#9aa1a9', [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 8))
+    const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 38,
+      noiseTex('#4a5058', [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 110), grassMat)
+    ground.receiveShadow = true
+    s.add(ground)
+
+    const lot = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 20), this.concreteMat)
+    lot.position.set(-0.75, 0, 0.015)
+    lot.receiveShadow = true
+    s.add(lot)
+    for (let y = -8; y <= 8; y += 4) {
+      const j = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 0.06), lam(0x7e858d))
+      j.position.set(-0.75, y, 0.02)
+      s.add(j)
+    }
+    box(0.25, 20.4, 0.16, 0xd8dbde, -6.55, 0, 0.08, s)
+    // yol tarafı bordürü (rampalar arasında)
+    box(0.18, 12.2, 0.14, 0xd8dbde, 5.02, 0, 0.07, s)
+
+    // yol (arada yeşil bant kalır) + şerit çizgileri
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(4, 100), roadMat)
+    road.position.set(ROAD_X, 0, 0.01)
+    road.receiveShadow = true
+    s.add(road)
+    for (let y = -48; y < 49; y += 4) {
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 1.6), lam(0xe8e4d8))
+      dash.position.set(ROAD_X, y, 0.02)
+      s.add(dash)
+    }
+
+    // giriş/çıkış rampaları
+    this.makeApron(APRON_IN_Y)
+    this.makeApron(APRON_OUT_Y)
+
+    // ofis binası
+    const officeGroup = new THREE.Group()
+    if (this.statics?.office) {
+      const o = fitModel(this.statics.office, 4.4)
+      o.traverse(m => { m.castShadow = true })
+      officeGroup.add(o)
+    } else {
+      box(3.2, 4.2, 2.4, 0xdfd8c8, 0, 0, 1.2, officeGroup)
+      box(3.4, 4.4, 0.25, 0x9c5b3c, 0, 0, 2.5, officeGroup)
+    }
+    officeGroup.position.set(-5.0, 4.5, 0)
+    s.add(officeGroup)
+    this.register('office', 'OFİS', officeGroup, 5.6)
+    cyl(0.22, 0.6, 0x3f6f56, -3.3, 6.8, 0.3, 'z', s)
+    this.placePlanter(-3.3, 2.6)
+
+    // ana yakıt tankı (küre) + borular
+    this.tankGroup = new THREE.Group()
+    s.add(this.tankGroup)
+    this.addSphereTank(TANK_POS.x, TANK_POS.y)
+    this.register('tank', 'YAKIT TANKI', this.tankGroup, 0)
+    const tankLabel = this.buildings.find(b => b.id === 'tank')!
+    ;(tankLabel.group.children.find(o => o instanceof THREE.Sprite) as THREE.Sprite)
+      .position.set(TANK_POS.x, TANK_POS.y, 3.6)
+    cyl(0.09, 1.0, 0x59616b, TANK_POS.x, TANK_POS.y - 1.55, 0.55, 'z', s)
+    cyl(0.09, 4.3, 0x59616b, TANK_POS.x + 2.15, TANK_POS.y - 1.9, 0.12, 'x', s)
+    cyl(0.09, 3.6, 0x59616b, -1.2, TANK_POS.y - 0.1, 0.12, 'y', s)
+    cyl(0.09, 0.5, 0x59616b, -1.2, -2.1, 0.2, 'z', s)
+    const valve = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 8, 16), lam(0xd64545))
+    valve.rotation.y = Math.PI / 2
+    valve.position.set(-3.3, TANK_POS.y - 1.9, 0.42)
+    s.add(valve)
+    cyl(0.03, 0.3, 0x8f979e, -3.3, TANK_POS.y - 1.9, 0.25, 'z', s)
+
+    // çevre
+    this.placeTree(-9.5, -13, 1.2)
+    this.placeTree(-10.5, 2, 1.0)
+    this.placeTree(-8.5, 12.5, 1.3)
+    this.placeTree(-9, 20, 1.0)
+    this.placeTree(12.4, -16, 1.1)
+    this.placeTree(12.7, 9, 1.2)
+    this.placeTree(12.1, 22, 1.0)
+    this.placeLamp(4.5, -5.5)
+    this.placeLamp(4.5, 5.5)
+    stain(1.9, -1.6, 0.45, s)
+    stain(1.5, -3.0, 0.3, s)
+    stain(2.2, 2.8, 0.4, s)
+    stain(-2.5, 6.5, 0.5, s)
+
+    this.setSign(0)
+    this.makeSaleBoard('south')
+    this.makeSaleBoard('north')
+    this.addPump(0)
+  }
+
+  // ---- kayıt / etiket / uyarı ----
+
+  private register(id: string, name: string, group: THREE.Object3D, labelZ: number) {
+    const label = labelSprite(name)
+    label.position.z = labelZ
+    label.visible = false // isim sadece bina seçilince görünür
+    group.add(label)
+    group.userData.buildingId = id
+    this.buildings.push({ id, name, group, label, warn: null, warnText: null, labelZ })
+  }
+
+  /** seçili binanın isim etiketini gösterir, diğerlerini gizler */
+  setSelected(id: string | null) {
+    for (const b of this.buildings) b.label.visible = b.id === id
+  }
+
+  /** 0 = gündüz, 1 = gece — ışıklar geceleri yanar */
+  setNight(f: number) {
+    this.sun.intensity = 2.2 - 1.95 * f
+    this.sun.color.setHex(f > 0.5 ? 0xb8c8ff : 0xfff0d8)
+    this.hemi.intensity = 1.1 - 0.78 * f
+    const day = new THREE.Color(0xbfe0ee)
+    const night = new THREE.Color(0x0f1a2e)
+    ;(this.scene.background as THREE.Color).copy(day.lerp(night, f))
+    for (const n of this.nightMats) {
+      n.mat.emissiveIntensity = n.day + (n.night - n.day) * f
+    }
+  }
+
+  showGrid(v: boolean) {
+    this.grid.visible = v
+  }
+
+  private unregister(id: string) {
+    this.buildings = this.buildings.filter(b => b.id !== id)
+  }
+
+  /** main her karede çağırır: id → uyarı metni (tıklanınca maintId tetiklenir) */
+  syncWarnings(list: Map<string, { text: string; maintId: string }>) {
+    for (const b of this.buildings) {
+      const want = list.get(b.id)
+      if (want && b.warnText !== want.text) {
+        if (b.warn) b.group.remove(b.warn)
+        b.warn = warnSprite(want.text, want.maintId)
+        b.warn.position.z = b.labelZ > 0 ? b.labelZ + 0.8 : 4.4
+        if (b.id === 'tank') b.warn.position.set(TANK_POS.x, TANK_POS.y, 4.4)
+        b.group.add(b.warn)
+        b.warnText = want.text
+      } else if (!want && b.warn) {
+        b.group.remove(b.warn)
+        b.warn = null
+        b.warnText = null
+      }
+    }
+  }
+
+  private makeApron(y: number) {
+    const apron = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.4), this.concreteMat)
+    apron.position.set(5.5, y, 0.014)
+    apron.receiveShadow = true
+    this.scene.add(apron)
+  }
+
+  private addSphereTank(x: number, y: number) {
+    const g = new THREE.Group()
+    const R = 1.15
+    const sp = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 18), lam(0xdfe3e8))
+    sp.position.z = R + 0.55
+    sp.castShadow = true
+    g.add(sp)
+    const band = new THREE.Mesh(new THREE.TorusGeometry(R * 0.97, 0.05, 8, 28), lam(0xd64545))
+    band.position.z = R + 0.55
+    g.add(band)
+    for (const [lx, ly] of [[0.6, 0.6], [0.6, -0.6], [-0.6, 0.6], [-0.6, -0.6]] as const) {
+      cyl(0.09, 1.4, 0x8f979e, lx, ly, 0.7, 'z', g)
+    }
+    cyl(0.05, 0.45, 0x8f979e, 0, 0, R * 2 + 0.6, 'z', g)
+    g.position.set(x, y, 0)
+    this.tankGroup.add(g)
+  }
+
+  private placeTree(x: number, y: number, scale: number) {
+    const proto = scale >= 1.1 ? this.statics?.treeLarge : (this.statics?.treeSmall ?? this.statics?.treeLarge)
+    if (proto) {
+      const t = fitModel(proto, 1.6 * scale, 'z')
+      t.position.set(x, y, 0)
+      t.rotation.z = Math.random() * Math.PI * 2
+      t.traverse(m => { m.castShadow = true })
+      this.scene.add(t)
+    } else {
+      buildTreeProc(x, y, scale, this.scene)
+    }
+  }
+
+  private placeLamp(x: number, y: number) {
+    if (this.statics?.lamp) {
+      const l = fitModel(this.statics.lamp, 3.4, 'z')
+      l.position.set(x, y, 0)
+      l.rotation.z = Math.PI
+      l.traverse(m => { m.castShadow = true })
+      this.scene.add(l)
+    } else {
+      buildLampProc(x, y, this.scene)
+    }
+    // gece yanan ampul
+    const bulbMat = glow(0xfff3c4, 0.05)
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), bulbMat)
+    bulb.position.set(x + 0.6, y, 3.0)
+    this.scene.add(bulb)
+    this.nightMats.push({ mat: bulbMat, day: 0.05, night: 2.2, owner: 'lamp' })
+  }
+
+  private placePlanter(x: number, y: number) {
+    if (!this.statics?.planter) return
+    const p = fitModel(this.statics.planter, 1.3)
+    p.position.set(x, y, 0)
+    this.scene.add(p)
+  }
+
+  private makeSaleBoard(side: 'north' | 'south') {
+    const g = new THREE.Group()
+    box(0.1, 0.1, 1.1, 0x8a6a48, 0, -0.5, 0.55, g)
+    box(0.1, 0.1, 1.1, 0x8a6a48, 0, 0.5, 0.55, g)
+    const p = canvasPanel(1.7, 0.85, 340, 170, (ctx, W, H) => {
+      ctx.fillStyle = '#f5f4ef'; ctx.fillRect(0, 0, W, H)
+      ctx.strokeStyle = '#d64545'; ctx.lineWidth = 10; ctx.strokeRect(5, 5, W - 10, H - 10)
+      ctx.fillStyle = '#d64545'; ctx.font = '800 62px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('SATILIK', W / 2, H / 2 - 12)
+      ctx.fillStyle = '#1c2530'; ctx.font = '700 30px -apple-system, sans-serif'
+      ctx.fillText('₺6.000', W / 2, H / 2 + 42)
+    })
+    p.position.z = 1.35
+    g.add(p)
+    g.position.set(3.5, side === 'south' ? -14 : 14, 0)
+    this.scene.add(g)
+    this.saleBoards[side] = g
+  }
+
+  buyLand(side: 'north' | 'south') {
+    const b = this.saleBoards[side]
+    if (b) { this.scene.remove(b); this.saleBoards[side] = null }
+    const yc = side === 'south' ? -17 : 17
+    const lot = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 14), this.concreteMat)
+    lot.position.set(-0.75, yc, 0.015)
+    lot.receiveShadow = true
+    this.scene.add(lot)
+    box(0.25, 14, 0.16, 0xd8dbde, -6.55, yc, 0.08, this.scene)
+    box(11.7, 0.25, 0.16, 0xd8dbde, -0.75, side === 'south' ? -24 : 24, 0.08, this.scene)
+    if (side === 'south') {
+      this.makeApron(APRON_SOUTH_Y)
+      box(0.18, 5.6, 0.14, 0xd8dbde, 5.02, -21, 0.07, this.scene)
+      box(0.18, 3.6, 0.14, 0xd8dbde, 5.02, -12, 0.07, this.scene)
+    } else {
+      box(0.18, 14, 0.14, 0xd8dbde, 5.02, 17, 0.07, this.scene)
+    }
+  }
+
+  addPump(index: number) {
+    const y = PUMP_SLOTS_POS[index].y
+    const g = new THREE.Group()
+    box(1.7, 3.4, 0.2, 0xc7ccd1, 0, 0, 0.1, g)
+    box(1.75, 3.45, 0.05, 0xe0b13e, 0, 0, 0.02, g)
+    cyl(0.09, 0.55, 0xe0b13e, 0, -1.5, 0.45, 'z', g)
+    cyl(0.09, 0.55, 0xe0b13e, 0, 1.5, 0.45, 'z', g)
+    const p = buildPumpMesh(this.nightMats)
+    p.position.z = 0.2
+    g.add(p)
+    g.position.set(0, y, 0)
+    this.scene.add(g)
+    this.register(`pump-${index}`, `POMPA #${index + 1}`, g, 2.5)
+  }
+
+  addEvCharger(index: number) {
+    const y = EV_SLOTS_POS[index].y
+    const g = new THREE.Group()
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({
+      color: 0x2f8fd6, transparent: true, opacity: 0.28,
+    }))
+    pad.position.set(1.1, 0, 0.025)
+    g.add(pad)
+    box(1.0, 1.6, 0.14, 0xc7ccd1, 0, 0, 0.07, g)
+    box(0.35, 0.55, 1.5, 0xf0f0ec, 0, 0, 0.85, g)
+    const stripe = glow(0x35c7d6, 0.8)
+    box(0.37, 0.57, 0.22, 0x35c7d6, 0, 0, 1.35, g, stripe)
+    this.nightMats.push({ mat: stripe, day: 0.8, night: 1.8, owner: 'charger' })
+    box(0.04, 0.34, 0.3, 0x1c2530, 0.19, 0, 1.0, g)
+    cyl(0.03, 0.5, 0x23272b, 0.15, 0.3, 0.6, 'z', g)
+    box(0.1, 0.08, 0.2, 0x35c7d6, 0.15, 0.3, 0.35, g)
+    g.position.set(0.7, y, 0)
+    this.scene.add(g)
+    this.register(`charger-${index}`, `DC ŞARJ #${index + 1}`, g, 2.3)
+  }
+
+  setStationName(name: string) {
+    this.stationName = (name.trim() || 'BENZİNLİK').toLocaleUpperCase('tr-TR').slice(0, 14)
+    this.setSign(this.signLevel)
+  }
+
+  setSign(level: number) {
+    this.signLevel = level
+    if (this.signGroup) this.scene.remove(this.signGroup)
+    const g = new THREE.Group()
+    const H = [2.4, 3.2, 4.2, 5.4][level]
+    const pw = [1.5, 1.9, 2.4, 3.0][level]
+    const ph = [1.6, 2.0, 2.4, 2.8][level]
+    box(level >= 2 ? 0.9 : 0.5, 0.24, H, 0x39424e, 0, 0, H / 2, g)
+    this.nightMats = this.nightMats.filter(n => n.owner !== 'sign')
+    let backMat: THREE.Material
+    if (level >= 1) {
+      const gm = glow(level >= 3 ? 0xd64545 : 0xf0f0ec, level >= 2 ? 0.35 : 0.05)
+      this.nightMats.push({ mat: gm, day: level >= 2 ? 0.35 : 0.05, night: 1.4, owner: 'sign' })
+      backMat = gm
+    } else {
+      backMat = lam(0xf0f0ec)
+    }
+    box(pw + 0.1, 0.2, ph + 0.1, 0, 0, 0, H + ph / 2, g, backMat)
+    const drawFace = (ctx: CanvasRenderingContext2D, W: number, H2: number) => {
+      ctx.fillStyle = '#f5f4ef'; ctx.fillRect(0, 0, W, H2)
+      ctx.fillStyle = '#d64545'; ctx.fillRect(0, 0, W, 84)
+      ctx.fillStyle = '#fff'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      let fs = 44
+      ctx.font = `800 ${fs}px -apple-system, sans-serif`
+      while (fs > 16 && ctx.measureText(this.stationName).width > W - 16) {
+        fs -= 2
+        ctx.font = `800 ${fs}px -apple-system, sans-serif`
+      }
+      ctx.fillText(this.stationName, W / 2, 44)
+      ctx.fillStyle = '#1c2530'; ctx.font = '700 34px -apple-system, sans-serif'
+      ctx.textAlign = 'left'; ctx.fillText('BENZİN', 18, 140)
+      ctx.textAlign = 'right'; ctx.fillText('10.0', W - 18, 140)
+      ctx.textAlign = 'left'; ctx.fillText('DİZEL', 18, 210)
+      ctx.textAlign = 'right'; ctx.fillText('9.0', W - 18, 210)
+      if (level >= 1) {
+        ctx.fillStyle = '#27a05a'; ctx.font = '700 26px -apple-system, sans-serif'
+        ctx.textAlign = 'center'; ctx.fillText('★ 7/24 AÇIK ★', W / 2, 262)
+      }
+    }
+    for (const sy of [1, -1]) {
+      const panel = canvasPanel(pw, ph, 256, 288, drawFace, new THREE.Vector3(0, sy, 0))
+      panel.position.set(0, sy * 0.12, H + ph / 2)
+      g.add(panel)
+    }
+    if (level >= 3) box(pw + 0.3, 0.22, 0.18, 0xe0b13e, 0, 0, H + ph + 0.15, g)
+    g.position.set(4.0, -11.5, 0)
+    this.scene.add(g)
+    this.signGroup = g
+  }
+
+  buildMarket(level: number, pos?: THREE.Vector2) {
+    const at = pos ?? new THREE.Vector2(-3.8, 15.5)
+    if (this.marketGroup) { this.scene.remove(this.marketGroup); this.unregister('market') }
+    const g = new THREE.Group()
+    const proto = level >= 2 ? (this.statics?.market2 ?? this.statics?.market1) : this.statics?.market1
+    let H = level >= 2 ? 3.0 : 2.5
+    if (proto) {
+      const b = fitModel(proto, level >= 2 ? 7.0 : 4.6)
+      const bb = new THREE.Box3().setFromObject(b)
+      H = bb.max.z
+      b.traverse(m => { m.castShadow = true })
+      g.add(b)
+    } else {
+      const W = level >= 2 ? 5.5 : 4.2
+      const D = level >= 2 ? 7.5 : 5.0
+      box(W, D, H, 0xe8e2d4, 0, 0, H / 2, g)
+      box(W + 0.3, D + 0.3, 0.25, 0x8a5a3c, 0, 0, H + 0.12, g)
+    }
+    const sign = canvasPanel(2.6, 0.6, 420, 100, (ctx, w, h) => {
+      ctx.fillStyle = '#d64545'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 18); ctx.fill()
+      ctx.fillStyle = '#fff'; ctx.font = '800 58px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('MARKET', w / 2, h / 2 + 2)
+    })
+    sign.position.set(level >= 2 ? 1.7 : 1.4, 0, H + 0.35)
+    g.add(sign)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.marketGroup = g
+    this.register('market', 'MARKET', g, H + 1.0)
+  }
+
+  buildToilet(level: number, pos?: THREE.Vector2) {
+    const at = pos ?? new THREE.Vector2(2.0, 12.8)
+    if (this.toiletGroup) { this.scene.remove(this.toiletGroup); this.unregister('toilet') }
+    const g = new THREE.Group()
+    let H = level >= 2 ? 2.4 : 2.1
+    if (this.statics?.toilet) {
+      const b = fitModel(this.statics.toilet, level >= 2 ? 3.4 : 2.6)
+      const bb = new THREE.Box3().setFromObject(b)
+      H = bb.max.z
+      b.traverse(m => { m.castShadow = true })
+      g.add(b)
+    } else {
+      const W = level >= 2 ? 2.8 : 2.1
+      const D = level >= 2 ? 3.4 : 2.6
+      box(W, D, H, level >= 2 ? 0x9fc4b8 : 0xa8bfd0, 0, 0, H / 2, g)
+    }
+    const sign = canvasPanel(0.9, 0.5, 180, 100, (ctx, w, h) => {
+      ctx.fillStyle = '#2f6fed'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 16); ctx.fill()
+      ctx.fillStyle = '#fff'; ctx.font = '800 56px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('WC', w / 2, h / 2 + 2)
+    })
+    sign.position.set(1.0, 0, H + 0.3)
+    g.add(sign)
+    if (level >= 2) {
+      const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), lam(0x6fb35a))
+      bush.position.set(1.4, -1.6, 0.3); bush.castShadow = true; g.add(bush)
+      const bush2 = bush.clone(); bush2.position.y = 1.6; g.add(bush2)
+    }
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.toiletGroup = g
+    this.register('toilet', 'TUVALET', g, H + 0.85)
+  }
+
+  upgradeTankVisual(level: number) {
+    if (level === 1) this.addSphereTank(TANK_POS.x, TANK_POS.y + 2.4)
+    if (level === 2) this.addSphereTank(TANK_POS.x + 2.2, TANK_POS.y)
+    if (level === 3) this.addSphereTank(TANK_POS.x + 2.2, TANK_POS.y + 2.4)
+  }
+
+  buildBattery(level: number, pos?: THREE.Vector2) {
+    if (pos) this.batteryPos.copy(pos)
+    if (this.batteryGroup) { this.scene.remove(this.batteryGroup); this.unregister('battery') }
+    const g = new THREE.Group()
+    const colors = [0x3f8f5f, 0x3f6f8f, 0xb08a3f]
+    for (let i = 0; i < level; i++) {
+      box(2.2, 1.3, 1.15, colors[i], 0, 0, 0.6 + i * 1.2, g)
+      for (let k = -2; k <= 2; k++) box(2.24, 0.05, 1.1, 0x2b2f33, 0, k * 0.28, 0.6 + i * 1.2, g)
+      // yan yüzde büyük pil işareti — ne olduğu uzaktan belli olsun
+      const battDecal = canvasPanel(1.0, 1.0, 160, 160, (ctx, w, h) => {
+        ctx.fillStyle = 'rgba(255,255,255,0.92)'
+        ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 8, 0, 7); ctx.fill()
+        ctx.font = '96px -apple-system, sans-serif'
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+        ctx.fillText('🔋', w / 2, h / 2 + 8)
+      })
+      battDecal.position.set(1.14, 0, 0.62 + i * 1.2)
+      g.add(battDecal)
+      // ön yüze şarj çubukları
+      const barsDecal = canvasPanel(0.8, 0.5, 160, 100, (ctx, w, h) => {
+        ctx.fillStyle = '#0f1a14'
+        ctx.beginPath(); ctx.roundRect(0, 0, w, h, 14); ctx.fill()
+        for (let b = 0; b < 4; b++) {
+          ctx.fillStyle = b < 3 ? '#37c97e' : 'rgba(255,255,255,0.25)'
+          ctx.fillRect(14 + b * 34, 18, 24, h - 36)
+        }
+      }, new THREE.Vector3(0, -1, 0))
+      barsDecal.position.set(0, -0.68, 0.62 + i * 1.2)
+      g.add(barsDecal)
+    }
+    const warn = canvasPanel(0.9, 0.45, 180, 90, (ctx, w, h) => {
+      ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 12); ctx.fill()
+      ctx.fillStyle = '#1c2530'; ctx.font = '800 40px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('⚡ DEPO', w / 2, h / 2)
+    })
+    warn.position.set(1.13, 0, 0.9)
+    g.add(warn)
+    g.position.set(this.batteryPos.x, this.batteryPos.y, 0)
+    this.scene.add(g)
+    this.batteryGroup = g
+    this.register('battery', 'BATARYA DEPOSU', g, level * 1.2 + 1.1)
+  }
+
+  buildSolar(side: 'north' | 'south', pos?: THREE.Vector2) {
+    const g = new THREE.Group()
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1),
+        new THREE.MeshLambertMaterial({ color: 0x1e3a5f, side: THREE.DoubleSide }))
+      p.position.set(-1 + r * 2.0, -2.4 + c * 2.4, 0.75)
+      p.rotation.y = -0.55
+      p.castShadow = true
+      g.add(p)
+      box(0.08, 0.08, 0.55, 0x8f979e, -1 + r * 2.0, -2.4 + c * 2.4, 0.28, g)
+    }
+    box(0.7, 0.5, 0.5, 0x59616b, 1.6, 2.6, 0.25, g)
+    const at = pos ?? new THREE.Vector2(-4, side === 'south' ? -20 : 20)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('solar', 'GÜNEŞ SANTRALİ', g, 2.4)
+  }
+
+  buildDiesel(pos?: THREE.Vector2) {
+    const at = pos ?? new THREE.Vector2(-5.7, -9.2)
+    const g = new THREE.Group()
+    box(1.3, 0.9, 0.9, 0xe0b13e, 0, 0, 0.5, g)
+    box(1.34, 0.94, 0.12, 0x2b2f33, 0, 0, 1.0, g)
+    cyl(0.06, 0.6, 0x59616b, 0.4, 0.25, 1.3, 'z', g)
+    box(0.3, 0.2, 0.25, 0x2b2f33, -0.4, 0, 1.1, g)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('dieselgen', 'JENERATÖR', g, 2.2)
+  }
+
+  buildSMR(side: 'north' | 'south', pos?: THREE.Vector2) {
+    const g = new THREE.Group()
+    // hiperboloit soğutma kulesi
+    const pts: THREE.Vector2[] = []
+    for (let i = 0; i <= 16; i++) {
+      const t = i / 16
+      const z = t * 4.6
+      const r = 0.95 * Math.sqrt(1 + Math.pow((z - 3.2) / 1.9, 2))
+      pts.push(new THREE.Vector2(r, z))
+    }
+    const tower = new THREE.Mesh(new THREE.LatheGeometry(pts, 30), lam(0xe8e6e1))
+    tower.rotation.x = Math.PI / 2
+    tower.castShadow = true
+    g.add(tower)
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.07, 8, 28), lam(0xd64545))
+    rim.position.z = 4.58
+    g.add(rim)
+    // buhar
+    for (const [sx, sy, sz, sr] of [[0, 0, 5.3, 0.55], [0.3, 0.25, 5.9, 0.42], [-0.25, -0.2, 6.3, 0.32]] as const) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(sr, 12, 10),
+        new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }))
+      puff.position.set(sx, sy, sz)
+      g.add(puff)
+    }
+    // reaktör çekirdek binası
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xdfe3e8))
+    dome.position.set(2.2, -0.8, 0.9)
+    dome.castShadow = true
+    g.add(dome)
+    cyl(0.7, 0.9, 0xdfe3e8, 2.2, -0.8, 0.45, 'z', g)
+    box(1.0, 0.7, 0.7, 0x59616b, 2.2, 0.9, 0.35, g)
+    const sign = canvasPanel(0.7, 0.7, 128, 128, (ctx, w, h) => {
+      ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 4, 0, 7); ctx.fill()
+      ctx.font = '70px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('☢️', w / 2, h / 2 + 4)
+    })
+    sign.position.set(2.92, -0.8, 0.9)
+    g.add(sign)
+    const at = pos ?? new THREE.Vector2(1.8, side === 'south' ? -20.5 : 20.5)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('smr', 'REAKTÖR', g, 7.0)
+  }
+}

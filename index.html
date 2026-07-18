@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Benzinlik</title>
+  <style>
+    :root {
+      --surface: rgba(15, 21, 30, .86);
+      --surface-solid: #131b26;
+      --raised: #1c2634;
+      --line: rgba(255, 255, 255, .08);
+      --text: #e9eef5;
+      --muted: #8fa0b3;
+      --accent: #4f8cff;
+      --good: #37c97e;
+      --warn: #f2a93b;
+      --bad: #ec5b5b;
+      --ev: #3fc6d8;
+      --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
+      --shadow: 0 12px 32px rgba(0, 0, 0, .45);
+      --font: -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--font); color: var(--text); }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+    button { font-family: var(--font); }
+
+    /* ---------- HUD ---------- */
+    .hud { position: fixed; left: 0; right: 0; top: 0; display: flex; gap: 8px; padding: 10px 12px;
+           align-items: stretch; pointer-events: none; z-index: 10; flex-wrap: wrap; }
+    .hud button { pointer-events: auto; }
+    .chip { background: var(--surface); backdrop-filter: blur(10px); border: 1px solid var(--line);
+            border-radius: var(--r-md); padding: 6px 14px; display: flex; flex-direction: column;
+            justify-content: center; gap: 2px; min-width: 86px; }
+    .chip .cl { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; color: var(--muted); }
+    .chip .cv { font-size: 14.5px; font-weight: 800; font-variant-numeric: tabular-nums; display: flex;
+                align-items: center; gap: 7px; white-space: nowrap; }
+    .bar { width: 74px; height: 7px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden; }
+    .bar > div { height: 100%; border-radius: 4px; transition: width .25s; }
+    #tankfill { background: var(--good); width: 50%; }
+    #battfill { background: var(--ev); width: 0%; }
+    #battchip { display: none; }
+    .spacer { flex: 1; }
+
+    /* ---------- Butonlar ---------- */
+    .btn { border: 0; border-radius: var(--r-md); padding: 10px 16px; font-size: 13.5px; font-weight: 800;
+           cursor: pointer; color: #fff; background: var(--raised); border: 1px solid var(--line);
+           transition: filter .12s, transform .05s; }
+    .btn:not(:disabled):hover { filter: brightness(1.15); }
+    .btn:not(:disabled):active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .btn.primary { background: var(--accent); border-color: transparent; }
+    .btn.good { background: var(--good); border-color: transparent; color: #06281a; }
+    .btn.warn { background: var(--warn); border-color: transparent; color: #2d1d02; }
+    .btn.danger { background: var(--bad); border-color: transparent; }
+
+    /* ---------- Servis paneli ---------- */
+    #panel { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+             background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--line);
+             border-radius: var(--r-lg); padding: 16px; width: min(400px, 94vw); z-index: 10;
+             display: none; box-shadow: var(--shadow); }
+    #panel.show { display: block; }
+    #panel h3 { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+    #panel .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+    #liters { font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 700; flex: 1;
+              text-align: center; color: var(--muted); }
+    #amount { flex: 1; background: rgba(0,0,0,.35); border: 1.5px solid var(--line); border-radius: var(--r-md);
+              color: var(--text); padding: 11px 12px; font-size: 17px; font-weight: 800; outline: none; min-width: 0; }
+    #amount:focus { border-color: var(--accent); }
+    .quick { flex: 1; background: var(--raised); padding: 8px; font-size: 12.5px; }
+    .nozzle { flex: 1; padding: 12px; }
+    .nozzle.sel { outline: 2.5px solid #fff; outline-offset: -2.5px; }
+    #chargebtn { flex: 1; padding: 13px; font-size: 15px; background: var(--ev); color: #062a30; }
+    #chargebtn:disabled { background: var(--raised); color: var(--muted); }
+    #evnote { font-size: 12.5px; color: var(--warn); text-align: center; margin-top: 8px; }
+
+    /* ---------- Bina bilgi kartı ---------- */
+    #infocard { position: fixed; left: 14px; bottom: 14px; width: min(300px, 88vw);
+                background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--line);
+                border-radius: var(--r-lg); padding: 14px 16px; z-index: 10; display: none;
+                box-shadow: var(--shadow); }
+    #infocard.show { display: block; }
+    #infocard .head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    #infocard .bicon { font-size: 22px; background: var(--raised); border-radius: var(--r-sm);
+                       width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+    #infocard .bname { font-size: 15px; font-weight: 800; flex: 1; }
+    #infocard .bclose { background: none; border: 0; color: var(--muted); font-size: 17px; cursor: pointer; padding: 4px; }
+    #infocard .bdesc { font-size: 12px; color: var(--muted); line-height: 1.45; margin-bottom: 10px; }
+    #infocard .stat { display: flex; justify-content: space-between; font-size: 12.5px; padding: 5px 0;
+                      border-top: 1px solid var(--line); }
+    #infocard .stat .k { color: var(--muted); }
+    #infocard .stat .v { font-weight: 800; font-variant-numeric: tabular-nums; }
+    #infocard .stat .v.bad { color: var(--bad); }
+    #infocard .stat .v.good { color: var(--good); }
+    #infocard .baction { width: 100%; margin-top: 10px; padding: 11px; }
+
+    /* ---------- Modallar ---------- */
+    .backdrop { position: fixed; inset: 0; background: rgba(4, 8, 13, .55); backdrop-filter: blur(5px);
+                z-index: 30; display: none; align-items: center; justify-content: center; }
+    .backdrop.show { display: flex; }
+    .modal { background: var(--surface-solid); border: 1px solid var(--line); border-radius: var(--r-lg);
+             width: min(480px, 94vw); max-height: 84vh; display: flex; flex-direction: column;
+             box-shadow: var(--shadow); overflow: hidden; }
+    .mhead { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 12px; }
+    .mhead h3 { font-size: 16px; font-weight: 800; }
+    .mclose { background: var(--raised); border: 1px solid var(--line); color: var(--text); width: 30px;
+              height: 30px; border-radius: 9px; font-size: 15px; cursor: pointer; }
+    .mbody { padding: 0 14px 14px; overflow-y: auto; }
+    .msec { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; color: var(--muted);
+            margin: 12px 6px 8px; }
+
+    /* mağaza satırları */
+    .shoprow { display: flex; align-items: center; gap: 11px; background: var(--raised);
+               border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 7px; }
+    .shoprow.maxed { opacity: .48; }
+    .shoprow.urgent { border-color: var(--bad); }
+    .sicon { font-size: 21px; width: 40px; height: 40px; background: rgba(0,0,0,.28); border-radius: var(--r-sm);
+             display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .sinfo { flex: 1; min-width: 0; }
+    .st { font-size: 13.5px; font-weight: 800; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .stat-badge { font-size: 10.5px; font-weight: 800; background: rgba(79, 140, 255, .16); color: #8fb4ff;
+                  padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+    .sd { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+    .slock { font-size: 11px; color: var(--warn); margin-top: 3px; }
+    .sbuy { flex-shrink: 0; min-width: 76px; padding: 9px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+    /* ayarlar */
+    #settings label { font-size: 12px; color: var(--muted); display: block; margin: 4px 6px 8px; }
+    #settings .row { display: flex; gap: 8px; padding: 0 4px 6px; }
+    #stname { flex: 1; background: rgba(0,0,0,.35); border: 1.5px solid var(--line); border-radius: var(--r-md);
+              color: var(--text); padding: 11px 12px; font-size: 15px; font-weight: 800; outline: none;
+              min-width: 0; text-transform: uppercase; }
+    #stname:focus { border-color: var(--accent); }
+
+    /* ---------- Toast ---------- */
+    #toasts { position: fixed; top: 62px; left: 50%; transform: translateX(-50%); z-index: 40;
+              display: flex; flex-direction: column; gap: 7px; align-items: center; pointer-events: none; }
+    .toast { background: var(--surface); backdrop-filter: blur(12px); border: 1px solid var(--line);
+             border-left: 3.5px solid var(--muted); color: var(--text); padding: 10px 16px;
+             border-radius: var(--r-md); font-size: 13px; font-weight: 700; box-shadow: var(--shadow);
+             animation: toastin .22s ease-out; max-width: min(460px, 86vw); text-align: left; }
+    .toast.bad { border-left-color: var(--bad); }
+    .toast.good { border-left-color: var(--good); }
+    @keyframes toastin { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; } }
+
+    /* ---------- Patlama ---------- */
+    #boom { position: fixed; inset: 0; background: #fff; z-index: 100; display: none;
+            align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+            font-size: 26px; font-weight: 800; color: #7a1f1f; text-align: center; padding: 20px; }
+    #boom.show { display: flex; animation: boomflash .6s ease-out; }
+    #boom .big { font-size: 96px; }
+    #boom .sub { font-size: 15px; font-weight: 600; color: #9c4a4a; }
+    @keyframes boomflash { 0% { background: #fff; } 30% { background: #ffb347; } 100% { background: #fff; } }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div class="hud">
+    <div class="chip"><span class="cl">KASA</span><span class="cv">💰 <span id="money">0</span> ₺</span></div>
+    <div class="chip"><span class="cl">YAKIT TANKI</span><span class="cv">⛽ <div class="bar"><div id="tankfill"></div></div> <span id="tankL">0L</span></span></div>
+    <div class="chip" id="battchip"><span class="cl">BATARYA</span><span class="cv">🔋 <div class="bar"><div id="battfill"></div></div> <span id="battkwh">0</span></span></div>
+    <div class="chip"><span class="cl">İTİBAR</span><span class="cv">⭐ <span id="rep">3.0</span></span></div>
+    <div class="spacer"></div>
+    <button id="orderbtn" class="btn warn">🚛 Yakıt Siparişi</button>
+    <button id="shopbtn" class="btn primary">🏗️ İnşaat</button>
+    <button id="setbtn" class="btn" title="Ayarlar">⚙️</button>
+  </div>
+
+  <div id="panel">
+    <h3 id="demand">—</h3>
+    <div id="fuelctl">
+      <div class="row">
+        <button id="noz-benzin" class="btn good nozzle">⛽ Benzin</button>
+        <button id="noz-dizel" class="btn warn nozzle">⛽ Dizel</button>
+      </div>
+      <div class="row">
+        <button class="btn quick" data-amt="100">₺100</button>
+        <button class="btn quick" data-amt="200">₺200</button>
+        <button class="btn quick" data-amt="300">₺300</button>
+        <button class="btn quick" data-amt="400">₺400</button>
+      </div>
+      <div class="row">
+        <input id="amount" type="number" inputmode="numeric" min="0" step="10" placeholder="₺ tutar gir" />
+        <button id="startbtn" class="btn good" disabled>BAŞLAT ▶</button>
+      </div>
+      <div class="row">
+        <div id="liters">—</div>
+      </div>
+    </div>
+    <div id="evctl" style="display:none">
+      <div class="row">
+        <button id="chargebtn" class="btn">⚡ HIZLI ŞARJ</button>
+      </div>
+      <div id="evnote"></div>
+    </div>
+  </div>
+
+  <div id="infocard">
+    <div class="head">
+      <div class="bicon" id="binfo-icon">🏢</div>
+      <div class="bname" id="binfo-name">—</div>
+      <button class="bclose" id="binfo-close">✕</button>
+    </div>
+    <div class="bdesc" id="binfo-desc"></div>
+    <div id="binfo-stats"></div>
+    <button class="btn danger baction" id="binfo-action" style="display:none">Tamir</button>
+  </div>
+
+  <div class="backdrop" id="shopwrap">
+    <div class="modal">
+      <div class="mhead">
+        <h3>🏗️ İnşaat &amp; Yatırım</h3>
+        <button class="mclose" data-close="shopwrap">✕</button>
+      </div>
+      <div class="mbody">
+        <div id="shoplist"></div>
+        <div class="msec" id="mainthead" style="display:none">🔧 BAKIM &amp; ONARIM</div>
+        <div id="maintlist"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="backdrop" id="setwrap">
+    <div class="modal" id="settings">
+      <div class="mhead">
+        <h3>⚙️ Ayarlar</h3>
+        <button class="mclose" data-close="setwrap">✕</button>
+      </div>
+      <div class="mbody">
+        <label for="stname">İstasyon adı (tabelada görünür)</label>
+        <div class="row">
+          <input id="stname" type="text" maxlength="14" placeholder="BENZİNLİK" />
+          <button id="stsave" class="btn good">Kaydet</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <div id="boom">
+    <div class="big">💥</div>
+    <div>REAKTÖR PATLADI!</div>
+    <div class="sub">Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...</div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
