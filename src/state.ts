@@ -4,6 +4,8 @@ export const FUELS: FuelType[] = ['benzin', 'dizel', 'lpg']
 export const FUEL_PRICE: Record<FuelType, number> = { benzin: 10, dizel: 9, lpg: 6 }
 export const FUEL_LABEL: Record<FuelType, string> = { benzin: 'BENZİN', dizel: 'DİZEL', lpg: 'LPG' }
 export const FUEL_COST: Record<FuelType, number> = { benzin: 6.5, dizel: 6, lpg: 4 }
+/** her yeni hesabın açılış bakiyesi */
+export const START_MONEY = 5000
 export const ORDER_ETA = 25 // saniye
 export const FILL_RATE = 7 // L/sn
 export const SPILL_PENALTY_PER_L = 3
@@ -71,7 +73,7 @@ export const URANIUM_ETA = 20 // saniye
 const URANIUM_DRAIN_PER_S = 100 / 300 // tam yük ~5 dakika sürer
 
 export class GameState {
-  money = 4000
+  money = START_MONEY
   reputation = 3.0
   /** tabeladaki istasyon adı — hesaba bağlı, kayıtla gezer */
   stationName = 'BENZİNLİK'
@@ -120,7 +122,7 @@ export class GameState {
 
   // ilerleme / bağlılık
   day = 1
-  dayStartMoney = 4000
+  dayStartMoney = START_MONEY
   achievements = new Set<string>()
   lastLoginDate = ''
   loginStreak = 0

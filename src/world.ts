@@ -84,7 +84,7 @@ function labelSprite(text: string): THREE.Sprite {
   ctx.fillText(text, 192, 50)
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, color: 0xdedede }))
   sp.scale.set(2.5, 0.62, 1)
   return sp
 }
@@ -114,7 +114,7 @@ function cashSprite(text: string, id: string): THREE.Sprite {
   ctx.fillText(text, x0 + 76, 55)
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, color: 0xe2e2e2 }))
   sp.scale.set(2.3, 0.75, 1)
   sp.userData.cashFor = id
   return sp
@@ -140,7 +140,7 @@ function warnSprite(text: string, maintId: string): THREE.Sprite {
   ctx.fillText(text, 224, 54)
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, color: 0xe2e2e2 }))
   sp.scale.set(3.1, 0.72, 1)
   sp.userData.warnFor = maintId
   return sp

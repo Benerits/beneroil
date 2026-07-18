@@ -112,7 +112,7 @@ function textSprite(text: string, accent: string): THREE.Sprite {
   ctx.fillText(text, 256, 100)
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, color: 0xdedede }))
   sp.scale.set(2.6, 0.98, 1)
   return sp
 }
