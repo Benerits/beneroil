@@ -17,7 +17,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
 
 const app = document.getElementById('app')!
 const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)) // performans: 2x retina yerine 1.5x yeterli
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -53,6 +53,8 @@ function resize() {
 }
 window.addEventListener('resize', resize)
 window.addEventListener('wheel', e => {
+  // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
+  if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud')) return
   camera.zoom = Math.min(2.6, Math.max(0.5, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
@@ -73,7 +75,7 @@ let cardRefreshT = 0
 
 composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(world.scene, camera))
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.5, 0.85))
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.35, 0.5, 0.85)) // yarı çözünürlük bloom: gözle fark yok, kat kat hızlı
 composer.addPass(new OutputPass())
 composer.setSize(window.innerWidth, window.innerHeight)
 
@@ -506,6 +508,7 @@ function rebuildFromState() {
   if (state.hasSelfWash) world.buildSelfWash(pv('selfwash'))
   if (state.hasParking) world.buildParking(pv('parking'))
   for (const [id, rot] of Object.entries(placedRot)) world.rotateBuilding(id, rot)
+  world.setClosed(state.closed)
 }
 
 function fixedObstacles(): Rect[] {
@@ -755,6 +758,15 @@ ui.onReset = () => {
   location.reload()
 }
 
+ui.onToggleClosed = () => {
+  state.closed = !state.closed
+  world.setClosed(state.closed)
+  ui.toast(state.closed
+    ? 'İstasyon KAPALI — yeni müşteri girmez, itibar etkilenmez. Bakım için rahatsın.'
+    : 'İstasyon tekrar AÇIK — bekleriz!', state.closed ? '' : 'good')
+  persist()
+}
+
 // ---- İstasyon adı ----
 const nameInput = document.getElementById('stname') as HTMLInputElement
 
@@ -778,7 +790,7 @@ function buildingCard(id: string): BuildingCard | null {
     const i = Number(id.slice(5))
     const broken = state.brokenPumps.has(i)
     return {
-      icon: '⛽', name: `Pompa #${i + 1}`,
+      icon: 'i-fuel', name: `Pompa #${i + 1}`,
       desc: 'Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.',
       stats: [
         ['Durum', broken ? 'ARIZALI' : 'Çalışıyor', broken ? 'bad' : 'good'],
@@ -793,7 +805,7 @@ function buildingCard(id: string): BuildingCard | null {
     const i = Number(id.slice(8))
     const broken = state.brokenChargers.has(i)
     return {
-      icon: '🔌', name: `DC Şarj #${i + 1}`,
+      icon: 'i-charger', name: `DC Şarj #${i + 1}`,
       desc: 'Elektrikli araçlar batarya deposundan anında şarj olur. Depoda yeterli kWh yoksa müşteri bekler.',
       stats: [
         ['Durum', broken ? 'ARIZALI' : 'Çalışıyor', broken ? 'bad' : 'good'],
@@ -806,7 +818,7 @@ function buildingCard(id: string): BuildingCard | null {
   switch (id) {
     case 'office':
       return {
-        icon: '🏢', name: 'Ofis',
+        icon: 'i-office', name: 'Ofis',
         desc: 'İstasyonun yönetim binası. Burada sen varsın — her işe tek başına yetişiyorsun.',
         stats: [
           ['Pompa', `${state.pumps}`],
@@ -816,7 +828,7 @@ function buildingCard(id: string): BuildingCard | null {
       }
     case 'tank':
       return {
-        icon: '🛢️', name: 'Yakıt Tankı',
+        icon: 'i-tank', name: 'Yakıt Tankı',
         desc: 'Sattığın benzin ve dizel buradan çıkar. Bitirmeden tanker siparişi vermeyi unutma.',
         stats: [
           ['Doluluk', `${Math.round(state.tank)}L / ${state.tankCapacity}L`, state.tank < state.tankCapacity * 0.15 ? 'bad' : ''],
@@ -826,7 +838,7 @@ function buildingCard(id: string): BuildingCard | null {
       }
     case 'battery':
       return {
-        icon: '🔋', name: 'Batarya Deposu',
+        icon: 'i-batt', name: 'Batarya Deposu',
         desc: 'Santrallerin ürettiği elektriği biriktirir. Elektrikli araçlar buradan anında şarj alır.',
         stats: [
           ['Dolu', `${Math.floor(state.battery)} / ${state.batteryCapacity} kWh`],
@@ -836,7 +848,7 @@ function buildingCard(id: string): BuildingCard | null {
       }
     case 'market':
       return {
-        icon: '🛒', name: `Market Sv.${state.marketLevel}`,
+        icon: 'i-market', name: `Market Sv.${state.marketLevel}`,
         desc: 'Müşterilerin bir kısmı içeri girip alışveriş yapar — ekstra gelir ve memnuniyet.',
         stats: [
           ['Müşteri harcaması', `₺${25 * state.marketLevel}-${60 * state.marketLevel}`],
@@ -845,7 +857,7 @@ function buildingCard(id: string): BuildingCard | null {
       }
     case 'toilet':
       return {
-        icon: '🚻', name: `Tuvalet Sv.${state.toiletLevel}`,
+        icon: 'i-toilet', name: `Tuvalet Sv.${state.toiletLevel}`,
         desc: 'Yol yorgunları için. Tuvalet arayan müşteri bulamazsa itibarın düşer.',
         stats: [
           ['Moral etkisi', `+${(0.15 * state.toiletLevel).toFixed(2)} puan/müşteri`, 'good'],
@@ -855,7 +867,7 @@ function buildingCard(id: string): BuildingCard | null {
     case 'solar': {
       const net = 2 * (1 - 0.7 * state.solarDirt) * (state.gridLevel >= 2 ? 1.3 : 1)
       return {
-        icon: '☀️', name: 'Güneş Santrali',
+        icon: 'i-solar', name: 'Güneş Santrali',
         desc: 'Bedava elektrik üretir ama paneller kirlendikçe verim düşer. Ara sıra temizlik yaptır.',
         stats: [
           ['Üretim', `+${net.toFixed(1)} kWh/sn`, net < 1 ? 'bad' : 'good'],
@@ -866,7 +878,7 @@ function buildingCard(id: string): BuildingCard | null {
     }
     case 'dieselgen':
       return {
-        icon: '🛠️', name: 'Dizel Jeneratör',
+        icon: 'i-gen', name: 'Dizel Jeneratör',
         desc: 'Tanktan mazot yakarak elektrik üretir. Çalışırken gürültüsü şarjdaki müşterileri rahatsız eder.',
         stats: [
           ['Üretim', `+1.5 kWh/sn`],
@@ -876,7 +888,7 @@ function buildingCard(id: string): BuildingCard | null {
       }
     case 'wash':
       return {
-        icon: '🚿', name: 'Oto Yıkama',
+        icon: 'i-wash', name: 'Oto Yıkama',
         desc: 'Yakıt alan müşterilerin bir kısmı çıkışta aracını yıkatır.',
         stats: [
           ['Hizmet ücreti', '₺60-120'],
@@ -885,43 +897,43 @@ function buildingCard(id: string): BuildingCard | null {
       }
     case 'coffee':
       return {
-        icon: '☕', name: 'Kahveci',
+        icon: 'i-coffee', name: 'Kahveci',
         desc: 'Park eden müşteriler kahve molası verir.',
         stats: [['Satış', '₺20-45'], ['Uğrama oranı', '~%30']],
       }
     case 'restaurant':
       return {
-        icon: '🍽️', name: 'Restoran',
+        icon: 'i-food', name: 'Restoran',
         desc: 'Uzun yol müşterisi park edip yemek yer — yüksek hesap öder.',
         stats: [['Hesap', '₺80-160'], ['Uğrama oranı', '~%18']],
       }
     case 'truckpark':
       return {
-        icon: '🚛', name: 'Tır Parkı',
+        icon: 'i-truck', name: 'Tır Parkı',
         desc: 'Tırcılar konaklar; sen hiçbir şey yapmadan düzenli gelir akar.',
         stats: [['Pasif gelir', '₺90-160 / ~45sn'], ['Trafik etkisi', '+%2']],
       }
     case 'airwater':
       return {
-        icon: '💨', name: 'Hava-Su Ünitesi',
+        icon: 'i-air', name: 'Hava-Su Ünitesi',
         desc: 'Lastik havası ve su. Küçük gelir ama müşteri çeker.',
         stats: [['Hizmet', '₺10-20'], ['Kullanım', '~%20']],
       }
     case 'selfwash':
       return {
-        icon: '🧽', name: 'Self Yıkama',
+        icon: 'i-selfwash', name: 'Self Yıkama',
         desc: 'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır.',
         stats: [['Pasif gelir', '₺30-60 / ~35sn'], ['Trafik etkisi', '+%2']],
       }
     case 'parking':
       return {
-        icon: '🅿️', name: 'Otopark',
+        icon: 'i-parking', name: 'Otopark',
         desc: 'Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.',
         stats: [['Kapasite', '4 araç'], ['Doluluk', `${cars.cars.filter(c => c.phase === 'parked' || c.phase === 'toPark').length}/4`]],
       }
     case 'oil':
       return {
-        icon: '🔧', name: 'Yağ Değişimi',
+        icon: 'i-oil', name: 'Yağ Değişimi',
         desc: 'Bakım vakti gelen araçlar burada yağ değiştirir — en kârlı yan hizmet.',
         stats: [
           ['Hizmet ücreti', '₺150-250'],
@@ -936,7 +948,7 @@ function buildingCard(id: string): BuildingCard | null {
       else if (!state.uraniumPending && state.uranium <= 60) action = { label: `🟢 Uranyum Sipariş Et — ₺${URANIUM_COST.toLocaleString('tr-TR')}`, maintId: 'order-uranium' }
       else if (state.smrWear >= 0.1) action = { label: '☢️ Bakım Yap — ₺1.500', maintId: 'maint-smr' }
       return {
-        icon: '☢️', name: 'Modüler Reaktör',
+        icon: 'i-reactor', name: 'Modüler Reaktör',
         desc: 'En güçlü enerji kaynağı. Uranyumla çalışır, yıprandıkça patlama riski artar — bakımı ASLA aksatma.',
         stats: [
           ['Üretim', producing ? `+${(8 * (state.gridLevel >= 2 ? 1.3 : 1)).toFixed(1)} kWh/sn` : 'DURDU (uranyum yok)', producing ? 'good' : 'bad'],
@@ -1010,7 +1022,7 @@ window.addEventListener('pointermove', e => {
   if (Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > 8) isDrag = true
   if (isDrag) {
     const wpp = VIEW / window.innerHeight / camera.zoom
-    camX = Math.max(-32, Math.min(8, camX + (0.894 * dx + 0.447 * dy) * wpp))
+    camX = Math.max(-34, Math.min(50, camX + (0.894 * dx + 0.447 * dy) * wpp))
     camY = Math.max(-26, Math.min(26, camY + (-0.447 * dx + 0.894 * dy) * wpp))
   }
 })

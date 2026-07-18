@@ -201,6 +201,7 @@ export class World {
   scene = new THREE.Scene()
   stationName = 'BENZİNLİK'
   buildings: Building[] = []
+  private closedFlag = false
   private signLevel = 0
   private signGroup: THREE.Group | null = null
   private marketGroup: THREE.Group | null = null
@@ -227,13 +228,13 @@ export class World {
     this.sun = sun
     sun.position.set(18, -12, 26)
     sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
+    sun.shadow.mapSize.set(1024, 1024) // performans: geniş harita + yumuşak gölgede 1024 yeterli
     const cam = sun.shadow.camera
-    cam.left = -42; cam.right = 42; cam.top = 42; cam.bottom = -42; cam.far = 120
+    cam.left = -55; cam.right = 55; cam.top = 55; cam.bottom = -55; cam.far = 140
     s.add(sun)
 
     // yerleştirme modu grid'i (1 birimlik kareler)
-    this.grid = new THREE.GridHelper(80, 80, 0xffffff, 0xffffff)
+    this.grid = new THREE.GridHelper(110, 110, 0xffffff, 0xffffff)
     this.grid.rotation.x = Math.PI / 2
     this.grid.position.z = 0.04
     ;(this.grid.material as THREE.Material).transparent = true
@@ -260,7 +261,8 @@ export class World {
     const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 38,
       noiseTex('#4a5058', [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 110), grassMat)
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(130, 110), grassMat)
+    ground.position.x = 8
     ground.receiveShadow = true
     s.add(ground)
 
@@ -278,14 +280,27 @@ export class World {
     box(0.18, 12.2, 0.14, 0xd8dbde, 5.02, 0, 0.07, s)
 
     // yol (arada yeşil bant kalır) + şerit çizgileri
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(4, 100), roadMat)
+    // gidiş-geliş yol: çift sarı orta çizgi + şerit içi beyaz kesikler + kenar çizgileri
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 100), roadMat)
     road.position.set(ROAD_X, 0, 0.01)
     road.receiveShadow = true
     s.add(road)
-    for (let y = -48; y < 49; y += 4) {
-      const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 1.6), lam(0xe8e4d8))
-      dash.position.set(ROAD_X, y, 0.02)
-      s.add(dash)
+    for (const off of [-0.1, 0.1]) {
+      const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 100), lam(0xe0b13e))
+      center.position.set(ROAD_X + off, 0, 0.022)
+      s.add(center)
+    }
+    for (const off of [-2.16, 2.16]) {
+      const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 100), lam(0xe8e4d8))
+      edgeLine.position.set(ROAD_X + off, 0, 0.02)
+      s.add(edgeLine)
+    }
+    for (let y = -48; y < 49; y += 5) {
+      for (const off of [-1.1, 1.1]) {
+        const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 1.5), lam(0xd9d5c9))
+        dash.position.set(ROAD_X + off, y, 0.02)
+        s.add(dash)
+      }
     }
 
     // giriş/çıkış rampaları
@@ -343,8 +358,37 @@ export class World {
     stain(2.2, 2.8, 0.4, s)
     stain(-2.5, 6.5, 0.5, s)
 
+    // çim dokusuna hayat: taşlar ve çiçekler
+    const rockGeo = new THREE.IcosahedronGeometry(0.22, 0)
+    const rockMat = lam(0x9aa1a9)
+    for (const [rx, ry, rs] of [[-8.2, -16.5, 1], [-10.8, 7.6, 1.3], [12.6, -12.2, 0.9], [13.4, 15.8, 1.1],
+      [-8.9, 16.8, 0.8], [12.1, 2.3, 1.2], [-11.6, -5.2, 1]] as const) {
+      const rock = new THREE.Mesh(rockGeo, rockMat)
+      rock.position.set(rx, ry, 0.12 * rs)
+      rock.scale.set(rs, rs, rs * 0.6)
+      rock.rotation.z = rx * 2.1
+      rock.castShadow = true
+      s.add(rock)
+    }
+    const flowerColors = [0xe8e6e1, 0xf2c14e, 0xe08bb0]
+    for (const [fx, fy] of [[-9.8, -11.4], [-8.4, 14.2], [12.9, -17.6], [11.8, 12.4], [-11.2, 1.2],
+      [13.6, 6.7], [-9.1, 22.4], [12.3, 20.2], [-10.4, -20.8]] as const) {
+      const fm = lam(flowerColors[Math.floor((fx * fy * 7.13 % 1 + 1) * 3) % 3])
+      for (let k = 0; k < 3; k++) {
+        const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), fm)
+        p.position.set(fx + Math.sin(k * 2.4 + fx) * 0.5, fy + Math.cos(k * 1.9 + fy) * 0.5, 0.09)
+        s.add(p)
+      }
+    }
+
     this.setSign(0)
     this.addPump(0)
+  }
+
+  /** istasyon kapalı/açık — tabela yeniden çizilir */
+  setClosed(v: boolean) {
+    this.closedFlag = v
+    this.setSign(this.signLevel)
   }
 
   // ---- kayıt / etiket / uyarı ----
@@ -520,6 +564,17 @@ export class World {
     lot.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.015)
     lot.receiveShadow = true
     this.scene.add(lot)
+    // beton derz çizgileri — zemin yavan durmasın
+    for (let jy = y0 + 4; jy < y1 - 0.5; jy += 4) {
+      const j = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, 0.06), lam(0x7e858d))
+      j.position.set((x0 + x1) / 2, jy, 0.02)
+      this.scene.add(j)
+    }
+    for (let jx = x0 + 4; jx < x1 - 0.5; jx += 4) {
+      const j = new THREE.Mesh(new THREE.PlaneGeometry(0.06, d - 0.3), lam(0x7e858d))
+      j.position.set(jx, (y0 + y1) / 2, 0.02)
+      this.scene.add(j)
+    }
     // istasyon kolonunun yol tarafı özel: rampa + bordür + lamba
     if (c === 0 && r === 0) {
       this.makeApron(APRON_SOUTH_Y)
@@ -626,7 +681,12 @@ export class World {
       ctx.textAlign = 'right'; ctx.fillText('10.0', W - 18, 140)
       ctx.textAlign = 'left'; ctx.fillText('DİZEL', 18, 210)
       ctx.textAlign = 'right'; ctx.fillText('9.0', W - 18, 210)
-      if (level >= 1) {
+      if (this.closedFlag) {
+        ctx.fillStyle = '#d64545'
+        ctx.fillRect(0, 238, W, 50)
+        ctx.fillStyle = '#fff'; ctx.font = '800 32px -apple-system, sans-serif'
+        ctx.textAlign = 'center'; ctx.fillText('KAPALI', W / 2, 263)
+      } else if (level >= 1) {
         ctx.fillStyle = '#27a05a'; ctx.font = '700 26px -apple-system, sans-serif'
         ctx.textAlign = 'center'; ctx.fillText('★ 7/24 AÇIK ★', W / 2, 262)
       }

@@ -28,12 +28,30 @@ const EV_COSTS = [6000, 10000, 14000, 18000]
 const SOLAR_COST = 9000
 const DIESELGEN_COST = 4000
 const SMR_COST = 40000
-// 3×3 arsa haritası: sütun 0 = istasyon kolonu, 1-2 batıya doğru; satır 0 = güney, 1 = orta, 2 = kuzey
-export const PARCEL_COLS: [number, number][] = [[-6.5, 5], [-18, -6.5], [-29.5, -18]]
+// Arsa haritası: sütun 0 = istasyon kolonu, 1-2 batıya doğru; 3-5 yolun KARŞI tarafı (doğu).
+// Satır 0 = güney, 1 = orta, 2 = kuzey. Toplam 2 blok × 3×3.
+export const PARCEL_COLS: [number, number][] = [
+  [-6.5, 5], [-18, -6.5], [-29.5, -18],
+  [10.9, 22.4], [22.4, 33.9], [33.9, 45.4],
+]
 export const PARCEL_ROWS: [number, number][] = [[-24, -10], [-10, 10], [10, 24]]
 export const PAVE_COST = 2500
 export function parcelKey(c: number, r: number) { return `${c},${r}` }
-export function parcelCost(c: number, _r: number) { return c === 0 ? 6000 : c === 1 ? 9000 : 14000 }
+export function parcelCost(c: number, _r: number) {
+  if (c === 0) return 6000
+  if (c === 1 || c === 3) return 9000
+  return 14000
+}
+/** komşuluk: aynı blokta yan yana/alt alta; 0↔3 yol karşısı sayılır */
+export function parcelsAdjacent(c1: number, r1: number, c2: number, r2: number): boolean {
+  if (r1 === r2) {
+    const sameBlock = (c1 < 3) === (c2 < 3)
+    if (sameBlock && Math.abs(c1 - c2) === 1) return true
+    if ((c1 === 0 && c2 === 3) || (c1 === 3 && c2 === 0)) return true // yolun karşısı
+  }
+  if (c1 === c2 && Math.abs(r1 - r2) === 1) return true
+  return false
+}
 
 const WASH_COST = 8000
 const OIL_COST = 12000
@@ -74,6 +92,8 @@ export class GameState {
   hasAirWater = false
   hasSelfWash = false
   hasParking = false
+  /** istasyon kapalı: yeni müşteri girmez, itibar etkilenmez (bakım molası) */
+  closed = false
   private truckTimer = 45
   private selfWashTimer = 30
 
@@ -95,8 +115,9 @@ export class GameState {
   get anyLand() { return this.ownedParcels.size > 1 }
 
   parcelAdjacentToOwned(c: number, r: number): boolean {
-    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      if (this.ownedParcels.has(parcelKey(c + dc, r + dr))) return true
+    for (const key of this.ownedParcels) {
+      const [oc, or] = key.split(',').map(Number)
+      if (parcelsAdjacent(c, r, oc, or)) return true
     }
     return false
   }
@@ -225,6 +246,7 @@ export class GameState {
 
   /** yoldan geçen bir aracın istasyona girme olasılığı */
   entryChance() {
+    if (this.closed) return 0
     const c = 0.32 + 0.1 * this.signLevel + 0.05 * (this.reputation - 3)
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
       + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
@@ -282,84 +304,72 @@ export function getShopItems(s: GameState): ShopRow[] {
     else if (locked) rows.push({ id, icon, title, desc, stat, cost, status: 'locked', note: locked })
     else rows.push({ id, icon, title, desc, stat, cost, status: 'buy', note: '' })
   }
-  const anyLand = s.anyLand
   const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
 
-  row('land', '🏞️', `Arsa Satın Al (${s.ownedParcels.size}/9)`, '3×3 harita',
-    'Bitişik arsalardan birini seç — fiyat konuma göre ₺6-14 bin',
-    s.ownedParcels.size >= 9 ? null : 6000, null)
-  row('pave', '🧱', 'Zemin Betonu', 'arsa başı',
-    'Çimen arsana beton döşe — yapı kurmak için şart (güneş paneli hariç)',
+  row('land', 'i-land', `Arsa Satın Al (${s.ownedParcels.size}/18)`, '2 blok 3×3',
+    'Bitişik arsalardan birini seç — yolun karşısı da alınabilir (₺6-14 bin)',
+    s.ownedParcels.size >= 18 ? null : 6000, null)
+  row('pave', 'i-pave', 'Zemin Betonu', 'arsa başı',
+    'Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)',
     PAVE_COST, hasUnpaved ? null : 'Betonsuz arsan yok')
-  row('pump', '⛽', `Pompa #${Math.min(s.pumps + 1, MAX_PUMPS)}`, '+1 pompa', 'Aynı anda bir müşteri daha alırsın',
-    s.pumps >= MAX_PUMPS ? null : PUMP_COSTS[s.pumps],
-    s.pumps >= 2 && !s.landSouth ? 'Güney arsa gerekli' : null)
-  row('sign', '🪧', `Tabela Sv.${Math.min(s.signLevel + 1, 3)}`, '+%10 trafik', 'Yoldan geçenlerin uğrama şansı artar',
+  row('pump', 'i-fuel', `Pompa #${Math.min(s.pumps + 1, MAX_PUMPS)}`, '+1 pompa', 'Aynı anda bir müşteri daha alırsın',
+    s.pumps >= MAX_PUMPS ? null : PUMP_COSTS[s.pumps], null)
+  row('sign', 'i-sign', `Tabela Sv.${Math.min(s.signLevel + 1, 3)}`, '+%10 trafik', 'Yoldan geçenlerin uğrama şansı artar',
     s.signLevel >= 3 ? null : SIGN_COSTS[s.signLevel], null)
-  row('tank', '🛢️', 'Yakıt Tankı', s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
+  row('tank', 'i-tank', 'Yakıt Tankı', s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
     'Depo büyür, daha seyrek sipariş verirsin',
     s.tankLevel >= 3 ? null : TANK_COSTS[s.tankLevel], null)
-  row('market', '🛒', s.marketLevel === 0 ? 'Market' : 'Market Sv.2', `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
-    'Müşteriler ekstra alışveriş yapar',
-    s.marketLevel >= 2 ? null : MARKET_COSTS[s.marketLevel],
-    !s.landNorth ? 'Kuzey arsa gerekli' : null)
-  row('toilet', '🚻', s.toiletLevel === 0 ? 'Tuvalet' : 'Tuvalet Sv.2', '+moral',
-    'Müşteri memnuniyetini ve itibarı artırır',
-    s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel],
-    !s.landNorth ? 'Kuzey arsa gerekli' : null)
-
-  row('wash', '🚿', 'Oto Yıkama', '+₺60-120', 'Müşterilerin ~%25\'i araç yıkatır, ekstra gelir',
-    s.hasWash ? null : WASH_COST,
-    !anyLand ? 'Yan arsa gerekli' : null)
-  row('oil', '🛢️', 'Yağ Değişimi', '+₺150-250', 'Müşterilerin ~%12\'si yağ değiştirtir, güçlü ek gelir',
-    s.hasOil ? null : OIL_COST,
-    !anyLand ? 'Yan arsa gerekli' : null)
-  row('airwater', '💨', 'Hava-Su Ünitesi', '+₺10-20', 'Lastik havası ve su — ucuz ama müşteri çeker',
+  row('airwater', 'i-air', 'Hava-Su Ünitesi', '+₺10-20', 'Lastik havası ve su — ucuz ama müşteri çeker',
     s.hasAirWater ? null : AIRWATER_COST, null)
-  row('parking', '🅿️', 'Otopark', '4 araç', 'Çizgili park alanı — müşteriler park edip tesisleri kullanır',
+  row('parking', 'i-parking', 'Otopark', '4 araç', 'Çizgili park alanı — müşteriler park edip tesisleri kullanır',
     s.hasParking ? null : PARKING_COST, null)
-  row('selfwash', '🧽', 'Self Yıkama', '+₺30-60/dk', 'Araçlar kendisi yıkar; köpük ve su otomatik satılır',
-    s.hasSelfWash ? null : SELFWASH_COST,
-    !anyLand ? 'Yan arsa gerekli' : null)
-  row('coffee', '☕', 'Kahveci', '+₺20-45', 'Yolcular kahve molası verir',
-    s.hasCoffee ? null : COFFEE_COST,
-    !anyLand ? 'Yan arsa gerekli' : null)
-  row('restaurant', '🍽️', 'Restoran', '+₺80-160', 'Uzun yol müşterisi yemek molası verir',
-    s.hasRestaurant ? null : RESTAURANT_COST,
-    !anyLand ? 'Yan arsa gerekli' : null)
-  row('truckpark', '🚛', 'Tır Parkı', '+₺90-160/dk', 'Tırcılar konaklar — düzenli pasif gelir',
-    s.hasTruckPark ? null : TRUCKPARK_COST,
-    !s.landWest ? 'Batı arsa gerekli' : null)
 
-  // elektrik zinciri
-  row('grid', '⚡', `Elektrik Altyapısı Sv.${Math.min(s.gridLevel + 1, 2)}`,
+  row('market', 'i-market', s.marketLevel === 0 ? 'Market' : 'Market Sv.2', `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
+    'Müşteriler ekstra alışveriş yapar',
+    s.marketLevel >= 2 ? null : MARKET_COSTS[s.marketLevel], null)
+  row('toilet', 'i-toilet', s.toiletLevel === 0 ? 'Tuvalet' : 'Tuvalet Sv.2', '+moral',
+    'Müşteri memnuniyetini ve itibarı artırır',
+    s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel], null)
+  row('wash', 'i-wash', 'Oto Yıkama', '+₺60-120', "Müşterilerin ~%25'i araç yıkatır, ekstra gelir",
+    s.hasWash ? null : WASH_COST, null)
+  row('oil', 'i-oil', 'Yağ Değişimi', '+₺150-250', "Müşterilerin ~%12'si yağ değiştirtir, güçlü ek gelir",
+    s.hasOil ? null : OIL_COST, null)
+  row('selfwash', 'i-selfwash', 'Self Yıkama', '+₺30-60/dk', 'Araçlar kendisi yıkar; köpük ve su otomatik satılır',
+    s.hasSelfWash ? null : SELFWASH_COST, null)
+  row('coffee', 'i-coffee', 'Kahveci', '+₺20-45', 'Yolcular kahve molası verir',
+    s.hasCoffee ? null : COFFEE_COST, null)
+  row('restaurant', 'i-food', 'Restoran', '+₺80-160', 'Uzun yol müşterisi yemek molası verir',
+    s.hasRestaurant ? null : RESTAURANT_COST, null)
+  row('truckpark', 'i-truck', 'Tır Parkı', '+₺90-160/dk', 'Tırcılar konaklar — düzenli pasif gelir',
+    s.hasTruckPark ? null : TRUCKPARK_COST, null)
+
+  // elektrik zinciri (teknoloji sırası korunur, arsa şartı yok)
+  row('grid', 'i-bolt', `Elektrik Altyapısı Sv.${Math.min(s.gridLevel + 1, 2)}`,
     s.gridLevel === 0 ? 'temel' : '+%30 üretim',
     s.gridLevel === 0 ? 'Şarj ve enerji yapılarının önünü açar' : 'Tüm üretimi güçlendirir, yeni yapılar açılır',
     s.gridLevel >= 2 ? null : GRID_COSTS[s.gridLevel], null)
-  row('battery', '🔋', `Batarya Deposu Sv.${Math.min(s.batteryLevel + 1, 3)}`,
+  row('battery', 'i-batt', `Batarya Deposu Sv.${Math.min(s.batteryLevel + 1, 3)}`,
     `${BATTERY_CAP[Math.min(s.batteryLevel + 1, 3)]} kWh`,
     'Üretilen elektriği biriktirir, araçlar buradan anında şarj olur',
     s.batteryLevel >= 3 ? null : BATTERY_COSTS[s.batteryLevel],
     s.gridLevel < 1 ? 'Elektrik altyapısı gerekli' : null)
-  row('evcharger', '🔌', `DC Şarj Ünitesi #${Math.min(s.evChargers + 1, MAX_EV)}`, '+1 ünite',
+  row('evcharger', 'i-charger', `DC Şarj Ünitesi #${Math.min(s.evChargers + 1, MAX_EV)}`, '+1 ünite',
     'Elektrikli araç müşterileri gelmeye başlar; ünite arttıkça EV trafiği artar',
     s.evChargers >= MAX_EV ? null : EV_COSTS[s.evChargers],
     s.gridLevel < 1 ? 'Elektrik altyapısı gerekli'
-      : s.evChargers >= 1 && s.gridLevel < 2 ? 'Altyapı Sv.2 gerekli'
-      : s.evChargers >= 2 && !s.landSouth ? 'Güney arsa gerekli'
       : s.batteryLevel < 1 ? 'Önce batarya deposu kur' : null)
-  row('solar', '☀️', 'Güneş Santrali', '+2 kWh/sn',
-    'Bedava üretim · ⚠️ kirlenir, düzenli temizlik ister',
+  row('solar', 'i-solar', 'Güneş Santrali', '+2 kWh/sn',
+    'Bedava üretim — ama kirlenir, düzenli temizlik ister',
     s.hasSolar ? null : SOLAR_COST,
-    s.gridLevel < 1 ? 'Elektrik altyapısı gerekli' : !anyLand ? 'Yan arsa gerekli' : null)
-  row('dieselgen', '🛠️', 'Dizel Jeneratör', '+1.5 kWh/sn',
-    'Tanktan mazot yakar · ⚠️ gürültüsü şarjdaki müşterileri kaçırır',
+    s.gridLevel < 1 ? 'Elektrik altyapısı gerekli' : null)
+  row('dieselgen', 'i-gen', 'Dizel Jeneratör', '+1.5 kWh/sn',
+    'Tanktan mazot yakar — gürültüsü şarjdaki müşterileri kaçırır',
     s.hasDiesel ? null : DIESELGEN_COST,
     s.gridLevel < 1 ? 'Elektrik altyapısı gerekli' : null)
-  row('smr', '☢️', 'Modüler Reaktör', '+8 kWh/sn',
-    'Dev üretim · ⚠️ bakımsız kalırsa PATLAR, her şey sıfırlanır',
+  row('smr', 'i-reactor', 'Modüler Reaktör', '+8 kWh/sn',
+    'Dev üretim — bakımsız kalırsa PATLAR, her şey sıfırlanır',
     s.hasSMR ? null : SMR_COST,
-    s.gridLevel < 2 ? 'Altyapı Sv.2 gerekli' : !anyLand ? 'Yan arsa gerekli' : null)
+    s.gridLevel < 2 ? 'Altyapı Sv.2 gerekli' : null)
 
   return rows
 }
@@ -379,19 +389,19 @@ export function getMaintenanceItems(s: GameState): MaintRow[] {
   const rows: MaintRow[] = []
   if (s.hasSolar) {
     rows.push({
-      id: 'clean-solar', icon: '🧽',
+      id: 'clean-solar', icon: 'i-clean',
       title: `Panel Temizliği (kir %${Math.round(s.solarDirt * 100)})`,
       cost: 300, urgent: s.solarDirt > 0.6, disabled: s.solarDirt < 0.15,
     })
   }
   if (s.hasSMR) {
     rows.push({
-      id: 'maint-smr', icon: '☢️',
+      id: 'maint-smr', icon: 'i-reactor',
       title: `Reaktör Bakımı (yıpranma %${Math.round(s.smrWear * 100)})`,
       cost: 1500, urgent: s.smrWear > 0.6, disabled: s.smrWear < 0.1,
     })
     rows.push({
-      id: 'order-uranium', icon: '🟢',
+      id: 'order-uranium', icon: 'i-uranium',
       title: s.uraniumPending
         ? `Uranyum yolda (${Math.ceil(s.uraniumEta)}sn)`
         : `Uranyum Siparişi (%${Math.round(s.uranium)} kaldı)`,
@@ -400,10 +410,10 @@ export function getMaintenanceItems(s: GameState): MaintRow[] {
     })
   }
   for (const i of s.brokenPumps) {
-    rows.push({ id: `fix-pump-${i}`, icon: '⛽', title: `Pompa #${i + 1} Tamiri`, cost: 800, urgent: true, disabled: false })
+    rows.push({ id: `fix-pump-${i}`, icon: 'i-wrench', title: `Pompa #${i + 1} Tamiri`, cost: 800, urgent: true, disabled: false })
   }
   for (const i of s.brokenChargers) {
-    rows.push({ id: `fix-charger-${i}`, icon: '🔌', title: `Şarj #${i + 1} Tamiri`, cost: 1000, urgent: true, disabled: false })
+    rows.push({ id: `fix-charger-${i}`, icon: 'i-wrench', title: `Şarj #${i + 1} Tamiri`, cost: 1000, urgent: true, disabled: false })
   }
   return rows
 }
@@ -436,7 +446,7 @@ const SAVE_FIELDS = [
   'money', 'tank', 'reputation', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'hasSolar', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasAirWater', 'hasSelfWash', 'hasParking',
-  'solarDirt', 'smrWear', 'uranium', 'day', 'dayStartMoney',
+  'solarDirt', 'smrWear', 'uranium', 'day', 'dayStartMoney', 'closed',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {

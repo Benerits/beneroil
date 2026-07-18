@@ -5,13 +5,31 @@ function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T
 }
 
+/** UI'da emoji yok — metinlerden ayıkla (tasarım dili: ui-signage-design) */
+function stripEmoji(s: string): string {
+  return s.replace(/\p{Extended_Pictographic}/gu, '').replace(/️/g, '').replace(/\s{2,}/g, ' ').trim()
+}
+
+function icon(id: string, cls = 'ic'): string {
+  return `<svg class="${cls}"><use href="#${id}"/></svg>`
+}
+
 export interface BuildingCard {
-  icon: string
+  icon: string // svg symbol id (i-...)
   name: string
   desc: string
   stats: [string, string, ('' | 'good' | 'bad')?][]
   action?: { label: string; maintId: string }
   move?: { label: string; id: string }
+}
+
+/** inşaat sekmeleri */
+const CATEGORY_MAP: Record<string, string> = {
+  land: 'arsa', pave: 'arsa',
+  pump: 'istasyon', sign: 'istasyon', tank: 'istasyon', airwater: 'istasyon', parking: 'istasyon',
+  market: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
+  coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis',
+  grid: 'enerji', battery: 'enerji', evcharger: 'enerji', solar: 'enerji', dieselgen: 'enerji', smr: 'enerji',
 }
 
 export class UI {
@@ -27,9 +45,11 @@ export class UI {
   onCardClose: () => void = () => {}
   onMove: (id: string) => void = () => {}
   onReset: () => void = () => {}
+  onToggleClosed: () => void = () => {}
   batteryKwh: () => number = () => 0
 
   private money = el<HTMLSpanElement>('money')
+  private day = el<HTMLSpanElement>('day')
   private tankL = el<HTMLSpanElement>('tankL')
   private tankFill = el<HTMLDivElement>('tankfill')
   private battChip = el<HTMLDivElement>('battchip')
@@ -40,10 +60,11 @@ export class UI {
   private orderLabel = el<HTMLSpanElement>('orderlabel')
   private shopBtn = el<HTMLButtonElement>('shopbtn')
   private shopLabel = el<HTMLSpanElement>('shoplabel')
+  private closeBtn = el<HTMLButtonElement>('closebtn')
+  private closeLabel = el<HTMLSpanElement>('closelabel')
   private shopWrap = el<HTMLDivElement>('shopwrap')
   private shopList = el<HTMLDivElement>('shoplist')
-  private maintHead = el<HTMLDivElement>('mainthead')
-  private maintList = el<HTMLDivElement>('maintlist')
+  private maintBadge = el<HTMLSpanElement>('maintbadge')
   private panel = el<HTMLDivElement>('panel')
   private demand = el<HTMLHeadingElement>('demand')
   private fuelCtl = el<HTMLDivElement>('fuelctl')
@@ -58,15 +79,16 @@ export class UI {
   private infoCard = el<HTMLDivElement>('infocard')
   private infoAction = el<HTMLButtonElement>('binfo-action')
   private infoMove = el<HTMLButtonElement>('binfo-move')
-  private day = el<HTMLSpanElement>('day')
   private currentAction: string | null = null
   private currentMove: string | null = null
 
   private shopOpen = false
   private shopRenderT = 0
+  private shopCat = 'istasyon'
 
   constructor() {
     this.orderBtn.addEventListener('click', () => this.onOrder())
+    this.closeBtn.addEventListener('click', () => this.onToggleClosed())
 
     // modallar
     const setWrap = el<HTMLDivElement>('setwrap')
@@ -89,6 +111,15 @@ export class UI {
           wrap.classList.remove('show')
           if (wrap === this.shopWrap) this.shopOpen = false
         }
+      })
+    }
+
+    // sekmeler
+    for (const tab of document.querySelectorAll<HTMLButtonElement>('#shoptabs .tab')) {
+      tab.addEventListener('click', () => {
+        this.shopCat = tab.dataset.cat!
+        for (const t of document.querySelectorAll('#shoptabs .tab')) t.classList.toggle('active', t === tab)
+        this.shopRenderT = 0
       })
     }
 
@@ -136,15 +167,13 @@ export class UI {
     })
 
     // mağaza tıklamaları
-    const shopClick = (e: Event) => {
+    this.shopList.addEventListener('click', e => {
       const btn = (e.target as HTMLElement).closest('button[data-buy], button[data-maint]') as HTMLButtonElement | null
       if (!btn) return
       if (btn.dataset.buy) this.onBuy(btn.dataset.buy)
       if (btn.dataset.maint) this.onMaint(btn.dataset.maint)
       this.shopRenderT = 0
-    }
-    this.shopList.addEventListener('click', shopClick)
-    this.maintList.addEventListener('click', shopClick)
+    })
   }
 
   private pickNozzle(type: FuelType) {
@@ -175,11 +204,11 @@ export class UI {
     if (car.kind === 'ev') {
       this.fuelCtl.style.display = 'none'
       this.evCtl.style.display = 'block'
-      this.demand.textContent = `🔌 Elektrikli araç · İstek: ${car.demandKwh} kWh`
+      this.demand.textContent = `Elektrikli araç · İstek: ${car.demandKwh} kWh`
       const have = this.batteryKwh()
       const enough = have >= car.demandKwh
       this.chargeBtn.disabled = !enough
-      this.chargeBtn.textContent = `⚡ HIZLI ŞARJ (${car.demandKwh} kWh)`
+      this.chargeBtn.textContent = `HIZLI ŞARJ (${car.demandKwh} kWh)`
       this.evNote.textContent = enough
         ? 'Batarya hazır — anında şarj, müşteri hemen yola çıkar.'
         : `Bataryada yeterli enerji yok (${Math.floor(have)}/${car.demandKwh} kWh).`
@@ -188,7 +217,7 @@ export class UI {
 
     this.fuelCtl.style.display = 'block'
     this.evCtl.style.display = 'none'
-    this.demand.textContent = `🚗 Müşteri isteği: ₺${car.demandAmount} ${FUEL_LABEL[car.demandType]}`
+    this.demand.textContent = `Müşteri isteği: ₺${car.demandAmount} ${FUEL_LABEL[car.demandType]}`
     this.nozBenzin.classList.toggle('sel', car.nozzle === 'benzin')
     this.nozDizel.classList.toggle('sel', car.nozzle === 'dizel')
     const locked = car.filled > 0 || car.filling
@@ -203,22 +232,22 @@ export class UI {
   // ---- bina bilgi kartı ----
 
   showBuildingCard(card: BuildingCard) {
-    el<HTMLDivElement>('binfo-icon').textContent = card.icon
-    el<HTMLDivElement>('binfo-name').textContent = card.name
-    el<HTMLDivElement>('binfo-desc').textContent = card.desc
+    el<HTMLDivElement>('binfo-icon').innerHTML = icon(card.icon)
+    el<HTMLDivElement>('binfo-name').textContent = stripEmoji(card.name)
+    el<HTMLDivElement>('binfo-desc').textContent = stripEmoji(card.desc)
     el<HTMLDivElement>('binfo-stats').innerHTML = card.stats.map(([k, v, cls]) =>
-      `<div class="stat"><span class="k">${k}</span><span class="v ${cls ?? ''}">${v}</span></div>`).join('')
+      `<div class="stat"><span class="k">${stripEmoji(k)}</span><span class="v ${cls ?? ''}">${stripEmoji(v)}</span></div>`).join('')
     if (card.action) {
-      this.infoAction.style.display = 'block'
-      this.infoAction.textContent = card.action.label
+      this.infoAction.style.display = 'flex'
+      this.infoAction.textContent = stripEmoji(card.action.label)
       this.currentAction = card.action.maintId
     } else {
       this.infoAction.style.display = 'none'
       this.currentAction = null
     }
     if (card.move) {
-      this.infoMove.style.display = 'block'
-      this.infoMove.textContent = card.move.label
+      this.infoMove.style.display = 'flex'
+      this.infoMove.textContent = stripEmoji(card.move.label)
       this.currentMove = card.move.id
     } else {
       this.infoMove.style.display = 'none'
@@ -230,6 +259,7 @@ export class UI {
   hideBuildingCard() {
     this.infoCard.classList.remove('show')
     this.currentAction = null
+    this.currentMove = null
   }
 
   get buildingCardVisible() {
@@ -239,34 +269,37 @@ export class UI {
   // ---- mağaza ----
 
   private renderShop(state: GameState) {
-    const rows = getShopItems(state)
+    if (this.shopCat === 'bakim') {
+      const maint = getMaintenanceItems(state)
+      this.shopList.innerHTML = maint.length === 0
+        ? `<div class="sd" style="text-align:center; padding:18px 0">Her şey yolunda — bakım gereken bir şey yok.</div>`
+        : maint.map(r => {
+          const cls = r.urgent ? 'shoprow urgent' : 'shoprow'
+          const disabled = r.disabled || state.money < r.cost
+          return `<div class="${cls}">
+            <div class="sicon">${icon(r.icon)}</div>
+            <div class="sinfo"><div class="st">${stripEmoji(r.title)}</div></div>
+            <button class="btn sbuy ${r.urgent ? 'danger' : ''}" data-maint="${r.id}" ${disabled ? 'disabled' : ''}>₺${r.cost.toLocaleString('tr-TR')}</button></div>`
+        }).join('')
+      return
+    }
+    const rows = getShopItems(state).filter(r => CATEGORY_MAP[r.id] === this.shopCat)
     this.shopList.innerHTML = rows.map(r => {
       const cls = r.status === 'maxed' ? 'shoprow maxed' : 'shoprow'
       let btn: string
       if (r.status === 'maxed') btn = `<button class="btn sbuy" disabled>MAKS</button>`
-      else if (r.status === 'locked') btn = `<button class="btn sbuy" disabled>🔒</button>`
+      else if (r.status === 'locked') btn = `<button class="btn sbuy" disabled>KİLİTLİ</button>`
       else {
         const afford = state.money >= (r.cost ?? 0)
         btn = `<button class="btn sbuy ${afford ? 'good' : ''}" data-buy="${r.id}" ${afford ? '' : 'disabled'}>₺${r.cost?.toLocaleString('tr-TR')}</button>`
       }
-      const lock = r.status === 'locked' ? `<div class="slock">🔒 ${r.note}</div>` : ''
+      const lock = r.status === 'locked' ? `<div class="slock">${stripEmoji(r.note)}</div>` : ''
       return `<div class="${cls}">
-        <div class="sicon">${r.icon}</div>
+        <div class="sicon">${icon(r.icon)}</div>
         <div class="sinfo">
-          <div class="st">${r.title} <span class="stat-badge">${r.stat}</span></div>
-          <div class="sd">${r.desc}</div>${lock}
+          <div class="st">${stripEmoji(r.title)} <span class="stat-badge">${stripEmoji(r.stat)}</span></div>
+          <div class="sd">${stripEmoji(r.desc)}</div>${lock}
         </div>${btn}</div>`
-    }).join('')
-
-    const maint = getMaintenanceItems(state)
-    this.maintHead.style.display = maint.length ? 'block' : 'none'
-    this.maintList.innerHTML = maint.map(r => {
-      const cls = r.urgent ? 'shoprow urgent' : 'shoprow'
-      const disabled = r.disabled || state.money < r.cost
-      return `<div class="${cls}">
-        <div class="sicon">${r.icon}</div>
-        <div class="sinfo"><div class="st">${r.title}</div></div>
-        <button class="btn sbuy ${r.urgent ? 'danger' : ''}" data-maint="${r.id}" ${disabled ? 'disabled' : ''}>₺${r.cost.toLocaleString('tr-TR')}</button></div>`
     }).join('')
   }
 
@@ -276,6 +309,9 @@ export class UI {
     this.tankL.textContent = `${Math.round(state.tank)}L`
     this.tankFill.style.width = `${(state.tank / state.tankCapacity) * 100}%`
     this.rep.textContent = state.reputation.toFixed(1)
+
+    this.closeLabel.textContent = state.closed ? 'KAPALI' : 'Açık'
+    this.closeBtn.classList.toggle('danger', state.closed)
 
     if (state.batteryLevel > 0) {
       this.battChip.style.display = 'flex'
@@ -295,9 +331,11 @@ export class UI {
     }
 
     const maintCount = getMaintenanceItems(state).filter(m => !m.disabled).length
-    this.shopLabel.textContent = maintCount > 0 ? `İnşaat (${maintCount} bakım!)` : 'İnşaat'
+    this.shopLabel.textContent = 'İnşaat'
     this.shopBtn.classList.toggle('danger', maintCount > 0)
     this.shopBtn.classList.toggle('primary', maintCount === 0)
+    this.maintBadge.style.display = maintCount > 0 ? 'inline-block' : 'none'
+    this.maintBadge.textContent = `${maintCount}`
 
     if (this.shopOpen) {
       this.shopRenderT -= dt
@@ -309,7 +347,7 @@ export class UI {
 
     const car = this.activeCar
     if (car && car.phase === 'atPump' && car.kind === 'fuel' && (car.filling || car.filled > 0)) {
-      this.progress.textContent = `⛽ ${car.filled.toFixed(1)}L · ₺${car.filledValue.toFixed(0)} / ₺${car.targetAmount}`
+      this.progress.textContent = `${car.filled.toFixed(1)}L · ₺${car.filledValue.toFixed(0)} / ₺${car.targetAmount}`
     }
   }
 
@@ -318,7 +356,7 @@ export class UI {
     while (box.children.length >= 4) box.firstElementChild?.remove()
     const t = document.createElement('div')
     t.className = `toast ${kind}`
-    t.textContent = msg
+    t.textContent = stripEmoji(msg)
     box.appendChild(t)
     setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .4s' }, 3000)
     setTimeout(() => t.remove(), 3500)
