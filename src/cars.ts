@@ -598,7 +598,7 @@ export class CarManager {
       for (const o of this.cars) {
         if (o === c || o.phase === 'gone') continue
         // otopark içi: park etmiş komşu araçlar engel sayılmaz (dar aralıkta kilitlenme olmasın)
-        if (o.phase === 'parked' && (c.phase === 'toPark' || c.phase === 'parked' || c.phase === 'leaving')) continue
+        if (o.phase === 'parked' && (c.phase === 'toPark' || c.phase === 'leaving')) continue
         const rel = new THREE.Vector3().subVectors(o.group.position, c.group.position)
         rel.z = 0
         const forward = rel.dot(dir)

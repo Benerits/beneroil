@@ -10,6 +10,48 @@ class AudioMan {
   private bar = 0
   sfxOn = localStorage.getItem('benzinlik-sfx') !== '0'
   private dieselNodes: { gain: GainNode; stop: () => void } | null = null
+  private pumpNodes: { gain: GainNode; stop: () => void } | null = null
+
+  /** tabanca takılınca kısa 'klik-tak' */
+  clunk() {
+    if (!this.sfxOn) return
+    this.tone(220, 0.04, 'square', 0.12)
+    this.tone(90, 0.09, 'square', 0.18, 0.045)
+  }
+
+  /** yakıt akış sesi — dolum sürerken yumuşak fışırtı */
+  setPump(on: boolean) {
+    if (!this.ctx || !this.master) return
+    const want = on && this.sfxOn
+    if (want && !this.pumpNodes) {
+      const ctx = this.ctx
+      const gain = ctx.createGain()
+      gain.gain.value = 0
+      gain.gain.linearRampToValueAtTime(0.035, ctx.currentTime + 0.4)
+      gain.connect(this.master)
+      const nbuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
+      const nd = nbuf.getChannelData(0)
+      for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * 0.5
+      const noise = ctx.createBufferSource(); noise.buffer = nbuf; noise.loop = true
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 950; bp.Q.value = 0.7
+      // hafif dalgalanma: akış canlı hissettirir
+      const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 2.1
+      const lfoGain = ctx.createGain(); lfoGain.gain.value = 180
+      lfo.connect(lfoGain); lfoGain.connect(bp.frequency)
+      noise.connect(bp); bp.connect(gain)
+      noise.start(); lfo.start()
+      this.pumpNodes = {
+        gain,
+        stop: () => {
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3)
+          setTimeout(() => { noise.stop(); lfo.stop(); gain.disconnect() }, 400)
+        },
+      }
+    } else if (!want && this.pumpNodes) {
+      this.pumpNodes.stop()
+      this.pumpNodes = null
+    }
+  }
 
   /** dizel jeneratör motor gürültüsü — çalışırken sürekli döner, bizi de rahatsız eder */
   setDiesel(on: boolean) {

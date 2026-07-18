@@ -235,7 +235,13 @@ function facilityVisits(car: Car): Visit[] {
     v.push({ buildingId: 'market', revenue: () => Math.round((25 + Math.random() * 35) * state.marketLevel), toastMsg: m => `🛒 Market alışverişi: +₺${m}`, score: 0.2 })
   }
   if (car.wantsToilet && state.toiletLevel > 0) {
-    v.push({ buildingId: 'toilet', revenue: () => 0, toastMsg: () => '', score: 0.15 * state.toiletLevel })
+    const fee = state.toiletFee
+    v.push({
+      buildingId: 'toilet',
+      revenue: () => fee,
+      toastMsg: mm => `🚻 Tuvalet ücreti: +₺${mm}`,
+      score: 0.15 * state.toiletLevel - (fee > 0 ? 0.03 + fee * 0.012 : 0),
+    })
   }
   if (car.wantsCoffee && state.hasCoffee) {
     v.push({ buildingId: 'coffee', revenue: () => Math.round(20 + Math.random() * 25), toastMsg: m => `☕ Kahve satışı: +₺${m}`, score: 0.15 })
@@ -268,7 +274,7 @@ function vehicleServices(car: Car): number {
   }
   if (car.wantsOil && state.hasOil) {
     const m = Math.round(150 + Math.random() * 100)
-    state.money += m; d += 0.25
+    state.facEarn('oil', m); d += 0.25
     ui.toast(`🔧 Yağ değişimi yapıldı: +₺${m}`, 'good')
   }
   if (car.wantsAir && state.hasAirWater) {
@@ -326,7 +332,7 @@ function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number }) {
       let score = data.score
       for (const v of data.visits) {
         const m = v.revenue()
-        if (m > 0) { state.money += m; ui.toast(v.toastMsg(m), 'good') }
+        if (m > 0) { state.money -= m; state.facEarn(v.buildingId, m); ui.toast(v.toastMsg(m), 'good') }
         score += v.score
       }
       state.addRep((score - 3.3) * 0.08)
@@ -378,6 +384,7 @@ ui.onStart = (car, amount) => {
   car.targetAmount = amount
   car.filling = true
   car.beingServed = true
+  audio.clunk()
 }
 
 ui.onStartFull = car => {
@@ -385,6 +392,7 @@ ui.onStartFull = car => {
   car.fullMode = true
   car.filling = true
   car.beingServed = true
+  audio.clunk()
 }
 
 /** servis bitti: skoru bağla, tesis ziyareti varsa otoparka çek, yoksa uğurla */
@@ -411,7 +419,7 @@ function concludeService(car: Car, score: number) {
     // otopark doluysa ziyaret gelirleri yine gelsin (hızlı mod)
     for (const v of visits) {
       const m = v.revenue()
-      if (m > 0) { state.money += m; ui.toast(v.toastMsg(m), 'good') }
+      if (m > 0) { state.money -= m; state.facEarn(v.buildingId, m); ui.toast(v.toastMsg(m), 'good') }
       score += v.score
     }
     state.addRep((score - 3.3) * 0.08)
@@ -1254,6 +1262,13 @@ if (isFullMode) {
 }
 
 ui.onMaint = id => {
+  if (id === 'toilet-fee') {
+    state.toiletFee = state.toiletFee === 0 ? 5 : state.toiletFee === 5 ? 10 : 0
+    ui.toast(state.toiletFee === 0 ? 'Tuvalet artık ücretsiz.' : `Tuvalet ücreti: ₺${state.toiletFee}`, 'good')
+    refreshBuildingCard()
+    persist()
+    return
+  }
   if (doMaintenance(state, id)) {
     if (id === 'clean-solar') ui.toast('🧽 Paneller tertemiz, üretim tam güçte!', 'good')
     else if (id === 'maint-smr') ui.toast('☢️ Reaktör bakımı yapıldı, güvendesin.', 'good')
@@ -1455,11 +1470,12 @@ function buildingCard(id: string): BuildingCard | null {
     case 'toilet':
       return {
         icon: 'i-toilet', name: `Tuvalet Sv.${state.toiletLevel}`,
-        desc: 'Yol yorgunları için. Tuvalet arayan müşteri bulamazsa itibarın düşer.',
+        desc: 'Yol yorgunları için. Ücret koyarsan gelir gelir ama memnuniyet biraz düşer.',
         stats: [
-          ['Moral etkisi', `+${(0.15 * state.toiletLevel).toFixed(2)} puan/müşteri`, 'good'],
-          ['Arayan müşteri', '~%30'],
+          ['Moral etkisi', `+${Math.max(0, 0.15 * state.toiletLevel - (state.toiletFee > 0 ? 0.03 + state.toiletFee * 0.012 : 0)).toFixed(2)} puan`, 'good'],
+          ['Kullanım ücreti', state.toiletFee === 0 ? 'Ücretsiz' : `₺${state.toiletFee}`, state.toiletFee > 0 ? 'good' : ''],
         ],
+        action: { label: `Ücreti Değiştir (${state.toiletFee === 0 ? 'Ücretsiz' : '₺' + state.toiletFee} → ${state.toiletFee === 0 ? '₺5' : state.toiletFee === 5 ? '₺10' : 'Ücretsiz'})`, maintId: 'toilet-fee' },
       }
     case 'solar': {
       const net = 3 * (1 - 0.7 * state.solarDirt) * (state.gridLevel >= 2 ? 1.3 : 1)
@@ -1564,6 +1580,10 @@ function refreshBuildingCard() {
   if (!selectedBuilding) return
   const card = buildingCard(selectedBuilding)
   if (!card) return
+  const facId = selectedBuilding.split('#')[0]
+  if (['market', 'toilet', 'wash', 'oil', 'coffee', 'restaurant', 'truckpark', 'selfwash', 'airwater'].includes(facId)) {
+    card.stats.push(['Bugünkü ciro', `₺${Math.round(state.facDaily[facId] ?? 0).toLocaleString('tr-TR')}`, 'good'])
+  }
   // karttan doğrudan yükseltme: ilgili mağaza kalemi alınabilir durumdaysa buton koy
   const shopId = selectedBuilding.startsWith('pump-') ? 'pump'
     : selectedBuilding.startsWith('charger-') ? 'evcharger'
@@ -1805,6 +1825,7 @@ function frame() {
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(`📅 Gün ${state.day - 1} bitti — ${profit >= 0 ? 'kâr' : 'zarar'}: ₺${Math.abs(profit).toLocaleString('tr-TR')}`, profit >= 0 ? 'good' : 'bad')
     state.dayStartMoney = state.money
+    state.facDaily = {}
     persist()
   }
   prevCycleT = cycleT
@@ -1936,6 +1957,7 @@ function frame() {
 
   world.update(dt)
   audio.setDiesel(state.dieselRunning() && !state.closed)
+  audio.setPump(cars.cars.some(c => c.filling && c.phase === 'atPump' && !c.wrongFuelHandled))
   Car.solids = hardRects()
   tickEvCharging(dt)
   syncHoses()

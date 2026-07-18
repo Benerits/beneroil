@@ -106,6 +106,10 @@ export class GameState {
   batteryLevel = 0
   /** oyuncunun belirlediği elektrik satış fiyatı (₺/kWh) */
   elecPrice = EV_PRICE_PER_KWH
+  /** tuvalet kullanım ücreti (0 = ücretsiz) */
+  toiletFee = 0
+  /** tesis bazında bugünkü ciro (gün dönümünde sıfırlanır) */
+  facDaily: Record<string, number> = {}
   /** ömür boyu istatistikler */
   stats = {
     served: 0, lost: 0, kwh: 0, revenue: 0,
@@ -382,8 +386,15 @@ export class GameState {
     this.tanks[f] = this.tankCapacity
   }
 
+  /** tesis geliri: doğrudan kasaya + günlük ciroya işlenir */
+  facEarn(id: string, amt: number) {
+    this.money += amt
+    this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
+  }
+
   /** tesise para biriktir (kumbara dolarsa haber ver) */
   addPending(id: string, amt: number, name: string) {
+    this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
     const cap = 600
     const cur = this.pendingCash[id] ?? 0
     this.pendingCash[id] = Math.min(cap, cur + amt)
@@ -568,7 +579,7 @@ export function checkAchievements(s: GameState) {
 
 const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
-  'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'solarCount', 'hasDiesel', 'hasSMR',
+  'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'day', 'dayStartMoney', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare',
@@ -579,6 +590,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   for (const f of SAVE_FIELDS) out[f] = (s as any)[f]
   out.tanks = { ...s.tanks }
   out.stats = { ...s.stats, liters: { ...s.stats.liters } }
+  out.facDaily = { ...s.facDaily }
   out.prices = { ...s.prices }
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
   out.pendingCash = { ...s.pendingCash }
@@ -598,6 +610,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.hasAirWater && !s.airWaterCount) s.airWaterCount = 1
   if (data.hasSelfWash && !s.selfWashCount) s.selfWashCount = 1
   if (data.tanks && typeof data.tanks === 'object') Object.assign(s.tanks, data.tanks)
+  if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
   const st = data.stats as { liters?: Record<string, number> } & Record<string, number> | undefined
   if (st && typeof st === 'object') {
     for (const k of ['served', 'lost', 'kwh', 'revenue'] as const) {
