@@ -11,6 +11,7 @@ export interface BuildingCard {
   desc: string
   stats: [string, string, ('' | 'good' | 'bad')?][]
   action?: { label: string; maintId: string }
+  move?: { label: string; id: string }
 }
 
 export class UI {
@@ -24,6 +25,8 @@ export class UI {
   onMaint: (id: string) => void = () => {}
   onRename: (name: string) => void = () => {}
   onCardClose: () => void = () => {}
+  onMove: (id: string) => void = () => {}
+  onReset: () => void = () => {}
   batteryKwh: () => number = () => 0
 
   private money = el<HTMLSpanElement>('money')
@@ -34,7 +37,9 @@ export class UI {
   private battKwh = el<HTMLSpanElement>('battkwh')
   private rep = el<HTMLSpanElement>('rep')
   private orderBtn = el<HTMLButtonElement>('orderbtn')
+  private orderLabel = el<HTMLSpanElement>('orderlabel')
   private shopBtn = el<HTMLButtonElement>('shopbtn')
+  private shopLabel = el<HTMLSpanElement>('shoplabel')
   private shopWrap = el<HTMLDivElement>('shopwrap')
   private shopList = el<HTMLDivElement>('shoplist')
   private maintHead = el<HTMLDivElement>('mainthead')
@@ -52,7 +57,10 @@ export class UI {
   private nozDizel = el<HTMLButtonElement>('noz-dizel')
   private infoCard = el<HTMLDivElement>('infocard')
   private infoAction = el<HTMLButtonElement>('binfo-action')
+  private infoMove = el<HTMLButtonElement>('binfo-move')
+  private day = el<HTMLSpanElement>('day')
   private currentAction: string | null = null
+  private currentMove: string | null = null
 
   private shopOpen = false
   private shopRenderT = 0
@@ -90,6 +98,9 @@ export class UI {
     }
     el<HTMLButtonElement>('stsave').addEventListener('click', save)
     nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') save() })
+    el<HTMLButtonElement>('resetbtn').addEventListener('click', () => {
+      if (confirm('Tüm ilerleme silinecek. Emin misin?')) this.onReset()
+    })
 
     // servis paneli
     this.nozBenzin.addEventListener('click', () => this.pickNozzle('benzin'))
@@ -119,6 +130,9 @@ export class UI {
     })
     this.infoAction.addEventListener('click', () => {
       if (this.currentAction) this.onMaint(this.currentAction)
+    })
+    this.infoMove.addEventListener('click', () => {
+      if (this.currentMove) this.onMove(this.currentMove)
     })
 
     // mağaza tıklamaları
@@ -202,6 +216,14 @@ export class UI {
       this.infoAction.style.display = 'none'
       this.currentAction = null
     }
+    if (card.move) {
+      this.infoMove.style.display = 'block'
+      this.infoMove.textContent = card.move.label
+      this.currentMove = card.move.id
+    } else {
+      this.infoMove.style.display = 'none'
+      this.currentMove = null
+    }
     this.infoCard.classList.add('show')
   }
 
@@ -250,6 +272,7 @@ export class UI {
 
   update(state: GameState, dt: number) {
     this.money.textContent = Math.round(state.money).toLocaleString('tr-TR')
+    this.day.textContent = `${state.day}`
     this.tankL.textContent = `${Math.round(state.tank)}L`
     this.tankFill.style.width = `${(state.tank / state.tankCapacity) * 100}%`
     this.rep.textContent = state.reputation.toFixed(1)
@@ -261,18 +284,18 @@ export class UI {
     }
 
     if (state.orderPending) {
-      this.orderBtn.textContent = `🚛 Yolda · ${Math.ceil(state.orderEta)}sn`
+      this.orderLabel.textContent = `Yolda · ${Math.ceil(state.orderEta)}sn`
       this.orderBtn.disabled = true
     } else {
       const need = state.orderNeed()
-      this.orderBtn.textContent = need < 100
-        ? '🚛 Tank dolu'
-        : `🚛 Sipariş · ${need}L · ₺${state.orderCost().toLocaleString('tr-TR')}`
+      this.orderLabel.textContent = need < 100
+        ? 'Tank dolu'
+        : `Sipariş · ${need}L · ₺${state.orderCost().toLocaleString('tr-TR')}`
       this.orderBtn.disabled = !state.canOrder()
     }
 
     const maintCount = getMaintenanceItems(state).filter(m => !m.disabled).length
-    this.shopBtn.textContent = maintCount > 0 ? `🏗️ İnşaat ❗${maintCount}` : '🏗️ İnşaat'
+    this.shopLabel.textContent = maintCount > 0 ? `İnşaat (${maintCount} bakım!)` : 'İnşaat'
     this.shopBtn.classList.toggle('danger', maintCount > 0)
     this.shopBtn.classList.toggle('primary', maintCount === 0)
 

@@ -412,8 +412,6 @@ export class Tanker {
 }
 
 const WAIT_SPOTS = [new THREE.Vector3(3.6, -6.5, 0), new THREE.Vector3(3.6, -9.5, 0)]
-/** servis sonrası tesisleri kullanacak araçların otoparkı */
-export const PARK_SPOTS = [new THREE.Vector3(-2.2, 3.2, 0), new THREE.Vector3(-2.2, 1.2, 0), new THREE.Vector3(-2.2, -0.8, 0)]
 const PARK_LANE_Y = 4.8
 
 export interface CarManagerOpts {
@@ -423,6 +421,8 @@ export interface CarManagerOpts {
   evShare: () => number
   isPumpBroken: (i: number) => boolean
   isChargerBroken: (i: number) => boolean
+  /** yerleştirilmiş otoparkın park noktaları (yoksa boş) */
+  parkSpots: () => THREE.Vector3[]
   onCarReady: (car: Car) => void
   onCarLost: (car: Car) => void
 }
@@ -433,7 +433,7 @@ export class CarManager {
   private farTimer = 2.5
   private pumpOcc: (Car | null)[] = [null, null, null, null]
   private evOcc: (Car | null)[] = [null, null, null, null]
-  private parkOcc: (Car | null)[] = [null, null, null]
+  private parkOcc: (Car | null)[] = []
 
   constructor(private scene: THREE.Scene, private lib: ModelLib | null,
               private opts: CarManagerOpts) {}
@@ -579,10 +579,13 @@ export class CarManager {
     ], () => this.arriveAtSlot(car))
   }
 
-  /** servis bitti, tesis kullanacak → otoparka çek. Yer yoksa false. */
+  /** servis bitti, tesis kullanacak → otoparka çek. Otopark yok/dolu ise false. */
   sendToParking(car: Car): boolean {
+    const spots = this.opts.parkSpots()
+    if (spots.length === 0) return false
+    while (this.parkOcc.length < spots.length) this.parkOcc.push(null)
     let spot = -1
-    for (let i = 0; i < PARK_SPOTS.length; i++) if (!this.parkOcc[i]) { spot = i; break }
+    for (let i = 0; i < spots.length; i++) if (!this.parkOcc[i]) { spot = i; break }
     if (spot < 0) return false
     // pompayı/şarjı hemen boşalt ki sıradaki müşteri girsin
     if (car.slotIndex >= 0) {
@@ -596,15 +599,16 @@ export class CarManager {
     car.filling = false
     car.hideBubble()
     car.hideBars()
-    const p = PARK_SPOTS[spot]
+    const p = spots[spot].clone()
+    p.z = 0
     car.setPath([
       new THREE.Vector3(3.0, car.group.position.y, 0),
       new THREE.Vector3(3.0, PARK_LANE_Y, 0),
-      new THREE.Vector3(-2.2, PARK_LANE_Y, 0),
+      new THREE.Vector3(p.x, PARK_LANE_Y, 0),
       p,
     ], () => {
       car.phase = 'parked'
-      car.group.rotation.z = Math.PI / 2
+      car.group.rotation.z = -Math.PI / 2
     })
     return true
   }
@@ -624,7 +628,7 @@ export class CarManager {
     car.hideBars()
     if (fromPark) {
       car.setPath([
-        new THREE.Vector3(-2.2, PARK_LANE_Y, 0),
+        new THREE.Vector3(car.group.position.x, PARK_LANE_Y, 0),
         new THREE.Vector3(3.0, PARK_LANE_Y, 0),
         new THREE.Vector3(4.2, APRON_OUT_Y, 0),
         new THREE.Vector3(LANE_NEAR, APRON_OUT_Y + 4, 0),

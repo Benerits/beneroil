@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { StaticLib, fitModel } from './models'
+import { PARCEL_COLS, PARCEL_ROWS } from './state'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
 // Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
@@ -206,7 +207,6 @@ export class World {
   private toiletGroup: THREE.Group | null = null
   private batteryGroup: THREE.Group | null = null
   private tankGroup: THREE.Group
-  private saleBoards: Record<'north' | 'south' | 'west', THREE.Group | null> = { north: null, south: null, west: null }
   private concreteMat: THREE.MeshLambertMaterial
   private nightMats: NightMat[] = []
   private nightLights: THREE.PointLight[] = []
@@ -229,11 +229,11 @@ export class World {
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     const cam = sun.shadow.camera
-    cam.left = -30; cam.right = 30; cam.top = 30; cam.bottom = -30; cam.far = 90
+    cam.left = -42; cam.right = 42; cam.top = 42; cam.bottom = -42; cam.far = 120
     s.add(sun)
 
     // yerleştirme modu grid'i (1 birimlik kareler)
-    this.grid = new THREE.GridHelper(60, 60, 0xffffff, 0xffffff)
+    this.grid = new THREE.GridHelper(80, 80, 0xffffff, 0xffffff)
     this.grid.rotation.x = Math.PI / 2
     this.grid.position.z = 0.04
     ;(this.grid.material as THREE.Material).transparent = true
@@ -344,9 +344,6 @@ export class World {
     stain(-2.5, 6.5, 0.5, s)
 
     this.setSign(0)
-    this.makeSaleBoard('south')
-    this.makeSaleBoard('north')
-    this.makeSaleBoard('west')
     this.addPump(0)
   }
 
@@ -498,56 +495,59 @@ export class World {
     this.scene.add(p)
   }
 
-  private makeSaleBoard(side: 'north' | 'south' | 'west') {
+  /** satın alınan (henüz betonsuz) arsayı kesikli sınırla işaretle */
+  markOwned(c: number, r: number) {
+    const [x0, x1] = PARCEL_COLS[c]
+    const [y0, y1] = PARCEL_ROWS[r]
     const g = new THREE.Group()
-    box(0.1, 0.1, 1.1, 0x8a6a48, 0, -0.5, 0.55, g)
-    box(0.1, 0.1, 1.1, 0x8a6a48, 0, 0.5, 0.55, g)
-    const p = canvasPanel(1.7, 0.85, 340, 170, (ctx, W, H) => {
-      ctx.fillStyle = '#f5f4ef'; ctx.fillRect(0, 0, W, H)
-      ctx.strokeStyle = '#d64545'; ctx.lineWidth = 10; ctx.strokeRect(5, 5, W - 10, H - 10)
-      ctx.fillStyle = '#d64545'; ctx.font = '800 62px -apple-system, sans-serif'
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('SATILIK', W / 2, H / 2 - 12)
-      ctx.fillStyle = '#1c2530'; ctx.font = '700 30px -apple-system, sans-serif'
-      ctx.fillText('₺6.000', W / 2, H / 2 + 42)
-    })
-    p.position.z = 1.35
-    g.add(p)
-    if (side === 'west') g.position.set(-7.6, -1.5, 0)
-    else g.position.set(3.5, side === 'south' ? -14 : 14, 0)
+    const mat = new THREE.MeshLambertMaterial({ color: 0xf5f4ef, transparent: true, opacity: 0.75 })
+    const dash = (px: number, py: number, w: number, d: number) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat)
+      m.position.set(px, py, 0.03)
+      g.add(m)
+    }
+    for (let x = x0 + 0.8; x < x1 - 0.4; x += 1.6) { dash(x, y0 + 0.1, 0.9, 0.12); dash(x, y1 - 0.1, 0.9, 0.12) }
+    for (let y = y0 + 0.8; y < y1 - 0.4; y += 1.6) { dash(x0 + 0.1, y, 0.12, 0.9); dash(x1 - 0.1, y, 0.12, 0.9) }
     this.scene.add(g)
-    this.saleBoards[side] = g
   }
 
-  buyLand(side: 'north' | 'south' | 'west') {
-    const b = this.saleBoards[side]
-    if (b) { this.scene.remove(b); this.saleBoards[side] = null }
-    if (side === 'west') {
-      const lot = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 20), this.concreteMat)
-      lot.position.set(-12.25, 0, 0.015)
-      lot.receiveShadow = true
-      this.scene.add(lot)
-      box(0.25, 20.4, 0.16, 0xd8dbde, -18.05, 0, 0.08, this.scene)
-      box(11.7, 0.25, 0.16, 0xd8dbde, -12.25, 10.1, 0.08, this.scene)
-      box(11.7, 0.25, 0.16, 0xd8dbde, -12.25, -10.1, 0.08, this.scene)
-      return
-    }
-    const yc = side === 'south' ? -17 : 17
-    const lot = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 14), this.concreteMat)
-    lot.position.set(-0.75, yc, 0.015)
+  /** arsaya beton döşe (yapı kurmanın ön şartı) */
+  paveParcel(c: number, r: number) {
+    const [x0, x1] = PARCEL_COLS[c]
+    const [y0, y1] = PARCEL_ROWS[r]
+    const w = x1 - x0, d = y1 - y0
+    const lot = new THREE.Mesh(new THREE.PlaneGeometry(w, d), this.concreteMat)
+    lot.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.015)
     lot.receiveShadow = true
     this.scene.add(lot)
-    box(0.25, 14, 0.16, 0xd8dbde, -6.55, yc, 0.08, this.scene)
-    box(11.7, 0.25, 0.16, 0xd8dbde, -0.75, side === 'south' ? -24 : 24, 0.08, this.scene)
-    if (side === 'south') {
+    // istasyon kolonunun yol tarafı özel: rampa + bordür + lamba
+    if (c === 0 && r === 0) {
       this.makeApron(APRON_SOUTH_Y)
       box(0.18, 5.6, 0.14, 0xd8dbde, 5.02, -21, 0.07, this.scene)
       box(0.18, 3.6, 0.14, 0xd8dbde, 5.02, -12, 0.07, this.scene)
       this.placeLamp(5.45, -20)
-    } else {
+    } else if (c === 0 && r === 2) {
       box(0.18, 14, 0.14, 0xd8dbde, 5.02, 17, 0.07, this.scene)
       this.placeLamp(5.45, 19)
     }
+  }
+
+  /** yerleştirmede seçilen yöne döndür (90° adımlar) */
+  rotateBuilding(id: string, rot: number) {
+    const b = this.buildings.find(x => x.id === id)
+    if (b) (b.group as THREE.Group).rotation.z = rot * Math.PI / 2
+  }
+
+  /** taşıma için: kayıtlı binayı sahneden kaldır */
+  removeBuildingGroup(id: string) {
+    const b = this.buildings.find(x => x.id === id)
+    if (!b) return
+    this.scene.remove(b.group as THREE.Group)
+    this.unregister(id)
+    if (id === 'smr') this.steam = []
+    if (id === 'market') this.marketGroup = null
+    if (id === 'toilet') this.toiletGroup = null
+    if (id === 'battery') this.batteryGroup = null
   }
 
   addPump(index: number) {
@@ -961,6 +961,39 @@ export class World {
     this.register('selfwash', 'SELF YIKAMA', g, 3.4)
   }
 
+  buildParking(pos?: THREE.Vector2) {
+    const at = pos ?? new THREE.Vector2(-2.2, 1.2)
+    const g = new THREE.Group()
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 3.8), lam(0x6b7480))
+    pad.position.z = 0.02
+    pad.receiveShadow = true
+    g.add(pad)
+    // çizgili park yerleri (4 kapasite)
+    for (let i = 0; i <= 4; i++) {
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 3.4), lam(0xe8e4d8))
+      line.position.set(-2.3 + i * 1.15, 0, 0.03)
+      g.add(line)
+    }
+    for (let i = 0; i < 4; i++) {
+      box(0.7, 0.14, 0.1, 0xd8dbde, -1.72 + i * 1.15, -1.5, 0.05, g) // teker stoperi
+    }
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('parking', 'OTOPARK', g, 2.2)
+  }
+
+  /** yerleştirilen otoparkın dünya koordinatındaki park noktaları */
+  getParkingSpots(): THREE.Vector3[] {
+    const b = this.buildings.find(x => x.id === 'parking')
+    if (!b) return []
+    const g = b.group as THREE.Group
+    g.updateMatrixWorld(true)
+    return [0, 1, 2, 3].map(i => {
+      const local = new THREE.Vector3(-1.72 + i * 1.15, -0.2, 0)
+      return local.applyMatrix4(g.matrixWorld)
+    })
+  }
+
   buildAirWater(pos?: THREE.Vector2) {
     const at = pos ?? new THREE.Vector2(-4.5, 0.2)
     const g = new THREE.Group()
@@ -1026,9 +1059,6 @@ export class World {
     const water = new THREE.Mesh(new THREE.CircleGeometry(1.05, 24), lam(0x2e4a66))
     water.position.z = 3.9
     g.add(water)
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.07, 8, 28), lam(0xd64545))
-    rim.position.z = 4.58
-    g.add(rim)
     // hareketli buhar (update() içinde yükselir/kaybolur)
     for (let i = 0; i < 4; i++) {
       const puff = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10),

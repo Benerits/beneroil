@@ -4,7 +4,8 @@ import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import {
   FuelType, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY,
-  EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, buyItem, doMaintenance, getShopItems,
+  EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST,
+  parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
@@ -27,11 +28,12 @@ app.appendChild(renderer.domElement)
 const VIEW = 26
 const camera = new THREE.OrthographicCamera()
 const camDir = new THREE.Vector3(1, 2, 1).normalize().multiplyScalar(42)
+let camX = 0
 let camY = 0
 
 function updateCamera() {
-  camera.position.set(camDir.x, camDir.y + camY, camDir.z)
-  camera.lookAt(0, camY, 0)
+  camera.position.set(camDir.x + camX, camDir.y + camY, camDir.z)
+  camera.lookAt(camX, camY, 0)
 }
 
 let composer: EffectComposer | null = null
@@ -82,6 +84,7 @@ const cars = new CarManager(world.scene, modelLib, {
   evShare: () => (state.evChargers > 0 ? Math.min(0.5, 0.15 + 0.09 * state.evChargers) : 0),
   isPumpBroken: i => state.brokenPumps.has(i),
   isChargerBroken: i => state.brokenChargers.has(i),
+  parkSpots: () => world.getParkingSpots(),
   onCarReady: car => { if (!ui.activeCar) ui.selectCar(car) },
   onCarLost: car => {
     ui.toast('😡 Müşteri beklemekten sıkıldı ve gitti!', 'bad')
@@ -382,8 +385,6 @@ ui.onOrder = () => {
 /** satın alma sonrası sahnedeki görsel karşılığını kurar */
 function buildVisual(id: string, pos?: THREE.Vector2) {
   switch (id) {
-    case 'land-south': world.buyLand('south'); break
-    case 'land-north': world.buyLand('north'); break
     case 'pump': world.addPump(state.pumps - 1); break
     case 'sign': world.setSign(state.signLevel); break
     case 'tank': world.upgradeTankVisual(state.tankLevel); break
@@ -396,22 +397,23 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'smr': world.buildSMR(state.landNorth ? 'north' : 'south', pos); break
     case 'wash': world.buildWash(pos); break
     case 'oil': world.buildOil(pos); break
-    case 'land-west': world.buyLand('west'); break
     case 'coffee': world.buildCoffee(pos); break
     case 'restaurant': world.buildRestaurant(pos); break
     case 'truckpark': world.buildTruckPark(pos); break
     case 'airwater': world.buildAirWater(pos); break
     case 'selfwash': world.buildSelfWash(pos); break
+    case 'parking': world.buildParking(pos); break
   }
 }
 
 // ---- Grid'e yerleştirme modu ----
 
-const PLACEABLE: Record<string, () => { w: number; d: number }> = {
-  market: () => (state.marketLevel === 0 ? { w: 5, d: 6 } : { w: 6, d: 8 }),
+interface Footprint { w: number; d: number; grass?: boolean }
+const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
+  market: fm => ((fm ? state.marketLevel >= 2 : state.marketLevel >= 1) ? { w: 6, d: 8 } : { w: 5, d: 6 }),
   toilet: () => ({ w: 3, d: 4 }),
   battery: () => ({ w: 3, d: 2 }),
-  solar: () => ({ w: 5, d: 7 }),
+  solar: () => ({ w: 5, d: 7, grass: true }),
   dieselgen: () => ({ w: 2, d: 2 }),
   smr: () => ({ w: 6, d: 5 }),
   wash: () => ({ w: 4.5, d: 5 }),
@@ -421,11 +423,90 @@ const PLACEABLE: Record<string, () => { w: number; d: number }> = {
   truckpark: () => ({ w: 8, d: 6 }),
   airwater: () => ({ w: 1.6, d: 2 }),
   selfwash: () => ({ w: 5.5, d: 7 }),
+  parking: () => ({ w: 5.5, d: 4 }),
+}
+
+/** taşıma bedeli: kuruluş maliyetinin ~%70'i */
+const MOVE_COST: Record<string, () => number> = {
+  market: () => Math.round((state.marketLevel >= 2 ? 12000 : 7000) * 0.7),
+  toilet: () => Math.round((state.toiletLevel >= 2 ? 5000 : 2500) * 0.7),
+  battery: () => Math.round([0, 5000, 9000, 16000][state.batteryLevel] * 0.7),
+  solar: () => 6300,
+  dieselgen: () => 2800,
+  smr: () => 28000,
+  wash: () => 5600,
+  oil: () => 8400,
+  coffee: () => 4900,
+  restaurant: () => 10500,
+  truckpark: () => 8400,
+  airwater: () => 1050,
+  selfwash: () => 4200,
+  parking: () => 840,
 }
 
 interface Rect { cx: number; cy: number; w: number; d: number }
 const placedRects: (Rect & { id: string })[] = []
+const placedPos: Record<string, [number, number]> = {}
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+
+// ---- Kayıt sistemi ----
+const SAVE_KEY = 'benzinlik-save-v1'
+
+function persist() {
+  if (isFullMode) return
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ s: serializeState(state), placedPos, placedRot, placedRects }))
+  } catch { /* depolama dolu vs. */ }
+}
+
+function loadSave(): boolean {
+  const raw = localStorage.getItem(SAVE_KEY)
+  if (!raw) return false
+  try {
+    const d = JSON.parse(raw)
+    hydrateState(state, d.s ?? {})
+    Object.assign(placedPos, d.placedPos ?? {})
+    Object.assign(placedRot, d.placedRot ?? {})
+    if (Array.isArray(d.placedRects)) placedRects.push(...d.placedRects)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** kayıttan gelen state'e göre sahneyi yeniden kurar */
+function rebuildFromState() {
+  for (const key of state.ownedParcels) {
+    const [c, r] = key.split(',').map(Number)
+    if (c === 0 && r === 1) continue
+    world.markOwned(c, r)
+  }
+  for (const key of state.pavedParcels) {
+    const [c, r] = key.split(',').map(Number)
+    if (c === 0 && r === 1) continue
+    world.paveParcel(c, r)
+  }
+  for (let i = 1; i < state.pumps; i++) world.addPump(i)
+  for (let i = 0; i < state.evChargers; i++) world.addEvCharger(i)
+  world.setSign(state.signLevel)
+  for (let l = 1; l <= state.tankLevel; l++) world.upgradeTankVisual(l)
+  const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
+  if (state.marketLevel > 0) world.buildMarket(state.marketLevel, pv('market'))
+  if (state.toiletLevel > 0) world.buildToilet(state.toiletLevel, pv('toilet'))
+  if (state.batteryLevel > 0) world.buildBattery(state.batteryLevel, pv('battery'))
+  if (state.hasSolar) world.buildSolar(state.landSouth ? 'south' : 'north', pv('solar'))
+  if (state.hasDiesel) world.buildDiesel(pv('dieselgen'))
+  if (state.hasSMR) world.buildSMR(state.landNorth ? 'north' : 'south', pv('smr'))
+  if (state.hasWash) world.buildWash(pv('wash'))
+  if (state.hasOil) world.buildOil(pv('oil'))
+  if (state.hasCoffee) world.buildCoffee(pv('coffee'))
+  if (state.hasRestaurant) world.buildRestaurant(pv('restaurant'))
+  if (state.hasTruckPark) world.buildTruckPark(pv('truckpark'))
+  if (state.hasAirWater) world.buildAirWater(pv('airwater'))
+  if (state.hasSelfWash) world.buildSelfWash(pv('selfwash'))
+  if (state.hasParking) world.buildParking(pv('parking'))
+  for (const [id, rot] of Object.entries(placedRot)) world.rotateBuilding(id, rot)
+}
 
 function fixedObstacles(): Rect[] {
   const r: Rect[] = [
@@ -433,8 +514,6 @@ function fixedObstacles(): Rect[] {
     { cx: -4.4, cy: -5.4, w: 5.6, d: 6.6 }, // yakıt tankları
     { cx: -5.0, cy: 4.5, w: 4.8, d: 5.4 },  // ofis
     { cx: 4.0, cy: -11.5, w: 2.6, d: 3.8 }, // tabela
-    { cx: -2.2, cy: 1.2, w: 3.2, d: 6.6 },  // otopark
-    { cx: 0.2, cy: 4.8, w: 7.2, d: 1.8 },   // otopark yolu
   ]
   for (let i = 0; i < state.pumps; i++) r.push({ cx: 0.9, cy: PUMP_SLOTS_POS[i].y, w: 4.6, d: 4.2 })
   for (let i = 0; i < state.evChargers; i++) r.push({ cx: 1.2, cy: EV_SLOTS_POS[i].y, w: 4.2, d: 2.8 })
@@ -445,67 +524,142 @@ function overlaps(a: Rect, b: Rect): boolean {
   return Math.abs(a.cx - b.cx) < (a.w + b.w) / 2 && Math.abs(a.cy - b.cy) < (a.d + b.d) / 2
 }
 
-let placing: { id: string; w: number; d: number; ghost: THREE.Mesh; valid: boolean; cx: number; cy: number } | null = null
+let placing: { id: string; w: number; d: number; grass: boolean; move: boolean; ghost: THREE.Mesh; valid: boolean; cx: number; cy: number; rot: number } | null = null
+const placedRot: Record<string, number> = {}
+let zoneMode: { kind: 'land' | 'pave'; ghost: THREE.Mesh; c: number; r: number; valid: boolean } | null = null
 
-function inOwnedLand(x: number, y: number): boolean {
-  if (x >= -6.3 && x <= 4.8) {
-    if (y >= -9.7 && y <= 9.7) return true
-    if (state.landSouth && y >= -23.7 && y < -9.7) return true
-    if (state.landNorth && y > 9.7 && y <= 23.7) return true
+function parcelAt(x: number, y: number): [number, number] | null {
+  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) {
+    const [x0, x1] = PARCEL_COLS[c]
+    const [y0, y1] = PARCEL_ROWS[r]
+    if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return [c, r]
   }
-  if (state.landWest && x >= -17.8 && x < -6.3 && y >= -9.7 && y <= 9.7) return true
-  return false
+  return null
 }
 
-function isValidPlacement(p: Rect, skipId: string): boolean {
-  // ayak izinin köşeleri, kenar ortaları ve merkezi sahip olunan arsada olmalı
+function landOk(x: number, y: number, grassOk: boolean): boolean {
+  const p = parcelAt(x, y)
+  if (!p) return false
+  if (!state.owns(p[0], p[1])) return false
+  return grassOk || state.isPaved(p[0], p[1])
+}
+
+function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
-    if (!inOwnedLand(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2))) return false
+    if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
   }
   for (const o of fixedObstacles()) if (overlaps(p, o)) return false
   for (const o of placedRects) if (o.id !== skipId && overlaps(p, o)) return false
   return true
 }
 
-function startPlacement(id: string) {
-  cancelPlacement()
-  const { w, d } = PLACEABLE[id]()
+function makeGhost(w: number, d: number): THREE.Mesh {
   const ghost = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
     new THREE.MeshBasicMaterial({ color: 0x37c97e, transparent: true, opacity: 0.42, depthTest: false }))
   ghost.position.z = 0.06
   world.scene.add(ghost)
+  return ghost
+}
+
+function startPlacement(id: string, move = false) {
+  cancelPlacement()
+  const f = PLACEABLE[id](move)
+  placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, ghost: makeGhost(f.w, f.d), valid: false, cx: 0, cy: 0, rot: placedRot[id] ?? 0 }
+  placing.ghost.rotation.z = placing.rot * Math.PI / 2
   world.showGrid(true)
-  placing = { id, w, d, ghost, valid: false, cx: 0, cy: 0 }
   ui.closeShop()
-  ui.toast('📐 Yerleştirme modu: yeşil kareye tıkla · sağ tık veya ESC iptal', '')
+  ui.hideBuildingCard()
+  ui.toast(move
+    ? 'Taşıma modu: yeni yeri seç · R ile döndür · sağ tık/ESC iptal'
+    : 'Yerleştirme modu: kareye tıkla · R ile döndür · sağ tık/ESC iptal', '')
+}
+
+function startZoneMode(kind: 'land' | 'pave') {
+  cancelPlacement()
+  zoneMode = { kind, ghost: makeGhost(1, 1), c: -1, r: -1, valid: false }
+  world.showGrid(true)
+  ui.closeShop()
+  ui.toast(kind === 'land'
+    ? '🏞️ Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal'
+    : '🧱 Zemin seçimi: betonlanacak arsana tıkla · ESC iptal', '')
 }
 
 function cancelPlacement() {
-  if (!placing) return
-  world.scene.remove(placing.ghost)
+  if (placing) {
+    world.scene.remove(placing.ghost)
+    placing = null
+  }
+  if (zoneMode) {
+    world.scene.remove(zoneMode.ghost)
+    zoneMode = null
+  }
   world.showGrid(false)
-  placing = null
 }
 
 function confirmPlacement() {
   const p = placing!
-  if (!buyItem(state, p.id)) {
-    ui.toast('💸 Para yetmiyor!', 'bad')
-    cancelPlacement()
-    return
+  if (p.move) {
+    const cost = MOVE_COST[p.id]?.() ?? 0
+    if (state.money < cost) { ui.toast('💸 Taşıma için para yetmiyor!', 'bad'); cancelPlacement(); return }
+    state.money -= cost
+    world.removeBuildingGroup(p.id)
+    buildVisual(p.id, new THREE.Vector2(p.cx, p.cy))
+    ui.toast(`📦 Taşındı (-₺${cost.toLocaleString('tr-TR')})`, 'good')
+  } else {
+    if (!buyItem(state, p.id)) {
+      ui.toast('💸 Para yetmiyor!', 'bad')
+      cancelPlacement()
+      return
+    }
+    buildVisual(p.id, new THREE.Vector2(p.cx, p.cy))
+    buyToast(p.id)
   }
-  buildVisual(p.id, new THREE.Vector2(p.cx, p.cy))
+  world.rotateBuilding(p.id, p.rot)
+  placedPos[p.id] = [p.cx, p.cy]
+  placedRot[p.id] = p.rot
   const i = placedRects.findIndex(r => r.id === p.id)
   if (i >= 0) placedRects.splice(i, 1)
-  placedRects.push({ id: p.id, cx: p.cx, cy: p.cy, w: p.w, d: p.d })
-  buyToast(p.id)
+  const odd = p.rot % 2 === 1
+  placedRects.push({ id: p.id, cx: p.cx, cy: p.cy, w: odd ? p.d : p.w, d: odd ? p.w : p.d })
   cancelPlacement()
+  persist()
 }
 
-window.addEventListener('keydown', e => { if (e.key === 'Escape') cancelPlacement() })
+function confirmZone() {
+  const z = zoneMode!
+  const key = parcelKey(z.c, z.r)
+  if (z.kind === 'land') {
+    const cost = parcelCost(z.c, z.r)
+    if (state.money < cost) { ui.toast('💸 Para yetmiyor!', 'bad'); return }
+    state.money -= cost
+    state.ownedParcels.add(key)
+    world.markOwned(z.c, z.r)
+    ui.toast(`🏞️ Arsa satın alındı (-₺${cost.toLocaleString('tr-TR')}) — yapı için Zemin Betonu döşe.`, 'good')
+  } else {
+    if (state.money < PAVE_COST) { ui.toast('💸 Para yetmiyor!', 'bad'); return }
+    state.money -= PAVE_COST
+    state.pavedParcels.add(key)
+    world.paveParcel(z.c, z.r)
+    ui.toast('🧱 Zemin betonlandı — artık yapı kurabilirsin!', 'good')
+  }
+  cancelPlacement()
+  persist()
+}
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') cancelPlacement()
+  if ((e.key === 'r' || e.key === 'R') && placing) {
+    placing.rot = (placing.rot + 1) % 4
+    placing.ghost.rotation.z = placing.rot * Math.PI / 2
+  }
+})
 renderer.domElement.addEventListener('contextmenu', e => { e.preventDefault(); cancelPlacement() })
 
 ui.onBuy = id => {
+  if (id === 'land' || id === 'pave') {
+    startZoneMode(id)
+    return
+  }
   const needsPlacement = id in PLACEABLE && !(id === 'battery' && state.batteryLevel > 0)
   if (needsPlacement) {
     const item = getShopItems(state).find(r => r.id === id)
@@ -516,12 +670,16 @@ ui.onBuy = id => {
   if (!buyItem(state, id)) return
   buildVisual(id)
   buyToast(id)
+  persist()
+}
+
+ui.onMove = id => {
+  if (!(id in PLACEABLE) || !MOVE_COST[id]) return
+  startPlacement(id, true)
 }
 
 function buyToast(id: string) {
   switch (id) {
-    case 'land-south': ui.toast('🏞️ Güney arsa satın alındı!', 'good'); break
-    case 'land-north': ui.toast('🏞️ Kuzey arsa satın alındı!', 'good'); break
     case 'pump': ui.toast(`⛽ Pompa #${state.pumps} kuruldu!`, 'good'); break
     case 'sign': ui.toast('🪧 Tabela büyüdü — daha çok müşteri gelecek!', 'good'); break
     case 'tank': ui.toast(`🛢️ Tank kapasitesi: ${state.tankCapacity}L`, 'good'); break
@@ -535,23 +693,35 @@ function buyToast(id: string) {
     case 'smr': ui.toast('☢️ Reaktör devrede! ⚠️ BAKIMI ASLA AKSATMA — patlarsa her şey gider!', 'bad'); break
     case 'wash': ui.toast('🚿 Oto yıkama açıldı — müşteriler araç yıkatacak!', 'good'); break
     case 'oil': ui.toast('🔧 Yağ değişim istasyonu açıldı!', 'good'); break
-    case 'land-west': ui.toast('🏞️ Batı arsa satın alındı — geniş alan senin!', 'good'); break
     case 'coffee': ui.toast('☕ Kahveci açıldı!', 'good'); break
     case 'restaurant': ui.toast('🍽️ Restoran açıldı — yolcular yemek molası verecek!', 'good'); break
     case 'truckpark': ui.toast('🚛 Tır parkı açıldı — düzenli konaklama geliri!', 'good'); break
     case 'airwater': ui.toast('💨 Hava-su ünitesi kuruldu!', 'good'); break
     case 'selfwash': ui.toast('🧽 Self yıkama açıldı — köpük ve su otomatik satılacak!', 'good'); break
+    case 'parking': ui.toast('🅿️ Otopark açıldı — müşteriler park edip tesisleri gezebilecek!', 'good'); break
   }
 }
 
 // 🧪 FULL / vitrin modu: ?full=1 ile her şey kurulu başlar
-if (new URLSearchParams(location.search).has('full')) {
+const isFullMode = new URLSearchParams(location.search).has('full')
+if (!isFullMode && loadSave()) {
+  rebuildFromState()
+  ui.toast(`💾 Kayıt yüklendi — Gün ${state.day}, hoş geldin!`, 'good')
+}
+if (isFullMode) {
+  for (const key of ['0,0', '0,2', '1,1']) {
+    const [c, r] = key.split(',').map(Number)
+    state.ownedParcels.add(key)
+    state.pavedParcels.add(key)
+    world.markOwned(c, r)
+    world.paveParcel(c, r)
+  }
   const FULL_ORDER = [
-    'land-south', 'land-north', 'pump', 'pump', 'pump', 'sign', 'sign', 'sign',
+    'pump', 'pump', 'pump', 'sign', 'sign', 'sign',
     'tank', 'tank', 'tank', 'market', 'market', 'toilet', 'toilet', 'grid', 'grid',
     'battery', 'battery', 'battery', 'evcharger', 'evcharger', 'evcharger', 'evcharger',
     'solar', 'dieselgen', 'smr', 'wash', 'oil',
-    'land-west', 'airwater', 'selfwash', 'coffee', 'restaurant', 'truckpark',
+    'airwater', 'selfwash', 'coffee', 'restaurant', 'truckpark', 'parking',
   ]
   state.money = 10_000_000
   for (const id of FULL_ORDER) {
@@ -578,6 +748,11 @@ ui.onMaint = id => {
 ui.onCardClose = () => {
   selectedBuilding = null
   world.setSelected(null)
+}
+
+ui.onReset = () => {
+  localStorage.removeItem(SAVE_KEY)
+  location.reload()
 }
 
 // ---- İstasyon adı ----
@@ -738,6 +913,12 @@ function buildingCard(id: string): BuildingCard | null {
         desc: 'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır.',
         stats: [['Pasif gelir', '₺30-60 / ~35sn'], ['Trafik etkisi', '+%2']],
       }
+    case 'parking':
+      return {
+        icon: '🅿️', name: 'Otopark',
+        desc: 'Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.',
+        stats: [['Kapasite', '4 araç'], ['Doluluk', `${cars.cars.filter(c => c.phase === 'parked' || c.phase === 'toPark').length}/4`]],
+      }
     case 'oil':
       return {
         icon: '🔧', name: 'Yağ Değişimi',
@@ -773,7 +954,11 @@ function buildingCard(id: string): BuildingCard | null {
 function refreshBuildingCard() {
   if (!selectedBuilding) return
   const card = buildingCard(selectedBuilding)
-  if (card) ui.showBuildingCard(card)
+  if (!card) return
+  if (MOVE_COST[selectedBuilding]) {
+    card.move = { label: `📦 Taşı — ₺${MOVE_COST[selectedBuilding]().toLocaleString('tr-TR')}`, id: selectedBuilding }
+  }
+  ui.showBuildingCard(card)
 }
 
 // ---- Girdi: sürükle-kaydır + tıkla-seç ----
@@ -787,17 +972,35 @@ renderer.domElement.addEventListener('pointerdown', e => {
   downY = lastY = e.clientY
 })
 window.addEventListener('pointermove', e => {
-  // yerleştirme hayaleti imleci takip eder
-  if (placing) {
+  // yerleştirme / arsa seçim hayaleti imleci takip eder
+  if (placing || zoneMode) {
     pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1)
     raycaster.setFromCamera(pointer, camera)
     const pt = new THREE.Vector3()
     if (raycaster.ray.intersectPlane(groundPlane, pt)) {
-      placing.cx = Math.round(pt.x)
-      placing.cy = Math.round(pt.y)
-      placing.ghost.position.set(placing.cx, placing.cy, 0.06)
-      placing.valid = isValidPlacement(placing, placing.id)
-      ;(placing.ghost.material as THREE.MeshBasicMaterial).color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
+      if (placing) {
+        placing.cx = Math.round(pt.x)
+        placing.cy = Math.round(pt.y)
+        placing.ghost.position.set(placing.cx, placing.cy, 0.06)
+        const odd = placing.rot % 2 === 1
+        const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
+        placing.valid = isValidPlacement(eff, placing.id, placing.grass)
+        ;(placing.ghost.material as THREE.MeshBasicMaterial).color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
+      } else if (zoneMode) {
+        const pc = parcelAt(pt.x, pt.y)
+        if (pc) {
+          const [c, r] = pc
+          zoneMode.c = c; zoneMode.r = r
+          const [x0, x1] = PARCEL_COLS[c]
+          const [y0, y1] = PARCEL_ROWS[r]
+          zoneMode.ghost.scale.set(x1 - x0 - 0.3, y1 - y0 - 0.3, 1)
+          zoneMode.ghost.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.06)
+          zoneMode.valid = zoneMode.kind === 'land'
+            ? !state.owns(c, r) && state.parcelAdjacentToOwned(c, r) && state.money >= parcelCost(c, r)
+            : state.owns(c, r) && !state.isPaved(c, r) && state.money >= PAVE_COST
+          ;(zoneMode.ghost.material as THREE.MeshBasicMaterial).color.setHex(zoneMode.valid ? 0x37c97e : 0xec5b5b)
+        }
+      }
     }
   }
   if (!isDown) return
@@ -807,7 +1010,8 @@ window.addEventListener('pointermove', e => {
   if (Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > 8) isDrag = true
   if (isDrag) {
     const wpp = VIEW / window.innerHeight / camera.zoom
-    camY = Math.max(-22, Math.min(22, camY + (-0.45 * dx + 0.36 * dy) * wpp))
+    camX = Math.max(-32, Math.min(8, camX + (0.894 * dx + 0.447 * dy) * wpp))
+    camY = Math.max(-26, Math.min(26, camY + (-0.447 * dx + 0.894 * dy) * wpp))
   }
 })
 window.addEventListener('pointerup', e => {
@@ -817,7 +1021,16 @@ window.addEventListener('pointerup', e => {
   if (placing) {
     if (e.button === 0) {
       if (placing.valid) confirmPlacement()
-      else ui.toast('🚫 Buraya yerleştiremezsin — yeşil alana koy.', 'bad')
+      else ui.toast('🚫 Buraya yerleştiremezsin — sahipli ve betonlu alana koy.', 'bad')
+    }
+    return
+  }
+  if (zoneMode) {
+    if (e.button === 0) {
+      if (zoneMode.valid) confirmZone()
+      else ui.toast(zoneMode.kind === 'land'
+        ? '🚫 Bu arsa alınamaz (bitişik değil, zaten senin ya da para yetmiyor).'
+        : '🚫 Bu arsa betonlanamaz (senin değil, zaten betonlu ya da para yetmiyor).', 'bad')
     }
     return
   }
@@ -865,6 +1078,9 @@ function handleClick(e: PointerEvent) {
 // ---- Oyun döngüsü ----
 const clock = new THREE.Clock()
 let dayTime = 0
+let prevCycleT = 0
+let achieveT = 2
+let saveT = 5
 const DAY_CYCLE = 160 // saniye: ~90sn gündüz, ~40sn gece
 
 function nightFactor(t: number): number {
@@ -889,9 +1105,33 @@ function frame() {
 
   if (state.exploded) {
     exploding = true
+    localStorage.removeItem(SAVE_KEY) // her şey sıfırlanır
     ui.showBoom()
     setTimeout(() => location.reload(), 3500)
     return
+  }
+
+  // gün dönümü: günlük kâr raporu
+  const cycleT = (dayTime % DAY_CYCLE) / DAY_CYCLE
+  if (cycleT < prevCycleT) {
+    state.day++
+    const profit = Math.round(state.money - state.dayStartMoney)
+    ui.toast(`📅 Gün ${state.day - 1} bitti — ${profit >= 0 ? 'kâr' : 'zarar'}: ₺${Math.abs(profit).toLocaleString('tr-TR')}`, profit >= 0 ? 'good' : 'bad')
+    state.dayStartMoney = state.money
+    persist()
+  }
+  prevCycleT = cycleT
+
+  // başarımlar + otomatik kayıt
+  achieveT -= dt
+  if (achieveT <= 0) {
+    achieveT = 2
+    checkAchievements(state)
+  }
+  saveT -= dt
+  if (saveT <= 0) {
+    saveT = 5
+    persist()
   }
 
   // bina uyarı etiketleri

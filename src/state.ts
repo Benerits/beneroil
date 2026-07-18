@@ -28,14 +28,21 @@ const EV_COSTS = [6000, 10000, 14000, 18000]
 const SOLAR_COST = 9000
 const DIESELGEN_COST = 4000
 const SMR_COST = 40000
+// 3×3 arsa haritası: sütun 0 = istasyon kolonu, 1-2 batıya doğru; satır 0 = güney, 1 = orta, 2 = kuzey
+export const PARCEL_COLS: [number, number][] = [[-6.5, 5], [-18, -6.5], [-29.5, -18]]
+export const PARCEL_ROWS: [number, number][] = [[-24, -10], [-10, 10], [10, 24]]
+export const PAVE_COST = 2500
+export function parcelKey(c: number, r: number) { return `${c},${r}` }
+export function parcelCost(c: number, _r: number) { return c === 0 ? 6000 : c === 1 ? 9000 : 14000 }
+
 const WASH_COST = 8000
 const OIL_COST = 12000
-const LAND_WEST_COST = 9000
 const COFFEE_COST = 7000
 const RESTAURANT_COST = 15000
 const TRUCKPARK_COST = 12000
 const AIRWATER_COST = 1500
 const SELFWASH_COST = 6000
+const PARKING_COST = 1200
 export const URANIUM_COST = 2500
 export const URANIUM_ETA = 20 // saniye
 const URANIUM_DRAIN_PER_S = 100 / 300 // tam yük ~5 dakika sürer
@@ -50,8 +57,6 @@ export class GameState {
   tankLevel = 0
   marketLevel = 0
   toiletLevel = 0
-  landNorth = false
-  landSouth = false
 
   // elektrik
   gridLevel = 0
@@ -63,14 +68,38 @@ export class GameState {
   hasSMR = false
   hasWash = false
   hasOil = false
-  landWest = false
   hasCoffee = false
   hasRestaurant = false
   hasTruckPark = false
   hasAirWater = false
   hasSelfWash = false
+  hasParking = false
   private truckTimer = 45
   private selfWashTimer = 30
+
+  // arsa sistemi: 3×3 = 9 parsel; istasyon (0,1) baştan sahipli ve betonlu
+  ownedParcels = new Set<string>([parcelKey(0, 1)])
+  pavedParcels = new Set<string>([parcelKey(0, 1)])
+
+  // ilerleme / bağlılık
+  day = 1
+  dayStartMoney = 4000
+  achievements = new Set<string>()
+
+  owns(c: number, r: number) { return this.ownedParcels.has(parcelKey(c, r)) }
+  isPaved(c: number, r: number) { return this.pavedParcels.has(parcelKey(c, r)) }
+  /** eski kilitler bu getter'ları kullanır: sahip + zemin döşeli sayılır */
+  get landSouth() { return this.pavedParcels.has(parcelKey(0, 0)) }
+  get landNorth() { return this.pavedParcels.has(parcelKey(0, 2)) }
+  get landWest() { return this.pavedParcels.has(parcelKey(1, 1)) }
+  get anyLand() { return this.ownedParcels.size > 1 }
+
+  parcelAdjacentToOwned(c: number, r: number): boolean {
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      if (this.ownedParcels.has(parcelKey(c + dc, r + dr))) return true
+    }
+    return false
+  }
 
   // bakım / arıza
   solarDirt = 0 // 0..1
@@ -253,14 +282,15 @@ export function getShopItems(s: GameState): ShopRow[] {
     else if (locked) rows.push({ id, icon, title, desc, stat, cost, status: 'locked', note: locked })
     else rows.push({ id, icon, title, desc, stat, cost, status: 'buy', note: '' })
   }
-  const anyLand = s.landNorth || s.landSouth
+  const anyLand = s.anyLand
+  const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
 
-  row('land-south', '🏞️', 'Güney Arsa', '+1 arsa', 'Güneye doğru yeni tesis alanı açar',
-    s.landSouth ? null : LAND_COST, null)
-  row('land-north', '🏞️', 'Kuzey Arsa', '+1 arsa', 'Kuzeye doğru yeni tesis alanı açar',
-    s.landNorth ? null : LAND_COST, null)
-  row('land-west', '🏞️', 'Batı Arsa', 'geniş alan', 'Arka tarafta restoran, kahveci ve tır parkı için büyük alan',
-    s.landWest ? null : LAND_WEST_COST, null)
+  row('land', '🏞️', `Arsa Satın Al (${s.ownedParcels.size}/9)`, '3×3 harita',
+    'Bitişik arsalardan birini seç — fiyat konuma göre ₺6-14 bin',
+    s.ownedParcels.size >= 9 ? null : 6000, null)
+  row('pave', '🧱', 'Zemin Betonu', 'arsa başı',
+    'Çimen arsana beton döşe — yapı kurmak için şart (güneş paneli hariç)',
+    PAVE_COST, hasUnpaved ? null : 'Betonsuz arsan yok')
   row('pump', '⛽', `Pompa #${Math.min(s.pumps + 1, MAX_PUMPS)}`, '+1 pompa', 'Aynı anda bir müşteri daha alırsın',
     s.pumps >= MAX_PUMPS ? null : PUMP_COSTS[s.pumps],
     s.pumps >= 2 && !s.landSouth ? 'Güney arsa gerekli' : null)
@@ -286,6 +316,8 @@ export function getShopItems(s: GameState): ShopRow[] {
     !anyLand ? 'Yan arsa gerekli' : null)
   row('airwater', '💨', 'Hava-Su Ünitesi', '+₺10-20', 'Lastik havası ve su — ucuz ama müşteri çeker',
     s.hasAirWater ? null : AIRWATER_COST, null)
+  row('parking', '🅿️', 'Otopark', '4 araç', 'Çizgili park alanı — müşteriler park edip tesisleri kullanır',
+    s.hasParking ? null : PARKING_COST, null)
   row('selfwash', '🧽', 'Self Yıkama', '+₺30-60/dk', 'Araçlar kendisi yıkar; köpük ve su otomatik satılır',
     s.hasSelfWash ? null : SELFWASH_COST,
     !anyLand ? 'Yan arsa gerekli' : null)
@@ -376,6 +408,55 @@ export function getMaintenanceItems(s: GameState): MaintRow[] {
   return rows
 }
 
+// ---- Başarımlar ----
+
+const ACHIEVEMENTS: [string, string, (s: GameState) => boolean][] = [
+  ['first-10k', 'İlk ₺10.000 — Esnaf oldun!', s => s.money >= 10000],
+  ['rich-100k', '₺100.000 — Patron!', s => s.money >= 100000],
+  ['five-star', '5 yıldız itibar — Efsane istasyon!', s => s.reputation >= 4.95],
+  ['full-pumps', '4 pompa — Tam kadro!', s => s.pumps >= 4],
+  ['electric-age', 'Elektrik çağı — İlk şarj ünitesi!', s => s.evChargers >= 1],
+  ['atomic', 'Atom karıncası — Reaktör kuruldu!', s => s.hasSMR],
+  ['landlord', 'Toprak ağası — 9 arsanın tamamı!', s => s.ownedParcels.size >= 9],
+  ['week-one', '7. gün — Bir haftadır ayaktasın!', s => s.day >= 7],
+]
+
+export function checkAchievements(s: GameState) {
+  for (const [id, title, cond] of ACHIEVEMENTS) {
+    if (!s.achievements.has(id) && cond(s)) {
+      s.achievements.add(id)
+      s.events.push(`🏆 Başarım: ${title}`)
+    }
+  }
+}
+
+// ---- Kayıt ----
+
+const SAVE_FIELDS = [
+  'money', 'tank', 'reputation', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
+  'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'hasSolar', 'hasDiesel', 'hasSMR',
+  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasAirWater', 'hasSelfWash', 'hasParking',
+  'solarDirt', 'smrWear', 'uranium', 'day', 'dayStartMoney',
+] as const
+
+export function serializeState(s: GameState): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const f of SAVE_FIELDS) out[f] = (s as any)[f]
+  out.ownedParcels = [...s.ownedParcels]
+  out.pavedParcels = [...s.pavedParcels]
+  out.achievements = [...s.achievements]
+  return out
+}
+
+export function hydrateState(s: GameState, data: Record<string, unknown>) {
+  for (const f of SAVE_FIELDS) {
+    if (f in data) (s as any)[f] = data[f]
+  }
+  if (Array.isArray(data.ownedParcels)) s.ownedParcels = new Set(data.ownedParcels as string[])
+  if (Array.isArray(data.pavedParcels)) s.pavedParcels = new Set(data.pavedParcels as string[])
+  if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])
+}
+
 export function doMaintenance(s: GameState, id: string): boolean {
   const item = getMaintenanceItems(s).find(r => r.id === id)
   if (!item || item.disabled || s.money < item.cost) return false
@@ -394,8 +475,6 @@ export function buyItem(s: GameState, id: string): boolean {
   if (!item || item.status !== 'buy' || item.cost === null || s.money < item.cost) return false
   s.money -= item.cost
   switch (id) {
-    case 'land-south': s.landSouth = true; break
-    case 'land-north': s.landNorth = true; break
     case 'pump': s.pumps++; break
     case 'sign': s.signLevel++; break
     case 'tank': s.tankLevel++; break
@@ -409,12 +488,12 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'smr': s.hasSMR = true; s.uranium = 100; break
     case 'wash': s.hasWash = true; break
     case 'oil': s.hasOil = true; break
-    case 'land-west': s.landWest = true; break
     case 'coffee': s.hasCoffee = true; break
     case 'restaurant': s.hasRestaurant = true; break
     case 'truckpark': s.hasTruckPark = true; break
     case 'airwater': s.hasAirWater = true; break
     case 'selfwash': s.hasSelfWash = true; break
+    case 'parking': s.hasParking = true; break
     default: return false
   }
   return true
