@@ -168,6 +168,8 @@ export class Car {
   /** öndeki araca çok yaklaştıysa bu karede bekle (üst üste binme yok) */
   hold = false
   holdTime = 0
+  /** sıkışma kurtarma penceresi: bu süre boyunca hold yok sayılır */
+  overrideT = 0
   private barsOn = false
   wrongFuelHandled = false
   beingServed = false
@@ -535,7 +537,7 @@ export class CarManager {
         if (o === c || o.lane === 'far') return false
         const oy = o.group.position.y
         // arkadan yaklaşan akan trafik
-        if (o.phase === 'transit' && oy > p.y - 12 && oy < p.y + 1.5) return true
+        if (o.phase === 'transit' && !o.hold && oy > p.y - 12 && oy < p.y + 1.5) return true
         // az önce şeride çıkmış öndeki araç yeterince uzaklaşmadıysa bekle
         if (o.phase === 'leaving' && o.group.position.x > 5.2 && oy > p.y - 1 && oy < p.y + 6) return true
         return false
@@ -547,11 +549,21 @@ export class CarManager {
     for (const [c, o] of blockers) {
       if (blockers.get(o) === c && c.hold && o.hold) o.hold = false
     }
-    // uzun süre sıkışan araç kendini kurtarır (gridlock sigortası)
+    // uzun süre sıkışan araç kendini kurtarır (gridlock sigortası):
+    // 5 sn beklerse 1.4 sn'lik gerçek bir kurtulma penceresi açılır
     for (const c of this.cars) {
+      if (c.overrideT > 0) {
+        c.overrideT -= dt
+        c.hold = false
+        continue
+      }
       if (c.hold) {
         c.holdTime += dt
-        if (c.holdTime > 6) { c.hold = false; c.holdTime = 4 }
+        if (c.holdTime > 5) {
+          c.holdTime = 0
+          c.overrideT = 1.4
+          c.hold = false
+        }
       } else {
         c.holdTime = 0
       }
