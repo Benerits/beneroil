@@ -3,7 +3,7 @@ import { World, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import {
-  FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY,
+  FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
 } from './state'
@@ -1404,6 +1404,7 @@ function buildingCard(id: string): BuildingCard | null {
         stats: [
           ['Dolu', `${Math.floor(state.battery)} / ${state.batteryCapacity} kWh`],
           ['Üretim', `+${state.genRate().toFixed(1)} kWh/sn (şebeke dahil)`, 'good'],
+          ['Şebeke maliyeti', `₺${GRID_COST_PER_KWH}/kWh`, 'bad'],
           ['Araca akış', `${[0, 15, 25, 40][state.batteryLevel]} kWh/sn`],
           ['Üretim', `+${rate.toFixed(1)} kWh/sn`, rate > 0 ? 'good' : ''],
           ['Seviye', `${state.batteryLevel}/3`],

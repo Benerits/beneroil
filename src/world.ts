@@ -306,8 +306,6 @@ export class World {
     s.add(lot)
     this.paveJoints(-6.5, 5, -10, 10)
     this.kerbs.set('0,1:W', box(0.25, 20.4, 0.16, 0xd8dbde, -6.55, 0, 0.08, s))
-    // yol tarafı bordürü (rampalar arasında)
-    box(0.18, 12.2, 0.14, 0xd8dbde, 5.02, 0, 0.07, s)
 
     // yol (arada yeşil bant kalır) + şerit çizgileri
     // gidiş-geliş yol: çift sarı orta çizgi + şerit içi beyaz kesikler + kenar çizgileri
@@ -333,9 +331,6 @@ export class World {
       }
     }
 
-    // giriş/çıkış rampaları
-    this.makeApron(APRON_IN_Y)
-    this.makeApron(APRON_OUT_Y)
 
     this.buildOffice()
     this.buildGate('in')
@@ -618,6 +613,31 @@ export class World {
     apron.position.set(5.5, y, 0.014)
     apron.receiveShadow = true
     this.scene.add(apron)
+    return apron
+  }
+
+  /** yol kenarı bordürü + rampalar: kapılar nereye taşınırsa boşluk oraya gelir */
+  private roadEdgeMeshes: THREE.Object3D[] = []
+  private buildRoadEdge() {
+    for (const o of this.roadEdgeMeshes) this.scene.remove(o)
+    this.roadEdgeMeshes = []
+    const gaps = [this.gateIn.y, this.gateOut.y]
+      .map(y => [y - 1.75, y + 1.75] as [number, number])
+      .sort((a, b) => a[0] - b[0])
+    const segs: [number, number][] = []
+    let cursor = -10
+    for (const [g0, g1] of gaps) {
+      if (g1 < -10 || g0 > 10) continue
+      if (g0 > cursor) segs.push([cursor, Math.min(g0, 10)])
+      cursor = Math.max(cursor, g1)
+    }
+    if (cursor < 10) segs.push([cursor, 10])
+    for (const [a, b] of segs) {
+      if (b - a < 0.3) continue
+      this.roadEdgeMeshes.push(box(0.18, b - a, 0.14, 0xd8dbde, 5.02, (a + b) / 2, 0.07, this.scene))
+    }
+    this.roadEdgeMeshes.push(this.makeApron(this.gateIn.y))
+    this.roadEdgeMeshes.push(this.makeApron(this.gateOut.y))
   }
 
   private addSphereTank(x: number, y: number, R = 1.15, bandColor = 0xd64545) {
@@ -883,6 +903,7 @@ export class World {
     g.position.set(v.x, v.y, 0)
     this.scene.add(g)
     this.register(id, kind === 'in' ? 'GİRİŞ' : 'ÇIKIŞ', g, 2.1)
+    this.buildRoadEdge()
   }
 
   /** ofis binası — taşınabilir (düzenleme modu) */

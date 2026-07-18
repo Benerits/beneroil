@@ -233,7 +233,7 @@ export class Car {
     this.demandKwh = 20 + Math.floor(Math.random() * 9) * 5 // 20..60
     this.wantsFull = kind === 'fuel' && Math.random() < 0.10
     // FULLE isteyenler dolu depo boşaltır: ₺500-1000 arası (kusuratlı) yakıt alır
-    if (this.wantsFull) this.hiddenNeedL = (500 + Math.random() * 500) / this.prices[this.demandType]
+    if (this.wantsFull) this.hiddenNeedL = (250 + Math.random() * 250) / this.prices[this.demandType]
     this.maxPatience = kind === 'ev' ? 45 : 75
     this.patience = this.maxPatience
     this.wantsMarket = Math.random() < 0.35

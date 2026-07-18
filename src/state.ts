@@ -20,6 +20,7 @@ export const MAX_PUMPS = 8
 export const MAX_EV = 8
 export const BATTERY_CAP = [0, 100, 250, 600] // kWh
 export const EV_PRICE_PER_KWH = 8
+export const GRID_COST_PER_KWH = 3.5 // şebekeden çekilen her kWh faturalanır
 export const DIESEL_GEN_FUEL_PER_S = 0.25 // jeneratör çalışırken tanktaki mazot tüketimi (L/sn)
 
 const PUMP_COSTS = [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000]
@@ -200,6 +201,11 @@ export class GameState {
   }
 
   /** anlık üretim gücü kWh/sn (kir, yakıt vs. dahil) */
+  /** şebekeden gelen kWh/sn (faturalı) */
+  gridRate() {
+    return this.gridLevel >= 1 ? 2 * (this.gridLevel >= 2 ? 1.3 : 1) : 0
+  }
+
   genRate() {
     let r = 0
     if (this.gridLevel >= 1) r += 2 // şebeke: altyapı varsa temel akış
@@ -223,7 +229,14 @@ export class GameState {
     }
     // batarya şarjı
     if (this.batteryLevel > 0 && this.battery < this.batteryCapacity) {
-      this.battery = Math.min(this.batteryCapacity, this.battery + this.genRate() * dt)
+      const before = this.battery
+      const total = this.genRate()
+      this.battery = Math.min(this.batteryCapacity, this.battery + total * dt)
+      const added = this.battery - before
+      // şebeke payı faturalanır — santral üretimi bedava, o yüzden daha kârlı
+      if (added > 0 && total > 0) {
+        this.money -= added * Math.min(1, this.gridRate() / total) * GRID_COST_PER_KWH
+      }
       if (this.dieselRunning()) {
         this.tanks.dizel = Math.max(0, this.tanks.dizel - DIESEL_GEN_FUEL_PER_S * dt)
       }
