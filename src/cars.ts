@@ -509,15 +509,23 @@ export class CarManager {
         }
       }
     }
-    // trafik kuralı: şeride çıkacak araç, yaklaşan akan trafiğe YOL VERİR
+    // trafik kuralı: şeride çıkacak araç yaklaşan trafiğe YOL VERİR ve
+    // öndeki araç takip mesafesi kadar (4.5 birim) açılmadan yola atlamaz
     for (const c of this.cars) {
       if (c.hold || c.phase !== 'leaving') continue
       const p = c.group.position
       const inMergeZone = p.x > 3.9 && p.x < LANE_NEAR - 0.25
       if (!inMergeZone) continue
-      const oncoming = this.cars.some(o => o !== c && o.phase === 'transit' && o.lane === 'near'
-        && o.group.position.y > p.y - 10.5 && o.group.position.y < p.y + 1.5)
-      if (oncoming) c.hold = true
+      const laneBusy = this.cars.some(o => {
+        if (o === c || o.lane === 'far') return false
+        const oy = o.group.position.y
+        // arkadan yaklaşan akan trafik
+        if (o.phase === 'transit' && oy > p.y - 10.5 && oy < p.y + 1.5) return true
+        // az önce şeride çıkmış öndeki araç yeterince uzaklaşmadıysa bekle
+        if (o.phase === 'leaving' && o.group.position.x > 5.2 && oy > p.y - 1 && oy < p.y + 4.5) return true
+        return false
+      })
+      if (laneBusy) c.hold = true
     }
 
     // karşılıklı kilitlenme: ikisi de birbirini bekliyorsa biri yol alır
