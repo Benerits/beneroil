@@ -1404,11 +1404,6 @@ function handleClick(e: PointerEvent) {
       }
       return
     }
-    const warnFor = hits.find(h => h.object.userData.warnFor)?.object.userData.warnFor
-    if (warnFor) {
-      ui.onMaint(warnFor)
-      return
-    }
     let obj: THREE.Object3D | null = hits[0].object
     while (obj && !obj.userData.buildingId) obj = obj.parent
     if (obj?.userData.buildingId) {

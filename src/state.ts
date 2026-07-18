@@ -157,6 +157,8 @@ export class GameState {
   // bakım / arıza
   solarDirt = 0 // 0..1
   smrWear = 0 // 0..1
+  /** bakım özeni: her bakım/tamir artırır, zamanla azalır; yüksekken arıza olasılığı düşer */
+  maintCare = 0
   uranium = 0 // % 0..100
   uraniumPending = false
   uraniumEta = 0
@@ -268,19 +270,23 @@ export class GameState {
       }
     }
 
-    // rastgele arızalar — Murphy kanunu: para azken arıza olasılığı katlanır
-    const stress = this.money < 1000 ? 4 : this.money < 3000 ? 2.5 : this.money < 6000 ? 1.5 : 1
+    // bakım özeni zamanla azalır
+    this.maintCare = Math.max(0, this.maintCare - 0.0004 * dt)
+
+    // rastgele arızalar — seyrek; para azken (Murphy) artar, bakım özeni yüksekken düşer
+    const stress = this.money < 1000 ? 3 : this.money < 3000 ? 2 : 1
+    const care = 1 - 0.65 * this.maintCare
     const brokenCount = this.brokenPumps.size + this.brokenChargers.size
     if (brokenCount < 2) {
       for (let i = 0; i < this.pumps; i++) {
-        if (!this.brokenPumps.has(i) && Math.random() < (dt / 900) * stress) {
+        if (!this.brokenPumps.has(i) && Math.random() < (dt / 2000) * stress * care) {
           this.brokenPumps.add(i)
-          this.events.push(`🔧 Pompa #${i + 1} arıza yaptı! Bakım menüsünden tamir et.`)
+          this.events.push(`🔧 Pompa #${i + 1} arıza yaptı! Üstüne tıklayıp karttan tamir et.`)
           break
         }
       }
       for (let i = 0; i < this.evChargers; i++) {
-        if (!this.brokenChargers.has(i) && Math.random() < (dt / 1000) * stress) {
+        if (!this.brokenChargers.has(i) && Math.random() < (dt / 2400) * stress * care) {
           this.brokenChargers.add(i)
           this.events.push(`🔌 Şarj ünitesi #${i + 1} arızalandı!`)
           break
@@ -513,7 +519,7 @@ const SAVE_FIELDS = [
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'hasSolar', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasAirWater', 'hasSelfWash', 'hasParking',
   'solarDirt', 'smrWear', 'uranium', 'day', 'dayStartMoney', 'closed',
-  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
+  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -542,6 +548,7 @@ export function doMaintenance(s: GameState, id: string): boolean {
   const item = getMaintenanceItems(s).find(r => r.id === id)
   if (!item || item.disabled || s.money < item.cost) return false
   s.money -= item.cost
+  s.maintCare = Math.min(1, s.maintCare + 0.2) // düzenli bakım = daha az arıza
   if (id === 'clean-solar') s.solarDirt = 0
   else if (id === 'maint-smr') s.smrWear = 0
   else if (id === 'order-uranium') { s.uraniumPending = true; s.uraniumEta = URANIUM_ETA }
