@@ -300,6 +300,7 @@ export class World {
       box(3.4, 4.4, 0.25, 0x9c5b3c, 0, 0, 2.5, officeGroup)
     }
     officeGroup.position.set(-5.0, 4.5, 0)
+    this.facadeLights(officeGroup, [[1.55, -0.9, 1.1], [1.55, 0.9, 1.1]])
     s.add(officeGroup)
     this.register('office', 'OFİS', officeGroup, 5.6)
     cyl(0.22, 0.6, 0x3f6f56, -3.3, 6.8, 0.3, 'z', s)
@@ -331,8 +332,9 @@ export class World {
     this.placeTree(12.4, -16, 1.1)
     this.placeTree(12.7, 9, 1.2)
     this.placeTree(12.1, 22, 1.0)
-    this.placeLamp(4.5, -5.5)
-    this.placeLamp(4.5, 5.5)
+    // lambalar yol-istasyon arasındaki yeşil bantta (araç rotalarının tamamen dışında)
+    this.placeLamp(5.45, -5.5)
+    this.placeLamp(5.45, 5.5)
     stain(1.9, -1.6, 0.45, s)
     stain(1.5, -3.0, 0.3, s)
     stain(2.2, 2.8, 0.4, s)
@@ -358,6 +360,18 @@ export class World {
   /** seçili binanın isim etiketini gösterir, diğerlerini gizler */
   setSelected(id: string | null) {
     for (const b of this.buildings) b.label.visible = b.id === id
+  }
+
+  /** binaya gece yanan sıcak pencere ışıkları ekler */
+  private facadeLights(g: THREE.Object3D, positions: [number, number, number][], w = 0.9, h = 0.55) {
+    for (const [x, y, z] of positions) {
+      const m = glow(0xffd989, 0.03)
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m)
+      p.lookAt(new THREE.Vector3(1, 0, 0))
+      p.position.set(x, y, z)
+      g.add(p)
+      this.nightMats.push({ mat: m, day: 0.03, night: 1.7, owner: 'bldg' })
+    }
   }
 
   /** 0 = gündüz, 1 = gece — ışıklar geceleri yanar */
@@ -497,8 +511,10 @@ export class World {
       this.makeApron(APRON_SOUTH_Y)
       box(0.18, 5.6, 0.14, 0xd8dbde, 5.02, -21, 0.07, this.scene)
       box(0.18, 3.6, 0.14, 0xd8dbde, 5.02, -12, 0.07, this.scene)
+      this.placeLamp(5.45, -20)
     } else {
       box(0.18, 14, 0.14, 0xd8dbde, 5.02, 17, 0.07, this.scene)
+      this.placeLamp(5.45, 19)
     }
   }
 
@@ -620,6 +636,8 @@ export class World {
     })
     sign.position.set(level >= 2 ? 1.7 : 1.4, 0, H + 0.35)
     g.add(sign)
+    const fx = level >= 2 ? 2.3 : 1.6
+    this.facadeLights(g, [[fx, -1.1, 1.0], [fx, 1.1, 1.0]], 1.2, 0.8)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.marketGroup = g
@@ -650,6 +668,7 @@ export class World {
     })
     sign.position.set(1.0, 0, H + 0.3)
     g.add(sign)
+    this.facadeLights(g, [[1.05, 0, 1.0]], 0.6, 0.4)
     if (level >= 2) {
       const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), lam(0x6fb35a))
       bush.position.set(1.4, -1.6, 0.3); bush.castShadow = true; g.add(bush)
@@ -739,6 +758,56 @@ export class World {
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.register('dieselgen', 'JENERATÖR', g, 2.2)
+  }
+
+  buildWash(pos?: THREE.Vector2) {
+    const at = pos ?? new THREE.Vector2(-4.7, -12.6)
+    const g = new THREE.Group()
+    box(3.8, 3.2, 2.5, 0x9fc8e8, 0, 0, 1.25, g)
+    box(4.0, 3.4, 0.22, 0x2f6fed, 0, 0, 2.6, g)
+    // araç giriş ağzı (+y yönü) ve fırçalar
+    box(0.15, 0.15, 2.2, 0x39424e, 1.5, 1.62, 1.1, g)
+    box(0.15, 0.15, 2.2, 0x39424e, -1.5, 1.62, 1.1, g)
+    cyl(0.35, 1.8, 0xd64545, 0.8, 1.0, 1.1, 'z', g)
+    cyl(0.35, 1.8, 0x2f6fed, -0.8, 1.0, 1.1, 'z', g)
+    cyl(0.3, 1.4, 0xe8e6e1, 0, 0.2, 1.9, 'y', g)
+    const sign = canvasPanel(2.8, 0.55, 460, 90, (ctx, w, h) => {
+      ctx.fillStyle = '#2f6fed'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 18); ctx.fill()
+      ctx.fillStyle = '#fff'; ctx.font = '800 52px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('🚿 OTO YIKAMA', w / 2, h / 2 + 2)
+    })
+    sign.position.set(2.02, 0, 2.2)
+    g.add(sign)
+    this.facadeLights(g, [[1.92, -0.9, 1.0]], 0.8, 0.5)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('wash', 'OTO YIKAMA', g, 3.4)
+  }
+
+  buildOil(pos?: THREE.Vector2) {
+    const at = pos ?? new THREE.Vector2(-4.7, -16.8)
+    const g = new THREE.Group()
+    box(3.4, 3.0, 2.4, 0xb8bec4, 0, 0, 1.2, g)
+    box(3.6, 3.2, 0.22, 0x39424e, 0, 0, 2.5, g)
+    box(0.06, 2.2, 1.7, 0x4a5560, 1.71, 0, 0.85, g) // garaj kapısı
+    for (let k = 0; k < 4; k++) box(0.02, 2.2, 0.06, 0x39424e, 1.75, 0, 0.3 + k * 0.42, g)
+    // yağ varilleri
+    cyl(0.3, 0.8, 0x2b2f33, 0.9, -1.9, 0.4, 'z', g)
+    cyl(0.3, 0.8, 0xe0b13e, 0.25, -1.95, 0.4, 'z', g)
+    cyl(0.3, 0.8, 0x2b2f33, 0.55, -1.6, 1.15, 'z', g)
+    const sign = canvasPanel(2.9, 0.55, 480, 90, (ctx, w, h) => {
+      ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 18); ctx.fill()
+      ctx.fillStyle = '#1c2530'; ctx.font = '800 50px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('🔧 YAĞ DEĞİŞİMİ', w / 2, h / 2 + 2)
+    })
+    sign.position.set(1.85, 0, 2.15)
+    g.add(sign)
+    this.facadeLights(g, [[1.74, 0, 1.6]], 1.4, 0.4)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('oil', 'YAĞ DEĞİŞİMİ', g, 3.3)
   }
 
   buildSMR(side: 'north' | 'south', pos?: THREE.Vector2) {

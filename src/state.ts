@@ -28,6 +28,8 @@ const EV_COSTS = [6000, 10000, 14000, 18000]
 const SOLAR_COST = 9000
 const DIESELGEN_COST = 4000
 const SMR_COST = 40000
+const WASH_COST = 8000
+const OIL_COST = 12000
 export const URANIUM_COST = 2500
 export const URANIUM_ETA = 20 // saniye
 const URANIUM_DRAIN_PER_S = 100 / 300 // tam yük ~5 dakika sürer
@@ -53,6 +55,8 @@ export class GameState {
   hasSolar = false
   hasDiesel = false
   hasSMR = false
+  hasWash = false
+  hasOil = false
 
   // bakım / arıza
   solarDirt = 0 // 0..1
@@ -135,17 +139,23 @@ export class GameState {
         this.exploded = true
       }
     }
-    // rastgele arızalar
-    for (let i = 0; i < this.pumps; i++) {
-      if (!this.brokenPumps.has(i) && Math.random() < dt / 300) {
-        this.brokenPumps.add(i)
-        this.events.push(`🔧 Pompa #${i + 1} arıza yaptı! Bakım menüsünden tamir et.`)
+    // rastgele arızalar — Murphy kanunu: para azken arıza olasılığı katlanır
+    const stress = this.money < 1000 ? 4 : this.money < 3000 ? 2.5 : this.money < 6000 ? 1.5 : 1
+    const brokenCount = this.brokenPumps.size + this.brokenChargers.size
+    if (brokenCount < 2) {
+      for (let i = 0; i < this.pumps; i++) {
+        if (!this.brokenPumps.has(i) && Math.random() < (dt / 900) * stress) {
+          this.brokenPumps.add(i)
+          this.events.push(`🔧 Pompa #${i + 1} arıza yaptı! Bakım menüsünden tamir et.`)
+          break
+        }
       }
-    }
-    for (let i = 0; i < this.evChargers; i++) {
-      if (!this.brokenChargers.has(i) && Math.random() < dt / 320) {
-        this.brokenChargers.add(i)
-        this.events.push(`🔌 Şarj ünitesi #${i + 1} arızalandı!`)
+      for (let i = 0; i < this.evChargers; i++) {
+        if (!this.brokenChargers.has(i) && Math.random() < (dt / 1000) * stress) {
+          this.brokenChargers.add(i)
+          this.events.push(`🔌 Şarj ünitesi #${i + 1} arızalandı!`)
+          break
+        }
       }
     }
   }
@@ -154,6 +164,7 @@ export class GameState {
   entryChance() {
     const c = 0.32 + 0.1 * this.signLevel + 0.05 * (this.reputation - 3)
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
+      + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
     return Math.min(0.95, Math.max(0.08, c))
   }
 
@@ -227,6 +238,13 @@ export function getShopItems(s: GameState): ShopRow[] {
     'Müşteri memnuniyetini ve itibarı artırır',
     s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel],
     !s.landNorth ? 'Kuzey arsa gerekli' : null)
+
+  row('wash', '🚿', 'Oto Yıkama', '+₺60-120', 'Müşterilerin ~%25\'i araç yıkatır, ekstra gelir',
+    s.hasWash ? null : WASH_COST,
+    !anyLand ? 'Yan arsa gerekli' : null)
+  row('oil', '🛢️', 'Yağ Değişimi', '+₺150-250', 'Müşterilerin ~%12\'si yağ değiştirtir, güçlü ek gelir',
+    s.hasOil ? null : OIL_COST,
+    !anyLand ? 'Yan arsa gerekli' : null)
 
   // elektrik zinciri
   row('grid', '⚡', `Elektrik Altyapısı Sv.${Math.min(s.gridLevel + 1, 2)}`,
@@ -336,6 +354,8 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'solar': s.hasSolar = true; break
     case 'dieselgen': s.hasDiesel = true; break
     case 'smr': s.hasSMR = true; s.uranium = 100; break
+    case 'wash': s.hasWash = true; break
+    case 'oil': s.hasOil = true; break
     default: return false
   }
   return true

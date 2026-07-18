@@ -148,6 +148,8 @@ export class Car {
   converted = false
   wantsMarket: boolean
   wantsToilet: boolean
+  wantsWash: boolean
+  wantsOil: boolean
   filled = 0
   nozzle: FuelType | null = null
   targetAmount = 0
@@ -183,6 +185,8 @@ export class Car {
     this.patience = this.maxPatience
     this.wantsMarket = Math.random() < 0.35
     this.wantsToilet = Math.random() < 0.3
+    this.wantsWash = kind === 'fuel' && Math.random() < 0.25
+    this.wantsOil = kind === 'fuel' && Math.random() < 0.12
     scene.add(this.group)
 
     const mkBar = (c: number, z: number) => {
@@ -449,7 +453,7 @@ export class CarManager {
 
     this.cars = this.cars.filter(c => {
       if (c.phase === 'gone') return false
-      if ((c.phase === 'transit' || c.phase === 'leaving') && Math.abs(c.group.position.y) > 42) {
+      if ((c.phase === 'transit' || c.phase === 'leaving') && Math.abs(c.group.position.y) > 42.5) {
         c.dispose(this.scene)
         return false
       }
@@ -465,12 +469,12 @@ export class CarManager {
     car.lane = lane
     car.phase = 'transit'
     if (lane === 'near') {
-      car.group.position.set(LANE_NEAR, -44, 0)
+      car.group.position.set(LANE_NEAR, -40, 0)
       car.group.rotation.z = Math.PI / 2
       car.setPath([new THREE.Vector3(LANE_NEAR, 44, 0)])
       car.wantsEnter = Math.random() < this.opts.entryChance()
     } else {
-      car.group.position.set(LANE_FAR, 44, 0)
+      car.group.position.set(LANE_FAR, 40, 0)
       car.group.rotation.z = -Math.PI / 2
       car.setPath([new THREE.Vector3(LANE_FAR, -44, 0)])
     }

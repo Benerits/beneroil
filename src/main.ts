@@ -146,6 +146,22 @@ function extrasScore(car: Car): number {
       ui.toast(`🛒 Müşteri marketten alışveriş yaptı: +₺${m}`, 'good')
     } else d -= 0.3
   }
+  if (car.wantsWash) {
+    if (state.hasWash) {
+      const m = Math.round(60 + Math.random() * 60)
+      state.money += m
+      d += 0.2
+      ui.toast(`🚿 Araç yıkandı: +₺${m}`, 'good')
+    } else d -= 0.25
+  }
+  if (car.wantsOil) {
+    if (state.hasOil) {
+      const m = Math.round(150 + Math.random() * 100)
+      state.money += m
+      d += 0.25
+      ui.toast(`🔧 Yağ değişimi yapıldı: +₺${m}`, 'good')
+    } else d -= 0.15
+  }
   return d
 }
 
@@ -254,6 +270,8 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'solar': world.buildSolar(state.landSouth ? 'south' : 'north', pos); break
     case 'dieselgen': world.buildDiesel(pos); break
     case 'smr': world.buildSMR(state.landNorth ? 'north' : 'south', pos); break
+    case 'wash': world.buildWash(pos); break
+    case 'oil': world.buildOil(pos); break
   }
 }
 
@@ -266,6 +284,8 @@ const PLACEABLE: Record<string, () => { w: number; d: number }> = {
   solar: () => ({ w: 5, d: 7 }),
   dieselgen: () => ({ w: 2, d: 2 }),
   smr: () => ({ w: 6, d: 5 }),
+  wash: () => ({ w: 4.5, d: 4 }),
+  oil: () => ({ w: 4, d: 4 }),
 }
 
 interface Rect { cx: number; cy: number; w: number; d: number }
@@ -366,6 +386,8 @@ function buyToast(id: string) {
     case 'solar': ui.toast('☀️ Güneş santrali kuruldu. ⚠️ Paneller zamanla kirlenir!', 'good'); break
     case 'dieselgen': ui.toast('🛠️ Jeneratör kuruldu. ⚠️ Gürültüsü EV müşterilerini kaçırabilir!', 'good'); break
     case 'smr': ui.toast('☢️ Reaktör devrede! ⚠️ BAKIMI ASLA AKSATMA — patlarsa her şey gider!', 'bad'); break
+    case 'wash': ui.toast('🚿 Oto yıkama açıldı — müşteriler araç yıkatacak!', 'good'); break
+    case 'oil': ui.toast('🔧 Yağ değişim istasyonu açıldı!', 'good'); break
   }
 }
 
@@ -375,7 +397,7 @@ if (new URLSearchParams(location.search).has('full')) {
     'land-south', 'land-north', 'pump', 'pump', 'pump', 'sign', 'sign', 'sign',
     'tank', 'tank', 'tank', 'market', 'market', 'toilet', 'toilet', 'grid', 'grid',
     'battery', 'battery', 'battery', 'evcharger', 'evcharger', 'evcharger', 'evcharger',
-    'solar', 'dieselgen', 'smr',
+    'solar', 'dieselgen', 'smr', 'wash', 'oil',
   ]
   state.money = 10_000_000
   for (const id of FULL_ORDER) {
@@ -521,6 +543,24 @@ function buildingCard(id: string): BuildingCard | null {
           ['Üretim', `+1.5 kWh/sn`],
           ['Yakıt tüketimi', '0.25 L/sn'],
           ['Durum', state.dieselRunning() ? 'ÇALIŞIYOR 🔊' : 'Beklemede', state.dieselRunning() ? 'bad' : 'good'],
+        ],
+      }
+    case 'wash':
+      return {
+        icon: '🚿', name: 'Oto Yıkama',
+        desc: 'Yakıt alan müşterilerin bir kısmı çıkışta aracını yıkatır.',
+        stats: [
+          ['Hizmet ücreti', '₺60-120'],
+          ['Kullanım oranı', '~%25'],
+        ],
+      }
+    case 'oil':
+      return {
+        icon: '🔧', name: 'Yağ Değişimi',
+        desc: 'Bakım vakti gelen araçlar burada yağ değiştirir — en kârlı yan hizmet.',
+        stats: [
+          ['Hizmet ücreti', '₺150-250'],
+          ['Kullanım oranı', '~%12'],
         ],
       }
     case 'smr': {
