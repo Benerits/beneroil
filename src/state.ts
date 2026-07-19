@@ -88,10 +88,10 @@ export class GameState {
   /** yakıt türü başına ayrı yer altı tankı */
   tanks: Record<FuelType, number> = { benzin: 250, dizel: 150, lpg: 100 }
   /** yakıt türü başına ayrı sipariş/tanker takibi */
-  orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean }> = {
-    benzin: { pending: false, eta: 0, arrived: false },
-    dizel: { pending: false, eta: 0, arrived: false },
-    lpg: { pending: false, eta: 0, arrived: false },
+  orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean }> = {
+    benzin: { pending: false, eta: 0, arrived: false, delivering: false },
+    dizel: { pending: false, eta: 0, arrived: false, delivering: false },
+    lpg: { pending: false, eta: 0, arrived: false, delivering: false },
   }
 
   pumps = 1
@@ -375,7 +375,8 @@ export class GameState {
   }
 
   canOrder(f: FuelType) {
-    return !this.orders[f].pending && this.orderNeed(f) >= 100 && this.money >= this.orderCost(f)
+    const o = this.orders[f]
+    return !o.pending && !o.arrived && !o.delivering && this.orderNeed(f) >= 100 && this.money >= this.orderCost(f)
   }
 
   placeOrder(f: FuelType) {
@@ -630,11 +631,12 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   }
   if (data.orders && typeof data.orders === 'object') {
     for (const f of FUELS) {
-      const o = (data.orders as Record<string, { pending?: boolean; eta?: number; arrived?: boolean }>)[f]
+      const o = (data.orders as Record<string, { pending?: boolean; eta?: number; arrived?: boolean; delivering?: boolean }>)[f]
       if (o) {
         s.orders[f].pending = !!o.pending
         s.orders[f].eta = Math.min(60, Math.max(0, Number(o.eta) || 0))
         s.orders[f].arrived = !!o.arrived
+        s.orders[f].delivering = !!o.delivering
       }
     }
   }

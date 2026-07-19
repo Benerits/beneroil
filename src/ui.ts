@@ -517,8 +517,8 @@ export class UI {
       const need = state.orderNeed(f)
       const btn = el<HTMLButtonElement>(`fbtn-${f}`)
       const info = el<HTMLDivElement>(`fneed-${f}`)
-      if (o.pending) {
-        this.setText(info, `Tanker yolda — ${Math.ceil(o.eta)} sn`)
+      if (o.pending || o.delivering) {
+        this.setText(info, o.delivering ? 'Tanker istasyona yaklaşıyor…' : `Tanker yolda — ${Math.ceil(o.eta)} sn`)
         this.setText(btn, 'Yolda')
         btn.disabled = true
       } else if (need < 100) {
