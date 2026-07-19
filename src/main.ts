@@ -212,7 +212,7 @@ const cars = new CarManager(world.scene, modelLib, {
   },
   onCarLost: car => {
     state.stats.lost++
-    ui.toast('Müşteri beklemekten sıkıldı ve gitti!', 'bad', true)
+    ui.toast(t('Müşteri beklemekten sıkıldı ve gitti!'), 'bad', true)
     audio.miss()
     state.addRep(-0.2)
     if (ui.activeCar === car) ui.selectCar(nextServableCar())
@@ -469,7 +469,7 @@ function concludeService(car: Car, score: number) {
   const visits = facilityVisits(car)
   if (visits.length > 0 && cars.sendToParking(car)) {
     pendingVisits.set(car, { visits, score, started: false })
-    ui.toast('🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.', '')
+    ui.toast(t('🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.'), '')
   } else {
     // otopark doluysa ziyaret gelirleri yine gelsin (hızlı mod)
     for (const v of visits) {
@@ -498,12 +498,12 @@ function finishSale(car: Car) {
     const penalty = Math.max(5, Math.round(spill * SPILL_PENALTY_PER_L))
     state.money -= penalty
     score -= 0.8
-    ui.toast(`Taşan yakıt cezası: -₺${penalty}`, 'bad')
+    ui.toast(t('Taşan yakıt cezası: -₺{0}', penalty), 'bad')
   } else if (car.filledValue >= car.demandAmount - 10) {
     const tip = Math.round(revenue0 * 0.1)
     revenue += tip
     score += 0.8
-    ui.toast(`Bahşiş: +₺${tip}`, 'good')
+    ui.toast(t('Bahşiş: +₺{0}', tip), 'good')
   } else {
     score -= 0.6 // eksik dolum: sessiz, sadece memnuniyet düşer
   }
@@ -603,8 +603,8 @@ function tickEvCharging(dt: number) {
 
 ui.onOrderFuel = f => {
   const o = state.orders[f]
-  if (o.pending || o.delivering) { ui.toast(`${FUEL_LABEL[f]} tankeri zaten yolda — teslimatı bekle.`, ''); return }
-  if (state.placeOrder(f)) ui.toast(`${FUEL_LABEL[f]} tankeri yola çıktı!`, 'good')
+  if (o.pending || o.delivering) { ui.toast(t('{0} tankeri zaten yolda — teslimatı bekle.', FUEL_LABEL[f]), ''); return }
+  if (state.placeOrder(f)) ui.toast(t('{0} tankeri yola çıktı!', FUEL_LABEL[f]), 'good')
   else ui.toast('Sipariş verilemedi (tank dolu ya da para yetmiyor).', 'bad')
 }
 
@@ -1073,13 +1073,13 @@ function confirmPlacement() {
   const p = placing!
   if (p.move) {
     applyDynamicMove(p.id, p.cx, p.cy)
-    ui.toast('Taşındı!', 'good')
+    ui.toast(t('Taşındı!'), 'good')
   } else {
     const purchaseId = p.id.startsWith('pump-') ? 'pump'
       : p.id.startsWith('charger-') ? 'evcharger'
       : p.id.split('#')[0]
     if (!buyItem(state, purchaseId)) {
-      ui.toast('💸 Para yetmiyor!', 'bad')
+      ui.toast(t('💸 Para yetmiyor!'), 'bad')
       cancelPlacement()
       return
     }
@@ -1105,13 +1105,13 @@ function confirmZone() {
   const key = parcelKey(z.c, z.r)
   if (z.kind === 'land') {
     const cost = parcelCost(z.c, z.r, state)
-    if (state.money < cost) { ui.toast('💸 Para yetmiyor!', 'bad'); return }
+    if (state.money < cost) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
     state.money -= cost
     state.ownedParcels.add(key)
     world.markOwned(z.c, z.r)
     ui.toast(`🏞️ Arsa satın alındı (-₺${cost.toLocaleString('tr-TR')}) — yapı için Zemin Betonu döşe.`, 'good')
   } else {
-    if (state.money < PAVE_COST) { ui.toast('💸 Para yetmiyor!', 'bad'); return }
+    if (state.money < PAVE_COST) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
     state.money -= PAVE_COST
     state.pavedParcels.add(key)
     world.paveParcel(z.c, z.r)
@@ -1373,7 +1373,7 @@ ui.onMaint = id => {
   }
   if (id === 'toilet-fee') {
     state.toiletFee = state.toiletFee === 0 ? 5 : state.toiletFee === 5 ? 10 : 0
-    ui.toast(state.toiletFee === 0 ? 'Tuvalet artık ücretsiz.' : `Tuvalet ücreti: ₺${state.toiletFee}`, 'good')
+    ui.toast(state.toiletFee === 0 ? t('Tuvalet artık ücretsiz.') : t('Tuvalet ücreti: ₺{0}', state.toiletFee), 'good')
     refreshBuildingCard()
     persist()
     return
@@ -1477,7 +1477,7 @@ function buildingCard(id: string): BuildingCard | null {
       icon: 'i-fuel', name: `Pompa #${i + 1}`,
       desc: 'Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.',
       stats: [
-        ['Durum', broken ? 'ARIZALI' : 'Çalışıyor', broken ? 'bad' : 'good'],
+        [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         ['Dolum hızı', `${FILL_RATE} L/sn`],
         ['Benzin', `₺${FUEL_PRICE.benzin}/L`],
         ['Dizel', `₺${FUEL_PRICE.dizel}/L`],
@@ -1492,7 +1492,7 @@ function buildingCard(id: string): BuildingCard | null {
       icon: 'i-charger', name: `DC Şarj #${i + 1}`,
       desc: 'Elektrikli araçlar batarya deposundan anında şarj olur. Depoda yeterli kWh yoksa müşteri bekler.',
       stats: [
-        ['Durum', broken ? 'ARIZALI' : 'Çalışıyor', broken ? 'bad' : 'good'],
+        [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         ['Şarj süresi', 'Anında'],
         ['Satış', `₺${state.elecPrice}/kWh`],
       ],
@@ -1717,7 +1717,7 @@ adBtn.addEventListener('click', () => {
   rewarded('musteri-patlamasi',
     () => {
       state.promo = { type: 'rush', until: Date.now() + 90_000 }
-      ui.toast('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!', 'good')
+      ui.toast(t('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!'), 'good')
       audio.achieve()
     },
     watched => {
@@ -2060,26 +2060,26 @@ function frame() {
   }
   for (let i = tankers.length - 1; i >= 0; i--) {
     const tk = tankers[i]
-    const { t, fuel } = tk
+    const { t: tnk, fuel } = tk
     tk.age = (tk.age ?? 0) + dt
-    if (t.update(dt, blockedFor(t)) && !tk.credited) {
+    if (tnk.update(dt, blockedFor(tnk)) && !tk.credited) {
       tk.credited = true
       state.orders[fuel].delivering = false
       state.deliverFuel(fuel)
-      ui.toast(`${FUEL_LABEL[fuel]} tankı dolduruldu!`, 'good')
+      ui.toast(t('{0} tankı dolduruldu!', FUEL_LABEL[fuel]), 'good')
     }
     // teslimat sigortası: trafik tıkarsa bile 75 sn'de yakıt MUTLAKA teslim edilir
     if (!tk.credited && tk.age > 75) {
       tk.credited = true
       state.orders[fuel].delivering = false
       state.deliverFuel(fuel)
-      ui.toast(`${FUEL_LABEL[fuel]} teslimatı tamamlandı (tanker trafikte gecikti).`, 'good')
-      world.scene.remove(t.group)
+      ui.toast(t('{0} teslimatı gecikti — yakıt yine de teslim edildi.', FUEL_LABEL[fuel]), 'good')
+      world.scene.remove(tnk.group)
       tankers.splice(i, 1)
       continue
     }
-    if (t.done) {
-      world.scene.remove(t.group)
+    if (tnk.done) {
+      world.scene.remove(tnk.group)
       tankers.splice(i, 1)
     }
   }

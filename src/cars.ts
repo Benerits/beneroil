@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { t } from './i18n'
 import { FuelType, FUEL_LABEL, FUEL_PRICE } from './state'
 import { ROAD_X, LANE_NEAR, LANE_FAR, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 
