@@ -365,11 +365,21 @@ async function handleVs(req, res, url) {
         SELECT
           coalesce(avg(sessions), 0)::float AS spu,
           count(*)::int AS total,
+          count(*) FILTER (WHERE last_seen_at > now() - interval '1 day')::int AS active1d,
           count(*) FILTER (WHERE last_seen_at > created_at + interval '1 day')::int AS d1,
           count(*) FILTER (WHERE last_seen_at > created_at + interval '7 day')::int AS d7,
           count(*) FILTER (WHERE last_seen_at > created_at + interval '30 day')::int AS d30,
           coalesce(sum((save->'s'->'stats'->>'served')::int), 0)::int AS served,
-          coalesce(sum((save->'s'->'stats'->>'kwh')::int), 0)::int AS kwh
+          coalesce(sum((save->'s'->'stats'->>'kwh')::int), 0)::int AS kwh,
+          coalesce(sum((save->'s'->'stats'->>'revenue')::numeric), 0)::bigint AS revenue,
+          coalesce(round(avg((save->'s'->>'day')::int)), 0)::int AS avg_day,
+          coalesce(max((save->'s'->>'day')::int), 0)::int AS max_day,
+          coalesce(sum((save->'s'->'stats'->'liters'->>'benzin')::numeric), 0)::bigint AS l_benzin,
+          coalesce(sum((save->'s'->'stats'->'liters'->>'dizel')::numeric), 0)::bigint AS l_dizel,
+          coalesce(sum((save->'s'->'stats'->'liters'->>'lpg')::numeric), 0)::bigint AS l_lpg,
+          count(*) FILTER (WHERE (save->'s'->>'evChargers')::int > 0)::int AS ev_stations,
+          count(*) FILTER (WHERE (save->'s'->>'hasSMR')::boolean)::int AS nuclear_stations,
+          coalesce(round(avg((save->'s'->>'reputation')::numeric), 2), 0)::float AS avg_rep
         FROM benzinlik_player`)
       const fb = await pool.query('SELECT count(*)::int AS n FROM benzinlik_feedback')
       const a = agg.rows[0]
@@ -379,8 +389,18 @@ async function handleVs(req, res, url) {
         sessionsPerUser: Math.round(a.spu * 10) / 10,
         retention: { d1: pct(a.d1), d7: pct(a.d7), d30: pct(a.d30) },
         topEvents: [
-          { event: 'musteri_servis', count: a.served },
-          { event: 'ev_sarj_kwh', count: a.kwh },
+          { event: 'toplam_musteri_servisi', count: Number(a.served) },
+          { event: 'satilan_benzin_L', count: Number(a.l_benzin) },
+          { event: 'satilan_dizel_L', count: Number(a.l_dizel) },
+          { event: 'satilan_lpg_L', count: Number(a.l_lpg) },
+          { event: 'satilan_elektrik_kWh', count: Number(a.kwh) },
+          { event: 'toplam_ciro_TL', count: Number(a.revenue) },
+          { event: 'ortalama_oyun_gunu', count: Number(a.avg_day) },
+          { event: 'en_ileri_oyun_gunu', count: Number(a.max_day) },
+          { event: 'elektrikli_istasyon_sayisi', count: Number(a.ev_stations) },
+          { event: 'nukleer_reaktorlu_istasyon', count: Number(a.nuclear_stations) },
+          { event: 'gun_ici_aktif_oyuncu', count: Number(a.active1d) },
+          { event: 'ortalama_itibar_x100', count: Math.round(Number(a.avg_rep) * 100) },
           { event: 'sorun_bildirimi', count: fb.rows[0].n },
         ],
         asOf: new Date().toISOString(),
