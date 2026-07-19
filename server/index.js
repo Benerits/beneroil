@@ -363,11 +363,31 @@ async function handleVs(req, res, url) {
       const nextCursor = rows.rows.length > limit ? Buffer.from(String(cursor + limit)).toString('base64url') : null
       return json(res, 200, { data: page, nextCursor })
     }
-    const m = url.match(/^\/vs\/v1\/users\/(\d+)(?:\/(ban|unban|balance))?$/)
+    const m = url.match(/^\/vs\/v1\/users\/(\d+)(?:\/(ban|unban|balance|detail))?$/)
     if (m) {
       const id = Number(m[1])
-      const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at FROM benzinlik_player WHERE id=$1', [id])
+      const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at, ban_reason FROM benzinlik_player WHERE id=$1', [id])
       if (found.rowCount === 0) return json(res, 404, { error: { code: 'not_found', message: 'Kullanıcı yok.' } })
+      if (m[2] === 'detail' && req.method === 'GET') {
+        // record bloğu için {data:{...}} — şemaya uygun kullanıcı detayı
+        const r = found.rows[0]; const st = r.save?.s ?? {}
+        return json(res, 200, { data: {
+          email: r.email,
+          station: st.stationName || '—',
+          balance: Math.round(Number(st.money) || 0),
+          day: st.day ?? 1,
+          pumps: st.pumps ?? 1,
+          evChargers: st.evChargers ?? 0,
+          reputation: Math.round((Number(st.reputation) || 0) * 100) / 100,
+          served: st.stats?.served ?? 0,
+          kwh: Math.round(Number(st.stats?.kwh) || 0),
+          revenue: Math.round(Number(st.stats?.revenue) || 0),
+          sessions: r.sessions ?? 0,
+          signedUp: r.created_at,
+          lastSeen: r.last_seen_at ?? null,
+          status: r.banned_at ? `BANNED${r.ban_reason ? ' · ' + r.ban_reason : ''}` : 'Active',
+        } })
+      }
       if (m[2] === 'ban' && req.method === 'POST') {
         const { reason } = await readBody(req)
         await pool.query('UPDATE benzinlik_player SET banned_at=now(), ban_reason=$2 WHERE id=$1', [id, String(reason || '').slice(0, 300) || null])
