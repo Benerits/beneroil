@@ -5,6 +5,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import pg from 'pg'
+import { WebSocketServer } from 'ws'
 
 const PORT = Number(process.env.PORT || 80)
 const SECRET = process.env.AUTH_SECRET || 'benzinlik-dev-secret'
@@ -48,6 +49,9 @@ async function initDb() {
   await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_stat_hourly (
     hour timestamptz PRIMARY KEY, visits int NOT NULL DEFAULT 0,
     signups int NOT NULL DEFAULT 0, logins int NOT NULL DEFAULT 0
+  )`)
+  await pool.query(`CREATE TABLE IF NOT EXISTS beneloil_notification (
+    id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_email_lower ON benzinlik_player (lower(email))`)
   console.log('DB hazır (benzinlik_player + benzinlik_feedback).')
@@ -365,7 +369,7 @@ async function handleVs(req, res, url) {
       const nextCursor = rows.rows.length > limit ? Buffer.from(String(cursor + limit)).toString('base64url') : null
       return json(res, 200, { data: page, nextCursor })
     }
-    const m = url.match(/^\/vs\/v1\/users\/(\d+)(?:\/(ban|unban|balance|detail|restore|rawsave))?$/)
+    const m = url.match(/^\/vs\/v1\/users\/(\d+)(?:\/(ban|unban|balance|detail|restore|rawsave|live))?$/)
     if (m) {
       const id = Number(m[1])
       const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at, ban_reason FROM benzinlik_player WHERE id=$1', [id])
@@ -394,6 +398,35 @@ async function handleVs(req, res, url) {
       }
       if (m[2] === 'rawsave' && req.method === 'GET') {
         return json(res, 200, { data: found.rows[0].save ?? null }) // tam save (admin okuma)
+      }
+      if (m[2] === 'live' && req.method === 'POST') {
+        // WebSocket üzerinden anlık: bakiye / bildirim / hot-fix / reload
+        const b = await readBody(req)
+        const kind = b?.kind
+        if (kind === 'balance') {
+          const amt = Math.max(0, Math.round(Number(b.amount) || 0))
+          const cur = Math.round(Number(found.rows[0].save?.s?.money) || 0)
+          const next = b.op === 'set' ? amt : b.op === 'add' ? cur + amt : cur - amt
+          if (next < 0 || !['set', 'add', 'subtract'].includes(String(b.op))) return json(res, 400, { error: { code: 'invalid_request', message: 'op: set|add|subtract' } })
+          await pool.query(`UPDATE benzinlik_player SET save = jsonb_set(coalesce(save, '{}'::jsonb), '{s,money}', to_jsonb($2::int)) WHERE id=$1`, [id, next])
+          const live = pushToUser(id, { type: 'balance', money: next, toast: b.toast || 'Bakiye güncellendi' })
+          return json(res, 200, { data: { coins: next, live } })
+        }
+        if (kind === 'notify') {
+          const title = String(b.title || 'BenelOil').slice(0, 80)
+          const body = String(b.body || '').slice(0, 300)
+          await pool.query('INSERT INTO beneloil_notification(user_id, title, body) VALUES ($1,$2,$3)', [id, title, body]).catch(() => {})
+          const live = pushToUser(id, { type: 'notify', title, body })
+          return json(res, 200, { data: { live } })
+        }
+        if (kind === 'patch') {
+          const live = pushToUser(id, { type: 'patch', patch: b.patch || {} })
+          return json(res, 200, { data: { live } })
+        }
+        if (kind === 'reload') {
+          return json(res, 200, { data: { live: pushToUser(id, { type: 'reload' }) } })
+        }
+        return json(res, 400, { error: { code: 'invalid_request', message: 'kind: balance|notify|patch|reload' } })
       }
       if (m[2] === 'restore' && req.method === 'POST') {
         // yedekten tam save geri yükleme (admin) — override kazası kurtarma
@@ -564,6 +597,30 @@ async function handleVs(req, res, url) {
       const d = map[k] || { value: 0, label: k }
       return json(res, 200, { data: d })
     }
+    if (url === '/vs/v1/broadcast' && req.method === 'POST') {
+      // TÜM bağlı oyunculara anlık yayın (bildirim ya da reload)
+      const b = await readBody(req)
+      if (b?.kind === 'reload') return json(res, 200, { data: { live: broadcastAll({ type: 'reload' }) } })
+      if (b?.kind === 'notify') {
+        const title = String(b.title || 'BenelOil').slice(0, 80)
+        const body = String(b.body || '').slice(0, 300)
+        await pool.query('INSERT INTO beneloil_notification(user_id, title, body) VALUES (NULL,$1,$2)', [title, body]).catch(() => {})
+        return json(res, 200, { data: { live: broadcastAll({ type: 'notify', title, body }) } })
+      }
+      return json(res, 400, { error: { code: 'invalid_request', message: 'kind: notify|reload' } })
+    }
+    if (url === '/vs/v1/notifications' && req.method === 'GET') {
+      const rows = await pool.query(`SELECT n.id, n.title, n.body, n.created_at, p.email
+        FROM beneloil_notification n LEFT JOIN benzinlik_player p ON p.id = n.user_id
+        ORDER BY n.id DESC LIMIT 100`)
+      return json(res, 200, { data: rows.rows.map(r => ({
+        id: String(r.id), createdAt: r.created_at, kime: r.email || '(herkes)',
+        baslik: r.title, mesaj: r.body,
+      })) })
+    }
+    if (url === '/vs/v1/live-status' && req.method === 'GET') {
+      return json(res, 200, { data: { onlineSockets: liveOnlineCount() } })
+    }
     if (url === '/vs/v1/health' && req.method === 'GET') {
       return json(res, 200, {
         ok: true,
@@ -600,6 +657,55 @@ const server = http.createServer(async (req, res) => {
   })
   createReadStream(file).pipe(res)
 })
+
+// ---- WebSocket: anlık bakiye / bildirim / hot-fix / reload (izole, aynı container+port) ----
+const wss = new WebSocketServer({ noServer: true })
+const liveSockets = new Map() // userId(number) -> Set<ws>
+
+function pushToUser(id, msg) {
+  const set = liveSockets.get(Number(id))
+  if (!set) return 0
+  const data = JSON.stringify(msg)
+  let n = 0
+  for (const ws of set) { if (ws.readyState === 1) { try { ws.send(data); n++ } catch {} } }
+  return n
+}
+function broadcastAll(msg) {
+  const data = JSON.stringify(msg)
+  let n = 0
+  for (const set of liveSockets.values()) for (const ws of set) { if (ws.readyState === 1) { try { ws.send(data); n++ } catch {} } }
+  return n
+}
+function liveOnlineCount() { return liveSockets.size }
+
+server.on('upgrade', async (req, socket, head) => {
+  try {
+    const u = new URL(req.url, 'http://x')
+    if (u.pathname !== '/ws') { socket.destroy(); return }
+    const email = verifyToken(String(u.searchParams.get('token') || ''))
+    if (!email || !pool) { socket.destroy(); return }
+    const r = await pool.query('SELECT id, banned_at FROM benzinlik_player WHERE email=$1', [email])
+    if (!r.rowCount || r.rows[0].banned_at) { socket.destroy(); return }
+    const id = Number(r.rows[0].id)
+    wss.handleUpgrade(req, socket, head, ws => {
+      ws.userId = id; ws.isAlive = true
+      let set = liveSockets.get(id); if (!set) { set = new Set(); liveSockets.set(id, set) }
+      set.add(ws)
+      ws.on('pong', () => { ws.isAlive = true })
+      ws.on('message', () => {}) // client yalnızca dinler
+      ws.on('close', () => { const s = liveSockets.get(id); if (s) { s.delete(ws); if (!s.size) liveSockets.delete(id) } })
+      ws.on('error', () => {})
+      try { ws.send(JSON.stringify({ type: 'hello', ok: true })) } catch {}
+    })
+  } catch { try { socket.destroy() } catch {} }
+})
+// heartbeat: ölü bağlantıları temizle
+setInterval(() => {
+  for (const set of liveSockets.values()) for (const ws of set) {
+    if (ws.isAlive === false) { try { ws.terminate() } catch {}; continue }
+    ws.isAlive = false; try { ws.ping() } catch {}
+  }
+}, 30000)
 
 // dirençli boot: DB geç ayaklanırsa bile sunucu ASLA sessizce ölmez
 async function start() {

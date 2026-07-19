@@ -1288,6 +1288,56 @@ translateDom() // HUD + statik metinleri çevir
 ;(document.getElementById('lang-en') as HTMLButtonElement).addEventListener('click', () => setLang('en'))
 ui.syncAccount(auth.currentEmail())
 
+// ---- Canlı kanal (WebSocket): anlık bakiye / bildirim / hot-fix / reload ----
+function applyLivePatch(p: Record<string, unknown>) {
+  if (typeof p.money === 'number') state.money = p.money
+  const tanks = p.tanks as Record<string, number> | undefined
+  if (tanks) for (const f of Object.keys(tanks)) if (f in state.tanks) (state.tanks as Record<string, number>)[f] = Number(tanks[f])
+  const orders = p.orders as Record<string, unknown> | undefined
+  if (orders) for (const f of Object.keys(orders)) {
+    const o = (state.orders as Record<string, { pending: boolean; eta: number; arrived: boolean; delivering: boolean }>)[f]
+    if (o) { o.pending = false; o.arrived = false; o.delivering = false; o.eta = 0 }
+  }
+  persist()
+}
+let liveWs: WebSocket | null = null
+let liveRetry = 0
+function connectLive() {
+  if (isFullMode || isPromoMode || cloudBlocked || !auth.loggedIn()) return
+  const token = localStorage.getItem('benzinlik-token')
+  if (!token) return
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  try { liveWs = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`) } catch { return }
+  liveWs.onopen = () => { liveRetry = 0 }
+  liveWs.onmessage = ev => {
+    let m: { type?: string; [k: string]: unknown }
+    try { m = JSON.parse(ev.data) } catch { return }
+    if (m.type === 'balance') {
+      state.money = Number(m.money) || state.money
+      ui.toast(String(m.toast || t('Bakiye güncellendi')), 'good', true)
+    } else if (m.type === 'notify') {
+      const title = String(m.title || 'BenelOil'), body = String(m.body || '')
+      ui.toast(body ? `${title} — ${body}` : title, 'good')
+      try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body }) } catch {}
+    } else if (m.type === 'patch') {
+      applyLivePatch((m.patch as Record<string, unknown>) || {})
+      ui.toast(t('Kayıt güncellendi ✓'), 'good', true)
+    } else if (m.type === 'reload') {
+      ui.toast(t('Güncelleme uygulanıyor…'), '', true)
+      setTimeout(() => location.reload(), 800)
+    }
+  }
+  const reconnect = () => {
+    liveWs = null
+    if (isFullMode || isPromoMode || cloudBlocked) return
+    liveRetry = Math.min(liveRetry + 1, 6)
+    setTimeout(connectLive, 1000 * liveRetry) // 1..6 sn backoff
+  }
+  liveWs.onclose = reconnect
+  liveWs.onerror = () => { try { liveWs?.close() } catch {} }
+}
+connectLive()
+
 // oyun içi canlı t("OYUNDA") sayacı — 60 sn'de bir tazelenir (sosyal kanıt)
 function refreshOnline() {
   if (isPromoMode) return
