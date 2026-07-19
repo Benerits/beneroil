@@ -2,6 +2,10 @@
 
 Benzin istasyonu işletme oyunu — browser POC (hedef: iOS, Capacitor ile).
 
+> 📊 **Neden tuttu / dopamin & retention analizi:** [`docs/WHY-IT-WORKS.md`](docs/WHY-IT-WORKS.md)
+> — oyunun tutma mekanikleri, lansman verisi (tweet %31.5 dönüşüm), oyuncu kaybı noktaları ve
+> yol haritası. Oyun-hissi/ekonomi/onboarding'e dokunmadan önce oku (agent-facing).
+
 ## Çalıştırma
 
 ```bash
