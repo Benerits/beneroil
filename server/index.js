@@ -423,6 +423,19 @@ async function handleVs(req, res, url) {
           const live = pushToUser(id, { type: 'patch', patch: b.patch || {} })
           return json(res, 200, { data: { live } })
         }
+        if (kind === 'hotfix-fuel') {
+          // tek tık: tankları doldur + takılı siparişleri temizle (hem DB hem canlı)
+          const TANK_CAP = [800, 1500, 3000, 5000]
+          const save = found.rows[0].save || {}
+          save.s = save.s || {}
+          const cap = TANK_CAP[Math.min(3, Number(save.s.tankLevel) || 0)]
+          save.s.tanks = { ...(save.s.tanks || {}), benzin: cap, dizel: cap, lpg: cap }
+          const clear = { pending: false, eta: 0, arrived: false, delivering: false }
+          save.s.orders = { benzin: { ...clear }, dizel: { ...clear }, lpg: { ...clear } }
+          await pool.query('UPDATE benzinlik_player SET save=$2 WHERE id=$1', [id, JSON.stringify(save)])
+          const live = pushToUser(id, { type: 'patch', patch: { tanks: save.s.tanks, orders: save.s.orders } })
+          return json(res, 200, { data: { live, tanks: save.s.tanks } })
+        }
         if (kind === 'reload') {
           return json(res, 200, { data: { live: pushToUser(id, { type: 'reload' }) } })
         }
