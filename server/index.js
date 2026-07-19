@@ -38,6 +38,10 @@ async function initDb() {
       created_at timestamptz NOT NULL DEFAULT now()
     )
   `)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS last_seen_at timestamptz DEFAULT now()`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS sessions int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS banned_at timestamptz`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS ban_reason text`)
   console.log('DB hazır (benzinlik_player + benzinlik_feedback).')
 }
 
@@ -183,10 +187,12 @@ async function handleApi(req, res, url) {
       if (!rateLimit('login:' + clientIp(req), 30, 3600_000)) return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
       const { email, password } = await readBody(req)
       const e = String(email || '').trim().toLowerCase()
-      const r = await pool.query('SELECT pass FROM benzinlik_player WHERE email=$1', [e])
+      const r = await pool.query('SELECT pass, banned_at FROM benzinlik_player WHERE email=$1', [e])
       if (r.rowCount === 0 || !verifyPassword(String(password || ''), r.rows[0].pass)) {
         return json(res, 401, { error: 'E-posta veya şifre hatalı.' })
       }
+      if (r.rows[0].banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [e])
       return json(res, 200, { token: sign(e), email: e })
     }
     if (url === '/api/feedback' && req.method === 'POST') {
@@ -201,7 +207,9 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/save' && req.method === 'GET') {
       const email = auth(); if (!email) return
-      const r = await pool.query('SELECT save, updated_at FROM benzinlik_player WHERE email=$1', [email])
+      const r = await pool.query('SELECT save, updated_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
+      if (r.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      await pool.query('UPDATE benzinlik_player SET last_seen_at=now() WHERE email=$1', [email])
       return json(res, 200, { save: r.rows[0]?.save ?? null, updatedAt: r.rows[0]?.updated_at ?? null })
     }
     if (url === '/api/save' && req.method === 'POST') {
@@ -212,7 +220,8 @@ async function handleApi(req, res, url) {
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
       // makullük: para, geçen süreye göre imkânsız hızda artamaz (hile freni)
       if (clean && clean.s) {
-        const prev = await pool.query('SELECT save, updated_at FROM benzinlik_player WHERE email=$1', [email])
+        const prev = await pool.query('SELECT save, updated_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
+        if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
         const prevSave = prev.rows[0]?.save
         if (prevSave && prevSave.s && typeof prevSave.s.money === 'number') {
           const elapsed = Math.max(1, (Date.now() - new Date(prev.rows[0].updated_at).getTime()) / 1000)
@@ -222,7 +231,7 @@ async function handleApi(req, res, url) {
           }
         }
       }
-      await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now() WHERE email=$1', [email, clean])
+      await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1', [email, clean])
       return json(res, 200, { ok: true })
     }
     json(res, 404, { error: 'not found' })
@@ -232,9 +241,162 @@ async function handleApi(req, res, url) {
   }
 }
 
+// ---- VentureStudio paneli (/vs/v1): admin.benerits.com bu uçları Bearer key ile çeker ----
+const VS_KEY = process.env.VS_API_KEY || ''
+
+function vsAuth(req, res) {
+  const h = String(req.headers.authorization || '')
+  if (!VS_KEY || h !== `Bearer ${VS_KEY}`) {
+    json(res, 401, { error: { code: 'unauthorized', message: 'Bearer eksik ya da hatalı.' } })
+    return false
+  }
+  return true
+}
+
+function userRow(r) {
+  const st = r.save?.s ?? {}
+  return {
+    id: String(r.id),
+    email: r.email,
+    name: st.stationName || null,
+    avatarUrl: null,
+    country: null,
+    plan: 'free',
+    source: null,
+    authProvider: 'password',
+    github: null,
+    signedUpAt: r.created_at,
+    lastSeenAt: r.last_seen_at ?? null,
+    sessions: r.sessions ?? 0,
+    ltvCents: 0,
+    currency: 'USD',
+    bannedAt: r.banned_at ?? null,
+    coins: typeof st.money === 'number' ? Math.round(st.money) : 0,
+    metadata: {
+      day: st.day ?? 1,
+      pumps: st.pumps ?? 1,
+      reputation: st.reputation ?? 3,
+      served: st.stats?.served ?? 0,
+    },
+  }
+}
+
+async function handleVs(req, res, url) {
+  if (!pool) return json(res, 503, { error: { code: 'no_db', message: 'DB yok.' } })
+  if (!vsAuth(req, res)) return
+  const u = new URL(req.url, 'http://x')
+  try {
+    if (url === '/vs/v1/users/metrics' && req.method === 'GET') {
+      const days = { '7d': 7, '30d': 30, '90d': 90 }[u.searchParams.get('window') || '30d'] || 30
+      const q = await pool.query(`
+        SELECT
+          count(*)::int AS total,
+          count(*) FILTER (WHERE last_seen_at > now() - $1::interval)::int AS active,
+          count(*) FILTER (WHERE last_seen_at > now() - ($1::interval * 2) AND last_seen_at <= now() - $1::interval)::int AS active_prev,
+          count(*) FILTER (WHERE created_at > now() - $1::interval)::int AS news,
+          count(*) FILTER (WHERE created_at > now() - ($1::interval * 2) AND created_at <= now() - $1::interval)::int AS news_prev
+        FROM benzinlik_player`, [`${days} days`])
+      const r = q.rows[0]
+      const delta = (v, p) => (p > 0 ? Math.round(((v - p) / p) * 1000) / 10 : (v > 0 ? 100 : 0))
+      return json(res, 200, {
+        window: `${days}d`,
+        activeUsers: { value: r.active, previous: r.active_prev, deltaPct: delta(r.active, r.active_prev) },
+        newSignups: { value: r.news, previous: r.news_prev, deltaPct: delta(r.news, r.news_prev) },
+        paidUsers: { value: 0, previous: 0, deltaPct: 0 },
+        totalUsers: r.total,
+        asOf: new Date().toISOString(),
+      })
+    }
+    if (url === '/vs/v1/users' && req.method === 'GET') {
+      const limit = Math.min(200, Math.max(10, Number(u.searchParams.get('limit')) || 50))
+      const cursor = Number(Buffer.from(u.searchParams.get('cursor') || '', 'base64url').toString() || 0) || 0
+      const search = (u.searchParams.get('q') || '').toLowerCase()
+      const sort = u.searchParams.get('sort') || 'signed_up_desc'
+      const order = sort === 'last_seen_desc' ? 'last_seen_at DESC NULLS LAST' : 'created_at DESC'
+      const rows = await pool.query(`
+        SELECT id, email, save, created_at, last_seen_at, sessions, banned_at
+        FROM benzinlik_player
+        WHERE ($1 = '' OR lower(email) LIKE '%' || $1 || '%' OR lower(coalesce(save->'s'->>'stationName','')) LIKE '%' || $1 || '%')
+        ORDER BY ${order} OFFSET $2 LIMIT $3`, [search, cursor, limit + 1])
+      const page = rows.rows.slice(0, limit).map(userRow)
+      const nextCursor = rows.rows.length > limit ? Buffer.from(String(cursor + limit)).toString('base64url') : null
+      return json(res, 200, { data: page, nextCursor })
+    }
+    const m = url.match(/^\/vs\/v1\/users\/(\d+)(?:\/(ban|unban|balance))?$/)
+    if (m) {
+      const id = Number(m[1])
+      const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at FROM benzinlik_player WHERE id=$1', [id])
+      if (found.rowCount === 0) return json(res, 404, { error: { code: 'not_found', message: 'Kullanıcı yok.' } })
+      if (m[2] === 'ban' && req.method === 'POST') {
+        const { reason } = await readBody(req)
+        await pool.query('UPDATE benzinlik_player SET banned_at=now(), ban_reason=$2 WHERE id=$1', [id, String(reason || '').slice(0, 300) || null])
+      } else if (m[2] === 'unban' && req.method === 'POST') {
+        await pool.query('UPDATE benzinlik_player SET banned_at=NULL, ban_reason=NULL WHERE id=$1', [id])
+      } else if (m[2] === 'balance' && req.method === 'POST') {
+        const { op, amount } = await readBody(req)
+        const amt = Math.max(0, Math.round(Number(amount) || 0))
+        const cur = Math.round(Number(found.rows[0].save?.s?.money) || 0)
+        const next = op === 'set' ? amt : op === 'add' ? cur + amt : cur - amt
+        if (next < 0 || !['set', 'add', 'subtract'].includes(String(op))) {
+          return json(res, 400, { error: { code: 'invalid_request', message: 'Geçersiz işlem.' } })
+        }
+        await pool.query(`UPDATE benzinlik_player SET save = jsonb_set(coalesce(save, '{}'::jsonb), '{s,money}', to_jsonb($2::int)) WHERE id=$1`, [id, next])
+        return json(res, 200, { data: { coins: next } })
+      } else if (req.method === 'DELETE' && !m[2]) {
+        await pool.query('DELETE FROM benzinlik_player WHERE id=$1', [id])
+        res.writeHead(204)
+        return res.end()
+      } else if (req.method !== 'GET') {
+        return json(res, 404, { error: { code: 'not_found', message: 'yok' } })
+      }
+      const fresh = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at FROM benzinlik_player WHERE id=$1', [id])
+      return json(res, 200, userRow(fresh.rows[0]))
+    }
+    if (url === '/vs/v1/engagement' && req.method === 'GET') {
+      const agg = await pool.query(`
+        SELECT
+          coalesce(avg(sessions), 0)::float AS spu,
+          count(*)::int AS total,
+          count(*) FILTER (WHERE last_seen_at > created_at + interval '1 day')::int AS d1,
+          count(*) FILTER (WHERE last_seen_at > created_at + interval '7 day')::int AS d7,
+          count(*) FILTER (WHERE last_seen_at > created_at + interval '30 day')::int AS d30,
+          coalesce(sum((save->'s'->'stats'->>'served')::int), 0)::int AS served,
+          coalesce(sum((save->'s'->'stats'->>'kwh')::int), 0)::int AS kwh
+        FROM benzinlik_player`)
+      const fb = await pool.query('SELECT count(*)::int AS n FROM benzinlik_feedback')
+      const a = agg.rows[0]
+      const pct = n => (a.total > 0 ? Math.round((n / a.total) * 100) : 0)
+      return json(res, 200, {
+        window: '30d',
+        sessionsPerUser: Math.round(a.spu * 10) / 10,
+        retention: { d1: pct(a.d1), d7: pct(a.d7), d30: pct(a.d30) },
+        topEvents: [
+          { event: 'musteri_servis', count: a.served },
+          { event: 'ev_sarj_kwh', count: a.kwh },
+          { event: 'sorun_bildirimi', count: fb.rows[0].n },
+        ],
+        asOf: new Date().toISOString(),
+      })
+    }
+    if (url === '/vs/v1/health' && req.method === 'GET') {
+      return json(res, 200, {
+        ok: true,
+        version: process.env.GIT_SHA || '1.0.0',
+        status: 'operational',
+        uptime: { value: Math.round(process.uptime()), window: 'process-seconds', incidents: 0 },
+      })
+    }
+    json(res, 404, { error: { code: 'not_found', message: 'yok' } })
+  } catch (err) {
+    console.error('vs api:', err)
+    json(res, 500, { error: { code: 'server_error', message: 'Sunucu hatası.' } })
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   let url = (req.url || '/').split('?')[0]
   if (url.startsWith('/api/')) return handleApi(req, res, url)
+  if (url.startsWith('/vs/v1/')) return handleVs(req, res, url)
   if (url === '/ads.txt' && process.env.ADSENSE_PUB) {
     res.writeHead(200, { 'content-type': 'text/plain' })
     return res.end(`google.com, ${String(process.env.ADSENSE_PUB).replace('ca-', '')}, DIRECT, f08c47fec0942fa0\n`)
