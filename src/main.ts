@@ -587,7 +587,10 @@ function tickEvCharging(dt: number) {
 // ---- Sipariş, inşaat, bakım ----
 
 ui.onOrderFuel = f => {
+  const o = state.orders[f]
+  if (o.pending || o.delivering) { ui.toast(`${FUEL_LABEL[f]} tankeri zaten yolda — teslimatı bekle.`, ''); return }
   if (state.placeOrder(f)) ui.toast(`${FUEL_LABEL[f]} tankeri yola çıktı!`, 'good')
+  else ui.toast('Sipariş verilemedi (tank dolu ya da para yetmiyor).', 'bad')
 }
 
 /** satın alma sonrası sahnedeki görsel karşılığını kurar */
@@ -1990,6 +1993,7 @@ function frame() {
   for (const f of FUELS) {
     if (state.orders[f].arrived) {
       state.orders[f].arrived = false
+      state.orders[f].delivering = true // tanker fiziksel yolda: teslim edene dek yeni sipariş yok
       const used = new Set(tankers.map(x => x.slot))
       let slot = 0
       while (used.has(slot)) slot++
@@ -2026,12 +2030,14 @@ function frame() {
     tk.age = (tk.age ?? 0) + dt
     if (t.update(dt, blockedFor(t)) && !tk.credited) {
       tk.credited = true
+      state.orders[fuel].delivering = false
       state.deliverFuel(fuel)
       ui.toast(`${FUEL_LABEL[fuel]} tankı dolduruldu!`, 'good')
     }
     // teslimat sigortası: trafik tıkarsa bile 75 sn'de yakıt MUTLAKA teslim edilir
     if (!tk.credited && tk.age > 75) {
       tk.credited = true
+      state.orders[fuel].delivering = false
       state.deliverFuel(fuel)
       ui.toast(`${FUEL_LABEL[fuel]} teslimatı tamamlandı (tanker trafikte gecikti).`, 'good')
       world.scene.remove(t.group)
