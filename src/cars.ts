@@ -729,7 +729,7 @@ export class CarManager {
       }
       if (c.hold) {
         c.holdTime += dt
-        if (c.holdTime > 5) {
+        if (c.holdTime > 4) {
           c.holdTime = 0
           c.overrideT = 1.4
           c.hold = false
@@ -782,7 +782,9 @@ export class CarManager {
         const d2 = isNaN(car.prevFramePos.x) ? 1 : car.group.position.distanceToSquared(car.prevFramePos)
         if (d2 < 0.0006) car.hardStuckT += dt
         else car.hardStuckT = Math.max(0, car.hardStuckT - dt * 3)
-        if (car.hardStuckT > 18) this.evaporate(car)
+        // giriş rampasında/manevrada tıkanan araç yolu tıkamasın: 7 sn'de çekilir; genelde 12 sn
+        const atEntry = car.phase === 'driving' && car.group.position.x > 2.5 && car.slotIndex < 0
+        if (car.hardStuckT > (atEntry ? 7 : 12)) this.evaporate(car)
       } else {
         car.hardStuckT = 0
       }

@@ -360,6 +360,19 @@ async function handleVs(req, res, url) {
       const fresh = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at FROM benzinlik_player WHERE id=$1', [id])
       return json(res, 200, userRow(fresh.rows[0]))
     }
+    if (url === '/vs/v1/feedback' && req.method === 'GET') {
+      const limit = Math.min(200, Math.max(10, Number(u.searchParams.get('limit')) || 100))
+      const rows = await pool.query('SELECT id, email, message, game, created_at FROM benzinlik_feedback ORDER BY id DESC LIMIT $1', [limit])
+      return json(res, 200, { data: rows.rows.map(r => ({
+        id: String(r.id),
+        email: r.email,
+        message: r.message,
+        gun: r.game?.day ?? null,
+        kasa: r.game?.money ?? null,
+        cihaz: (r.game?.ua || '').slice(0, 60),
+        createdAt: r.created_at,
+      })), nextCursor: null })
+    }
     if (url === '/vs/v1/engagement' && req.method === 'GET') {
       const agg = await pool.query(`
         SELECT
