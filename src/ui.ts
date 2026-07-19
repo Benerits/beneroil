@@ -1,6 +1,7 @@
 import { Car } from './cars'
 import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems } from './state'
 import { audio } from './audio'
+import * as auth from './auth'
 
 function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T
@@ -87,6 +88,8 @@ export class UI {
   onToggleClosed: () => void = () => {}
   onPriceChange: (f: FuelType | 'elec', delta: number) => void = () => {}
   private lastHudKey = ''
+  /** sorun bildirimine iliştirilecek oyun bağlamı (main doldurur) */
+  feedbackContext: () => Record<string, unknown> = () => ({})
   private setText(e: HTMLElement, v: string) { if (e.textContent !== v) e.textContent = v }
   private setHtml(e: HTMLElement, v: string) {
     if ((e as HTMLElement & { __h?: string }).__h !== v) {
@@ -195,6 +198,21 @@ export class UI {
     }
     el<HTMLButtonElement>('stsave').addEventListener('click', save)
     nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') save() })
+    el<HTMLButtonElement>('fbsend').addEventListener('click', async () => {
+      const ta = el<HTMLTextAreaElement>('fbtext')
+      const msg = ta.value.trim()
+      if (msg.length < 3) { this.toast('Mesaj çok kısa — biraz detay ver.', 'bad'); return }
+      const btn = el<HTMLButtonElement>('fbsend')
+      btn.disabled = true
+      try {
+        await auth.sendFeedback(msg, this.feedbackContext())
+        ta.value = ''
+        this.toast('Bildirimin alındı — teşekkürler, okuyoruz!', 'good')
+      } catch (e) {
+        this.toast((e as Error).message || 'Gönderilemedi, tekrar dene.', 'bad')
+      }
+      btn.disabled = false
+    })
     el<HTMLButtonElement>('resetbtn').addEventListener('click', () => {
       if (confirm('Tüm ilerleme silinecek. Emin misin?')) this.onReset()
     })

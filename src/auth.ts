@@ -48,3 +48,8 @@ export async function pullSave(): Promise<unknown | null> {
 export async function pushSave(save: unknown): Promise<void> {
   await api('/api/save', 'POST', { save })
 }
+
+/** sorun bildir: mesaj + küçük oyun bağlamı SQL'e düşer */
+export async function sendFeedback(message: string, game?: Record<string, unknown>): Promise<void> {
+  await api('/api/feedback', 'POST', { message, game })
+}

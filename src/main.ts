@@ -127,6 +127,10 @@ const isPromoMode = new URLSearchParams(location.search).has('promo')
 let promoTick: ((dt: number) => void) | null = null
 const ui = new UI()
 ui.batteryKwh = () => state.battery
+ui.feedbackContext = () => ({
+  day: state.day, money: Math.round(state.money), pumps: state.pumps,
+  rep: Number(state.reputation.toFixed(2)), ua: navigator.userAgent.slice(0, 120),
+})
 ui.tankerStatus = () => {
   const parts: string[] = []
   for (const f of FUELS) {

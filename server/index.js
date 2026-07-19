@@ -29,7 +29,16 @@ async function initDb() {
       created_at timestamptz NOT NULL DEFAULT now()
     )
   `)
-  console.log('DB hazır (benzinlik_player).')
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS benzinlik_feedback (
+      id serial PRIMARY KEY,
+      email text NOT NULL,
+      message text NOT NULL,
+      game jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `)
+  console.log('DB hazır (benzinlik_player + benzinlik_feedback).')
 }
 
 // ---- şifre & token ----
@@ -176,6 +185,16 @@ async function handleApi(req, res, url) {
         return json(res, 401, { error: 'E-posta veya şifre hatalı.' })
       }
       return json(res, 200, { token: sign(e), email: e })
+    }
+    if (url === '/api/feedback' && req.method === 'POST') {
+      const email = auth(); if (!email) return
+      if (!rateLimit('fb:' + email, 5, 3600_000)) return json(res, 429, { error: 'Çok sık bildirim — biraz sonra tekrar dene.' })
+      const { message, game } = await readBody(req)
+      const msg = String(message || '').trim().slice(0, 1000)
+      if (msg.length < 3) return json(res, 400, { error: 'Mesaj çok kısa.' })
+      const meta = game && typeof game === 'object' && !Array.isArray(game) ? game : null
+      await pool.query('INSERT INTO benzinlik_feedback(email, message, game) VALUES ($1, $2, $3)', [email, msg, meta])
+      return json(res, 200, { ok: true })
     }
     if (url === '/api/save' && req.method === 'GET') {
       const email = auth(); if (!email) return
