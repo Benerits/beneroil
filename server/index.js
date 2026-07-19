@@ -157,11 +157,12 @@ function mailTemplate(kind, lang, url) {
   return { subject: C.subject, html }
 }
 function sendVerifyEmail(email, token, lang) {
-  const { subject, html } = mailTemplate('verify', lang, `${BASE_URL}/api/verify?token=${token}`)
+  // path-based token: mailde '=' olmaz → quoted-printable bozulması yaşanmaz
+  const { subject, html } = mailTemplate('verify', lang, `${BASE_URL}/api/verify/${token}`)
   return sendEmail(email, subject, html)
 }
 function sendResetEmail(email, token, lang) {
-  const { subject, html } = mailTemplate('reset', lang, `${BASE_URL}/reset?token=${token}`)
+  const { subject, html } = mailTemplate('reset', lang, `${BASE_URL}/reset/${token}`)
   return sendEmail(email, subject, html)
 }
 function htmlPage(res, title, msg) {
@@ -348,8 +349,10 @@ async function handleApi(req, res, url) {
       await sendVerifyEmail(e, tok, reqLang(req, svBody))
       return json(res, 200, { ok: true })
     }
-    if (url === '/api/verify' && req.method === 'GET') {
-      const tok = new URL(req.url, 'http://x').searchParams.get('token') || ''
+    if ((url === '/api/verify' || url.startsWith('/api/verify/')) && req.method === 'GET') {
+      // token path'ten (/api/verify/<token>) ya da geriye-dönük query'den
+      const fromPath = url.startsWith('/api/verify/') ? decodeURIComponent(url.slice('/api/verify/'.length)) : ''
+      const tok = fromPath || new URL(req.url, 'http://x').searchParams.get('token') || ''
       if (!tok) return htmlPage(res, 'Geçersiz bağlantı', 'Doğrulama kodu eksik.')
       const r = await pool.query('UPDATE benzinlik_player SET email_verified=true, verify_token=NULL WHERE verify_token=$1 RETURNING email', [tok])
       if (!r.rowCount) return htmlPage(res, 'Bağlantı geçersiz', 'Bu doğrulama bağlantısı geçersiz ya da zaten kullanılmış olabilir.')
@@ -834,8 +837,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/plain' })
     return res.end(`google.com, ${String(process.env.ADSENSE_PUB).replace('ca-', '')}, DIRECT, f08c47fec0942fa0\n`)
   }
-  if (url === '/reset') {
-    const tok = new URL(req.url, 'http://x').searchParams.get('token') || ''
+  if (url === '/reset' || url.startsWith('/reset/')) {
+    const tok = url.startsWith('/reset/')
+      ? decodeURIComponent(url.slice('/reset/'.length))
+      : (new URL(req.url, 'http://x').searchParams.get('token') || '')
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     return res.end(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>BenelOil — Şifre Sıfırla</title>
 <body style="font-family:system-ui,sans-serif;background:#0d1420;color:#eaf1fb;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px">
