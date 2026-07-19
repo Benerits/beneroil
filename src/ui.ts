@@ -79,6 +79,7 @@ export class UI {
   onStartFull: (car: Car) => void = () => {}
   onChargeEV: (car: Car) => void = () => {}
   onDismiss: (car: Car) => void = () => {}
+  onCleanWindows: (car: Car) => void = () => {}
   onOrderFuel: (f: FuelType) => void = () => {}
   onBuy: (id: string) => void = () => {}
   onMaint: (id: string) => void = () => {}
@@ -285,6 +286,12 @@ export class UI {
     el<HTMLButtonElement>('dismissbtn').addEventListener('click', () => {
       if (this.activeCar) this.onDismiss(this.activeCar)
     })
+    el<HTMLButtonElement>('cleanbtn').addEventListener('click', () => {
+      const car = this.activeCar
+      if (!car || car.windowsCleaned) return
+      this.onCleanWindows(car)
+      this.refreshPanel()
+    })
 
     // bina kartı
     el<HTMLButtonElement>('binfo-close').addEventListener('click', () => {
@@ -340,6 +347,9 @@ export class UI {
     }
     this.panel.classList.add('show')
     el<HTMLButtonElement>('dismissbtn').disabled = car.filling || car.filled > 0
+    const cleanBtn = el<HTMLButtonElement>('cleanbtn')
+    cleanBtn.disabled = car.windowsCleaned
+    this.setText(cleanBtn, car.windowsCleaned ? t('✨ Camlar Temiz') : t('🧼 Camları Temizle'))
 
     if (car.kind === 'ev') {
       this.fuelCtl.style.display = 'none'

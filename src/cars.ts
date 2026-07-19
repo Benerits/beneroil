@@ -238,6 +238,12 @@ export class Car {
   private feedback: THREE.Sprite | null = null
   private feedbackT = 0
 
+  // cam temizleme (bahşiş şansını artırır) — diğer mekaniklerden bağımsız
+  windowsCleaned = false
+  private windowFx: THREE.Mesh | null = null
+  private windowSpark: THREE.Sprite | null = null
+  private windowFxT = 0
+
   private prices: Record<FuelType, number>
 
   constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE) {
@@ -369,6 +375,32 @@ export class Car {
     this.feedbackT = 2.5
   }
 
+  /** ön cam temizleme görsel efekti — yalnızca aracın ön camına (local +x) parlama/silme */
+  cleanWindows() {
+    this.windowsCleaned = true
+    // önceki efekt kalıntısını temizle
+    if (this.windowFx) { this.group.remove(this.windowFx); this.windowFx = null }
+    if (this.windowSpark) { this.group.remove(this.windowSpark); this.windowSpark = null }
+    // ön cam paneli: aracın ön kısmında (local +x), sprite'ın hafif üstünde
+    const geo = new THREE.PlaneGeometry(0.62, 0.9)
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+    })
+    const fx = new THREE.Mesh(geo, mat)
+    fx.position.set(0.52, 0, 0.22)
+    fx.renderOrder = 20
+    this.group.add(fx)
+    this.windowFx = fx
+    const spark = emojiSprite('✨')
+    spark.scale.setScalar(0.62)
+    spark.position.set(0.52, -0.45, 0.3)
+    spark.renderOrder = 21
+    this.group.add(spark)
+    this.windowSpark = spark
+    this.windowFxT = 1.8
+  }
+
   /** ana döngü her karede doldurur: sert engeller (pompa, bina...) */
   static solids: { cx: number; cy: number; w: number; d: number }[] = []
 
@@ -450,6 +482,26 @@ export class Car {
       if (this.feedbackT <= 0) {
         this.group.remove(this.feedback)
         this.feedback = null
+      }
+    }
+
+    // cam temizleme silme/parlama animasyonu
+    if (this.windowFx) {
+      this.windowFxT -= dt
+      const DUR = 1.8
+      const p = Math.max(0, Math.min(1, 1 - this.windowFxT / DUR)) // 0→1
+      const mat = this.windowFx.material as THREE.MeshBasicMaterial
+      // iki silme geçişi + genel sönme: parlayan şerit araç boyunca kayar
+      const wipe = Math.abs(Math.sin(p * Math.PI * 2))
+      mat.opacity = wipe * 0.7 * (1 - p * 0.7)
+      if (this.windowSpark) {
+        const sm = this.windowSpark.material as THREE.SpriteMaterial
+        this.windowSpark.position.y = -0.45 + p * 0.9 // camda aşağıdan yukarı süpürme
+        sm.opacity = (1 - p) * 0.95
+      }
+      if (this.windowFxT <= 0) {
+        this.group.remove(this.windowFx); this.windowFx = null
+        if (this.windowSpark) { this.group.remove(this.windowSpark); this.windowSpark = null }
       }
     }
   }

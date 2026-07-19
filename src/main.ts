@@ -501,10 +501,17 @@ function finishSale(car: Car) {
     score -= 0.8
     ui.toast(t('Taşan yakıt cezası: -₺{0}', penalty), 'bad')
   } else if (car.filledValue >= car.demandAmount - 10) {
-    const tip = Math.round(revenue0 * 0.1)
+    // temiz camlar bahşişi ikiye katlar ve memnuniyeti artırır
+    const tip = Math.round(revenue0 * (car.windowsCleaned ? 0.2 : 0.1))
     revenue += tip
-    score += 0.8
+    score += car.windowsCleaned ? 1.1 : 0.8
     ui.toast(t('Bahşiş: +₺{0}', tip), 'good')
+  } else if (car.windowsCleaned && Math.random() < 0.5) {
+    // dolum tam olmasa da temiz cama nezaket bahşişi (bahşiş olasılığını artırır)
+    const tip = Math.max(1, Math.round(revenue0 * 0.05))
+    revenue += tip
+    score += 0.2
+    ui.toast(t('Temiz camlara bahşiş: +₺{0}', tip), 'good')
   } else {
     score -= 0.6 // eksik dolum: sessiz, sadece memnuniyet düşer
   }
@@ -544,6 +551,12 @@ ui.onDismiss = car => {
   ui.toast('Müşteri kibarca gönderildi.', '')
   cars.releaseCar(car)
   if (ui.activeCar === car) ui.selectCar(nextServableCar())
+}
+
+ui.onCleanWindows = car => {
+  if (car.phase !== 'atPump' || car.windowsCleaned) return
+  car.cleanWindows()
+  ui.toast(t('Ön cam pırıl pırıl — bahşiş şansı arttı! ✨'), 'good')
 }
 
 /** batarya deposu seviyesine göre araca akış hızı (kWh/sn) */
