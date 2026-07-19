@@ -564,6 +564,30 @@ Sorun Bildir
     <div class="sub">Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...</div>
   </div>
 
+  <!-- Mobil taşıma: yön butonlarıyla ince ayar (sürükleme zor) -->
+  <div id="movectl" style="display:none; position:fixed; right:14px; bottom:16px; z-index:40; user-select:none;
+       -webkit-user-select:none; touch-action:manipulation; text-align:center;">
+    <div style="display:grid; grid-template-columns:repeat(3,44px); grid-template-rows:repeat(3,44px); gap:5px; margin-bottom:8px;">
+      <span></span><button class="mvbtn" data-nudge="up">↑</button><span></span>
+      <button class="mvbtn" data-nudge="left">←</button>
+      <button class="mvbtn" id="mv-rot" title="Döndür">⟳</button>
+      <button class="mvbtn" data-nudge="right">→</button>
+      <span></span><button class="mvbtn" data-nudge="down">↓</button><span></span>
+    </div>
+    <div style="display:flex; gap:6px; justify-content:center;">
+      <button class="mvbtn mvok" id="mv-ok" data-i18n="Yerleştir">Yerleştir ✓</button>
+      <button class="mvbtn mvcancel" id="mv-cancel">✕</button>
+    </div>
+  </div>
+  <style>
+    .mvbtn { width:44px; height:44px; font-size:20px; border-radius:12px; border:1px solid var(--edge,#cdd3da);
+      background:var(--paper,#fff); color:var(--ink,#1c2530); box-shadow:0 2px 6px rgba(9,9,11,.12); cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center; font-weight:700; }
+    .mvbtn:active { transform:translateY(1px); background:var(--paper-2,#eef1f4); }
+    #mv-rot { background:#2f6fed; color:#fff; border-color:#2456c0; }
+    .mvok { width:auto; padding:0 16px; background:#27a05a; color:#fff; border-color:#1c7d45; font-size:15px; }
+    .mvcancel { background:#e2574d; color:#fff; border-color:#c33; }
+  </style>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

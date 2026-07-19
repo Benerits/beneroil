@@ -1062,9 +1062,11 @@ function startPlacement(id: string, move = false) {
   world.showGrid(true)
   ui.closeShop()
   ui.hideBuildingCard()
+  const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'block'
+  repositionPlacing(placing.cx, placing.cy) // ilk geçerlilik/renk
   ui.toast(move
-    ? t('Taşıma modu: yeni yeri seç · R ile döndür · sağ tık/ESC iptal')
-    : t('Yerleştirme modu: kareye tıkla · R ile döndür · sağ tık/ESC iptal'), '')
+    ? t('Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir')
+    : t('Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir'), '')
 }
 
 function startZoneMode(kind: 'land' | 'pave') {
@@ -1078,6 +1080,7 @@ function startZoneMode(kind: 'land' | 'pave') {
 }
 
 function cancelPlacement() {
+  const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'none'
   if (placing) {
     world.scene.remove(placing.root)
     placing = null
@@ -1108,6 +1111,32 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
     world.removeBuildingGroup(id)
     buildVisual(id, new THREE.Vector2(cx, cy))
   }
+}
+
+// yerleştirmedeki nesneyi (x,y)'ye taşı + geçerlilik/renk güncelle (pointer + mobil butonlar ortak)
+function repositionPlacing(x: number, y: number) {
+  if (!placing) return
+  if (placing.id === 'gatein' || placing.id === 'gateout') {
+    placing.cx = 4.2
+    placing.cy = Math.max(-24, Math.min(24, Math.round(y)))
+    placing.root.position.set(placing.cx, placing.cy, 0)
+    const otherY = placing.id === 'gatein' ? world.gateOut.y : world.gateIn.y
+    placing.valid = Math.abs(placing.cy - otherY) >= 5
+  } else {
+    placing.cx = Math.round(x)
+    placing.cy = Math.round(y)
+    placing.root.position.set(placing.cx, placing.cy, 0)
+    const odd = placing.rot % 2 === 1
+    const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
+    placing.valid = isValidPlacement(eff, placing.id, placing.grass)
+  }
+  placing.planeMat.color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
+  placing.planeMat.opacity = placing.valid ? 0.22 : 0.34
+}
+// mobil: yön butonlarıyla 1 birim kaydır (sürükleme zor)
+function nudgePlacing(dx: number, dy: number) {
+  if (!placing) return
+  repositionPlacing((placing.cx || 0) + dx, (placing.cy || 0) + dy)
 }
 
 function confirmPlacement() {
@@ -1339,6 +1368,30 @@ function connectLive() {
   liveWs.onerror = () => { try { liveWs?.close() } catch {} }
 }
 connectLive()
+
+// ---- Mobil taşıma: yön butonları (sürükleme zor) ----
+{
+  const mc = document.getElementById('movectl')
+  if (mc) {
+    for (const b of mc.querySelectorAll<HTMLButtonElement>('[data-nudge]')) {
+      b.addEventListener('click', () => {
+        const d = b.dataset.nudge
+        nudgePlacing(d === 'right' ? 1 : d === 'left' ? -1 : 0, d === 'up' ? 1 : d === 'down' ? -1 : 0)
+      })
+    }
+    document.getElementById('mv-rot')?.addEventListener('click', () => {
+      if (!placing) return
+      placing.rot = (placing.rot + 1) % 4
+      placing.root.rotation.z = placing.rot * Math.PI / 2
+      repositionPlacing(placing.cx, placing.cy) // döndürünce yeniden doğrula
+    })
+    document.getElementById('mv-ok')?.addEventListener('click', () => {
+      if (placing && placing.valid) confirmPlacement()
+      else ui.toast(t('Buraya yerleştirilemez — kırmızıysa başka yere taşı.'), 'bad')
+    })
+    document.getElementById('mv-cancel')?.addEventListener('click', () => cancelPlacement())
+  }
+}
 
 // oyun içi canlı t("OYUNDA") sayacı — 60 sn'de bir tazelenir (sosyal kanıt)
 function refreshOnline() {
@@ -1873,25 +1926,7 @@ window.addEventListener('pointermove', e => {
     const pt = new THREE.Vector3()
     if (raycaster.ray.intersectPlane(groundPlane, pt)) {
       if (placing) {
-        if (placing.id === 'gatein' || placing.id === 'gateout') {
-          // kapılar yol kenarı şeridine kilitli — sadece y seçilir
-          placing.cx = 4.2
-          placing.cy = Math.max(-24, Math.min(24, Math.round(pt.y)))
-          placing.root.position.set(placing.cx, placing.cy, 0)
-          const otherY = placing.id === 'gatein' ? world.gateOut.y : world.gateIn.y
-          placing.valid = Math.abs(placing.cy - otherY) >= 5
-          placing.planeMat.color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
-          placing.planeMat.opacity = placing.valid ? 0.22 : 0.34
-          return
-        }
-        placing.cx = Math.round(pt.x)
-        placing.cy = Math.round(pt.y)
-        placing.root.position.set(placing.cx, placing.cy, 0)
-        const odd = placing.rot % 2 === 1
-        const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
-        placing.valid = isValidPlacement(eff, placing.id, placing.grass)
-        placing.planeMat.color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
-        placing.planeMat.opacity = placing.valid ? 0.22 : 0.34
+        repositionPlacing(pt.x, pt.y)
       } else if (zoneMode) {
         const pc = parcelAt(pt.x, pt.y)
         if (pc) {
