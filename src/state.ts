@@ -1,3 +1,4 @@
+import { t } from './i18n'
 export type FuelType = 'benzin' | 'dizel' | 'lpg'
 
 export const FUELS: FuelType[] = ['benzin', 'dizel', 'lpg']
@@ -448,66 +449,66 @@ export function getShopItems(s: GameState): ShopRow[] {
   }
   const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
 
-  row('land', 'i-land', `Arsa Satın Al (${s.ownedParcels.size}/18)`, '2 blok 3×3',
-    'Bitişik arsalardan birini seç — istasyon geliştikçe emlak fiyatları artar',
+  row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size), t('2 blok 3×3'),
+    t('Bitişik arsalardan birini seç — istasyon geliştikçe emlak fiyatları artar'),
     s.ownedParcels.size >= 18 ? null : parcelCost(0, 0, s), null)
-  row('pave', 'i-pave', 'Zemin Betonu', 'arsa başı',
-    'Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)',
-    PAVE_COST, hasUnpaved ? null : 'Betonsuz arsan yok')
-  row('pump', 'i-fuel', `Pompa #${Math.min(s.pumps + 1, MAX_PUMPS)}`, '+1 pompa', 'Aynı anda bir müşteri daha alırsın',
+  row('pave', 'i-pave', t('Zemin Betonu'), t('arsa başı'),
+    t('Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)'),
+    PAVE_COST, hasUnpaved ? null : t('Betonsuz arsan yok'))
+  row('pump', 'i-fuel', t('Pompa #{0}', Math.min(s.pumps + 1, MAX_PUMPS)), t('+1 pompa'), t('Aynı anda bir müşteri daha alırsın'),
     s.pumps >= MAX_PUMPS ? null : PUMP_COSTS[s.pumps], null)
-  row('sign', 'i-sign', `Tabela Sv.${Math.min(s.signLevel + 1, 3)}`, '+%10 trafik', 'Yoldan geçenlerin uğrama şansı artar',
+  row('sign', 'i-sign', t('Tabela Sv.{0}', Math.min(s.signLevel + 1, 3)), t('+%10 trafik'), t('Yoldan geçenlerin uğrama şansı artar'),
     s.signLevel >= 3 ? null : SIGN_COSTS[s.signLevel], null)
-  row('tank', 'i-tank', 'Yakıt Tankı', s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
-    'Depo büyür, daha seyrek sipariş verirsin',
+  row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
+    t('Depo büyür, daha seyrek sipariş verirsin'),
     s.tankLevel >= 3 ? null : TANK_COSTS[s.tankLevel], null)
-  row('airwater', 'i-air', s.airWaterCount ? `Hava-Su Ünitesi (${s.airWaterCount})` : 'Hava-Su Ünitesi', '+₺10-20',
-    'Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)', AIRWATER_COST, null)
-  row('parking', 'i-parking', s.parkingCount ? `Otopark (${s.parkingCount})` : 'Otopark', '+4 araç',
-    'Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)', PARKING_COST, null)
+  row('airwater', 'i-air', s.airWaterCount ? t('Hava-Su Ünitesi ({0})', s.airWaterCount) : t('Hava-Su Ünitesi'), '+₺10-20',
+    t('Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)'), AIRWATER_COST, null)
+  row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
+    t('Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)'), PARKING_COST, null)
 
-  row('market', 'i-market', s.marketLevel === 0 ? 'Market' : 'Market Sv.2', `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
-    'Müşteriler ekstra alışveriş yapar',
+  row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.2'), `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
+    t('Müşteriler ekstra alışveriş yapar'),
     s.marketLevel >= 2 ? null : MARKET_COSTS[s.marketLevel], null)
-  row('toilet', 'i-toilet', s.toiletLevel === 0 ? 'Tuvalet' : 'Tuvalet Sv.2', '+moral',
-    'Müşteri memnuniyetini ve itibarı artırır',
+  row('toilet', 'i-toilet', s.toiletLevel === 0 ? t('Tuvalet') : t('Tuvalet Sv.2'), t('+moral'),
+    t('Müşteri memnuniyetini ve itibarı artırır'),
     s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel], null)
-  row('wash', 'i-wash', 'Oto Yıkama', '+₺60-120', "Müşterilerin ~%25'i araç yıkatır, ekstra gelir",
+  row('wash', 'i-wash', t('Oto Yıkama'), '+₺60-120', t("Müşterilerin ~%25'i araç yıkatır, ekstra gelir"),
     s.hasWash ? null : WASH_COST, null)
-  row('oil', 'i-oil', 'Yağ Değişimi', '+₺150-250', "Müşterilerin ~%12'si yağ değiştirtir, güçlü ek gelir",
+  row('oil', 'i-oil', t('Yağ Değişimi'), '+₺150-250', t("Müşterilerin ~%12'si yağ değiştirtir, güçlü ek gelir"),
     s.hasOil ? null : OIL_COST, null)
-  row('selfwash', 'i-selfwash', s.selfWashCount ? `Self Yıkama (${s.selfWashCount})` : 'Self Yıkama', '+₺30-60/dk',
-    'Araçlar kendisi yıkar; gelir kurulum sayısıyla artar (sınırsız)', SELFWASH_COST, null)
-  row('coffee', 'i-coffee', 'Kahveci', '+₺20-45', 'Yolcular kahve molası verir',
+  row('selfwash', 'i-selfwash', s.selfWashCount ? t('Self Yıkama ({0})', s.selfWashCount) : t('Self Yıkama'), '+₺30-60/dk',
+    t('Araçlar kendisi yıkar; gelir kurulum sayısıyla artar (sınırsız)'), SELFWASH_COST, null)
+  row('coffee', 'i-coffee', t('Kahveci'), '+₺20-45', t('Yolcular kahve molası verir'),
     s.hasCoffee ? null : COFFEE_COST, null)
-  row('restaurant', 'i-food', 'Restoran', '+₺80-160', 'Uzun yol müşterisi yemek molası verir',
+  row('restaurant', 'i-food', t('Restoran'), '+₺80-160', t('Uzun yol müşterisi yemek molası verir'),
     s.hasRestaurant ? null : RESTAURANT_COST, null)
-  row('truckpark', 'i-truck', 'Tır Parkı', '+₺90-160/dk', 'Tırcılar konaklar — düzenli pasif gelir',
+  row('truckpark', 'i-truck', t('Tır Parkı'), '+₺90-160/dk', t('Tırcılar konaklar — düzenli pasif gelir'),
     s.hasTruckPark ? null : TRUCKPARK_COST, null)
 
   // elektrik zinciri (teknoloji sırası korunur, arsa şartı yok)
-  row('grid', 'i-bolt', `Elektrik Altyapısı Sv.${Math.min(s.gridLevel + 1, 2)}`,
-    s.gridLevel === 0 ? 'temel' : '+%30 üretim',
-    s.gridLevel === 0 ? 'Şarj ve enerji yapılarının önünü açar' : 'Tüm üretimi güçlendirir, yeni yapılar açılır',
+  row('grid', 'i-bolt', t('Elektrik Altyapısı Sv.{0}', Math.min(s.gridLevel + 1, 2)),
+    s.gridLevel === 0 ? t('temel') : t('+%30 üretim'),
+    s.gridLevel === 0 ? t('Şarj ve enerji yapılarının önünü açar') : t('Tüm üretimi güçlendirir, yeni yapılar açılır'),
     s.gridLevel >= 2 ? null : GRID_COSTS[s.gridLevel], null)
-  row('battery', 'i-batt', `Batarya Deposu Sv.${Math.min(s.batteryLevel + 1, 3)}`,
+  row('battery', 'i-batt', t('Batarya Deposu Sv.{0}', Math.min(s.batteryLevel + 1, 3)),
     `${BATTERY_CAP[Math.min(s.batteryLevel + 1, 3)]} kWh`,
-    'Üretilen elektriği biriktirir, araçlar buradan anında şarj olur',
+    t('Üretilen elektriği biriktirir, araçlar buradan anında şarj olur'),
     s.batteryLevel >= 3 ? null : BATTERY_COSTS[s.batteryLevel],
-    s.gridLevel < 1 ? 'Elektrik altyapısı gerekli' : null)
-  row('evcharger', 'i-charger', `DC Şarj Ünitesi #${Math.min(s.evChargers + 1, MAX_EV)}`, '+1 ünite',
-    'Elektrikli araç müşterileri gelmeye başlar; ünite arttıkça EV trafiği artar',
+    s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
+  row('evcharger', 'i-charger', t('DC Şarj Ünitesi #{0}', Math.min(s.evChargers + 1, MAX_EV)), t('+1 ünite'),
+    t('Elektrikli araç müşterileri gelmeye başlar; ünite arttıkça EV trafiği artar'),
     s.evChargers >= MAX_EV ? null : EV_COSTS[s.evChargers],
     s.gridLevel < 1 ? 'Elektrik altyapısı gerekli'
       : s.batteryLevel < 1 ? 'Önce batarya deposu kur' : null)
   row('solar', 'i-solar', s.solarCount ? `Güneş Santrali (${s.solarCount})` : 'Güneş Santrali', '+3 kWh/sn',
     'Bedava üretim — ama kirlenir, düzenli temizlik ister (sınırsız kurulur)',
     SOLAR_COST,
-    s.gridLevel < 1 ? 'Elektrik altyapısı gerekli' : null)
+    s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
   row('dieselgen', 'i-gen', 'Dizel Jeneratör', '+7 kWh/sn',
     'Tanktan mazot yakar — gürültüsü şarjdaki müşterileri kaçırır',
     s.hasDiesel ? null : DIESELGEN_COST,
-    s.gridLevel < 1 ? 'Elektrik altyapısı gerekli' : null)
+    s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
   row('smr', 'i-reactor', 'Modüler Reaktör', '+15 kWh/sn',
     'Dev üretim — bakımsız kalırsa PATLAR, her şey sıfırlanır',
     s.hasSMR ? null : SMR_COST,

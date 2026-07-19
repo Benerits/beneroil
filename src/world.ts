@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { t } from './i18n'
 import { StaticLib, fitModel } from './models'
 import { PARCEL_COLS, PARCEL_ROWS } from './state'
 
@@ -340,7 +341,7 @@ export class World {
     this.tankGroup = new THREE.Group()
     s.add(this.tankGroup)
     this.buildTankCluster(0)
-    this.register('tank', 'YAKIT TANKI', this.tankGroup, 3.8)
+    this.register('tank', t('YAKIT TANKI'), this.tankGroup, 3.8)
 
     // çevre
     this.placeTree(-9.5, -13, 1.2)
@@ -960,7 +961,7 @@ export class World {
     officeGroup.position.set(at.x, at.y, 0)
     this.facadeLights(officeGroup, [[officeFx + 0.01, -0.9, 2.6], [officeFx + 0.01, 0.9, 2.6]])
     this.scene.add(officeGroup)
-    this.register('office', 'OFİS', officeGroup, 5.6)
+    this.register('office', t('OFİS'), officeGroup, 5.6)
     cyl(0.22, 0.6, 0x3f6f56, 1.7, 2.3, 0.3, 'z', officeGroup)
 
   }
@@ -1048,7 +1049,7 @@ export class World {
     g.add(p)
     g.position.set(base.x, base.y, 0)
     this.scene.add(g)
-    this.register(`pump-${index}`, `POMPA #${index + 1}`, g, 2.5)
+    this.register(`pump-${index}`, t('POMPA #{0}', index + 1), g, 2.5)
   }
 
   movePump(index: number, at: THREE.Vector2) {
@@ -1075,7 +1076,7 @@ export class World {
     box(0.1, 0.08, 0.2, 0x35c7d6, 0.15, 0.3, 0.35, g)
     g.position.set(base.x, base.y, 0)
     this.scene.add(g)
-    this.register(`charger-${index}`, `DC ŞARJ #${index + 1}`, g, 2.3)
+    this.register(`charger-${index}`, t('DC ŞARJ #{0}', index + 1), g, 2.3)
   }
 
   moveCharger(index: number, at: THREE.Vector2) {
@@ -1186,7 +1187,7 @@ export class World {
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.marketGroup = g
-    this.register('market', 'MARKET', g, H + 1.0)
+    this.register('market', t('MARKET'), g, H + 1.0)
   }
 
   buildToilet(level: number, pos?: THREE.Vector2) {
@@ -1222,7 +1223,7 @@ export class World {
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.toiletGroup = g
-    this.register('toilet', 'TUVALET', g, H + 0.85)
+    this.register('toilet', t('TUVALET'), g, H + 0.85)
   }
 
   upgradeTankVisual(level: number) {
@@ -1270,7 +1271,7 @@ export class World {
     g.position.set(this.batteryPos.x, this.batteryPos.y, 0)
     this.scene.add(g)
     this.batteryGroup = g
-    this.register('battery', 'BATARYA DEPOSU', g, level * 1.2 + 1.1)
+    this.register('battery', t('BATARYA DEPOSU'), g, level * 1.2 + 1.1)
   }
 
   buildSolar(side: 'north' | 'south', pos?: THREE.Vector2, regId = 'solar') {
@@ -1288,7 +1289,7 @@ export class World {
     const at = pos ?? new THREE.Vector2(-4, side === 'south' ? -20 : 20)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register(regId, 'GÜNEŞ SANTRALİ', g, 2.4)
+    this.register(regId, t('GÜNEŞ SANTRALİ'), g, 2.4)
   }
 
   buildDiesel(pos?: THREE.Vector2) {
@@ -1300,7 +1301,7 @@ export class World {
     box(0.3, 0.2, 0.25, 0x2b2f33, -0.4, 0, 1.1, g)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('dieselgen', 'JENERATÖR', g, 2.2)
+    this.register('dieselgen', t('JENERATÖR'), g, 2.2)
   }
 
   buildWash(pos?: THREE.Vector2) {
@@ -1347,7 +1348,7 @@ export class World {
     this.facadeLights(g, [[2.02, -1.6, 1.1]], 0.7, 0.5)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('wash', 'OTO YIKAMA', g, 3.6)
+    this.register('wash', t('OTO YIKAMA'), g, 3.6)
   }
 
   buildCoffee(pos?: THREE.Vector2) {
@@ -1370,7 +1371,7 @@ export class World {
     this.facadeLights(g, [[1.44, -0.5, 1.2]], 0.9, 0.6)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('coffee', 'KAHVECİ', g, 3.0)
+    this.register('coffee', t('KAHVECİ'), g, 3.0)
   }
 
   buildRestaurant(pos?: THREE.Vector2) {
@@ -1395,7 +1396,7 @@ export class World {
     this.facadeLights(g, [[2.44, -1.3, 1.4], [2.44, 1.0, 1.4]], 1.1, 0.7)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('restaurant', 'RESTORAN', g, 3.6)
+    this.register('restaurant', t('RESTORAN'), g, 3.6)
   }
 
   buildTruckPark(pos?: THREE.Vector2) {
@@ -1421,7 +1422,7 @@ export class World {
     cyl(0.08, 1.8, 0x59616b, 3.9, 0, 0.9, 'z', g)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('truckpark', 'TIR PARKI', g, 2.6)
+    this.register('truckpark', t('TIR PARKI'), g, 2.6)
   }
 
   buildSelfWash(pos?: THREE.Vector2, regId = 'selfwash') {
@@ -1453,7 +1454,7 @@ export class World {
     this.facadeLights(g, [[0.12, -1.5, 1.3], [0.12, 1.5, 1.3]], 0.7, 0.4)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register(regId, 'SELF YIKAMA', g, 3.4)
+    this.register(regId, t('SELF YIKAMA'), g, 3.4)
   }
 
   buildParking(pos?: THREE.Vector2, regId = 'parking') {
@@ -1474,7 +1475,7 @@ export class World {
     }
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register(regId, 'OTOPARK', g, 2.2)
+    this.register(regId, t('OTOPARK'), g, 2.2)
   }
 
   /** yerleştirilen otoparkın dünya koordinatındaki park noktaları */
@@ -1522,7 +1523,7 @@ export class World {
     g.add(sign)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register(regId, 'HAVA-SU ÜNİTESİ', g, 2.3)
+    this.register(regId, t('HAVA-SU ÜNİTESİ'), g, 2.3)
   }
 
   buildOil(pos?: THREE.Vector2) {
@@ -1595,6 +1596,6 @@ export class World {
     const at = pos ?? new THREE.Vector2(1.8, side === 'south' ? -20.5 : 20.5)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('smr', 'REAKTÖR', g, 7.0)
+    this.register('smr', t('REAKTÖR'), g, 7.0)
   }
 }
