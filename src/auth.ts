@@ -1,4 +1,5 @@
 /** Hesap istemcisi: aynı origin'deki /api ile konuşur. */
+import { lang } from './i18n'
 const TOKEN_KEY = 'benzinlik-token'
 const EMAIL_KEY = 'benzinlik-email'
 
@@ -24,7 +25,7 @@ async function api(path: string, method: string, body?: unknown): Promise<Record
 }
 
 export async function register(email: string, password: string) {
-  const d = await api('/api/register', 'POST', { email, password })
+  const d = await api('/api/register', 'POST', { email, password, lang })
   localStorage.setItem(TOKEN_KEY, String(d.token))
   localStorage.setItem(EMAIL_KEY, String(d.email))
 }
@@ -54,17 +55,17 @@ export async function pullSave(): Promise<unknown | null> {
 
 /** doğrulama mailini (tekrar) gönder */
 export async function sendVerify(email?: string): Promise<void> {
-  await api('/api/send-verify', 'POST', { email: email ?? currentEmail() })
+  await api('/api/send-verify', 'POST', { email: email ?? currentEmail(), lang })
 }
 /** e-posta değiştir (yeni adrese doğrulama gider) — token yenilenir */
 export async function changeEmail(newEmail: string): Promise<void> {
-  const d = await api('/api/change-email', 'POST', { newEmail })
+  const d = await api('/api/change-email', 'POST', { newEmail, lang })
   localStorage.setItem(TOKEN_KEY, String(d.token))
   localStorage.setItem(EMAIL_KEY, String(d.email))
 }
 /** şifre sıfırlama maili iste */
 export async function requestReset(email: string): Promise<void> {
-  await api('/api/request-reset', 'POST', { email })
+  await api('/api/request-reset', 'POST', { email, lang })
 }
 
 export async function pushSave(save: unknown): Promise<void> {
