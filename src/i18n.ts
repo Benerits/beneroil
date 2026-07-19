@@ -75,6 +75,7 @@ const EN: Record<string, string> = {
   'İstasyon tekrar AÇIK — bekleriz!': 'Station is OPEN again — welcome!',
   'Müşteri beklemekten sıkıldı ve gitti!': 'Customer got tired of waiting and left!',
   'Çıkış yapıldı.': 'Logged out.',
+  '★ 7/24 AÇIK ★': '★ 24/7 OPEN ★',
   'ŞİMDİ OYNA': 'PLAY NOW',
   'Ses': 'Sound',
   'Kaydet': 'Save',

@@ -1142,7 +1142,7 @@ export class World {
         ctx.textAlign = 'center'; ctx.fillText('KAPALI', W / 2, 263)
       } else if (level >= 1) {
         ctx.fillStyle = '#27a05a'; ctx.font = '700 26px -apple-system, sans-serif'
-        ctx.textAlign = 'center'; ctx.fillText('★ 7/24 AÇIK ★', W / 2, 262)
+        ctx.textAlign = 'center'; ctx.fillText(t('★ 7/24 AÇIK ★'), W / 2, 262)
       }
     }
     for (const sy of [1, -1]) {
