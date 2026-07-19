@@ -505,11 +505,11 @@ export function getShopItems(s: GameState): ShopRow[] {
     t('Bedava üretim — ama kirlenir, düzenli temizlik ister (sınırsız kurulur)'),
     SOLAR_COST,
     s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
-  row('dieselgen', 'i-gen', t('Dizel Jeneratör'), '+7 kWh/sn',
+  row('dieselgen', 'i-gen', t('Dizel Jeneratör'), t('+7 kWh/sn'),
     t('Tanktan mazot yakar — gürültüsü şarjdaki müşterileri kaçırır'),
     s.hasDiesel ? null : DIESELGEN_COST,
     s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
-  row('smr', 'i-reactor', t('Modüler Reaktör'), '+15 kWh/sn',
+  row('smr', 'i-reactor', t('Modüler Reaktör'), t('+15 kWh/sn'),
     t('Dev üretim — bakımsız kalırsa PATLAR, her şey sıfırlanır'),
     s.hasSMR ? null : SMR_COST,
     s.gridLevel < 2 ? t('Altyapı Sv.2 gerekli') : null)

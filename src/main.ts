@@ -1474,11 +1474,11 @@ function buildingCard(id: string): BuildingCard | null {
     const i = Number(id.slice(5))
     const broken = state.brokenPumps.has(i)
     return {
-      icon: 'i-fuel', name: `Pompa #${i + 1}`,
+      icon: 'i-fuel', name: t('Pompa #{0}', i + 1),
       desc: t('Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.'),
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
-        [t('Dolum hızı'), `${FILL_RATE} L/sn`],
+        [t('Dolum hızı'), t('{0} L/sn', FILL_RATE)],
         [t('Benzin'), `₺${FUEL_PRICE.benzin}/L`],
         [t('Dizel'), `₺${FUEL_PRICE.dizel}/L`],
       ],
