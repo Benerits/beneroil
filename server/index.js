@@ -423,6 +423,13 @@ async function handleVs(req, res, url) {
       const x = r.rows[0]
       return json(res, 200, { data: { id: String(x.id), durum: x.status === 'resolved' ? 'Çözüldü' : x.status === 'wontfix' ? 'Kapatıldı' : 'Açık', cozumNotu: x.resolved_note || '' } })
     }
+    if (url === '/vs/v1/hourly-chart' && req.method === 'GET') {
+      const metric = ['visits', 'signups', 'logins'].includes(u.searchParams.get('y')) ? u.searchParams.get('y') : 'visits'
+      const rows = await pool.query(`
+        SELECT to_char(hour, 'HH24:00') AS x, ${metric}::int AS y
+        FROM benzinlik_stat_hourly WHERE hour > now() - interval '24 hours' ORDER BY hour`)
+      return json(res, 200, { data: rows.rows })
+    }
     if (url === '/vs/v1/stats-hourly' && req.method === 'GET') {
       const rows = await pool.query(`
         SELECT to_char(hour, 'HH24:00') AS label, visits, signups, logins
