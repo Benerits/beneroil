@@ -165,6 +165,9 @@ async function handleApi(req, res, url) {
   }
   try {
     if (url === '/api/healthz') return json(res, 200, { ok: true })
+    if (url === '/api/config') {
+      return json(res, 200, { adsClient: process.env.ADSENSE_PUB || null })
+    }
     if (url === '/api/register' && req.method === 'POST') {
       if (!rateLimit('reg:' + clientIp(req), 6, 3600_000)) return json(res, 429, { error: 'Çok sık kayıt denemesi — biraz sonra tekrar dene.' })
       const { email, password } = await readBody(req)
@@ -232,6 +235,10 @@ async function handleApi(req, res, url) {
 const server = http.createServer(async (req, res) => {
   let url = (req.url || '/').split('?')[0]
   if (url.startsWith('/api/')) return handleApi(req, res, url)
+  if (url === '/ads.txt' && process.env.ADSENSE_PUB) {
+    res.writeHead(200, { 'content-type': 'text/plain' })
+    return res.end(`google.com, ${String(process.env.ADSENSE_PUB).replace('ca-', '')}, DIRECT, f08c47fec0942fa0\n`)
+  }
   if (url === '/terms') url = '/terms.html'
   if (url === '/privacy') url = '/privacy.html'
   // statik dosyalar + SPA fallback

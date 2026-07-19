@@ -10,6 +10,7 @@ import {
 import { loadModels, loadStatics } from './models'
 import { audio } from './audio'
 import * as auth from './auth'
+import { initAds, adsEnabled, interstitial, rewarded } from './ads'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
@@ -124,6 +125,12 @@ const world = new World(staticLib)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
 const isPromoMode = new URLSearchParams(location.search).has('promo')
+if (!isPromoMode) {
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    const test = new URLSearchParams(location.search).has('adstest')
+    if (cfg.adsClient || test) initAds(cfg.adsClient || 'ca-pub-0000000000000000', test)
+  }).catch(() => {})
+}
 let promoTick: ((dt: number) => void) | null = null
 const ui = new UI()
 ui.batteryKwh = () => state.battery
@@ -1665,6 +1672,40 @@ function refreshBuildingCard() {
   ui.showBuildingCard(card)
 }
 
+// ---- Ödüllü reklam: izle → müşteri patlaması ----
+const adBtn = document.getElementById('adbtn') as HTMLButtonElement
+let adCooldown = 120 // ilk fırsat: 2. dakika (baştan değil, biraz ilerleyince)
+adBtn.addEventListener('click', () => {
+  adBtn.disabled = true
+  rewarded('musteri-patlamasi',
+    () => {
+      state.promo = { type: 'rush', until: Date.now() + 90_000 }
+      ui.toast('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!', 'good')
+      audio.achieve()
+    },
+    watched => {
+      adBtn.disabled = false
+      adBtn.style.display = 'none'
+      adCooldown = watched ? 420 : 90 // izlediyse 7 dk, vazgeçtiyse 1.5 dk sonra tekrar
+    })
+})
+
+function tickAdOffer(dt: number) {
+  if (!adsEnabled() || isFullMode || isPromoMode) return
+  if (adCooldown > 0) {
+    adCooldown -= dt
+    return
+  }
+  // teklif koşulu: promosyon yokken ve oyun biraz ilerlemişken
+  if (!state.promo && state.day >= 1 && adBtn.style.display === 'none') {
+    adBtn.style.display = 'flex'
+  }
+  if (state.promo && adBtn.style.display !== 'none') {
+    adBtn.style.display = 'none'
+    adCooldown = 300
+  }
+}
+
 // ---- Düzenleme modu: tıkla-taşı ----
 let editMode = false
 const editBtn = document.getElementById('editbtn') as HTMLButtonElement
@@ -1895,6 +1936,7 @@ function frame() {
     ui.toast(`📅 Gün ${state.day - 1} bitti — ${profit >= 0 ? 'kâr' : 'zarar'}: ₺${Math.abs(profit).toLocaleString('tr-TR')}`, profit >= 0 ? 'good' : 'bad')
     state.dayStartMoney = state.money
     state.facDaily = {}
+    if (state.day >= 3 && !isFullMode && !isPromoMode) interstitial('gun-sonu')
     persist()
   }
   prevCycleT = cycleT
@@ -2029,6 +2071,7 @@ function frame() {
   audio.setPump(cars.cars.some(c => c.filling && c.phase === 'atPump' && !c.wrongFuelHandled))
   Car.solids = hardRects()
   evTurnAwayT = Math.max(0, evTurnAwayT - dt)
+  tickAdOffer(dt)
   // otomatik şarj: işaretli ünitelere yanaşan EV kendiliğinden başlar
   for (const c of cars.cars) {
     if (c.kind === 'ev' && c.phase === 'atPump' && !c.charging && !c.squatting
