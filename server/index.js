@@ -318,6 +318,8 @@ function userRow(r) {
       pumps: st.pumps ?? 1,
       reputation: st.reputation ?? 3,
       served: st.stats?.served ?? 0,
+      parcels: Array.isArray(st.ownedParcels) ? st.ownedParcels.length : 1,
+      paved: Array.isArray(st.pavedParcels) ? st.pavedParcels.length : 1,
     },
   }
 }
@@ -378,6 +380,8 @@ async function handleVs(req, res, url) {
           day: st.day ?? 1,
           pumps: st.pumps ?? 1,
           evChargers: st.evChargers ?? 0,
+          parcels: Array.isArray(st.ownedParcels) ? st.ownedParcels.length : 1,
+          paved: Array.isArray(st.pavedParcels) ? st.pavedParcels.length : 1,
           reputation: Math.round((Number(st.reputation) || 0) * 100) / 100,
           served: st.stats?.served ?? 0,
           kwh: Math.round(Number(st.stats?.kwh) || 0),

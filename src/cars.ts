@@ -381,20 +381,20 @@ export class Car {
     // önceki efekt kalıntısını temizle
     if (this.windowFx) { this.group.remove(this.windowFx); this.windowFx = null }
     if (this.windowSpark) { this.group.remove(this.windowSpark); this.windowSpark = null }
-    // ön cam paneli: aracın ön kısmında (local +x), sprite'ın hafif üstünde
-    const geo = new THREE.PlaneGeometry(0.62, 0.9)
+    // ön cam paneli: kabinin ön-üst yüzeyine oturur (local x≈0.4, z≈0.9 = cam yüksekliği)
+    const geo = new THREE.PlaneGeometry(0.5, 0.78)
     const mat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0,
+      color: 0xbfe3ff, transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
     })
     const fx = new THREE.Mesh(geo, mat)
-    fx.position.set(0.52, 0, 0.22)
+    fx.position.set(0.4, 0, 0.92)
     fx.renderOrder = 20
     this.group.add(fx)
     this.windowFx = fx
     const spark = emojiSprite('✨')
-    spark.scale.setScalar(0.62)
-    spark.position.set(0.52, -0.45, 0.3)
+    spark.scale.setScalar(0.5)
+    spark.position.set(0.4, -0.4, 1.15)
     spark.renderOrder = 21
     this.group.add(spark)
     this.windowSpark = spark
@@ -496,7 +496,7 @@ export class Car {
       mat.opacity = wipe * 0.7 * (1 - p * 0.7)
       if (this.windowSpark) {
         const sm = this.windowSpark.material as THREE.SpriteMaterial
-        this.windowSpark.position.y = -0.45 + p * 0.9 // camda aşağıdan yukarı süpürme
+        this.windowSpark.position.y = -0.4 + p * 0.8 // cam boyunca yana süpürme
         sm.opacity = (1 - p) * 0.95
       }
       if (this.windowFxT <= 0) {
