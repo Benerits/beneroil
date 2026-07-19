@@ -202,7 +202,7 @@ const cars = new CarManager(world.scene, modelLib, {
     state.addPending('truckpark', fee, t('Tır parkı'))
     ui.toast(t('Tır park etti: ₺{0} kumbarada', fee), 'good', true)
   },
-  onCarReady: car => { if (!ui.activeCar) ui.selectCar(car) },
+  onCarReady: car => { if (!ui.activeCar) ui.selectCar(car); tutStart() },
   onEvTurnedAway: () => {
     if (evTurnAwayT > 0) return
     evTurnAwayT = 4
@@ -422,6 +422,7 @@ function emojiFor(score: number): string {
 
 ui.onNozzle = (car, type: FuelType) => {
   car.nozzle = type
+  tutAdvance(2)
 }
 
 ui.onStart = (car, amount) => {
@@ -429,6 +430,7 @@ ui.onStart = (car, amount) => {
   car.filling = true
   car.beingServed = true
   audio.clunk()
+  tutAdvance(3)
 }
 
 ui.onStartFull = car => {
@@ -436,6 +438,7 @@ ui.onStartFull = car => {
   car.fullMode = true
   car.filling = true
   car.beingServed = true
+  tutAdvance(3)
   audio.clunk()
 }
 
@@ -1393,6 +1396,32 @@ connectLive()
   }
 }
 
+// ---- Onboarding: ilk oturum 3 adım rehberi (yeni oyuncu kafası karışmasın) ----
+let tutStep = 0
+const tutEl = document.getElementById('tuthint') as HTMLDivElement | null
+function tutActive() {
+  return !isFullMode && !isPromoMode && auth.loggedIn() && !localStorage.getItem('beneloil-onboarded')
+    && state.day <= 1 && (state.stats.served || 0) === 0
+}
+function tutStart() {
+  if (tutStep !== 0 || !tutEl || !tutActive()) return
+  tutStep = 1
+  tutEl.innerHTML = t('👋 Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.')
+  tutEl.style.display = 'block'
+}
+function tutAdvance(to: number) {
+  if (tutStep === 0 || !tutEl) return
+  if (to === 2 && tutStep < 2) {
+    tutStep = 2
+    tutEl.innerHTML = t('Tabanca seçildi ✓ Şimdi <b>tutar gir</b> ya da <b>FULLE</b> bas, sonra <b>BAŞLAT</b>.')
+  } else if (to === 3 && tutStep < 3) {
+    tutStep = 3
+    localStorage.setItem('beneloil-onboarded', '1')
+    tutEl.innerHTML = t('🎉 İlk satışın! İpucu: <b>🧼 cam temizle</b> = daha çok bahşiş. Büyümek için <b>🛒 mağazadan</b> pompa/tesis al, <b>🏢 ofisten</b> fiyatı ayarla.')
+    setTimeout(() => { if (tutEl) tutEl.style.display = 'none' }, 9000)
+  }
+}
+
 // oyun içi canlı t("OYUNDA") sayacı — 60 sn'de bir tazelenir (sosyal kanıt)
 function refreshOnline() {
   if (isPromoMode) return
@@ -1453,16 +1482,27 @@ document.getElementById('authgate')?.remove()
     const offSec = Math.min((Date.now() - loadedSaveAt) / 1000, 7200) // en fazla 2 saatlik birikim
     if (offSec > 90) {
       let total = 0
+      // kumbaralı tesisler (topla-hook'u): tır parkı, self yıkama, oto yıkama, hava-su
       const gains: [string, string, number][] = []
       if (state.hasTruckPark) gains.push(['truckpark', t('Tır parkı'), 125 / 45])
-      if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), 45 / 35])
+      if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
+      if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
+      if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
       for (const [id, name, rate] of gains) {
         const amt = Math.round(rate * offSec)
         state.addPending(id, amt, name)
         total += Math.min(amt, 600)
       }
+      // per-müşteri tesisler: küçük düz idle gelir, doğrudan kasaya (topla-cap'li, ilerlemeyi bozmaz)
+      let idleCash = 0
+      if (state.marketLevel > 0) idleCash += 0.8 * state.marketLevel * offSec
+      if (state.hasCoffee) idleCash += 0.6 * offSec
+      if (state.hasRestaurant) idleCash += 1.2 * offSec
+      if (state.hasOil) idleCash += 0.9 * offSec
+      idleCash = Math.min(Math.round(idleCash), 4000) // idle tavanı
+      if (idleCash > 0) { state.money += idleCash; total += idleCash }
       if (total > 0) {
-        ui.toast(t('Sen yokken tesislerin çalıştı: kumbaralarda ~₺{0} birikti — topla!', total), 'good', true)
+        ui.toast(t('Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!', total.toLocaleString('tr-TR')), 'good', true)
         audio.cash()
       }
     }
