@@ -66,6 +66,16 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
     }).catch(() => {})
     wire('glogin', '/api/login')
     wire('gregister', '/api/register')
+    ;(document.getElementById('gforgot') as HTMLButtonElement).addEventListener('click', async () => {
+      gErr.textContent = ''
+      const em = gEmail.value.trim().toLowerCase()
+      if (!/^\S+@\S+\.\S+$/.test(em)) { gErr.textContent = t('Önce e-postanı yaz, sonra Şifremi unuttum’a bas.'); return }
+      try {
+        await fetch('/api/request-reset', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: em }) })
+        gErr.style.color = '#2b8a4a'
+        gErr.textContent = t('Şifre sıfırlama bağlantısı gönderildi (kayıtlıysa). Mailini kontrol et.')
+      } catch { gErr.textContent = t('Gönderilemedi, sonra tekrar dene.') }
+    })
     gPass.addEventListener('keydown', e => {
       if (e.key === 'Enter') (document.getElementById('glogin') as HTMLButtonElement).click()
     })
@@ -738,6 +748,44 @@ function showBanOverlay(reason: string) {
   ;(document.getElementById('banblock-ok') as HTMLButtonElement).addEventListener('click', () => location.reload())
 }
 
+function showVerifyGate() {
+  if (document.getElementById('verifygate')) return
+  cloudBlocked = true // doğrulanana dek kayıt/oyun/WS durur
+  const email = auth.currentEmail() || ''
+  const o = document.createElement('div')
+  o.id = 'verifygate'
+  o.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#0d1420f7;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;font-family:system-ui,sans-serif'
+  o.innerHTML = `<div style="max-width:400px;width:100%;text-align:center;color:#eaf1fb">
+    <div style="font-size:44px;margin-bottom:6px">📧</div>
+    <div style="font-size:20px;font-weight:800;margin-bottom:8px">${t('E-postanı doğrula')}</div>
+    <div style="font-size:14px;line-height:1.5;color:#b8c6da;margin-bottom:16px"><b>${email}</b> ${t('adresine doğrulama bağlantısı gönderdik. Mailindeki linke tıkla, sonra Kontrol Et’e bas.')}</div>
+    <button id="vg-check" style="width:100%;padding:12px;border:0;border-radius:10px;background:#27a05a;color:#fff;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px">${t('Doğruladım — Kontrol Et')}</button>
+    <button id="vg-resend" style="width:100%;padding:11px;border:1px solid #33465f;border-radius:10px;background:#12233d;color:#eaf1fb;font-size:14px;cursor:pointer;margin-bottom:14px">${t('Doğrulama mailini tekrar gönder')}</button>
+    <div style="border-top:1px solid #22344d;padding-top:14px">
+      <div style="font-size:12px;color:#8ea0b5;margin-bottom:6px">${t('Yanlış e-posta mı? Değiştir:')}</div>
+      <input id="vg-email" type="email" placeholder="yeni@eposta.com" style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #33465f;background:#12233d;color:#fff;margin-bottom:6px">
+      <button id="vg-change" style="width:100%;padding:10px;border:0;border-radius:8px;background:#2f6fed;color:#fff;font-weight:600;cursor:pointer">${t('E-postayı değiştir & yeniden gönder')}</button>
+    </div>
+    <button id="vg-logout" style="margin-top:14px;background:none;border:0;color:#8ea0b5;font-size:12px;cursor:pointer;text-decoration:underline">${t('Çıkış yap')}</button>
+    <p id="vg-msg" style="color:#4fd18a;font-size:13px;margin-top:10px;min-height:16px"></p>
+  </div>`
+  document.body.appendChild(o)
+  const msg = document.getElementById('vg-msg') as HTMLParagraphElement
+  document.getElementById('vg-check')!.addEventListener('click', () => location.reload())
+  document.getElementById('vg-resend')!.addEventListener('click', async () => {
+    msg.textContent = t('Gönderiliyor...')
+    try { await auth.sendVerify(); msg.textContent = t('Mail gönderildi ✓ Gelen kutunu kontrol et.') } catch { msg.textContent = t('Gönderilemedi, biraz sonra dene.') }
+  })
+  document.getElementById('vg-change')!.addEventListener('click', async () => {
+    const ne = (document.getElementById('vg-email') as HTMLInputElement).value.trim()
+    if (!/^\S+@\S+\.\S+$/.test(ne)) { msg.textContent = t('Geçerli bir e-posta gir.'); return }
+    msg.textContent = t('Değiştiriliyor...')
+    try { await auth.changeEmail(ne); msg.textContent = t('E-posta değişti ✓ Yeni adrese doğrulama gönderildi.'); setTimeout(() => location.reload(), 1500) }
+    catch (e) { msg.textContent = (e as Error).message }
+  })
+  document.getElementById('vg-logout')!.addEventListener('click', () => { auth.logout(); location.reload() })
+}
+
 function persist() {
   if (isFullMode || isPromoMode || cloudBlocked) return
   // tek gerçek kaynak SQL: yerel kopya tutulmaz, eski veri asla hortlamaz
@@ -1318,6 +1366,11 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   }
 }
 if (cloudBlocked) await new Promise(() => {}) // oyun motoru burada durur, hiç kayıt gitmez
+// e-posta doğrulama kapısı: doğrulanmadan oyuna devam edilemez
+if (!isFullMode && !isPromoMode && auth.needsVerify()) {
+  showVerifyGate()
+  await new Promise(() => {}) // doğrulanana dek motor durur
+}
 if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)
 // eski yerel kayıt kalıntılarını temizle (artık her şey SQL'de)
