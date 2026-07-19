@@ -351,7 +351,7 @@ async function handleVs(req, res, url) {
       })
     }
     if (url === '/vs/v1/users' && req.method === 'GET') {
-      const limit = Math.min(200, Math.max(10, Number(u.searchParams.get('limit')) || 50))
+      const limit = Math.min(1000, Math.max(10, Number(u.searchParams.get('limit')) || 50))
       const cursor = Number(Buffer.from(u.searchParams.get('cursor') || '', 'base64url').toString() || 0) || 0
       const search = (u.searchParams.get('q') || '').toLowerCase()
       const sort = u.searchParams.get('sort') || 'signed_up_desc'
