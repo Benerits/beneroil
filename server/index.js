@@ -423,6 +423,17 @@ const server = http.createServer(async (req, res) => {
   createReadStream(file).pipe(res)
 })
 
-initDb().then(() => {
-  server.listen(PORT, () => console.log(`Benzinlik sunucusu :${PORT}`))
-})
+// dirençli boot: DB geç ayaklanırsa bile sunucu ASLA sessizce ölmez
+async function start() {
+  for (let i = 1; i <= 30; i++) {
+    try {
+      await initDb()
+      break
+    } catch (err) {
+      console.error(`DB hazır değil (deneme ${i}/30):`, err.message)
+      await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+  server.listen(PORT, () => console.log(`BenelOil sunucusu :${PORT}`))
+}
+start()
