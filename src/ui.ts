@@ -226,8 +226,8 @@ export class UI {
     const musicBtn = el<HTMLButtonElement>('musicbtn')
     const sfxBtn = el<HTMLButtonElement>('sfxbtn')
     const syncAudioLabels = () => {
-      musicBtn.textContent = t('Müzik: {0}', audio.musicOn ? t('Açık') : t('Kapalı'))
-      sfxBtn.textContent = t('Efektler: {0}', audio.sfxOn ? t('Açık') : t('Kapalı'))
+      musicBtn.textContent = audio.musicOn ? t('Müzik: Açık') : t('Müzik: Kapalı')
+      sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı')
     }
     syncAudioLabels()
     musicBtn.addEventListener('click', () => { audio.toggleMusic(); syncAudioLabels() })
@@ -235,7 +235,7 @@ export class UI {
     const notifBtn = el<HTMLButtonElement>('notifbtn')
     const syncNotif = () => {
       const p = 'Notification' in window ? Notification.permission : 'unsupported'
-      notifBtn.textContent = p === 'granted' ? t('Bildirimler: Açık') : p === 'denied' ? 'Bildirimler: Engelli' : t('Bildirimlere İzin Ver')
+      notifBtn.textContent = p === 'granted' ? t('Bildirimler: Açık') : p === 'denied' ? t('Bildirimler: Engelli') : t('Bildirimlere İzin Ver')
       notifBtn.disabled = p === 'granted' || p === 'denied' || p === 'unsupported'
     }
     syncNotif()
