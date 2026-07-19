@@ -43,6 +43,11 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS sessions int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS banned_at timestamptz`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS ban_reason text`)
+  // e-posta doğrulama + şifre sıfırlama (varsayılan doğrulanmadı = false → herkes doğrulanmadı)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT false`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS verify_token text`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_token text`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_expires timestamptz`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open'`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_note text`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_at timestamptz`)
@@ -84,6 +89,46 @@ function verifyToken(token) {
   } catch {
     return null
   }
+}
+
+// ---- E-posta doğrulama + şifre sıfırlama altyapısı ----
+const BASE_URL = process.env.PUBLIC_URL || 'https://petrol.benerits.com'
+function requireVerify() { return process.env.REQUIRE_EMAIL_VERIFY === 'true' } // key gelene dek kapalı
+function randToken() { return crypto.randomBytes(24).toString('base64url') }
+async function sendEmail(to, subject, html) {
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.MAIL_FROM || 'BenelOil <noreply@benerits.com>'
+  if (!key) { console.log('[mail] RESEND_API_KEY yok — atlandı:', to, '/', subject); return false }
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' },
+      body: JSON.stringify({ from, to, subject, html }),
+    })
+    if (!r.ok) console.log('[mail] resend hata', r.status, (await r.text()).slice(0, 160))
+    return r.ok
+  } catch (e) { console.log('[mail] istisna', e.message); return false }
+}
+function mailShell(title, body, btnText, btnUrl) {
+  return `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto;padding:24px;color:#1c2530">
+    <div style="font-size:26px;font-weight:800;color:#e8862e">⛽ BenelOil</div>
+    <h2 style="margin:16px 0 8px">${title}</h2>
+    <p style="color:#4a5560;line-height:1.5">${body}</p>
+    <a href="${btnUrl}" style="display:inline-block;margin-top:14px;padding:12px 22px;background:#27a05a;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">${btnText}</a>
+    <p style="color:#98a2ad;font-size:12px;margin-top:20px">Bu isteği sen yapmadıysan bu maili yok say.<br>BenelOil · Hopsule Inc.</p>
+  </div>`
+}
+function sendVerifyEmail(email, token) {
+  return sendEmail(email, 'BenelOil — E-postanı doğrula',
+    mailShell('E-postanı doğrula', 'Oyuna devam etmek için e-postanı doğrula:', 'E-postamı doğrula', `${BASE_URL}/api/verify?token=${token}`))
+}
+function sendResetEmail(email, token) {
+  return sendEmail(email, 'BenelOil — Şifre sıfırlama',
+    mailShell('Şifreni sıfırla', 'Yeni şifre belirlemek için tıkla (bağlantı 1 saat geçerli):', 'Şifremi sıfırla', `${BASE_URL}/reset?token=${token}`))
+}
+function htmlPage(res, title, msg) {
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+  res.end(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;background:#0d1420;color:#eaf1fb;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px"><div style="max-width:400px;text-align:center"><div style="font-size:40px">⛽</div><h2>${title}</h2><p style="color:#b8c6da">${msg}</p><a href="${BASE_URL}" style="display:inline-block;margin-top:12px;padding:12px 22px;background:#27a05a;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Oyuna dön</a></div></body>`)
 }
 
 function json(res, code, data) {
@@ -234,20 +279,76 @@ async function handleApi(req, res, url) {
       if (!ins.rowCount) return json(res, 409, { error: 'Bu e-posta zaten kayıtlı — giriş yap.' })
       bumpStat('signups')
       pushSignupNotif() // fire-and-forget: ekibe "+1 oyuncu" push (asla signup'ı etkilemez)
-      return json(res, 200, { token: sign(e), email: e })
+      const vtok = randToken()
+      await pool.query('UPDATE benzinlik_player SET verify_token=$2 WHERE email=$1', [e, vtok]).catch(() => {})
+      sendVerifyEmail(e, vtok) // fire-and-forget doğrulama maili
+      return json(res, 200, { token: sign(e), email: e, emailVerified: false, verifyRequired: requireVerify() })
     }
     if (url === '/api/login' && req.method === 'POST') {
       if (!rateLimit('login:' + clientIp(req), 30, 3600_000)) return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
       const { email, password } = await readBody(req)
       const e = String(email || '').trim().toLowerCase()
-      const r = await pool.query('SELECT pass, banned_at FROM benzinlik_player WHERE email=$1', [e])
+      const r = await pool.query('SELECT pass, banned_at, email_verified FROM benzinlik_player WHERE email=$1', [e])
       if (r.rowCount === 0 || !verifyPassword(String(password || ''), r.rows[0].pass)) {
         return json(res, 401, { error: 'E-posta veya şifre hatalı.' })
       }
       if (r.rows[0].banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [e])
       bumpStat('logins')
-      return json(res, 200, { token: sign(e), email: e })
+      return json(res, 200, { token: sign(e), email: e, emailVerified: !!r.rows[0].email_verified, verifyRequired: requireVerify() })
+    }
+    if (url === '/api/send-verify' && req.method === 'POST') {
+      const { email } = await readBody(req)
+      const e = String(email || '').trim().toLowerCase()
+      if (!rateLimit('verify:' + (e || clientIp(req)), 5, 3600_000)) return json(res, 429, { error: 'Çok sık deneme — biraz bekle.' })
+      const r = await pool.query('SELECT email_verified FROM benzinlik_player WHERE email=$1', [e])
+      if (r.rowCount === 0) return json(res, 200, { ok: true }) // e-posta varlığı sızdırılmaz
+      if (r.rows[0].email_verified) return json(res, 200, { ok: true, already: true })
+      const tok = randToken()
+      await pool.query('UPDATE benzinlik_player SET verify_token=$2 WHERE email=$1', [e, tok])
+      await sendVerifyEmail(e, tok)
+      return json(res, 200, { ok: true })
+    }
+    if (url === '/api/verify' && req.method === 'GET') {
+      const tok = new URL(req.url, 'http://x').searchParams.get('token') || ''
+      if (!tok) return htmlPage(res, 'Geçersiz bağlantı', 'Doğrulama kodu eksik.')
+      const r = await pool.query('UPDATE benzinlik_player SET email_verified=true, verify_token=NULL WHERE verify_token=$1 RETURNING email', [tok])
+      if (!r.rowCount) return htmlPage(res, 'Bağlantı geçersiz', 'Bu doğrulama bağlantısı geçersiz ya da zaten kullanılmış olabilir.')
+      return htmlPage(res, 'E-posta doğrulandı ✓', 'Teşekkürler! Artık oyuna dönüp devam edebilirsin.')
+    }
+    if (url === '/api/change-email' && req.method === 'POST') {
+      const email = auth(); if (!email) return
+      const { newEmail } = await readBody(req)
+      const ne = String(newEmail || '').trim().toLowerCase()
+      if (!/^\S+@\S+\.\S+$/.test(ne)) return json(res, 400, { error: 'Geçerli bir e-posta gir.' })
+      if (ne === email) return json(res, 400, { error: 'Yeni e-posta eskisiyle aynı.' })
+      if (!rateLimit('chgmail:' + email, 5, 3600_000)) return json(res, 429, { error: 'Çok sık deneme.' })
+      const tok = randToken()
+      const upd = await pool.query('UPDATE benzinlik_player SET email=$2, email_verified=false, verify_token=$3 WHERE email=$1', [email, ne, tok])
+        .catch(err => { if (String(err.code) === '23505') return null; throw err })
+      if (upd === null) return json(res, 409, { error: 'Bu e-posta zaten kullanımda.' })
+      await sendVerifyEmail(ne, tok)
+      return json(res, 200, { ok: true, token: sign(ne), email: ne, emailVerified: false, verifyRequired: requireVerify() })
+    }
+    if (url === '/api/request-reset' && req.method === 'POST') {
+      const { email } = await readBody(req)
+      const e = String(email || '').trim().toLowerCase()
+      if (!rateLimit('reset:' + (e || clientIp(req)), 5, 3600_000)) return json(res, 429, { error: 'Çok sık deneme.' })
+      const r = await pool.query('SELECT id FROM benzinlik_player WHERE email=$1', [e])
+      if (r.rowCount) {
+        const tok = randToken()
+        await pool.query(`UPDATE benzinlik_player SET reset_token=$2, reset_expires=now()+interval '1 hour' WHERE email=$1`, [e, tok])
+        await sendResetEmail(e, tok)
+      }
+      return json(res, 200, { ok: true }) // her durumda ok — e-posta varlığı sızdırılmaz
+    }
+    if (url === '/api/reset' && req.method === 'POST') {
+      const { token, password } = await readBody(req)
+      if (String(password || '').length < 4) return json(res, 400, { error: 'Şifre en az 4 karakter olmalı.' })
+      const r = await pool.query('SELECT email FROM benzinlik_player WHERE reset_token=$1 AND reset_expires > now()', [String(token || '')])
+      if (!r.rowCount) return json(res, 400, { error: 'Bağlantı geçersiz ya da süresi dolmuş.' })
+      await pool.query('UPDATE benzinlik_player SET pass=$2, reset_token=NULL, reset_expires=NULL WHERE email=$1', [r.rows[0].email, hashPassword(String(password))])
+      return json(res, 200, { ok: true })
     }
     if (url === '/api/feedback' && req.method === 'POST') {
       const email = auth(); if (!email) return
@@ -261,10 +362,10 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/save' && req.method === 'GET') {
       const email = auth(); if (!email) return
-      const r = await pool.query('SELECT save, updated_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
+      const r = await pool.query('SELECT save, updated_at, banned_at, email_verified FROM benzinlik_player WHERE email=$1', [email])
       if (r.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
       await pool.query('UPDATE benzinlik_player SET last_seen_at=now() WHERE email=$1', [email])
-      return json(res, 200, { save: r.rows[0]?.save ?? null, updatedAt: r.rows[0]?.updated_at ?? null })
+      return json(res, 200, { save: r.rows[0]?.save ?? null, updatedAt: r.rows[0]?.updated_at ?? null, emailVerified: !!r.rows[0]?.email_verified, verifyRequired: requireVerify() })
     }
     if (url === '/api/save' && req.method === 'POST') {
       const email = auth(); if (!email) return
@@ -686,6 +787,17 @@ const server = http.createServer(async (req, res) => {
   if (url === '/ads.txt' && process.env.ADSENSE_PUB) {
     res.writeHead(200, { 'content-type': 'text/plain' })
     return res.end(`google.com, ${String(process.env.ADSENSE_PUB).replace('ca-', '')}, DIRECT, f08c47fec0942fa0\n`)
+  }
+  if (url === '/reset') {
+    const tok = new URL(req.url, 'http://x').searchParams.get('token') || ''
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    return res.end(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>BenelOil — Şifre Sıfırla</title>
+<body style="font-family:system-ui,sans-serif;background:#0d1420;color:#eaf1fb;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px">
+<div style="max-width:380px;width:100%;text-align:center"><div style="font-size:40px">⛽</div><h2>Yeni şifre belirle</h2>
+<input id="pw" type="password" placeholder="Yeni şifre (en az 4 karakter)" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #33465f;background:#12233d;color:#fff;font-size:15px;margin:8px 0">
+<button id="go" style="width:100%;padding:12px;border:0;border-radius:10px;background:#27a05a;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Şifreyi Değiştir</button>
+<p id="msg" style="color:#b8c6da;font-size:13px;margin-top:12px"></p></div>
+<script>const t=${JSON.stringify(tok)};document.getElementById('go').onclick=async()=>{const pw=document.getElementById('pw').value;const m=document.getElementById('msg');if(pw.length<4){m.textContent='Şifre en az 4 karakter olmalı.';return}m.textContent='Gönderiliyor...';const r=await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:t,password:pw})});const d=await r.json().catch(()=>({}));if(r.ok){m.innerHTML='✓ Şifren değişti! <a href="/" style="color:#4fd18a">Giriş yap</a>';}else{m.textContent=d.error||'Hata oluştu.'}}</script></body>`)
   }
   if (url === '/terms') url = '/terms.html'
   if (url === '/privacy') url = '/privacy.html'

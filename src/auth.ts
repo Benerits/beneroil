@@ -40,9 +40,31 @@ export function logout() {
   localStorage.removeItem(EMAIL_KEY)
 }
 
+let _verifyRequired = false
+let _emailVerified = true
+/** e-posta doğrulaması gerekli mi (env açık + kullanıcı doğrulanmamış) */
+export function needsVerify(): boolean { return _verifyRequired && !_emailVerified }
+
 export async function pullSave(): Promise<unknown | null> {
   const d = await api('/api/save', 'GET')
+  _verifyRequired = !!d.verifyRequired
+  _emailVerified = !!d.emailVerified
   return d.save ?? null
+}
+
+/** doğrulama mailini (tekrar) gönder */
+export async function sendVerify(email?: string): Promise<void> {
+  await api('/api/send-verify', 'POST', { email: email ?? currentEmail() })
+}
+/** e-posta değiştir (yeni adrese doğrulama gider) — token yenilenir */
+export async function changeEmail(newEmail: string): Promise<void> {
+  const d = await api('/api/change-email', 'POST', { newEmail })
+  localStorage.setItem(TOKEN_KEY, String(d.token))
+  localStorage.setItem(EMAIL_KEY, String(d.email))
+}
+/** şifre sıfırlama maili iste */
+export async function requestReset(email: string): Promise<void> {
+  await api('/api/request-reset', 'POST', { email })
 }
 
 export async function pushSave(save: unknown): Promise<void> {
