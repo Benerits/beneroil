@@ -861,6 +861,30 @@ export class CarManager {
 
   private onLost(car: Car) { this.opts.onCarLost(car) }
 
+  /**
+   * İstasyon kalabalıkken yanaşma olasılığını düşüren çarpan (0.05..1).
+   * Boş pompa/bekleme yeri (EV için şarj yuvası) ve HÂLÂ yaklaşmakta olan
+   * niyetli araçlar hesaba katılır — böylece dolu istasyona akın olup
+   * apron/rampa kilitlenmez, ortalık rahatlar.
+   */
+  private stationCrowdFactor(isEv: boolean): number {
+    let cap, used
+    if (isEv) {
+      cap = Math.max(1, this.opts.evCount())
+      used = this.evOcc.filter(Boolean).length
+    } else {
+      cap = Math.max(1, this.opts.pumpCount() + WAIT_SPOTS.length)
+      used = this.pumpOcc.filter(Boolean).length + this.waitOcc.filter(Boolean).length
+    }
+    const kind = isEv ? 'ev' : 'fuel'
+    const approaching = this.cars.filter(c =>
+      c.wantsEnter && c.kind === kind && c.slotIndex < 0 && c.waitIndex < 0
+      && (c.phase === 'transit' || c.phase === 'driving')).length
+    const free = cap - used - approaching
+    if (free <= 0) return 0.05 // doluysa neredeyse kimse yanaşmaz, yoluna devam
+    return Math.max(0.05, Math.min(1, free / cap))
+  }
+
   private spawnTransit(lane: 'near' | 'far') {
     const isEv = Math.random() < this.opts.evShare()
     const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices())
@@ -870,7 +894,7 @@ export class CarManager {
       car.group.position.set(LANE_NEAR, -40, 0)
       car.group.rotation.z = Math.PI / 2
       car.setPath([new THREE.Vector3(LANE_NEAR, 44, 0)])
-      car.wantsEnter = Math.random() < this.opts.entryChance()
+      car.wantsEnter = Math.random() < this.opts.entryChance() * this.stationCrowdFactor(isEv)
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
     } else {
       car.group.position.set(LANE_FAR, 40, 0)
