@@ -109,22 +109,60 @@ async function sendEmail(to, subject, html) {
     return r.ok
   } catch (e) { console.log('[mail] istisna', e.message); return false }
 }
-function mailShell(title, body, btnText, btnUrl) {
-  return `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto;padding:24px;color:#1c2530">
-    <div style="font-size:26px;font-weight:800;color:#e8862e">⛽ BenelOil</div>
-    <h2 style="margin:16px 0 8px">${title}</h2>
-    <p style="color:#4a5560;line-height:1.5">${body}</p>
-    <a href="${btnUrl}" style="display:inline-block;margin-top:14px;padding:12px 22px;background:#27a05a;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">${btnText}</a>
-    <p style="color:#98a2ad;font-size:12px;margin-top:20px">Bu isteği sen yapmadıysan bu maili yok say.<br>BenelOil · Hopsule Inc.</p>
-  </div>`
+function reqLang(req, body) {
+  const l = String((body && body.lang) || '').toLowerCase()
+  if (l === 'en' || l === 'tr') return l
+  const al = String(req.headers['accept-language'] || '').toLowerCase()
+  return al.startsWith('en') ? 'en' : 'tr' // varsayılan TR
 }
-function sendVerifyEmail(email, token) {
-  return sendEmail(email, 'BenelOil — E-postanı doğrula',
-    mailShell('E-postanı doğrula', 'Oyuna devam etmek için e-postanı doğrula:', 'E-postamı doğrula', `${BASE_URL}/api/verify?token=${token}`))
+function mailTemplate(kind, lang, url) {
+  const en = lang === 'en'
+  const C = {
+    verify: {
+      subject: en ? 'BenelOil — Verify your email' : 'BenelOil — E-postanı doğrula',
+      emoji: '📧',
+      title: en ? 'Verify your email' : 'E-postanı doğrula',
+      body: en ? 'Welcome to BenelOil! Confirm your email address to keep running your station.'
+        : 'BenelOil’e hoş geldin! İstasyonunu işletmeye devam etmek için e-postanı doğrula.',
+      btn: en ? 'Verify my email' : 'E-postamı doğrula',
+    },
+    reset: {
+      subject: en ? 'BenelOil — Reset your password' : 'BenelOil — Şifre sıfırlama',
+      emoji: '🔑',
+      title: en ? 'Reset your password' : 'Şifreni sıfırla',
+      body: en ? 'We received a request to reset your password. Tap below to set a new one — this link is valid for 1 hour.'
+        : 'Şifreni sıfırlama isteği aldık. Yeni şifre belirlemek için aşağıya dokun — bağlantı 1 saat geçerli.',
+      btn: en ? 'Reset password' : 'Şifremi sıfırla',
+    },
+  }[kind]
+  const ignore = en ? 'If you didn’t request this, you can safely ignore this email.'
+    : 'Bu isteği sen yapmadıysan bu e-postayı güvenle yok sayabilirsin.'
+  const copy = en ? 'Or copy this link:' : 'Ya da bu bağlantıyı kopyala:'
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#eef1f4">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f4;padding:28px 12px"><tr><td align="center">
+<table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 6px 24px rgba(9,9,11,.08);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<tr><td style="background:linear-gradient(135deg,#e8862e,#d64545);padding:26px 28px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff;letter-spacing:-.5px">⛽ BenelOil</div></td></tr>
+<tr><td style="padding:34px 30px 10px;text-align:center">
+<div style="font-size:42px;margin-bottom:8px">${C.emoji}</div>
+<h1 style="margin:0 0 12px;font-size:22px;color:#1c2530">${C.title}</h1>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#5a6570">${C.body}</p>
+<a href="${url}" style="display:inline-block;padding:14px 32px;background:#27a05a;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:15px">${C.btn}</a>
+</td></tr>
+<tr><td style="padding:24px 30px 30px;text-align:center">
+<p style="margin:0 0 6px;font-size:12px;color:#9aa4ae;line-height:1.5">${ignore}</p>
+<p style="margin:0;font-size:11px;color:#9aa4ae">${copy}<br><span style="color:#7fa8e6;word-break:break-all">${url}</span></p>
+<hr style="border:none;border-top:1px solid #eef1f4;margin:18px 0">
+<p style="margin:0;font-size:11px;color:#b5bdc5">BenelOil · a Benerits game · operated by Hopsule Inc. (Delaware, USA)</p>
+</td></tr></table></td></tr></table></body></html>`
+  return { subject: C.subject, html }
 }
-function sendResetEmail(email, token) {
-  return sendEmail(email, 'BenelOil — Şifre sıfırlama',
-    mailShell('Şifreni sıfırla', 'Yeni şifre belirlemek için tıkla (bağlantı 1 saat geçerli):', 'Şifremi sıfırla', `${BASE_URL}/reset?token=${token}`))
+function sendVerifyEmail(email, token, lang) {
+  const { subject, html } = mailTemplate('verify', lang, `${BASE_URL}/api/verify?token=${token}`)
+  return sendEmail(email, subject, html)
+}
+function sendResetEmail(email, token, lang) {
+  const { subject, html } = mailTemplate('reset', lang, `${BASE_URL}/reset?token=${token}`)
+  return sendEmail(email, subject, html)
 }
 function htmlPage(res, title, msg) {
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
@@ -263,7 +301,8 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/register' && req.method === 'POST') {
       if (!rateLimit('reg:' + clientIp(req), 6, 3600_000)) return json(res, 429, { error: 'Çok sık kayıt denemesi — biraz sonra tekrar dene.' })
-      const { email, password } = await readBody(req)
+      const regBody = await readBody(req)
+      const { email, password } = regBody
       const e = String(email || '').trim().toLowerCase()
       if (!/^\S+@\S+\.\S+$/.test(e)) return json(res, 400, { error: 'Geçerli bir e-posta gir.' })
       if (String(password || '').length < 4) return json(res, 400, { error: 'Şifre en az 4 karakter olmalı.' })
@@ -281,7 +320,7 @@ async function handleApi(req, res, url) {
       pushSignupNotif() // fire-and-forget: ekibe "+1 oyuncu" push (asla signup'ı etkilemez)
       const vtok = randToken()
       await pool.query('UPDATE benzinlik_player SET verify_token=$2 WHERE email=$1', [e, vtok]).catch(() => {})
-      sendVerifyEmail(e, vtok) // fire-and-forget doğrulama maili
+      sendVerifyEmail(e, vtok, reqLang(req, regBody)) // fire-and-forget doğrulama maili
       return json(res, 200, { token: sign(e), email: e, emailVerified: false, verifyRequired: requireVerify() })
     }
     if (url === '/api/login' && req.method === 'POST') {
@@ -298,15 +337,15 @@ async function handleApi(req, res, url) {
       return json(res, 200, { token: sign(e), email: e, emailVerified: !!r.rows[0].email_verified, verifyRequired: requireVerify() })
     }
     if (url === '/api/send-verify' && req.method === 'POST') {
-      const { email } = await readBody(req)
-      const e = String(email || '').trim().toLowerCase()
+      const svBody = await readBody(req)
+      const e = String(svBody.email || '').trim().toLowerCase()
       if (!rateLimit('verify:' + (e || clientIp(req)), 5, 3600_000)) return json(res, 429, { error: 'Çok sık deneme — biraz bekle.' })
       const r = await pool.query('SELECT email_verified FROM benzinlik_player WHERE email=$1', [e])
       if (r.rowCount === 0) return json(res, 200, { ok: true }) // e-posta varlığı sızdırılmaz
       if (r.rows[0].email_verified) return json(res, 200, { ok: true, already: true })
       const tok = randToken()
       await pool.query('UPDATE benzinlik_player SET verify_token=$2 WHERE email=$1', [e, tok])
-      await sendVerifyEmail(e, tok)
+      await sendVerifyEmail(e, tok, reqLang(req, svBody))
       return json(res, 200, { ok: true })
     }
     if (url === '/api/verify' && req.method === 'GET') {
@@ -318,8 +357,8 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/change-email' && req.method === 'POST') {
       const email = auth(); if (!email) return
-      const { newEmail } = await readBody(req)
-      const ne = String(newEmail || '').trim().toLowerCase()
+      const ceBody = await readBody(req)
+      const ne = String(ceBody.newEmail || '').trim().toLowerCase()
       if (!/^\S+@\S+\.\S+$/.test(ne)) return json(res, 400, { error: 'Geçerli bir e-posta gir.' })
       if (ne === email) return json(res, 400, { error: 'Yeni e-posta eskisiyle aynı.' })
       if (!rateLimit('chgmail:' + email, 5, 3600_000)) return json(res, 429, { error: 'Çok sık deneme.' })
@@ -327,18 +366,18 @@ async function handleApi(req, res, url) {
       const upd = await pool.query('UPDATE benzinlik_player SET email=$2, email_verified=false, verify_token=$3 WHERE email=$1', [email, ne, tok])
         .catch(err => { if (String(err.code) === '23505') return null; throw err })
       if (upd === null) return json(res, 409, { error: 'Bu e-posta zaten kullanımda.' })
-      await sendVerifyEmail(ne, tok)
+      await sendVerifyEmail(ne, tok, reqLang(req, ceBody))
       return json(res, 200, { ok: true, token: sign(ne), email: ne, emailVerified: false, verifyRequired: requireVerify() })
     }
     if (url === '/api/request-reset' && req.method === 'POST') {
-      const { email } = await readBody(req)
-      const e = String(email || '').trim().toLowerCase()
+      const rrBody = await readBody(req)
+      const e = String(rrBody.email || '').trim().toLowerCase()
       if (!rateLimit('reset:' + (e || clientIp(req)), 5, 3600_000)) return json(res, 429, { error: 'Çok sık deneme.' })
       const r = await pool.query('SELECT id FROM benzinlik_player WHERE email=$1', [e])
       if (r.rowCount) {
         const tok = randToken()
         await pool.query(`UPDATE benzinlik_player SET reset_token=$2, reset_expires=now()+interval '1 hour' WHERE email=$1`, [e, tok])
-        await sendResetEmail(e, tok)
+        await sendResetEmail(e, tok, reqLang(req, rrBody))
       }
       return json(res, 200, { ok: true }) // her durumda ok — e-posta varlığı sızdırılmaz
     }

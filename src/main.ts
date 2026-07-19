@@ -38,7 +38,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
           const res = await fetch(path, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ email: gEmail.value, password: gPass.value }),
+            body: JSON.stringify({ email: gEmail.value, password: gPass.value, lang }),
           })
           const d = await res.json().catch(() => ({}))
           if (!res.ok) throw new Error(d.error ?? t('Sunucuya ulaşılamadı.'))
@@ -71,7 +71,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
       const em = gEmail.value.trim().toLowerCase()
       if (!/^\S+@\S+\.\S+$/.test(em)) { gErr.textContent = t('Önce e-postanı yaz, sonra Şifremi unuttum’a bas.'); return }
       try {
-        await fetch('/api/request-reset', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: em }) })
+        await fetch('/api/request-reset', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: em, lang }) })
         gErr.style.color = '#2b8a4a'
         gErr.textContent = t('Şifre sıfırlama bağlantısı gönderildi (kayıtlıysa). Mailini kontrol et.')
       } catch { gErr.textContent = t('Gönderilemedi, sonra tekrar dene.') }
