@@ -27,9 +27,10 @@ export const DIESEL_GEN_FUEL_PER_S = 0.25 // jeneratör çalışırken tanktaki 
 const PUMP_COSTS = [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000]
 const SIGN_COSTS = [1500, 4000, 9000]
 export const WIDEGATE_COST = 6000
-/** pompacı: işe alma (pompa başı, bir kez) + satış başına ücret; bahşiş de pompacıya kalır */
+/** pompacı: pompa başına bir kerelik işe alma ücreti. Satışın TAMAMI kasaya girer;
+ *  pompacının tek "maliyeti" işe alma + oyuncunun bahşişten feragat etmesidir (manuel
+ *  servis hâlâ bahşişle daha kârlı, ama pompacı yetişemediğin pompayı net kâra çevirir). */
 export const POMPACI_HIRE = 800
-export const POMPACI_FEE = 12
 const TANK_COSTS = [3000, 7000, 15000]
 const MARKET_COSTS = [7000, 12000]
 const TOILET_COSTS = [2500, 5000]
