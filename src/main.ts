@@ -2318,7 +2318,8 @@ function frame() {
       const used = new Set(tankers.map(x => x.slot))
       let slot = 0
       while (used.has(slot)) slot++
-      tankers.push({ t: new Tanker(world.scene, modelLib, f, slot, new THREE.Vector3(world.tankAnchor.x, world.tankAnchor.y, 0)), fuel: f, slot })
+      // kapılar taşınmış olabilir — tanker güncel giriş/çıkış rampalarını kullansın
+      tankers.push({ t: new Tanker(world.scene, modelLib, f, slot, new THREE.Vector3(world.tankAnchor.x, world.tankAnchor.y, 0), world.gateIn.y, world.gateOut.y), fuel: f, slot })
     }
   }
   const blockedFor = (self: Tanker) => (pos: THREE.Vector3, dir: THREE.Vector3) => {
