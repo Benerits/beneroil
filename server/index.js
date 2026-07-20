@@ -256,12 +256,21 @@ function rateLimit(key, max, windowMs) {
   b.n++
   return b.n <= max
 }
+// kullanıcı hatası (409 vb.) limit hakkı yememeli — tüketilen hakkı geri ver
+function rateRefund(key) {
+  const b = buckets.get(key)
+  if (b && b.n > 0) b.n--
+}
 setInterval(() => {
   const now = Date.now()
   for (const [k, b] of buckets) if (now > b.resetAt) buckets.delete(k)
 }, 60_000).unref()
 
 function clientIp(req) {
+  // Cloudflare arkasındayız: XFF'in ilk token'ı CF edge IP'si olabiliyor (tüm oyuncular
+  // aynı bucket'ı paylaşır → herkes 429 yer). cf-connecting-ip her zaman gerçek oyuncu IP'si.
+  const cf = String(req.headers['cf-connecting-ip'] || '').trim()
+  if (cf) return cf
   const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
   return xf || req.socket.remoteAddress || '?'
 }
@@ -301,12 +310,15 @@ async function handleApi(req, res, url) {
       return json(res, 200, { adsClient: process.env.ADSENSE_PUB || null })
     }
     if (url === '/api/register' && req.method === 'POST') {
-      if (!rateLimit('reg:' + clientIp(req), 6, 3600_000)) return json(res, 429, { error: 'Çok sık kayıt denemesi — biraz sonra tekrar dene.' })
       const regBody = await readBody(req)
       const { email, password } = regBody
       const e = String(email || '').trim().toLowerCase()
       if (!/^\S+@\S+\.\S+$/.test(e)) return json(res, 400, { error: 'Geçerli bir e-posta gir.' })
       if (String(password || '').length < 4) return json(res, 400, { error: 'Şifre en az 4 karakter olmalı.' })
+      // limit validasyondan SONRA: yazım hatası deneme hakkı yemesin. CGNAT (mobil) IP'leri
+      // yüzlerce kullanıcıyla paylaşıldığından limit gevşek tutuluyor.
+      const regKey = 'reg:' + clientIp(req)
+      if (!rateLimit(regKey, 20, 3600_000)) return json(res, 429, { error: 'Çok sık kayıt denemesi — biraz sonra tekrar dene.' })
       // atomik: yarış durumunda bile aynı e-posta ikinci kez ASLA açılmaz
       const ins = await pool.query(
         `INSERT INTO benzinlik_player(email, pass) VALUES ($1, $2)
@@ -316,7 +328,7 @@ async function handleApi(req, res, url) {
         if (String(err.code) === '23505') return { rowCount: 0 }
         throw err
       })
-      if (!ins.rowCount) return json(res, 409, { error: 'Bu e-posta zaten kayıtlı — giriş yap.' })
+      if (!ins.rowCount) { rateRefund(regKey); return json(res, 409, { error: 'Bu e-posta zaten kayıtlı — giriş yap.' }) }
       bumpStat('signups')
       pushSignupNotif() // fire-and-forget: ekibe "+1 oyuncu" push (asla signup'ı etkilemez)
       const vtok = randToken()
@@ -325,9 +337,14 @@ async function handleApi(req, res, url) {
       return json(res, 200, { token: sign(e), email: e, emailVerified: false, verifyRequired: requireVerify() })
     }
     if (url === '/api/login' && req.method === 'POST') {
-      if (!rateLimit('login:' + clientIp(req), 30, 3600_000)) return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
       const { email, password } = await readBody(req)
       const e = String(email || '').trim().toLowerCase()
+      // e-posta+IP bazlı: CGNAT'ta komşunun denemeleri seni kilitlemesin; IP-geneli tavan
+      // credential-stuffing'e karşı duruyor.
+      if (!rateLimit('login:' + e + ':' + clientIp(req), 10, 900_000) ||
+          !rateLimit('loginip:' + clientIp(req), 120, 3600_000)) {
+        return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
+      }
       const r = await pool.query('SELECT pass, banned_at, email_verified FROM benzinlik_player WHERE email=$1', [e])
       if (r.rowCount === 0 || !verifyPassword(String(password || ''), r.rows[0].pass)) {
         return json(res, 401, { error: 'E-posta veya şifre hatalı.' })
