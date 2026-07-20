@@ -262,14 +262,23 @@ export class UI {
     musicVol.addEventListener('input', () => { const p = Number(musicVol.value); audio.setMusicVolume(p / 100); paintSlider(p) })
     sfxBtn.addEventListener('click', () => { audio.toggleSfx(); syncAudioLabels() })
     const notifBtn = el<HTMLButtonElement>('notifbtn')
-    const syncNotif = () => {
+    const capLN = () => (window as unknown as { Capacitor?: { Plugins?: { LocalNotifications?: any } } }).Capacitor?.Plugins?.LocalNotifications
+    const syncNotif = async () => {
+      if (isNativePlatform() && capLN()) {
+        let st = 'prompt'
+        try { st = (await capLN().checkPermissions())?.display ?? 'prompt' } catch { /* yok say */ }
+        notifBtn.textContent = st === 'granted' ? t('Bildirimler: Açık') : st === 'denied' ? t('Bildirimler: Engelli') : t('Bildirimlere İzin Ver')
+        notifBtn.disabled = st === 'granted' || st === 'denied'
+        return
+      }
       const p = 'Notification' in window ? Notification.permission : 'unsupported'
       notifBtn.textContent = p === 'granted' ? t('Bildirimler: Açık') : p === 'denied' ? t('Bildirimler: Engelli') : t('Bildirimlere İzin Ver')
       notifBtn.disabled = p === 'granted' || p === 'denied' || p === 'unsupported'
     }
     syncNotif()
     notifBtn.addEventListener('click', async () => {
-      if ('Notification' in window) await Notification.requestPermission()
+      if (isNativePlatform() && capLN()) { try { await capLN().requestPermissions() } catch { /* yok say */ } }
+      else if ('Notification' in window) await Notification.requestPermission()
       syncNotif()
     })
 
