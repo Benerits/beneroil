@@ -6,7 +6,7 @@ import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
-  POMPACI_HIRE, POMPACI_FEE, sellInfo, applySell,
+  POMPACI_HIRE, sellInfo, applySell,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { t, lang, setLang, translateDom } from './i18n'
@@ -533,10 +533,10 @@ function finishSale(car: Car) {
     score -= 0.6 // eksik dolum: sessiz, sadece memnuniyet düşer
   }
 
-  // pompacı ücreti YALNIZCA gerçek satışta kesilir — sıfır dolumda pompa negatife düşmesin
+  // pompacı satışı: gelirin TAMAMI kasaya girer (kesinti yok). Oyuncu yalnızca bahşişten
+  // feragat eder. Pozitif toast göster — eskiden sadece kesinti görünüp "hep zarar" sanılıyordu.
   if (car.autoServed && revenue0 > 0) {
-    revenue -= POMPACI_FEE
-    ui.toast(t('🧑‍🔧 Pompacı servis etti: -₺{0}', POMPACI_FEE), '', true)
+    ui.toast(t('🧑‍🔧 Pompacı sattı: +₺{0}', Math.round(revenue)), 'good', true)
   }
   state.money += revenue
   state.stats.served++
@@ -1700,7 +1700,7 @@ ui.onMaint = id => {
       state.money -= POMPACI_HIRE
       state.autoPumps.add(i)
       audio.build()
-      ui.toast(t('🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur. Bahşiş pompacının, satış başı -₺{1}.', i + 1, POMPACI_FEE), 'good')
+      ui.toast(t('🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.', i + 1), 'good')
     }
     refreshBuildingCard()
     persist()
@@ -1811,7 +1811,7 @@ function buildingCard(id: string): BuildingCard | null {
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Dolum hızı'), t('{0} L/sn', FILL_RATE)],
-        [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (satış başı -₺{0})', POMPACI_FEE) : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
+        [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelirin tamamı senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
         [t('Benzin'), `₺${FUEL_PRICE.benzin}/L`],
         [t('Dizel'), `₺${FUEL_PRICE.dizel}/L`],
       ],

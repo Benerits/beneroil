@@ -122,15 +122,15 @@ const EN: Record<string, string> = {
   '🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}': '🧨 Demolished — half your investment back: +₺{0}',
   // --- Pompacı ---
   'Pompacı': 'Attendant',
-  'ÇALIŞIYOR (satış başı -₺{0})': 'ON DUTY (-₺{0} per sale)',
+  'ÇALIŞIYOR (gelirin tamamı senin)': 'ON DUTY (you keep all revenue)',
   'YOK': 'NONE',
   '🧑‍🔧 Pompacı Çalıştır — ₺{0}': '🧑‍🔧 Hire Attendant — ₺{0}',
   '🧑‍🔧 Pompacıyı işten çıkar': '🧑‍🔧 Dismiss attendant',
   'Pompa #{0}: pompacı işten çıktı — dolum yine sende.': 'Pump #{0}: attendant dismissed — filling is on you again.',
   '💸 Para yetmiyor — pompacı işe alma ₺{0}.': '💸 Not enough cash — hiring costs ₺{0}.',
-  '🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur. Bahşiş pompacının, satış başı -₺{1}.':
-    '🧑‍🔧 Pump #{0}: attendant hired — fills the right fuel automatically. Tips go to them, -₺{1} per sale.',
-  '🧑‍🔧 Pompacı servis etti: -₺{0}': '🧑‍🔧 Attendant served: -₺{0}',
+  '🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.':
+    '🧑‍🔧 Pump #{0}: attendant hired — auto-fills the right fuel, you keep the full sale. Only the tip goes to them.',
+  '🧑‍🔧 Pompacı sattı: +₺{0}': '🧑‍🔧 Attendant sold: +₺{0}',
   // --- Geniş giriş/çıkış ---
   'Geniş Giriş-Çıkış': 'Wide Entry & Exit',
   '2 şerit': '2 lanes',
