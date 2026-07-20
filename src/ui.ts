@@ -109,6 +109,8 @@ export class UI {
   onRegister: (email: string, pass: string) => void = () => {}
   onLogout: () => void = () => {}
   batteryKwh: () => number = () => 0
+  /** bu aracın pompasında/şarjında pompacı/şarjcı var mı (cam-sil butonunu gizlemek için) */
+  attendantAt: (car: Car) => boolean = () => false
   /** canlı tanker durumu satırları (main bağlar) */
   tankerStatus: () => string[] = () => []
   /** gerçek 3D modelin PNG render'ı (main bağlar) */
@@ -213,6 +215,11 @@ export class UI {
     // Sorun Bildir yalnızca web'de; native app'te gizli (mobil UI temiz kalsın).
     if (isNativePlatform()) fbBtn.style.display = 'none'
     fbBtn.addEventListener('click', () => fbWrap.classList.add('show'))
+    // ayarların içindeki Sorun Bildir: ayarları kapat, geri bildirim modalını aç (mobil/native dahil)
+    el<HTMLButtonElement>('set-feedback')?.addEventListener('click', () => {
+      el<HTMLDivElement>('setwrap').classList.remove('show')
+      fbWrap.classList.add('show')
+    })
     fbWrap.addEventListener('pointerdown', e => { if (e.target === fbWrap) fbWrap.classList.remove('show') })
     el<HTMLButtonElement>('fbsend').addEventListener('click', async () => {
       const ta = el<HTMLTextAreaElement>('fbtext')
@@ -365,12 +372,13 @@ export class UI {
     }
     this.panel.classList.add('show')
     el<HTMLButtonElement>('dismissbtn').disabled = car.filling || car.filled > 0
-    // camlar temizlenince o satır tamamen kapanır (iş bitti, buton yer kaplamasın)
-    el<HTMLDivElement>('cleanrow').style.display = car.windowsCleaned ? 'none' : 'flex'
+    // camlar temizlenince VEYA bu pompa/şarjda pompacı/şarjcı varsa cam-sil butonu gizlenir (artık onun işi)
+    el<HTMLDivElement>('cleanrow').style.display = (car.windowsCleaned || this.attendantAt(car)) ? 'none' : 'flex'
 
     if (car.kind === 'ev') {
       this.fuelCtl.style.display = 'none'
       this.evCtl.style.display = 'block'
+      el<HTMLDivElement>('pumpdisp').style.display = 'none'
       this.setHtml(this.demand, `<span class="dlabel">${t('MÜŞTERİ İSTEĞİ')}</span>` +
         `<span class="fpill" style="background:#1fa8bc">${t('ELEKTRİK')}</span><span class="damt">${car.demandKwh} kWh</span>`)
       const have = this.batteryKwh()
@@ -392,6 +400,9 @@ export class UI {
 
     this.fuelCtl.style.display = 'block'
     this.evCtl.style.display = 'none'
+    el<HTMLDivElement>('pumpdisp').style.display = 'flex'
+    el<HTMLSpanElement>('pd-liters').textContent = car.filled.toFixed(1)
+    el<HTMLSpanElement>('pd-total').textContent = Math.round(car.filledValue).toString()
     const fc = car.demandType === 'benzin' ? '#27a05a' : car.demandType === 'dizel' ? '#e8862e' : '#2f6fed'
     this.setHtml(this.demand, `<span class="dlabel">${t('MÜŞTERİ İSTEĞİ')}</span>` +
       `<span class="fpill" style="background:${fc}">${FUEL_LABEL[car.demandType]}</span>` +
@@ -568,7 +579,7 @@ export class UI {
         this.setText(btn, t('Dolu'))
         btn.disabled = true
       } else {
-        this.setText(info, `${Math.round(state.tanks[f])} / ${cap}L — ${need}L eksik`)
+        this.setText(info, `${Math.round(state.tanks[f])} / ${cap}L · +${need}L sipariş`)
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }
@@ -608,10 +619,14 @@ export class UI {
     }
 
     const car = this.activeCar
-    if (car && car.phase === 'atPump' && car.kind === 'fuel' && (car.filling || car.filled > 0)) {
-      this.progress.textContent = car.fullMode
-        ? `${car.filled.toFixed(1)}L · ₺${car.filledValue.toFixed(0)} / FULL`
-        : `${car.filled.toFixed(1)}L · ₺${car.filledValue.toFixed(0)} / ₺${car.targetAmount}`
+    if (car && car.phase === 'atPump' && car.kind === 'fuel') {
+      // dijital pompa ekranı canlı artar
+      el<HTMLSpanElement>('pd-liters').textContent = car.filled.toFixed(1)
+      el<HTMLSpanElement>('pd-total').textContent = Math.round(car.filledValue).toString()
+      if (car.filling || car.filled > 0)
+        this.progress.textContent = car.fullMode
+          ? t('doluyor… hedef FULL')
+          : t('doluyor… hedef ₺{0}', car.targetAmount)
     }
   }
 

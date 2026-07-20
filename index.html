@@ -70,8 +70,9 @@
     .spacer { flex: 1; }
 
     /* ---------- Mobil: kompakt HUD (buton/chip alanı yer kaplamasın) ---------- */
-    /* alt navbar yalnızca mobilde; masaüstünde gizli (genel kural @media'dan ÖNCE) */
+    /* alt navbar + uygulama-sheet sekme şeridi yalnızca mobilde; masaüstünde gizli */
     .navbar { display: none; }
+    #sheettabs { display: none; }
 
     @media (max-width: 680px) {
       .hud { gap: 5px; padding: calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(8px + env(safe-area-inset-left)); }
@@ -99,45 +100,112 @@
       #onlinechip { display: none !important; }
       #fuelrail { display: flex !important; flex-direction: column; position: fixed; z-index: 12;
         left: calc(8px + env(safe-area-inset-left)); top: calc(46px + env(safe-area-inset-top));
-        gap: 4px; width: 118px; pointer-events: none; }
-      #fuelrail .fuelchip { min-width: 0 !important; padding: 2px 8px 3px; border-bottom-width: 2px; }
-      #fuelrail .fuelchip .cl { display: block; font-size: 7px; letter-spacing: .08em; }
-      #fuelrail .fuelchip .cv { font-size: 11px; gap: 4px; }   /* daha küçük yakıt/kwh miktarı */
-      #fuelrail .fuelchip .ic { width: 11px; height: 11px; }
-      #fuelrail .fuelchip .bar { flex: 1; width: auto; min-width: 26px; height: 6px; }
+        gap: 4px; width: 154px; pointer-events: none; }
+      /* tek satır: isim + renkli ikon + bar + değer (isimli, ince) */
+      #fuelrail .fuelchip { min-width: 0 !important; flex-direction: row !important; align-items: center; gap: 6px;
+        padding: 3px 9px; border-bottom-width: 2px; }
+      #fuelrail .fuelchip .cl { display: block; font-size: 8px; letter-spacing: .04em; min-width: 34px; }
+      #fuelrail .fuelchip .cv { font-size: 10px; gap: 5px; flex: 1; }
+      #fuelrail .fuelchip .ic { width: 12px; height: 12px; }
+      #fuelrail .fuelchip .bar { flex: 1; width: auto; min-width: 18px; height: 6px; }
 
       /* ---- Popuplar navbarın ÜSTÜNDE; oyun üstte ufaktan görünmeye devam etsin ---- */
-      #panel, #infocard { z-index: 25 !important; bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
+      #panel, #infocard { z-index: 25 !important; bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
+      /* bina kartları mobilde ORTALI açılsın (eskiden sola yaslıydı, garip duruyordu) */
+      #infocard { left: 50% !important; right: auto !important; transform: translateX(-50%) !important;
+        width: min(360px, 92vw) !important; max-height: 74vh; overflow-y: auto; }
       /* büyük modallar: alt-sheet + hafif backdrop (oyun üstte görünür), navbar üstünde biter */
       .backdrop { align-items: flex-end; background: rgba(24, 32, 42, .3); }
       .backdrop .modal { position: absolute; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom));
         width: 100%; max-width: 100%; height: auto; max-height: 62vh; margin: 0;
         border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom-width: 1.5px; animation: sheetup .18s ease; }
       #setwrap .modal { max-height: 72vh; }
+      /* modallar mümkün olduğunca kompakt; içerik taşarsa küçük ekranda içeriden scroll (.mbody zaten overflow-y:auto) */
+      .mhead { padding: 9px 13px; }
+      .mhead h3 { font-size: 15px; }
+      .mbody { padding: 9px 12px 12px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 
-      /* ---- Gamified alt navbar (mobil app değil, oyun hissi) ---- */
+      /* ---- Alt navbar: oyunun paletinden ölçülü renklendirme; üst köşeler yuvarlak, kabartmalı yükselen panel ---- */
       .navbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-        justify-content: space-around; align-items: stretch; gap: 5px;
-        background: var(--paper); border-top: 2.5px solid var(--edge);
-        border-radius: 20px 20px 0 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-        box-shadow: 0 -6px 20px rgba(34, 48, 60, .2); }
-      .navbtn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-        color: var(--muted); cursor: pointer; padding: 6px 2px 5px; border-radius: 15px;
-        background: none; border: 1.5px solid transparent; font-family: var(--font);
-        transition: transform .08s, background .12s, color .12s; }
-      /* her nav item: solid renkli ikon tile (beyaz ikon) — bold oyun menüsü */
-      .navbtn .ic { width: 22px; height: 22px; padding: 9px; border-radius: 15px; box-sizing: content-box;
-        color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.16), var(--shadow); transition: transform .1s; }
-      #nav-office .ic  { background: #2f6fed; }
-      #nav-build .ic   { background: var(--red); }
-      #nav-order .ic   { background: var(--orange); }
-      #nav-roadmap .ic { background: var(--green); }
-      #nav-profile .ic { background: #6b7684; }
-      .navbtn span { font-size: 10.5px; font-weight: 800; letter-spacing: .01em; color: var(--ink); }
-      .navbtn:active { transform: translateY(2px) scale(.95); }
-      .navbtn:active .ic { box-shadow: 0 1px 0 rgba(0,0,0,.16); transform: translateY(1px); }
-      /* Sorun Bildir web butonu modalların altında kalsın (üstüne binmesin) */
-      #fbbtn { z-index: 15 !important; }
+        justify-content: space-around; align-items: flex-end; gap: 3px;
+        background: var(--paper); border: 2px solid #e0d4bd; border-bottom: 0;
+        border-radius: 20px 20px 0 0;
+        padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
+        box-shadow: inset 0 1.5px 0 rgba(255,255,255,.7), 0 -5px 18px rgba(34, 48, 60, .14); }
+      .navbtn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+        cursor: pointer; padding: 0; background: none; border: 0; font-family: var(--font); }
+      /* plaka: tek renk — grileşmiş ikon + hafif sıcak ton (oyunla uyumlu), kabartma derinliği */
+      .navbtn .ic { width: 23px; height: 23px; padding: 9px; border-radius: 14px; box-sizing: content-box;
+        color: #58626d; background: linear-gradient(180deg, #fefbf5, #f0e9d9);
+        border: 1.5px solid #e2dac8; border-bottom: 3px solid #d4cab2;
+        box-shadow: inset 0 1.5px 0 rgba(255,255,255,.7), 0 3px 6px rgba(34,48,60,.11);
+        transition: transform .08s, border-bottom-width .08s, background .12s, color .12s, box-shadow .12s; }
+      .navbtn span { font-size: 9.5px; font-weight: 800; letter-spacing: .02em; color: #6a7480; }
+      .navbtn:active .ic { border-bottom-width: 1.5px; transform: translateY(1.5px); background: #fff; }
+      /* seçili sekme: kırmızı marka vurgusu (tek renk, sadece aktif) */
+      .navbtn.on .ic { background: linear-gradient(180deg, #e05656, var(--red)); color: #fff; border-color: var(--red-dark);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 3px 7px rgba(178,52,52,.3); }
+      .navbtn.on span { color: var(--red); }
+
+      /* ---- Uygulama-sheet: bir bölüm açıkken alt navbar gizlenir; sekmeler ÜSTTE, içerik altta (mobil-app hissi) ---- */
+      .navbar.hidden { display: none !important; }
+      #sheettabs.show { display: flex; position: fixed; left: 0; right: 0; bottom: 62vh; z-index: 31;
+        justify-content: space-around; align-items: stretch; gap: 2px;
+        background: var(--paper); border: 2px solid #e0d4bd; border-bottom: 0; border-radius: 18px 18px 0 0;
+        padding: 8px 8px 9px; box-shadow: inset 0 1.5px 0 rgba(255,255,255,.7), 0 -8px 22px rgba(24, 32, 42, .16); }
+      .stab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; position: relative;
+        background: none; border: 0; padding: 4px 2px 3px; cursor: pointer; font-family: var(--font); color: var(--muted); }
+      .stab .ic { width: 21px; height: 21px; color: #7c8792; transition: color .12s, transform .1s; }
+      .stab span { font-size: 9.5px; font-weight: 800; letter-spacing: .02em; color: var(--muted); }
+      .stab.on .ic { color: var(--red); transform: translateY(-1px); }
+      .stab.on span { color: var(--red); }
+      .stab.on::after { content: ''; position: absolute; bottom: -9px; left: 24%; right: 24%; height: 3px;
+        background: var(--red); border-radius: 3px; }
+      /* nav-section modalleri sheet modunda: tab şeridinin altında, dibe kadar, düz üst köşe */
+      #shopwrap .modal, #fuelwrap .modal, #officewrap .modal, #accwrap .modal {
+        bottom: 0 !important; top: auto !important; height: 62vh !important; max-height: 62vh !important;
+        border-radius: 0 !important; border-bottom: 0 !important; padding-bottom: env(safe-area-inset-bottom);
+        animation: sheetup .18s ease; }
+      /* sekme geçişinde (zaten açık sheet) slide-up tekrar oynamasın → flash olmaz */
+      .no-sheet-anim #shopwrap .modal, .no-sheet-anim #fuelwrap .modal,
+      .no-sheet-anim #officewrap .modal, .no-sheet-anim #accwrap .modal { animation: none !important; }
+
+      /* ---- Sağ/sol-alt yüzen kutular navbar altında kalmasın (tanker durumu, taşıma kontrolü) ---- */
+      /* yolda gelen yakıt (tanker) bildirimleri: sol-üstte yakıt barlarının altında (sağ-alt göz yormasın) */
+      #tankerpanel { top: calc(150px + env(safe-area-inset-top)) !important; left: calc(8px + env(safe-area-inset-left)) !important;
+        right: auto !important; bottom: auto !important; z-index: 12 !important; align-items: flex-start !important; }
+      #tankerpanel .trow { min-width: 0 !important; padding: 5px 9px !important; font-size: 11px !important; border-bottom-width: 2px !important; }
+      #movectl { bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
+      /* ---- Toast bildirimleri: sağ-üstte SABİT dar kolon; kısa toast küçük, uzun toast 2 satıra sarar.
+             Genişlik kolonla sınırlı → uzun yazı sola taşmaz. Üst aksiyon butonlarının altında başlar. ---- */
+      #toasts { left: auto !important; transform: none !important; right: calc(8px + env(safe-area-inset-right));
+        top: calc(62px + env(safe-area-inset-top)); align-items: flex-end !important;
+        width: min(220px, 68vw); max-width: min(220px, 68vw); gap: 6px; }
+      #toasts > * { max-width: 100% !important; box-sizing: border-box;
+        font-size: 11.5px !important; padding: 7px 10px !important; line-height: 1.28;
+        text-align: left !important; white-space: normal; word-break: break-word;
+        border-bottom-width: 2px !important;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      /* alt-sekmeler (Profil/Ayarlar) yalnızca mobilde görünür (global display:none'ı ez) */
+      .subtabs { display: flex !important; }
+      /* Sorun Bildir mobilde ayarların içine taşındı — yüzen buton gizli */
+      #fbbtn { display: none !important; }
+    }
+    /* ---- Yatay (landscape) telefon: alt navbar dikey alanı yiyor — navbar yerine üst HUD tuşları,
+           modaller ortalı + içeriden scroll. iPad/masaüstü (yükseklik büyük) zaten üst-buton düzeninde. ---- */
+    @media (orientation: landscape) and (max-height: 480px) {
+      .navbar { display: none !important; }
+      /* portrede navbar'a taşınmış tuşlar geri gelsin (ikon-only, kompakt) */
+      #closebtn, #orderbtn, #shopbtn, #accbtn { display: inline-flex !important; }
+      /* alt-sheet yerine ortalı, içeriden kaydırılan dialog (kısa ekranda taşarsa scroll) */
+      .backdrop { align-items: center !important; }
+      .backdrop .modal { position: relative !important; bottom: auto !important; left: auto !important; right: auto !important;
+        width: min(560px, 88vw) !important; max-width: 88vw !important; max-height: 88vh !important;
+        border-radius: var(--r-lg) !important; border-bottom-width: 3px !important; animation: none !important; }
+      #setwrap .modal { max-height: 90vh !important; }
+      /* yüzen kutular alta insin (navbar yok) */
+      #panel, #infocard { bottom: calc(12px + env(safe-area-inset-bottom)) !important; }
+      #tankerpanel, #movectl, #fbbtn { top: auto !important; bottom: calc(12px + env(safe-area-inset-bottom)) !important; }
     }
     @keyframes sheetup { from { transform: translateY(24px); opacity: .4 } to { transform: none; opacity: 1 } }
 
@@ -187,8 +255,19 @@
     #panel.show { display: block; }
     #panel h3 { font-size: 14.5px; font-weight: 800; margin-bottom: 2px; }
     #panel .row { display: flex; gap: 8px; align-items: center; margin-top: 9px; }
-    #liters { font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 700; flex: 1;
+    #liters { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; flex: 1;
               text-align: center; color: var(--muted); }
+    /* dijital pompa ekranı (gerçek benzin pompası hissi) */
+    .pumpdisp { display: none; align-items: center; gap: 6px; margin-top: 9px; padding: 9px 12px; border-radius: 12px;
+                background: linear-gradient(180deg, #0c1712, #0a130f); border: 2px solid #24322a;
+                box-shadow: inset 0 3px 10px rgba(0,0,0,.6), inset 0 -1px 0 rgba(255,255,255,.04); }
+    .pd-cell { flex: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+    .pd-sep { width: 2px; align-self: stretch; background: linear-gradient(#2b3a31, transparent); }
+    .pd-lbl { font-size: 9px; font-weight: 800; letter-spacing: 2px; color: #5c7768; }
+    .pd-val { font-family: "SF Mono", Menlo, "Courier New", monospace; font-weight: 700; font-size: 30px; line-height: 1;
+              font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+    .pd-val.lit { color: #57f19a; text-shadow: 0 0 9px rgba(87,241,154,.5), 0 0 2px rgba(87,241,154,.9); }
+    .pd-val.amt { color: #ffbe4d; text-shadow: 0 0 9px rgba(255,190,77,.5), 0 0 2px rgba(255,190,77,.9); }
     #amount { flex: 1; background: #fff; border: 1.5px solid var(--edge); border-radius: var(--r-md);
               color: var(--ink); padding: 10px 12px; font-size: 17px; font-weight: 800; outline: none;
               min-width: 0; font-family: var(--font); }
@@ -216,19 +295,35 @@
     #infocard .bclose .ic { width: 14px; height: 14px; }
     #infocard .body { padding: 10px 14px 14px; }
     #infocard .bdesc { font-size: 12px; color: var(--muted); line-height: 1.45; margin-bottom: 8px; font-weight: 600; }
-    #infocard .stat { display: flex; justify-content: space-between; font-size: 12.5px; padding: 4.5px 0;
+    .stat { display: flex; justify-content: space-between; font-size: 12.5px; padding: 4.5px 0;
                       border-top: 1px solid var(--line); font-weight: 700; }
-    #infocard .stat .k { color: var(--muted); }
-    #infocard .stat .v { font-weight: 800; font-variant-numeric: tabular-nums; }
-    #infocard .stat .v.bad { color: var(--red); }
-    #infocard .stat .v.good { color: var(--green-dark); }
+    .stat .k { color: var(--muted); }
+    .stat .v { font-weight: 800; font-variant-numeric: tabular-nums; }
+    .stat .v.bad { color: var(--red); }
+    .stat .v.good { color: var(--green-dark); }
+    .ofsec { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted);
+             text-transform: uppercase; margin: 13px 0 3px; }
+    /* alt-sekme (segmented control) — Profil/Ayarlar; yalnızca mobilde görünür */
+    .subtabs { display: none; gap: 6px; margin-bottom: 11px; background: var(--paper-2);
+               border: 1.5px solid var(--edge); border-radius: 12px; padding: 4px; }
+    .subtab { flex: 1; padding: 8px 4px; border: 0; border-radius: 9px; background: none;
+              font-family: var(--font); font-weight: 800; font-size: 13px; color: var(--muted); cursor: pointer;
+              transition: background .12s, color .12s; }
+    .subtab.on { background: var(--paper); color: var(--red); box-shadow: 0 1px 3px rgba(34, 48, 60, .16); }
     #infocard .baction { width: 100%; margin-top: 9px; padding: 10px; justify-content: center; }
-    .prow { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px solid var(--line);
-            font-size: 12.5px; font-weight: 800; }
+    .prow { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line);
+            font-size: 13px; font-weight: 800; }
     .prow .pl { flex: 1; }
     .prow .pc { font-size: 10px; color: var(--muted); font-weight: 700; }
-    .prow .pv { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; }
-    .pbtn { padding: 3px 10px; font-size: 14px; line-height: 1; }
+    .prow .pv { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15px;
+                color: var(--ink); background: var(--paper-2); border: 1.5px solid var(--edge);
+                border-radius: 9px; padding: 6px 4px; }
+    .pbtn { width: 40px; height: 36px; padding: 0; font-size: 22px; line-height: 1; font-weight: 800;
+            display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+            color: var(--red); background: var(--paper); border: 1.5px solid var(--edge);
+            border-bottom-width: 3px; border-radius: 10px; }
+    .pbtn:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 1.5px; }
+    .pbtn:disabled { opacity: .4; }
 
     /* ---------- Modallar ---------- */
     .backdrop { position: fixed; inset: 0; background: rgba(24, 32, 42, .45); z-index: 30;
@@ -238,11 +333,13 @@
              border-radius: var(--r-lg); width: min(500px, 94vw); height: min(580px, 84vh); display: flex;
              flex-direction: column; box-shadow: 0 16px 44px rgba(20, 28, 38, .4); overflow: hidden; }
     #setwrap .modal { height: auto; max-height: 84vh; }
-    .mhead { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;
-             background: var(--red); color: #fff; }
-    .mhead h3 { font-size: 16px; font-weight: 800; }
-    .mclose { background: rgba(255, 255, 255, .16); border: 0; color: #fff; width: 30px; height: 30px;
-              border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .mhead { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px;
+             background: var(--paper); color: var(--ink); border-bottom: 1.5px solid var(--line); }
+    .mhead h3 { font-size: 16px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 9px; }
+    .mhead h3::before { content: ''; width: 5px; height: 18px; border-radius: 3px; background: var(--red); flex: 0 0 auto; }
+    .mclose { background: var(--paper-2); border: 1.5px solid var(--edge); color: var(--muted); width: 32px; height: 32px;
+              border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .12s, color .12s; }
+    .mclose:active { background: var(--red); border-color: var(--red-dark); color: #fff; }
     .mclose .ic { width: 13px; height: 13px; }
     .tabs { display: flex; gap: 6px; padding: 10px 12px 0; background: var(--paper); flex-wrap: wrap; }
     .tab { border: 1.5px solid var(--edge); border-bottom: 3px solid var(--edge); background: var(--paper-2);
@@ -345,13 +442,14 @@
     /* ---------- Toast ---------- */
     #toasts { position: fixed; top: 62px; left: 50%; transform: translateX(-50%); z-index: 40;
               display: flex; flex-direction: column; gap: 7px; align-items: center; pointer-events: none; }
-    .toast { background: var(--paper); border: 1.5px solid var(--edge); border-bottom: 3px solid var(--edge);
-             color: var(--ink); padding: 8px 16px; border-radius: var(--r-md); font-size: 13px;
-             font-weight: 700; box-shadow: var(--shadow);
-             animation: toastin .22s cubic-bezier(.34, 1.56, .64, 1);
-             max-width: min(480px, 86vw); text-align: center; }
-    .toast.bad { background: #fdeeee; border-color: var(--red); color: var(--red-dark); }
-    .toast.good { background: #ecf7f0; border-color: var(--green); color: var(--green-dark); }
+    /* toast = oyunun kart dili: krem + border-bottom "basılı kart" derinliği (jenerik değil) */
+    .toast { background: var(--paper); color: var(--ink);
+             border: 1.5px solid var(--edge); border-bottom: 3px solid var(--edge);
+             padding: 8px 15px; border-radius: var(--r-md); font-size: 13px; font-weight: 800;
+             box-shadow: var(--shadow); animation: toastin .22s cubic-bezier(.34, 1.56, .64, 1);
+             max-width: min(420px, 86vw); text-align: center; }
+    .toast.good { background: #eef7f1; border-color: var(--green); border-bottom-color: var(--green-dark); color: var(--green-dark); }
+    .toast.bad { background: #fbeeee; border-color: var(--red); border-bottom-color: var(--red-dark); color: var(--red-dark); }
     @keyframes toastin { from { opacity: 0; transform: translateY(-10px) scale(.94); } to { opacity: 1; } }
 
     /* ---------- Patlama ---------- */
@@ -377,6 +475,7 @@
     <symbol id="i-truck" viewBox="0 0 24 24"><rect x="2.5" y="7" width="12" height="8.5" rx="1.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14.5 10h3.6l2.9 3v2.5h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7" cy="17.2" r="1.9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16.8" cy="17.2" r="1.9" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-build" viewBox="0 0 24 24"><path d="M3.5 20.5h17M6 20.5V10l6-5.5 6 5.5v10.5M10 20.5v-4.5h4v4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
     <symbol id="i-gear" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M10.3 1.6a1.4 1.4 0 0 1 1.35-1.05h.7A1.4 1.4 0 0 1 13.7 1.6l.35 1.5c.5.17.98.4 1.42.68l1.47-.5a1.4 1.4 0 0 1 1.66.62l.35.6a1.4 1.4 0 0 1-.3 1.75l-1.13 1.03c.05.26.08.53.08.8s-.03.54-.08.8l1.13 1.03a1.4 1.4 0 0 1 .3 1.75l-.35.6a1.4 1.4 0 0 1-1.66.62l-1.47-.5c-.44.28-.92.51-1.42.68l-.35 1.5A1.4 1.4 0 0 1 12.35 23.4h-.7a1.4 1.4 0 0 1-1.35-1.05l-.35-1.5a7 7 0 0 1-1.42-.68l-1.47.5a1.4 1.4 0 0 1-1.66-.62l-.35-.6a1.4 1.4 0 0 1 .3-1.75l1.13-1.03a5.4 5.4 0 0 1 0-1.6L4.93 13.04a1.4 1.4 0 0 1-.3-1.75l.35-.6a1.4 1.4 0 0 1 1.66-.62l1.47.5c.44-.28.92-.51 1.42-.68zM12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8" clip-rule="evenodd"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 7h7M15 7h5M4 17h3M11 17h9"/></g><circle cx="13" cy="7" r="2.6" fill="currentColor"/><circle cx="9" cy="17" r="2.6" fill="currentColor"/></symbol>
     <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3.5v8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M7.2 6.4a8 8 0 1 0 9.6 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
     <symbol id="i-land" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-pave" viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 12h17M10 6v6M14 12v6" stroke="currentColor" stroke-width="1.8"/></symbol>
@@ -426,7 +525,7 @@
     <button id="orderbtn" class="btn warn" style="width:158px; justify-content:center"><svg class="ic"><use href="#i-truck"/></svg><span id="orderlabel" data-i18n="Yakıt Siparişi">Yakıt Siparişi</span></button>
     <button id="shopbtn" class="btn primary" style="width:118px; justify-content:center; position:relative"><svg class="ic"><use href="#i-build"/></svg><span id="shoplabel" data-i18n="İnşaat">İnşaat</span><span id="shopdot"></span></button>
     <button id="accbtn" class="btn" title="Hesabım"><svg class="ic" style="margin:0"><use href="#i-user"/></svg></button>
-    <button id="setbtn" class="btn" title="Ayarlar"><svg class="ic" style="margin:0"><use href="#i-gear"/></svg></button>
+    <button id="setbtn" class="btn" title="Ayarlar"><svg class="ic" style="margin:0"><use href="#i-sliders"/></svg></button>
   </div>
 
   <nav class="navbar" id="navbar">
@@ -436,6 +535,14 @@
     <button class="navbtn" id="nav-roadmap"><svg class="ic"><use href="#i-map"/></svg><span data-i18n="Yol Har.">Yol Har.</span></button>
     <button class="navbtn" id="nav-profile"><svg class="ic"><use href="#i-user"/></svg><span data-i18n="Profil">Profil</span></button>
   </nav>
+  <!-- Uygulama-sheet sekme şeridi: bir bölüm açıkken alt navbar yerine üstte görünür -->
+  <div id="sheettabs" role="tablist">
+    <button class="stab" data-sec="office"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Ofis">Ofis</span></button>
+    <button class="stab" data-sec="build"><svg class="ic"><use href="#i-build"/></svg><span data-i18n="İnşaat">İnşaat</span></button>
+    <button class="stab" data-sec="order"><svg class="ic"><use href="#i-truck"/></svg><span data-i18n="Sipariş">Sipariş</span></button>
+    <button class="stab" data-sec="roadmap"><svg class="ic"><use href="#i-map"/></svg><span data-i18n="Yol Har.">Yol Har.</span></button>
+    <button class="stab" data-sec="profile"><svg class="ic"><use href="#i-user"/></svg><span data-i18n="Profil">Profil</span></button>
+  </div>
 
   <div id="panel">
     <h3 id="demand">—</h3>
@@ -461,6 +568,12 @@
         <input id="amount" type="number" inputmode="numeric" min="0" step="10" placeholder="₺ tutar gir" data-i18n-ph="₺ tutar gir" />
         <button id="startbtn" class="btn good" disabled data-i18n="BAŞLAT">BAŞLAT</button>
         <button id="fullbtn" class="btn primary" disabled data-i18n="FULLE">FULLE</button>
+      </div>
+      <!-- dijital pompa ekranı: dolarken litre (yeşil) + tutar (amber) canlı artar -->
+      <div class="pumpdisp" id="pumpdisp">
+        <div class="pd-cell"><span class="pd-lbl">LİTRE</span><span class="pd-val lit" id="pd-liters">0.0</span></div>
+        <div class="pd-sep"></div>
+        <div class="pd-cell"><span class="pd-lbl">TUTAR ₺</span><span class="pd-val amt" id="pd-total">0</span></div>
       </div>
       <div class="row">
         <div id="liters">—</div>
@@ -551,12 +664,25 @@
       </div>
       <div class="mbody">
         <div class="stat-row"><span data-i18n="Kasa">Kasa</span><b id="of-cash" class="num">0 ₺</b></div>
-        <div class="stat-row"><span data-i18n="Toplam gelir">Toplam gelir</span><b id="of-rev" class="num">0 ₺</b></div>
-        <div class="stat-row"><span data-i18n="Servis edilen müşteri">Servis edilen müşteri</span><b id="of-served" class="num">0</b></div>
-        <div class="stat-row"><span data-i18n="Kaçan müşteri">Kaçan müşteri</span><b id="of-lost" class="num">0</b></div>
-        <div class="stat-row"><span data-i18n="İtibar">İtibar</span><b id="of-rep" class="num">0</b></div>
-        <button class="btn primary" id="of-toggle" style="width:100%; justify-content:center; margin-top:12px"><svg class="ic"><use href="#i-power"/></svg><span data-i18n="İstasyonu Aç/Kapa">İstasyonu Aç/Kapa</span></button>
+        <!-- performans özeti (bina kartıyla aynı) -->
+        <div id="of-stats"></div>
+        <!-- fiyat yönetimi (bina kartından taşındı) -->
+        <div class="ofsec" data-i18n="Yakıt Satış Fiyatı">Yakıt Satış Fiyatı</div>
+        <div id="of-prices"></div>
+        <button class="btn" id="of-bank" style="width:100%; justify-content:center; margin-top:12px; background:#1fa8bc; border-color:#178595; color:#fff"><svg class="ic"><use href="#i-coin"/></svg><span data-i18n="Banka / Kredi Çek">Banka / Kredi Çek</span></button>
+        <button class="btn primary" id="of-toggle" style="width:100%; justify-content:center; margin-top:8px"><svg class="ic"><use href="#i-power"/></svg><span data-i18n="İstasyonu Aç/Kapa">İstasyonu Aç/Kapa</span></button>
       </div>
+    </div>
+  </div>
+
+  <!-- Banka / kredi ekranı -->
+  <div class="backdrop" id="bankwrap">
+    <div class="modal" style="height:auto; max-height:84vh">
+      <div class="mhead">
+        <h3 data-i18n="Banka — Kredi">🏦 Banka — Kredi</h3>
+        <button class="mclose" data-close="bankwrap"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="mbody" id="bank-body"></div>
     </div>
   </div>
 
@@ -567,15 +693,24 @@
         <button class="mclose" data-close="accwrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="mbody">
-        <div class="shoprow"><div class="sicon" style="color:var(--red);background:#d645451c;border-color:#d6454544"><svg class="ic"><use href="#i-user"/></svg></div>
-          <div class="sinfo"><div class="st" id="acc-email">—</div><div class="sd">Kaydın buluta senkronlanıyor (10 sn'de bir)</div></div></div>
-        <div class="shoprow"><div class="sicon" style="color:var(--orange);background:#e8862e1c;border-color:#e8862e44"><svg class="ic"><use href="#i-cal"/></svg></div>
-          <div class="sinfo"><div class="st" id="acc-streak">—</div><div class="sd">Her gün gir, seri büyüsün — bonus artar</div></div></div>
-        <div class="shoprow"><div class="sicon" style="color:var(--green);background:#27a05a1c;border-color:#27a05a44"><svg class="ic"><use href="#i-star"/></svg></div>
-          <div class="sinfo"><div class="st" id="acc-ach">—</div><div class="sd">Başarımlar oynadıkça açılır</div></div></div>
-        <div class="row" style="display:flex; gap:8px; margin-top:4px">
-          <button id="acclogout" class="btn danger" style="flex:1; justify-content:center">Çıkış Yap</button>
+        <!-- mobilde 2 alt-sekme: Profil / Ayarlar (segmented control) -->
+        <div class="subtabs">
+          <button class="subtab on" data-sub="profil" data-i18n="Profil">Profil</button>
+          <button class="subtab" data-sub="ayarlar" data-i18n="Ayarlar">Ayarlar</button>
         </div>
+        <div class="subpane" data-pane="profil">
+          <div class="shoprow"><div class="sicon" style="color:var(--red);background:#d645451c;border-color:#d6454544"><svg class="ic"><use href="#i-user"/></svg></div>
+            <div class="sinfo"><div class="st" id="acc-email">—</div><div class="sd">Kaydın buluta senkronlanıyor (10 sn'de bir)</div></div></div>
+          <div class="shoprow"><div class="sicon" style="color:var(--orange);background:#e8862e1c;border-color:#e8862e44"><svg class="ic"><use href="#i-cal"/></svg></div>
+            <div class="sinfo"><div class="st" id="acc-streak">—</div><div class="sd">Her gün gir, seri büyüsün — bonus artar</div></div></div>
+          <div class="shoprow"><div class="sicon" style="color:var(--green);background:#27a05a1c;border-color:#27a05a44"><svg class="ic"><use href="#i-star"/></svg></div>
+            <div class="sinfo"><div class="st" id="acc-ach">—</div><div class="sd">Başarımlar oynadıkça açılır</div></div></div>
+          <div class="row" style="display:flex; gap:8px; margin-top:4px">
+            <button id="acclogout" class="btn danger" style="flex:1; justify-content:center">Çıkış Yap</button>
+          </div>
+        </div>
+        <!-- Ayarlar içeriği mobilde buraya taşınır (setwrap'ten) -->
+        <div class="subpane" data-pane="ayarlar" hidden></div>
       </div>
     </div>
   </div>
@@ -609,6 +744,10 @@
         <label style="margin-top:12px" data-i18n="Bildirimler (sekme kapalıyken tanker/kumbara haberi)">Bildirimler (sekme kapalıyken tanker/kumbara haberi)</label>
         <div class="row">
           <button id="notifbtn" class="btn" style="flex:1; justify-content:center">Bildirimlere İzin Ver</button>
+        </div>
+        <label style="margin-top:12px" data-i18n="Geri bildirim">Geri bildirim</label>
+        <div class="row">
+          <button id="set-feedback" class="btn warn" style="flex:1; justify-content:center" data-i18n="Sorun Bildir / Öneri Yaz">Sorun Bildir / Öneri Yaz</button>
         </div>
         <label style="margin-top:12px" data-i18n="Hesap (kaydın bulutta saklanır)">Hesap (kaydın bulutta saklanır)</label>
         <div id="accbox">

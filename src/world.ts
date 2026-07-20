@@ -652,24 +652,38 @@ export class World {
    *  Dönen mesh = iç dolum küresi; updateTankFill onu ölçekler. */
   private addSphereTank(x: number, y: number, R: number, color: number): THREE.Mesh {
     const g = new THREE.Group()
-    // gövde: yakıt renginde yarı-şeffaf cam
-    const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 20, 14),
-      new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.3 }))
-    shell.position.z = R + 0.55
+    const legH = 0.45                 // ayaklar kısa: küre yere yakın otursun
+    const centerZ = legH + R          // küre merkezinin dünya-z'si (grup z=0)
+    const fillR = R * 0.9
+    // gövde: yakıt renginde yarı-şeffaf cam — kubbe hep küre olarak okunsun diye yeterince opak
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 22, 16),
+      new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.42, depthWrite: false }))
+    shell.position.z = centerZ
     shell.castShadow = true
     g.add(shell)
-    // iç dolum: opak yakıt renk; ölçeği doluluk oranını gösterir (boş=çekirdek, dolu=gövde)
-    const fill = new THREE.Mesh(new THREE.SphereGeometry(R * 0.9, 18, 12), lam(color))
-    fill.position.z = R + 0.55
+    // iç sıvı: yatay düzlemle kırpılır → alttan yukarı dolar (%50 = yarım küre). Düz üst yüzey ayrı diskle.
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), centerZ - fillR) // başlangıç: boş (z <= alt)
+    const fillMat = lam(color)
+    fillMat.clippingPlanes = [plane]
+    fillMat.clipShadows = true
+    const fill = new THREE.Mesh(new THREE.SphereGeometry(fillR, 24, 18), fillMat)
+    fill.position.z = centerZ
+    fill.castShadow = true
     g.add(fill)
-    // kuşak (koyu)
-    const band = new THREE.Mesh(new THREE.TorusGeometry(R * 0.99, 0.05, 8, 28), lam(0x2a2f34))
-    band.position.z = R + 0.55
-    g.add(band)
-    for (const [lx, ly] of [[0.6, 0.6], [0.6, -0.6], [-0.6, 0.6], [-0.6, -0.6]] as const) {
-      cyl(0.08, R + 0.35, 0x8f979e, lx * (R / 1.15), ly * (R / 1.15), (R + 0.35) / 2, 'z', g)
+    // sıvının düz üst yüzeyi: birim daire, updateTankFill yüksekliğe göre ölçekler/konumlar
+    const cap = new THREE.Mesh(new THREE.CircleGeometry(1, 28),
+      new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }))
+    cap.position.z = centerZ - fillR
+    cap.visible = false
+    g.add(cap)
+    fill.userData = { plane, cap, fillR, centerZ }
+    // alt yaka + kısa ayaklar (yere yakın, ince)
+    cyl(R * 0.42, 0.12, 0x8f979e, 0, 0, legH - 0.02, 'z', g)
+    for (const [lx, ly] of [[0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]] as const) {
+      cyl(0.06, legH, 0x7f878e, lx * (R * 0.5), ly * (R * 0.5), legH / 2, 'z', g)
     }
-    cyl(0.05, 0.4, 0x8f979e, 0, 0, R * 2 + 0.55, 'z', g)
+    // üst ağız/valf
+    cyl(0.05, 0.32, 0x8f979e, 0, 0, centerZ + R + 0.1, 'z', g)
     g.position.set(x, y, 0)
     this.tankGroup.add(g)
     return fill
@@ -696,11 +710,21 @@ export class World {
     })
   }
 
-  /** Her yakıtın doluluk oranıyla (0..1) iç dolum kürelerini ölçekler. */
+  /** Her yakıtın doluluk oranıyla (0..1) sıvı seviyesini alttan yukarı ayarlar (kırpma düzlemi + yüzey diski). */
   updateTankFill(ratios: Record<FuelType, number>) {
     for (const f of ['benzin', 'dizel', 'lpg'] as FuelType[]) {
       const r = Math.max(0, Math.min(1, ratios[f] || 0))
-      for (const m of this.tankFillMeshes[f]) m.scale.setScalar(0.3 + 0.7 * r)
+      for (const m of this.tankFillMeshes[f]) {
+        const ud = m.userData as { plane: THREE.Plane; cap: THREE.Mesh; fillR: number; centerZ: number }
+        if (!ud?.plane) { m.scale.setScalar(0.3 + 0.7 * r); continue } // eski tank (güvenli geri düşüş)
+        const surfaceZ = ud.centerZ + ud.fillR * (2 * r - 1)   // %0=alt, %50=merkez, %100=üst
+        ud.plane.constant = surfaceZ                            // z <= surfaceZ olan kısım görünür
+        m.visible = r > 0.001
+        const crossR = ud.fillR * Math.sqrt(Math.max(0, 1 - (2 * r - 1) ** 2)) // yüzey kesit yarıçapı
+        ud.cap.visible = r > 0.02 && r < 0.99
+        ud.cap.position.z = surfaceZ
+        ud.cap.scale.setScalar(Math.max(0.0001, crossR))
+      }
     }
   }
 
