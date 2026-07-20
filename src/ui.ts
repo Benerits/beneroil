@@ -3,6 +3,7 @@ import { t } from './i18n'
 import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems } from './state'
 import { audio } from './audio'
 import * as auth from './auth'
+import { isNativePlatform } from './platform'
 
 function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T
@@ -206,7 +207,10 @@ export class UI {
     el<HTMLButtonElement>('stsave').addEventListener('click', save)
     nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') save() })
     const fbWrap = el<HTMLDivElement>('fbwrap')
-    el<HTMLButtonElement>('fbbtn').addEventListener('click', () => fbWrap.classList.add('show'))
+    const fbBtn = el<HTMLButtonElement>('fbbtn')
+    // Sorun Bildir yalnızca web'de; native app'te gizli (mobil UI temiz kalsın).
+    if (isNativePlatform()) fbBtn.style.display = 'none'
+    fbBtn.addEventListener('click', () => fbWrap.classList.add('show'))
     fbWrap.addEventListener('pointerdown', e => { if (e.target === fbWrap) fbWrap.classList.remove('show') })
     el<HTMLButtonElement>('fbsend').addEventListener('click', async () => {
       const ta = el<HTMLTextAreaElement>('fbtext')
