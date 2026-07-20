@@ -533,7 +533,8 @@ function finishSale(car: Car) {
     score -= 0.6 // eksik dolum: sessiz, sadece memnuniyet düşer
   }
 
-  if (car.autoServed) {
+  // pompacı ücreti YALNIZCA gerçek satışta kesilir — sıfır dolumda pompa negatife düşmesin
+  if (car.autoServed && revenue0 > 0) {
     revenue -= POMPACI_FEE
     ui.toast(t('🧑‍🔧 Pompacı servis etti: -₺{0}', POMPACI_FEE), '', true)
   }
@@ -2491,6 +2492,10 @@ function frame() {
       && state.autoPumps.has(c.slotIndex) && !state.brokenPumps.has(c.slotIndex)) {
       c.autoServed = true
       c.nozzle = c.demandType
+      // müşterinin TALEBİNE kadar doldur; targetAmount ayarlanmazsa dolum döngüsü
+      // ilk karede 0 litrede biterdi (pompacı benzin almadan yolluyordu → hep -₺30)
+      if (c.wantsFull) c.fullMode = true
+      else c.targetAmount = c.demandAmount
       c.filling = true
       c.beingServed = true
     }
