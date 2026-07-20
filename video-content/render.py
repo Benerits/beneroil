@@ -7,7 +7,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCENE = os.path.join(HERE, "scene")
 OUT = os.path.join(HERE, "frames")
 FPS = 30
-DUR = 15.0                      # saniye (CYCLE=8s → ~2 döngü)
+DUR = 18.0                     # saniye (CYCLE=9s -> tam 2 dongu)
 N = int(FPS * DUR)
 os.makedirs(OUT, exist_ok=True)
 for f in os.listdir(OUT):
