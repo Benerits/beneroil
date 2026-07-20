@@ -1,0 +1,16 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<title>BenelOil — Rafineri Sahnesi (canlı)</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#dfe7ee;font-family:system-ui,sans-serif}
+  canvas{display:block}
+  #hint{position:fixed;left:12px;bottom:12px;background:rgba(13,20,32,.72);color:#fff;
+        padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;pointer-events:none;z-index:5}
+  #hint b{color:#ffd08a}
+</style>
+<script type="importmap">
+{ "imports": { "three": "./three.module.js", "three/addons/": "./addons/" } }
+</script>
+</head><body>
+<div id="hint">Sürükle: <b>döndür</b> · Tekerlek: <b>zoom</b> · Sağ-sürükle: <b>kaydır</b><br>Sahne otomatik oynuyor — istediğin açıyı ayarlayıp ekran kaydı al.</div>
+<script type="module" src="./live.js"></script>
+</body></html>
