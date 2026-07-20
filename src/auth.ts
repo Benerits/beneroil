@@ -46,11 +46,22 @@ let _emailVerified = true
 /** e-posta doğrulaması gerekli mi (env açık + kullanıcı doğrulanmamış) */
 export function needsVerify(): boolean { return _verifyRequired && !_emailVerified }
 
+// çoklu cihaz senkronu: son sunucu zaman damgasını izle
+let _lastUpdatedAt: string | null = null
+export function lastUpdatedAt(): string | null { return _lastUpdatedAt }
+export function setLastUpdatedAt(v: string | null) { _lastUpdatedAt = v }
+
 export async function pullSave(): Promise<unknown | null> {
   const d = await api('/api/save', 'GET')
   _verifyRequired = !!d.verifyRequired
   _emailVerified = !!d.emailVerified
+  _lastUpdatedAt = (d.updatedAt as string) ?? _lastUpdatedAt
   return d.save ?? null
+}
+/** sunucudaki güncel zaman damgasını çek (odakta senkron kontrolü için) */
+export async function fetchUpdatedAt(): Promise<string | null> {
+  const d = await api('/api/save', 'GET')
+  return (d.updatedAt as string) ?? null
 }
 
 /** doğrulama mailini (tekrar) gönder */
@@ -68,8 +79,21 @@ export async function requestReset(email: string): Promise<void> {
   await api('/api/request-reset', 'POST', { email, lang })
 }
 
-export async function pushSave(save: unknown): Promise<void> {
-  await api('/api/save', 'POST', { save })
+/** Save'i sunucuya yaz. Çoklu cihaz guard: yüklediğimizden beri başka cihaz yazmışsa
+ *  sunucu 409 + yeni save döner → çağıran yeniyi uygular (clobber yok, ilerleme karışmaz). */
+export async function pushSave(save: unknown): Promise<{ conflict: boolean; save?: unknown; updatedAt?: string }> {
+  const res = await fetch('/api/save', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-auth': localStorage.getItem(TOKEN_KEY) ?? '' },
+    body: JSON.stringify({ save, baseUpdatedAt: _lastUpdatedAt }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (res.status === 409 && (data as { conflict?: boolean }).conflict) {
+    _lastUpdatedAt = (data as { updatedAt?: string }).updatedAt ?? _lastUpdatedAt
+    return { conflict: true, save: (data as { save?: unknown }).save, updatedAt: _lastUpdatedAt ?? undefined }
+  }
+  if (res.ok) _lastUpdatedAt = (data as { updatedAt?: string }).updatedAt ?? _lastUpdatedAt
+  return { conflict: false }
 }
 
 /** sorun bildir: mesaj + küçük oyun bağlamı SQL'e düşer */

@@ -575,8 +575,8 @@ export function getShopItems(s: GameState): ShopRow[] {
   }
   const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
 
-  row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size), t('2 blok 3×3'),
-    t('Bitişik arsalardan birini seç — istasyon geliştikçe emlak fiyatları artar'),
+  row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size), t('yol karşısı dahil'),
+    t('Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — uzak/karşı arsalar pahalı, istasyon geliştikçe artar. Seçince gerçek fiyat görünür.'),
     s.ownedParcels.size >= 18 ? null : parcelCost(0, 0, s), null)
   row('pave', 'i-pave', t('Zemin Betonu'), t('arsa başı'),
     t('Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)'),

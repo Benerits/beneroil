@@ -172,7 +172,7 @@
 
       /* ---- Sağ/sol-alt yüzen kutular navbar altında kalmasın (tanker durumu, taşıma kontrolü) ---- */
       /* yolda gelen yakıt (tanker) bildirimleri: sol-üstte yakıt barlarının altında (sağ-alt göz yormasın) */
-      #tankerpanel { top: calc(150px + env(safe-area-inset-top)) !important; left: calc(8px + env(safe-area-inset-left)) !important;
+      #tankerpanel { top: calc(184px + env(safe-area-inset-top)) !important; left: calc(8px + env(safe-area-inset-left)) !important;
         right: auto !important; bottom: auto !important; z-index: 12 !important; align-items: flex-start !important; }
       #tankerpanel .trow { min-width: 0 !important; padding: 5px 9px !important; font-size: 11px !important; border-bottom-width: 2px !important; }
       #movectl { bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
@@ -867,6 +867,8 @@ Sorun Bildir
        border:1px solid #2f6fed;"></div>
 
   <!-- Mobil taşıma: yön butonlarıyla ince ayar (sürükleme zor) -->
+  <div id="zonecost" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:calc(120px + env(safe-area-inset-top)); z-index:41;
+       background:var(--paper); border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:12px; padding:8px 16px; font-weight:800; font-size:14px; box-shadow:var(--shadow); pointer-events:none; white-space:nowrap"></div>
   <div id="movectl" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); bottom:calc(16px + env(safe-area-inset-bottom)); z-index:40; user-select:none;
        -webkit-user-select:none; touch-action:manipulation; text-align:center;">
     <div style="display:grid; grid-template-columns:repeat(3,44px); grid-template-rows:repeat(3,44px); gap:5px; margin-bottom:8px;">
