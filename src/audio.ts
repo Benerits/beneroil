@@ -95,6 +95,8 @@ class AudioMan {
     }
   }
   musicOn = localStorage.getItem('benzinlik-music') !== '0'
+  /** müzik ses seviyesi 0..1 (seviyeli slider) */
+  musicVolume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('benzinlik-music-vol') ?? '0.7')))
 
   ensure() {
     if (this.ctx) {
@@ -108,7 +110,7 @@ class AudioMan {
     this.master.gain.value = 0.9
     this.master.connect(this.ctx.destination)
     this.musicGain = this.ctx.createGain()
-    this.musicGain.gain.value = this.musicOn ? 1 : 0
+    this.musicGain.gain.value = this.musicOn ? this.musicVolume : 0
     this.musicGain.connect(this.master)
     this.startMusic()
   }
@@ -249,8 +251,18 @@ class AudioMan {
     this.musicOn = !this.musicOn
     localStorage.setItem('benzinlik-music', this.musicOn ? '1' : '0')
     this.ensure()
-    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? 1 : 0
+    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? this.musicVolume : 0
     return this.musicOn
+  }
+
+  /** seviyeli müzik ses ayarı (0..1). 0 = kapalı. */
+  setMusicVolume(v: number): void {
+    this.musicVolume = Math.min(1, Math.max(0, v))
+    this.musicOn = this.musicVolume > 0.001
+    localStorage.setItem('benzinlik-music-vol', String(this.musicVolume))
+    localStorage.setItem('benzinlik-music', this.musicOn ? '1' : '0')
+    this.ensure()
+    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? this.musicVolume : 0
   }
 
   toggleSfx(): boolean {

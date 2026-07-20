@@ -369,7 +369,7 @@ const cars = new CarManager(world.scene, modelLib, {
     state.addPending('truckpark', fee, t('Tır parkı'))
     ui.toast(t('Tır park etti: ₺{0} kumbarada', fee), 'good', true)
   },
-  onCarReady: car => { if (!ui.activeCar) ui.selectCar(car); tutStart() },
+  onCarReady: car => { if (!ui.activeCar && !isAttendantCar(car)) ui.selectCar(car); tutStart() },
   onEvTurnedAway: () => {
     if (evTurnAwayT > 0) return
     evTurnAwayT = 4
@@ -387,8 +387,12 @@ const cars = new CarManager(world.scene, modelLib, {
   },
 })
 
+/** pompacı çalışan pompaya yanaşan araç: panel açılmaz, popup kalmaz (pompacı halleder) */
+function isAttendantCar(car: Car): boolean {
+  return car.kind === 'fuel' && car.slotIndex >= 0 && state.autoPumps.has(car.slotIndex)
+}
 function nextServableCar(): Car | null {
-  return cars.cars.find(c => c.phase === 'atPump') ?? null
+  return cars.cars.find(c => c.phase === 'atPump' && !isAttendantCar(c)) ?? null
 }
 
 // ---- Pompa hortumları (her pompa bağımsız, her aracın kendi hortumu) ----
