@@ -83,15 +83,27 @@ const arm = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.5, 0.5), std(RED)); arm.
 const nozzleHead = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.6), std(RED2)); nozzleHead.position.set(0.4, 4.7, 9); gantry.add(nozzleHead)
 const hose = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1, 8), std(DARK)); hose.visible = false; scene.add(hose)
 
-// ---- ağaçlar ----
-function tree(x, z, s = 1) {
-  const g = new THREE.Group()
-  cyl(0.22 * s, 0.28 * s, 1.3 * s, 0x8a5a34, 0, 0.65 * s, 0, g, 6)
-  const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.15 * s, 1.9 * s, 8), std(0x4e9c50)); c1.position.y = 1.7 * s; c1.castShadow = true; g.add(c1)
-  const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.85 * s, 1.4 * s, 8), std(0x5cb35c)); c2.position.y = 2.5 * s; c2.castShadow = true; g.add(c2)
-  g.position.set(x, 0, z); scene.add(g)
+// ---- ağaçlar: oyunun gerçek Kenney asset'leri (yüklenince yerleştirilir) ----
+// [x, z, ölçek, küçük mü]
+const TREE_SPOTS = [
+  [-28, -10, 4.2, 0], [-33, 6, 3.4, 1], [28, -12, 4.0, 0], [34, 4, 4.4, 0],
+  [-24, 19, 3.0, 1], [24, 19, 3.6, 0], [-2, -26, 4.6, 0], [12, -24, 3.2, 1],
+  [-36, -2, 3.6, 0], [36, 16, 3.0, 1], [-14, 26, 3.4, 0], [16, 27, 3.2, 1],
+]
+function placeTrees(proto, small) {
+  for (const [x, z, s, sm] of TREE_SPOTS) {
+    if (!!sm !== small) continue
+    const box = new THREE.Box3().setFromObject(proto)
+    const g = proto.clone(true)
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true } })
+    const h = box.max.y - box.min.y
+    const s2 = s / Math.max(0.001, h)
+    g.scale.setScalar(s2)
+    g.rotation.y = (x * 13 + z * 7) % 6.28   // deterministik çeşitlilik
+    g.position.set(x, -box.min.y * s2, z)    // tabanı zemine otur
+    scene.add(g)
+  }
 }
-for (const [x, z, s] of [[-28, -10, 1.2], [-32, 6, 1], [28, -12, 1.1], [33, 4, 1.2], [-24, 18, 0.9], [24, 18, 1], [0, -26, 1.3]]) tree(x, z, s)
 
 // ============ TANKER (gerçek oyun asset'i: truck-flat.glb + tank) ============
 let tankerProto = null // yüklenince dolar
@@ -124,7 +136,10 @@ const PATH = new THREE.CatmullRomCurve3([
   new THREE.Vector3(-20, 0, 18),
   new THREE.Vector3(-38, 0, 22),
 ], false, 'catmullrom', 0.5)
-const U_DOCK = 3 / 6                  // DOCK, 7 nokta içinde 4.'sü → u≈0.5
+// arc-length parametreleme (getPointAt/getTangentAt = uniform hız); DOCK'a en yakın u'yu bul
+let U_DOCK = 0.5
+for (let i = 0, best = 1e9; i <= 240; i++) { const u = i / 240, d = PATH.getPointAt(u).distanceTo(DOCK); if (d < best) { best = d; U_DOCK = u } }
+const GAP = 7.5 / PATH.getLength()   // tankerler arası MİN mesafe → üst üste binmez
 let FACE = 0                          // truck-flat ön yüzü +Z → tanjant yönüne dönsün
 
 // tanker durumları + sıralı spawner
@@ -132,10 +147,10 @@ const tankers = []
 let spawnIdx = 0
 function trySpawn() {
   if (!tankerProto) return
-  // tek sıra: en son spawn olan yeterince ilerlediyse yenisini gönder
+  // tek sıra: spawn noktası (en son gelen) yeterince açılınca yenisini gönder
   const last = tankers[tankers.length - 1]
-  if (last && last.u < 0.22) return
-  if (tankers.length >= 4) return
+  if (last && last.u < GAP * 2.4) return
+  if (tankers.length >= 5) return
   const fuel = FUEL_KEYS[spawnIdx++ % 3]
   const obj = buildTanker(tankerProto, fuel)
   scene.add(obj)
@@ -143,8 +158,8 @@ function trySpawn() {
 }
 
 function placeOnPath(t) {
-  const p = PATH.getPoint(t.u)
-  const tan = PATH.getTangent(t.u)
+  const u = Math.min(1, Math.max(0, t.u))
+  const p = PATH.getPointAt(u), tan = PATH.getTangentAt(u)
   t.obj.position.set(p.x, 0, p.z)
   t.obj.rotation.y = Math.atan2(tan.x, tan.z) + FACE
 }
@@ -153,27 +168,29 @@ const clock = new THREE.Clock()
 function animate() {
   const dt = Math.min(0.05, clock.getDelta())
   trySpawn()
-  for (let i = tankers.length - 1; i >= 0; i--) {
-    const t = tankers[i]
+  // önden arkaya işle: her tanker öndekinden en az GAP kadar geride kalır (üst üste binmez)
+  for (let i = 0; i < tankers.length; i++) {
+    const t = tankers[i], ahead = tankers[i - 1]
+    const cap = ahead ? ahead.u - GAP : Infinity       // öndeki tankerin bıraktığı sınır
     if (t.state === 'approach') {
-      // hedefe (U_DOCK) yaklaşırken yavaşla — gerçekçi fren
-      const remain = U_DOCK - t.u
-      const target = Math.min(0.11, Math.max(0.012, remain * 0.9))   // hız birim/sn
-      t.speed += (target - t.speed) * Math.min(1, dt * 4)
-      t.u += t.speed * dt
-      if (t.u >= U_DOCK - 0.002) { t.u = U_DOCK; t.speed = 0; t.state = 'fill' }
+      const target = Math.min(U_DOCK, cap)
+      const remain = Math.max(0, target - t.u)
+      const desired = Math.min(0.10, remain * 1.5)      // hedefe yaklaşınca yavaşla (fren)
+      t.speed += (desired - t.speed) * Math.min(1, dt * 5)
+      t.u = Math.min(target, t.u + t.speed * dt)
+      if (t.u >= U_DOCK - 0.0015) { t.u = U_DOCK; t.speed = 0; t.state = 'fill'; t.fillT = 0 }
       placeOnPath(t)
     } else if (t.state === 'fill') {
       t.fillT += dt
-      const p = Math.min(1, t.fillT / 3.2)
-      t.obj.userData.fillMesh.scale.set(p, 1, p)
-      if (t.fillT >= 3.7) t.state = 'leave'
-    } else if (t.state === 'leave') {
-      const target = Math.min(0.12, 0.02 + (t.u - U_DOCK) * 0.6)      // hızlanarak çık
-      t.speed += (target - t.speed) * Math.min(1, dt * 4)
-      t.u += Math.max(0.02, t.speed) * dt
+      t.obj.userData.fillMesh.scale.set(Math.min(1, t.fillT / 3.2), 1, Math.min(1, t.fillT / 3.2))
+      if (t.fillT >= 3.8) { t.state = 'leave'; t.speed = 0 }
+    } else { // leave — hızlanarak çık, yine öndekiyle mesafeyi koru
+      const target = Math.min(1, ahead ? ahead.u - GAP : 1)
+      const desired = Math.min(0.14, 0.03 + (t.u - U_DOCK) * 0.5)
+      t.speed += (desired - t.speed) * Math.min(1, dt * 5)
+      t.u = Math.min(target, t.u + t.speed * dt)
       placeOnPath(t)
-      if (t.u >= 1) { scene.remove(t.obj); tankers.splice(i, 1) }
+      if (t.u >= 0.999) { scene.remove(t.obj); tankers.splice(i, 1); i-- }
     }
   }
   // dolum hortumu: dolan tankere iner
@@ -187,31 +204,28 @@ function animate() {
     hose.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize())
   } else hose.visible = false
 
-  // flare titreşimi
-  const now = performance.now() * 0.001
-  flame.scale.y = 1 + Math.sin(now * 11) * 0.12
   controls.update()
   renderer.render(scene, camera)
   requestAnimationFrame(animate)
 }
-
-// flare
-cyl(0.5, 0.65, 12, RED2, 9, 6.5, -6, refinery, 14)
-const flame = new THREE.Mesh(new THREE.ConeGeometry(0.7, 2, 14), new THREE.MeshBasicMaterial({ color: 0xffb03a }))
-flame.position.set(9, 0.6 + 12 + 1, -4 - 6); scene.add(flame)
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix()
   renderer.setSize(innerWidth, innerHeight)
 })
 
-// asset yükle, sonra döngüyü başlat
-new GLTFLoader().load('./truck-flat.glb', (gltf) => {
-  const m = gltf.scene
-  m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true } })
-  // tabanı y=0'a otur
-  const box = new THREE.Box3().setFromObject(m)
-  m.position.y -= box.min.y
-  tankerProto = m
+// assetleri yükle (tanker + oyunun ağaçları), sonra döngüyü başlat
+const loader = new GLTFLoader()
+const loadGlb = (url) => new Promise((res, rej) => loader.load(url, g => res(g.scene), undefined, rej))
+Promise.all([
+  loadGlb('./truck-flat.glb'),
+  loadGlb('./env/tree-large.glb').catch(() => null),
+  loadGlb('./env/tree-small.glb').catch(() => null),
+]).then(([truck, treeL, treeS]) => {
+  truck.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true } })
+  const box = new THREE.Box3().setFromObject(truck); truck.position.y -= box.min.y
+  tankerProto = truck
+  if (treeL) placeTrees(treeL, false)
+  if (treeS) placeTrees(treeS, true)
   animate()
-}, undefined, (err) => { console.error('truck-flat yüklenemedi', err); animate() })
+}).catch(err => { console.error('asset yüklenemedi', err); animate() })
