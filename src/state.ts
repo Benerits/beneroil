@@ -39,6 +39,8 @@ export const WIDEGATE_COST = 6000
  *  servis hâlâ bahşişle daha kârlı, ama pompacı yetişemediğin pompayı net kâra çevirir). */
 export const POMPACI_HIRE = 800
 export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) işe alma bedeli
+export const POMPACI_WAGE = 120       // pompacı GÜNLÜK yovmiyesi (her oyun günü kasadan)
+export const EV_ATTENDANT_WAGE = 150  // şarjcı günlük yovmiyesi
 const TANK_COSTS = [3000, 7000, 15000]
 export const MAX_TANKS_PER_FUEL = 4
 export const TANK_ADD_COSTS = [0, 6000, 12000, 20000] // index = mevcut adet → 2., 3., 4. tankın maliyeti
@@ -106,6 +108,8 @@ export class GameState {
   /** yakıt türü başına ayrı sipariş/tanker takibi */
   loan: Loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
   partner: Partner = { active: false, remaining: 0, share: PARTNER_SHARE } // banka ortaklığı (teminatsız temerrüt)
+  wagesPaid = 0 // muhasebe: toplam ödenen yovmiye
+  fuelSpent = 0 // muhasebe: toplam yakıt alım gideri
   orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }> = {
     benzin: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
     dizel: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
@@ -394,9 +398,12 @@ export class GameState {
     return Math.min(0.95, Math.max(0.08, c))
   }
 
-  /** Sipariş partisi = level-1 depo kadar (800L). Level 3 tankta bile ucuz parti hâlinde sipariş;
-   *  böylece oyuncu tek seferde devasa maliyetle batmaz. Kalan boşluktan fazlası sipariş edilmez. */
-  orderNeed(f: FuelType) { return Math.floor(Math.min(TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f])) }
+  /** Sipariş miktar çarpanı (× 800L parti). 1 = minimum (en düşük tank hacmi); + ile full'e kadar step. */
+  orderQty: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
+  orderMaxQty(f: FuelType) { return Math.max(1, Math.ceil((this.fuelCapacity(f) - this.tanks[f]) / TANK_CAPACITY[0])) }
+  adjustOrderQty(f: FuelType, d: number) { this.orderQty[f] = Math.min(this.orderMaxQty(f), Math.max(1, this.orderQty[f] + d)) }
+  /** Sipariş miktarı = çarpan × 800L, kalan boşlukla capli. Min 800L (level-1 hacmi), full'e kadar step'lenebilir. */
+  orderNeed(f: FuelType) { return Math.floor(Math.min(this.orderQty[f] * TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f])) }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     return Math.ceil(this.orderNeed(f) * FUEL_COST[f] * disc)
@@ -409,7 +416,9 @@ export class GameState {
 
   placeOrder(f: FuelType) {
     if (!this.canOrder(f)) return false
-    this.money -= this.orderCost(f)
+    const cost = this.orderCost(f)
+    this.money -= cost
+    this.fuelSpent += cost // muhasebe
     this.orders[f].pending = true
     this.orders[f].eta = ORDER_ETA
     this.orders[f].amount = this.orderNeed(f) // teslimatta bu kadar eklenecek (parti miktarı)
@@ -442,6 +451,8 @@ export class GameState {
     for (const [id, label] of c) { const v = this.collateralValue(id); if (v > 0) out.push({ id, label, value: v }) }
     return out
   }
+  /** günlük toplam yovmiye (pompacı + şarjcı) — her oyun günü kasadan çekilir */
+  dailyWages(): number { return this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE }
   loanMonthly(principal: number, rate = LOAN_RATE): number {
     const n = LOAN_TERMS
     return Math.ceil(principal * rate / (1 - Math.pow(1 + rate, -n)))
@@ -716,6 +727,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
+  'wagesPaid', 'fuelSpent',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {

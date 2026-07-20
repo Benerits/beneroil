@@ -99,15 +99,15 @@
       /* ---- Sol-üst düzen: takvim+para bir satır; altında benzin/dizel/lpg/kwh alt alta (küçük) ---- */
       #onlinechip { display: none !important; }
       #fuelrail { display: flex !important; flex-direction: column; position: fixed; z-index: 12;
-        left: calc(8px + env(safe-area-inset-left)); top: calc(46px + env(safe-area-inset-top));
-        gap: 4px; width: 154px; pointer-events: none; }
-      /* tek satır: isim + renkli ikon + bar + değer (isimli, ince) */
-      #fuelrail .fuelchip { min-width: 0 !important; flex-direction: row !important; align-items: center; gap: 6px;
-        padding: 3px 9px; border-bottom-width: 2px; }
-      #fuelrail .fuelchip .cl { display: block; font-size: 8px; letter-spacing: .04em; min-width: 34px; }
-      #fuelrail .fuelchip .cv { font-size: 10px; gap: 5px; flex: 1; }
-      #fuelrail .fuelchip .ic { width: 12px; height: 12px; }
-      #fuelrail .fuelchip .bar { flex: 1; width: auto; min-width: 18px; height: 6px; }
+        left: calc(8px + env(safe-area-inset-left)); top: calc(48px + env(safe-area-inset-top));
+        gap: 5px; width: 178px; pointer-events: none; }
+      /* tek satır: isim + renkli ikon + bar + değer (isimli, biraz büyütüldü) */
+      #fuelrail .fuelchip { min-width: 0 !important; flex-direction: row !important; align-items: center; gap: 7px;
+        padding: 4px 11px; border-bottom-width: 2px; }
+      #fuelrail .fuelchip .cl { display: block; font-size: 9px; letter-spacing: .04em; min-width: 38px; }
+      #fuelrail .fuelchip .cv { font-size: 11.5px; gap: 6px; flex: 1; }
+      #fuelrail .fuelchip .ic { width: 14px; height: 14px; }
+      #fuelrail .fuelchip .bar { flex: 1; width: auto; min-width: 20px; height: 7px; }
 
       /* ---- Popuplar navbarın ÜSTÜNDE; oyun üstte ufaktan görünmeye devam etsin ---- */
       #panel, #infocard { z-index: 25 !important; bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
@@ -639,19 +639,25 @@
         <div class="shoprow">
           <div class="sicon" style="color:var(--green);background:#27a05a1c;border-color:#27a05a44"><svg class="ic"><use href="#i-fuel"/></svg></div>
           <div class="sinfo"><div class="st">Benzin</div><div class="sd" id="fneed-benzin">—</div></div>
+          <button class="btn pbtn forder" data-f="benzin" data-d="-1">−</button>
+          <button class="btn pbtn forder" data-f="benzin" data-d="1">+</button>
           <button class="btn sbuy good" id="fbtn-benzin">Sipariş</button>
         </div>
         <div class="shoprow">
           <div class="sicon" style="color:var(--orange);background:#e8862e1c;border-color:#e8862e44"><svg class="ic"><use href="#i-fuel"/></svg></div>
           <div class="sinfo"><div class="st">Dizel (Mazot)</div><div class="sd" id="fneed-dizel">—</div></div>
+          <button class="btn pbtn forder" data-f="dizel" data-d="-1">−</button>
+          <button class="btn pbtn forder" data-f="dizel" data-d="1">+</button>
           <button class="btn sbuy warn" id="fbtn-dizel">Sipariş</button>
         </div>
         <div class="shoprow">
           <div class="sicon" style="color:var(--blue);background:#2f6fed1c;border-color:#2f6fed44"><svg class="ic"><use href="#i-fuel"/></svg></div>
           <div class="sinfo"><div class="st">LPG</div><div class="sd" id="fneed-lpg">—</div></div>
+          <button class="btn pbtn forder" data-f="lpg" data-d="-1">−</button>
+          <button class="btn pbtn forder" data-f="lpg" data-d="1">+</button>
           <button class="btn sbuy primary" id="fbtn-lpg">Sipariş</button>
         </div>
-        <div class="sd" style="text-align:center; padding:6px 0 2px">Her yakıtın tankeri ayrı gelir ve ayrı boşaltır — üçüne de sen yetişeceksin.</div>
+        <div class="sd" style="text-align:center; padding:6px 0 2px">−/+ ile miktarı ayarla (min 800L, full'e kadar). Her yakıtın tankeri ayrı gelir ve boşaltır.</div>
       </div>
     </div>
   </div>
@@ -669,6 +675,9 @@
         <!-- fiyat yönetimi (bina kartından taşındı) -->
         <div class="ofsec" data-i18n="Yakıt Satış Fiyatı">Yakıt Satış Fiyatı</div>
         <div id="of-prices"></div>
+        <!-- muhasebe: girdi-çıktı özeti (yovmiye, yakıt alımı, ciro, net) -->
+        <div class="ofsec" data-i18n="Muhasebe · Giderler">Muhasebe · Giderler</div>
+        <div id="of-account"></div>
         <button class="btn" id="of-bank" style="width:100%; justify-content:center; margin-top:12px; background:#1fa8bc; border-color:#178595; color:#fff"><svg class="ic"><use href="#i-coin"/></svg><span data-i18n="Banka / Kredi Çek">Banka / Kredi Çek</span></button>
         <button class="btn primary" id="of-toggle" style="width:100%; justify-content:center; margin-top:8px"><svg class="ic"><use href="#i-power"/></svg><span data-i18n="İstasyonu Aç/Kapa">İstasyonu Aç/Kapa</span></button>
       </div>
