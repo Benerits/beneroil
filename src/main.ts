@@ -817,11 +817,15 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     world.addEvCharger(parseInt(base.slice(8)), new THREE.Vector2(pos.x - 0.5, pos.y))
     return
   }
+  if (base.startsWith('tankadd-')) {
+    world.upgradeTankVisual(state.tankLevel, state.tankCounts) // yakıta özel yeni tank belirir
+    return
+  }
   switch (base) {
     case 'pump': world.addPump(state.pumps - 1); break
     case 'sign': world.setSign(state.signLevel); break
     case 'widegate': world.setWideGates(true); break
-    case 'tank': world.upgradeTankVisual(state.tankLevel); break
+    case 'tank': world.upgradeTankVisual(state.tankLevel, state.tankCounts); break
     case 'market': world.buildMarket(state.marketLevel, pos); break
     case 'toilet': world.buildToilet(state.toiletLevel, pos); break
     case 'battery': world.buildBattery(state.batteryLevel, pos); break
@@ -995,7 +999,7 @@ function rebuildFromState() {
   }
   world.setSign(state.signLevel)
   if (state.wideGates) world.setWideGates(true)
-  if (state.tankLevel > 0) world.upgradeTankVisual(state.tankLevel)
+  world.upgradeTankVisual(state.tankLevel, state.tankCounts) // seviye + yakıt-başına adet
   const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
   if (state.marketLevel > 0) world.buildMarket(state.marketLevel, pv('market'))
   if (state.toiletLevel > 0) world.buildToilet(state.toiletLevel, pv('toilet'))
@@ -2451,6 +2455,11 @@ function frame() {
 
   state.tick(dt)
   cars.update(dt)
+  world.updateTankFill({
+    benzin: state.tanks.benzin / state.fuelCapacity('benzin'),
+    dizel: state.tanks.dizel / state.fuelCapacity('dizel'),
+    lpg: state.tanks.lpg / state.fuelCapacity('lpg'),
+  })
 
   for (const msg of state.events.splice(0)) {
     if (msg.includes(t('Başarım'))) {

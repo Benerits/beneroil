@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { StaticLib, fitModel } from './models'
-import { PARCEL_COLS, PARCEL_ROWS } from './state'
+import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
 // Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
@@ -648,40 +648,66 @@ export class World {
     this.roadEdgeMeshes.push(this.makeApron(this.gateOut.y))
   }
 
-  private addSphereTank(x: number, y: number, R = 1.15, bandColor = 0xd64545) {
+  /** Yakıt renginde küre tank; şeffaf gövde + iç dolum küresi (doluluk göstergesi).
+   *  Dönen mesh = iç dolum küresi; updateTankFill onu ölçekler. */
+  private addSphereTank(x: number, y: number, R: number, color: number): THREE.Mesh {
     const g = new THREE.Group()
-    const sp = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 18), lam(0xdfe3e8))
-    sp.position.z = R + 0.55
-    sp.castShadow = true
-    g.add(sp)
-    const band = new THREE.Mesh(new THREE.TorusGeometry(R * 0.97, 0.05, 8, 28), lam(bandColor))
+    // gövde: yakıt renginde yarı-şeffaf cam
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 20, 14),
+      new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.3 }))
+    shell.position.z = R + 0.55
+    shell.castShadow = true
+    g.add(shell)
+    // iç dolum: opak yakıt renk; ölçeği doluluk oranını gösterir (boş=çekirdek, dolu=gövde)
+    const fill = new THREE.Mesh(new THREE.SphereGeometry(R * 0.9, 18, 12), lam(color))
+    fill.position.z = R + 0.55
+    g.add(fill)
+    // kuşak (koyu)
+    const band = new THREE.Mesh(new THREE.TorusGeometry(R * 0.99, 0.05, 8, 28), lam(0x2a2f34))
     band.position.z = R + 0.55
     g.add(band)
     for (const [lx, ly] of [[0.6, 0.6], [0.6, -0.6], [-0.6, 0.6], [-0.6, -0.6]] as const) {
-      cyl(0.09, R + 0.35, 0x8f979e, lx * (R / 1.15), ly * (R / 1.15), (R + 0.35) / 2, 'z', g)
+      cyl(0.08, R + 0.35, 0x8f979e, lx * (R / 1.15), ly * (R / 1.15), (R + 0.35) / 2, 'z', g)
     }
-    cyl(0.05, 0.45, 0x8f979e, 0, 0, R * 2 + 0.6, 'z', g)
+    cyl(0.05, 0.4, 0x8f979e, 0, 0, R * 2 + 0.55, 'z', g)
     g.position.set(x, y, 0)
     this.tankGroup.add(g)
+    return fill
   }
 
-  /** seviye arttıkça küre sayısı, boyutu ve kuşak rengi değişir */
-  buildTankCluster(level: number) {
+  /** Yakıt türüne göre renkli, adet-farkında tank çiftliği (benzin/dizel/lpg sütunları). */
+  buildTankCluster(level: number, counts: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }) {
     this.tankLevelNow = level
+    this.tankCountsNow = { ...counts }
+    this.tankFillMeshes = { benzin: [], dizel: [], lpg: [] }
     for (const ch of [...this.tankGroup.children]) {
       if (!(ch as THREE.Sprite).isSprite) this.tankGroup.remove(ch)
     }
     this.tankGroup.position.set(this.tankAnchor.x, this.tankAnchor.y, 0)
-    const spots: [number, number][] = [[0, 0], [0, 0.9], [0.9, 0], [0.9, 0.9]]
     const R = 0.4 + level * 0.04
-    const bandColor = [0xd64545, 0x2f6fed, 0xe8862e, 0x39424e][level]
-    for (let i = 0; i <= level; i++) this.addSphereTank(spots[i][0], spots[i][1], R, bandColor)
+    const colors: Record<FuelType, number> = { benzin: 0x27a05a, dizel: 0xe8862e, lpg: 0x2f6fed }
+    const fuels: FuelType[] = ['benzin', 'dizel', 'lpg']
+    const gap = 0.82
+    fuels.forEach((f, col) => {
+      for (let i = 0; i < counts[f]; i++) {
+        const fill = this.addSphereTank(col * gap, i * gap, R, colors[f])
+        this.tankFillMeshes[f].push(fill)
+      }
+    })
+  }
+
+  /** Her yakıtın doluluk oranıyla (0..1) iç dolum kürelerini ölçekler. */
+  updateTankFill(ratios: Record<FuelType, number>) {
+    for (const f of ['benzin', 'dizel', 'lpg'] as FuelType[]) {
+      const r = Math.max(0, Math.min(1, ratios[f] || 0))
+      for (const m of this.tankFillMeshes[f]) m.scale.setScalar(0.3 + 0.7 * r)
+    }
   }
 
   /** tank kümesini taşı (merkezden çapaya çevirir) */
   moveTank(center: THREE.Vector2) {
     this.tankAnchor.set(center.x - 0.45, center.y - 0.45)
-    this.buildTankCluster(this.tankLevelNow)
+    this.buildTankCluster(this.tankLevelNow, this.tankCountsNow)
   }
 
   private placeTree(x: number, y: number, scale: number) {
@@ -748,6 +774,8 @@ export class World {
     this.buildGate('out') // buildGate bordürü de yeniden kurar
   }
   private tankLevelNow = 0
+  private tankCountsNow: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
+  private tankFillMeshes: Record<FuelType, THREE.Mesh[]> = { benzin: [], dizel: [], lpg: [] }
 
   /** beton derzleri: hepsi YOLA DİK (x ekseni boyunca), dünya gridine hizalı —
    *  komşu betonlarda çizgi aynı hizada devam eder, bütünlük bozulmaz */
@@ -1241,8 +1269,8 @@ export class World {
     this.register('toilet', t('TUVALET'), g, H + 0.85)
   }
 
-  upgradeTankVisual(level: number) {
-    this.buildTankCluster(level)
+  upgradeTankVisual(level: number, counts: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }) {
+    this.buildTankCluster(level, counts)
   }
 
   buildBattery(level: number, pos?: THREE.Vector2) {

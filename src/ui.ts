@@ -547,8 +547,9 @@ export class UI {
     let anyLow = false
     for (const f of FUELS) {
       const lvl = state.tanks[f]
-      if (lvl < state.tankCapacity * 0.15) anyLow = true
-      el<HTMLDivElement>(`fill-${f}`).style.width = `${(lvl / state.tankCapacity) * 100}%`
+      const cap = state.fuelCapacity(f)
+      if (lvl < cap * 0.15) anyLow = true
+      el<HTMLDivElement>(`fill-${f}`).style.width = `${(lvl / cap) * 100}%`
       this.setText(el<HTMLSpanElement>(`lvl-${f}`), `${Math.round(lvl)}L`)
       const o = state.orders[f]
       const need = state.orderNeed(f)
@@ -563,7 +564,7 @@ export class UI {
         this.setText(btn, t('Dolu'))
         btn.disabled = true
       } else {
-        this.setText(info, `${Math.round(state.tanks[f])} / ${state.tankCapacity}L — ${need}L eksik`)
+        this.setText(info, `${Math.round(state.tanks[f])} / ${cap}L — ${need}L eksik`)
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }
