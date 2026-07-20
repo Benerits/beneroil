@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>BenelOil — Petrol İstasyonu Oyunu</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -38,14 +38,19 @@
       --font: "Baloo 2", -apple-system, "SF Pro Rounded", "Segoe UI", Roboto, sans-serif;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--font); color: var(--ink); }
-    #app { position: fixed; inset: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: var(--font); color: var(--ink);
+      /* mobil/WKWebView: sayfa pinch-zoom, çift-dokunuş zoom, kaydırma-yaylanması ve metin seçimi kapalı */
+      touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+    #app { position: fixed; inset: 0; touch-action: none; }
     canvas { display: block; }
     button { font-family: var(--font); }
     .ic { width: 16px; height: 16px; flex-shrink: 0; }
 
     /* ---------- HUD ---------- */
-    .hud { position: fixed; left: 0; right: 0; top: 0; display: flex; gap: 8px; padding: 10px 12px;
+    .hud { position: fixed; left: 0; right: 0; top: 0; display: flex; gap: 8px;
+           /* saat/Dynamic Island/pil çakışmasın: notch + yan güvenli alanlar kadar iç boşluk */
+           padding: calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));
            align-items: stretch; pointer-events: none; z-index: 10; flex-wrap: wrap; }
     .hud button { pointer-events: auto; }
     .chip { background: var(--paper); border: 1.5px solid var(--edge); border-bottom-width: 3px;
@@ -65,10 +70,12 @@
 
     /* ---------- Mobil: kompakt HUD (buton/chip alanı yer kaplamasın) ---------- */
     @media (max-width: 680px) {
-      .hud { gap: 5px; padding: calc(6px + env(safe-area-inset-top)) 8px 6px; }
-      .chip { min-width: 0 !important; padding: 3px 8px 4px; border-bottom-width: 2px; }
+      .hud { gap: 5px; padding: calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(8px + env(safe-area-inset-left)); }
+      .chip { min-width: 0 !important; padding: 3px 9px 4px; border-bottom-width: 2px; }
       .chip .cl { display: none; }            /* etiketleri gizle, ikon+değer yeter */
-      .chip .cv { font-size: 13px; gap: 4px; }
+      .chip .cv { font-size: 14px; gap: 4px; }
+      /* KASA (bakiye) net okunsun — biraz daha büyük ve nefes alan */
+      #money { font-size: 15px; }
       .chip .ic { width: 13px; height: 13px; }
       .bar { width: 40px; height: 7px; }
       /* günlük görev + itibar + online: mobilde ikincil, gizle (mağaza/ayarlarda görünür) */
@@ -100,7 +107,7 @@
                border: 2px solid var(--paper); }
 
     /* ---------- Servis paneli ---------- */
-    #panel { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    #panel { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%);
              background: var(--paper); border: 1.5px solid var(--edge); border-bottom-width: 3px;
              border-radius: var(--r-lg); padding: 14px 16px; width: min(400px, 94vw); z-index: 10;
              display: none; box-shadow: var(--shadow); }
@@ -121,7 +128,7 @@
     #evnote { font-size: 12.5px; color: var(--orange-dark); text-align: center; margin-top: 8px; font-weight: 700; }
 
     /* ---------- Bina bilgi kartı ---------- */
-    #infocard { position: fixed; left: 14px; bottom: 14px; width: min(300px, 88vw);
+    #infocard { position: fixed; left: calc(14px + env(safe-area-inset-left)); bottom: calc(14px + env(safe-area-inset-bottom)); width: min(300px, 88vw);
                 background: var(--paper); border: 1.5px solid var(--edge); border-bottom-width: 3px;
                 border-radius: var(--r-lg); z-index: 10; display: none; box-shadow: var(--shadow);
                 overflow: hidden; }
@@ -581,7 +588,7 @@
     </div>
   </div>
 
-  <button id="fbbtn" data-i18n="Sorun Bildir" title="Sorun Bildir" style="position:fixed; left:14px; bottom:14px; z-index:35;
+  <button id="fbbtn" data-i18n="Sorun Bildir" title="Sorun Bildir" style="position:fixed; left:calc(14px + env(safe-area-inset-left)); bottom:calc(14px + env(safe-area-inset-bottom)); z-index:35;
     display:inline-flex; align-items:center; gap:7px; padding:9px 14px; font-family:'Baloo 2',sans-serif;
     font-weight:800; font-size:13px; color:#fff; background:var(--red); border:0; border-bottom:3px solid var(--red-dark);
     border-radius:var(--r-md); box-shadow:var(--shadow); cursor:pointer">
@@ -605,7 +612,7 @@ Sorun Bildir
        border:1px solid #2f6fed;"></div>
 
   <!-- Mobil taşıma: yön butonlarıyla ince ayar (sürükleme zor) -->
-  <div id="movectl" style="display:none; position:fixed; right:14px; bottom:16px; z-index:40; user-select:none;
+  <div id="movectl" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); bottom:calc(16px + env(safe-area-inset-bottom)); z-index:40; user-select:none;
        -webkit-user-select:none; touch-action:manipulation; text-align:center;">
     <div style="display:grid; grid-template-columns:repeat(3,44px); grid-template-rows:repeat(3,44px); gap:5px; margin-bottom:8px;">
       <span></span><button class="mvbtn" data-nudge="up">↑</button><span></span>
