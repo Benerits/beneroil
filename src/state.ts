@@ -44,7 +44,7 @@ export const EV_ATTENDANT_WAGE = 150  // şarjcı günlük yovmiyesi
 const TANK_COSTS = [3000, 7000, 15000]
 export const MAX_TANKS_PER_FUEL = 4
 export const TANK_ADD_COSTS = [0, 6000, 12000, 20000] // index = mevcut adet → 2., 3., 4. tankın maliyeti
-const MARKET_COSTS = [7000, 12000]
+const MARKET_COSTS = [7000, 12000, 20000] // 3 seviye: kur → Sv.2 → Sv.3 (yerinde, aynı footprint)
 const TOILET_COSTS = [2500, 5000]
 const LAND_COST = 6000
 const GRID_COSTS = [8000, 15000]
@@ -603,9 +603,9 @@ export function getShopItems(s: GameState): ShopRow[] {
   row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
     t('Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)'), PARKING_COST, null)
 
-  row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.2'), `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
-    t('Müşteriler ekstra alışveriş yapar'),
-    s.marketLevel >= 2 ? null : MARKET_COSTS[s.marketLevel], null)
+  row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1), `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
+    t('Müşteriler ekstra alışveriş yapar. Yerinde yükselir (aynı yer), gelir seviyeyle artar.'),
+    s.marketLevel >= 3 ? null : MARKET_COSTS[s.marketLevel], null)
   row('toilet', 'i-toilet', s.toiletLevel === 0 ? t('Tuvalet') : t('Tuvalet Sv.2'), t('+moral'),
     t('Müşteri memnuniyetini ve itibarı artırır'),
     s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel], null)

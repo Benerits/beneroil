@@ -265,16 +265,42 @@ updateCamera()
 // tarayıcı autoplay kuralı: ilk dokunuşta ses sistemini aç
 window.addEventListener('pointerdown', () => audio.ensure(), { once: true })
 
-// sekme arka plandayken önemli olayları bildir (izin verildiyse) + başlıkta işaret
-function notifyIfHidden(text: string) {
-  if (!document.hidden) return
-  document.title = `(!) ${text.slice(0, 40)}`
+// ---- Bildirim sistemi: arka planda önemli olayları haber ver (web + native), spam yapma ----
+const notifCooldown = new Map<string, number>()
+function capPlugins(): Record<string, any> | null {
+  return (window as unknown as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins ?? null
+}
+/** Önemli olay bildirimi: sekme gizliyken (web) veya native'de fırlatılır; tag başına 60 sn throttle. */
+function notifyIfHidden(text: string, tag = text.slice(0, 24)) {
+  // ön planda web'de darlamayalım — toast zaten var; native'de yine de bildir (kullanıcı başka app'te olabilir)
+  if (!document.hidden && !isNativePlatform()) return
+  const now = Date.now()
+  if ((notifCooldown.get(tag) ?? 0) > now) return
+  notifCooldown.set(tag, now + 60_000)
+  if (document.hidden) document.title = `(!) ${text.slice(0, 40)}`
+  const title = world?.stationName ?? 'BenelOil'
   if ('Notification' in window && Notification.permission === 'granted') {
-    try { new Notification('Benzinlik', { body: text }) } catch { /* mobil kısıt */ }
+    try { new Notification(title, { body: text, tag }) } catch { /* mobil kısıt */ }
+  }
+  const P = capPlugins()
+  if (isNativePlatform() && P?.LocalNotifications) {
+    try { P.LocalNotifications.schedule({ notifications: [{ id: Math.floor(now % 2000000000), title, body: text }] }) } catch { /* yok say */ }
   }
 }
+/** Arka plana geçerken: yaklaşan tankerler için ETA'da native bildirim planla (WebView uykuda olsa bile ping gelir). */
+function scheduleBackgroundReminders() {
+  const P = capPlugins()
+  if (!isNativePlatform() || !P?.LocalNotifications) return
+  const notifs: any[] = []
+  for (const tk of tankers) {
+    const eta = state.orders[tk.fuel]?.eta ?? 0
+    if (eta > 3) notifs.push({ id: 1_700_000_000 + tk.slot, title: world?.stationName ?? 'BenelOil',
+      body: t('🚚 {0} tankeri istasyona ulaştı!', FUEL_LABEL[tk.fuel]), schedule: { at: new Date(Date.now() + eta * 1000) } })
+  }
+  if (notifs.length) { try { P.LocalNotifications.schedule({ notifications: notifs }) } catch { /* yok say */ } }
+}
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return
+  if (document.hidden) { scheduleBackgroundReminders(); return } // arka plana geçerken yaklaşan olayları planla
   document.title = `${world?.stationName ?? 'Benzinlik'} — Benzinlik`
   // odağa dönünce: başka cihaz save'i ilerlettiyse en güncele senkronla (ilerleme karışmasın)
   if (auth.loggedIn() && !syncedConflict) {
@@ -690,8 +716,8 @@ function vehicleServices(car: Car): number {
   }
   if (car.wantsOil && state.hasOil) {
     const m = Math.round(150 + Math.random() * 100)
-    state.facEarn('oil', m); d += 0.25
-    ui.toast(t('🔧 Yağ değişimi yapıldı: +₺{0}', m), 'good')
+    state.addPending('oil', m, t('Yağ değişimi')); d += 0.25
+    ui.toast(t('🔧 Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
   if (car.wantsAir && state.hasAirWater) {
     const m = Math.round(10 + Math.random() * 10)
@@ -708,6 +734,10 @@ interface Walker {
   done: () => void
 }
 const walkers: Walker[] = []
+/** tesis adı (kumbara etiketi için) */
+function facName(id: string): string {
+  return ({ market: t('Market'), toilet: t('Tuvalet'), coffee: t('Kahveci'), restaurant: t('Restoran'), oil: t('Yağ değişimi') } as Record<string, string>)[id] ?? id
+}
 const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean }>()
 
 function personMesh(): THREE.Group {
@@ -748,7 +778,7 @@ function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number; squat?
       let score = data.score
       for (const v of data.visits) {
         const m = v.revenue()
-        if (m > 0) { state.money -= m; state.facEarn(v.buildingId, m); ui.toast(v.toastMsg(m), 'good') }
+        if (m > 0) { state.addPending(v.buildingId, m, facName(v.buildingId)); ui.toast(v.toastMsg(m), 'good') }
         score += v.score
       }
       state.addRep((score - 3.3) * 0.08)
@@ -850,7 +880,7 @@ function concludeService(car: Car, score: number) {
     // otopark doluysa ziyaret gelirleri yine gelsin (hızlı mod)
     for (const v of visits) {
       const m = v.revenue()
-      if (m > 0) { state.money -= m; state.facEarn(v.buildingId, m); ui.toast(v.toastMsg(m), 'good') }
+      if (m > 0) { state.addPending(v.buildingId, m, facName(v.buildingId)); ui.toast(v.toastMsg(m), 'good') }
       score += v.score
     }
     state.addRep((score - 3.3) * 0.08)
@@ -968,6 +998,7 @@ function tickEvCharging(dt: number) {
     if (c.slotIndex >= 0 && state.brokenChargers.has(c.slotIndex)) {
       c.charging = false
       ui.toast(t('Şarj ünitesi arızalandı — şarj durdu, tamir gerekli.'), 'bad')
+      notifyIfHidden(t('🔧 Şarj ünitesi arızalandı — tamir gerekli!'), 'ariza-sarj')
       cars.releaseCar(c)
       continue
     }
@@ -1029,7 +1060,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
   }
   switch (base) {
     case 'pump': world.addPump(state.pumps - 1); break
-    case 'sign': world.setSign(state.signLevel); break
+    case 'sign': world.setSign(state.signLevel, pos); break
     case 'widegate': world.setWideGates(true); break
     case 'tank': world.upgradeTankVisual(state.tankLevel, state.tankCounts); break
     case 'market': world.buildMarket(state.marketLevel, pos); break
@@ -1055,7 +1086,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
 
 interface Footprint { w: number; d: number; grass?: boolean }
 const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
-  market: fm => ((fm ? state.marketLevel >= 2 : state.marketLevel >= 1) ? { w: 6, d: 8 } : { w: 5, d: 6 }),
+  market: () => ({ w: 6, d: 7 }), // 3 seviyede de AYNI footprint (yerinde yükselir, yıkmak gerekmez)
   toilet: () => ({ w: 3, d: 4 }),
   battery: () => ({ w: 3, d: 2 }),
   solar: () => ({ w: 5, d: 7, grass: true }),
@@ -1070,6 +1101,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   selfwash: () => ({ w: 5.5, d: 7 }),
   parking: () => ({ w: 4.6, d: 3.2 }),
   office: () => ({ w: 5, d: 5.5 }),
+  sign: () => ({ w: 1.8, d: 1.8, grass: true }), // tabela taşınabilir (çimen üstüne de konabilir)
 }
 
 interface Rect { cx: number; cy: number; w: number; d: number }
@@ -1222,7 +1254,7 @@ function rebuildFromState() {
     // Kayıtlı açıyla kur → araç yanaşma slotu da doğru hesaplanır (rotateBuilding slot güncellemez).
     world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined, placedRot[`charger-${i}`] ?? 0)
   }
-  world.setSign(state.signLevel)
+  world.setSign(state.signLevel, placedPos.sign ? new THREE.Vector2(placedPos.sign[0], placedPos.sign[1]) : undefined)
   if (state.wideGates) world.setWideGates(true)
   world.upgradeTankVisual(state.tankLevel, state.tankCounts) // seviye + yakıt-başına adet
   const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
@@ -1731,14 +1763,18 @@ ui.onBuy = id => {
     startPlacement(`charger-${state.evChargers}`)
     return
   }
-  const needsPlacement = id in PLACEABLE && !(id === 'battery' && state.batteryLevel > 0)
+  // seviye tabanlı tesisler (batarya/market/tuvalet) İLK kuruluşta yerleştirilir; yükseltme YERİNDE olur (yıkmak gerekmez)
+  const inPlaceUpgrade = (id === 'battery' && state.batteryLevel > 0)
+    || (id === 'market' && state.marketLevel > 0)
+    || (id === 'toilet' && state.toiletLevel > 0)
+  const needsPlacement = id in PLACEABLE && !inPlaceUpgrade
   if (needsPlacement) {
     if (!item0 || item0.status !== 'buy' || state.money < (item0.cost ?? Infinity)) return
     startPlacement(id)
     return
   }
   if (!buyItem(state, id)) return
-  buildVisual(id)
+  buildVisual(id, placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined) // yükseltmede AYNI konumda kur
   buyToast(id)
   persist()
   if (selectedBuilding) refreshBuildingCard()
@@ -2309,6 +2345,15 @@ function buildingCard(id: string): BuildingCard | null {
           : undefined,
       }
     }
+    case 'sign':
+      return {
+        icon: 'i-sign', name: t('Tabela'),
+        desc: t('Yoldan geçenlerin uğrama şansını artırır. Taşı butonuyla yerini değiştirebilirsin.'),
+        stats: [
+          [t('Seviye'), `${state.signLevel + 1}/4`],
+          [t('Trafik etkisi'), `+%${state.signLevel * 10}`, state.signLevel > 0 ? 'good' : ''],
+        ],
+      }
     case 'tank':
       return {
         icon: 'i-tank', name: t('Yakıt Tankı'),
@@ -2748,9 +2793,12 @@ function frame() {
     if (msg.includes(t('Başarım'))) {
       ui.toast(msg, 'good', true)
       audio.achieve()
+    } else if (msg.includes('FIRSAT')) {
+      ui.toast(msg, 'good', true) // yakıt indirimi / müşteri patlaması = iyi haber
+      notifyIfHidden(msg, 'firsat')
     } else {
       ui.toast(msg, 'bad')
-      if (msg.includes(t('KRİTİK')) || msg.includes('doldu')) notifyIfHidden(msg)
+      if (msg.includes(t('KRİTİK')) || msg.includes('doldu')) notifyIfHidden(msg, 'kritik')
     }
   }
 
@@ -2914,6 +2962,7 @@ function frame() {
     if (!(c.filling && c.kind === 'fuel' && c.phase === 'atPump' && c.nozzle && !c.wrongFuelHandled)) continue
     if (c.slotIndex >= 0 && state.brokenPumps.has(c.slotIndex)) {
       ui.toast(t('Pompa arızalandı — dolum yarıda kaldı, tamir gerekli.'), 'bad')
+      notifyIfHidden(t('🔧 Pompa arızalandı — tamir gerekli!'), 'ariza-pompa')
       finishSale(c)
       continue
     }

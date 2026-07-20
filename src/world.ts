@@ -1156,9 +1156,11 @@ export class World {
     this.setSign(this.signLevel)
   }
 
-  setSign(level: number) {
+  signPos = new THREE.Vector2(4.0, -11.5) // taşınabilir tabela konumu
+  setSign(level: number, pos?: THREE.Vector2) {
     this.signLevel = level
-    if (this.signGroup) this.scene.remove(this.signGroup)
+    if (pos) this.signPos.copy(pos)
+    if (this.signGroup) { this.scene.remove(this.signGroup); this.unregister('sign') }
     const g = new THREE.Group()
     const H = [2.4, 3.2, 4.2, 5.4][level]
     const pw = [1.5, 1.9, 2.4, 3.0][level]
@@ -1218,9 +1220,10 @@ export class World {
       g.add(panel)
     }
     if (level >= 3) box(pw + 0.3, 0.22, 0.18, 0xe0b13e, 0, 0, H + ph + 0.15, g)
-    g.position.set(4.0, -11.5, 0)
+    g.position.set(this.signPos.x, this.signPos.y, 0)
     this.scene.add(g)
     this.signGroup = g
+    this.register('sign', t('TABELA'), g, H + ph + 0.6) // tıklanabilir + etiketli (taşınabilir)
   }
 
   buildMarket(level: number, pos?: THREE.Vector2) {
@@ -1249,6 +1252,7 @@ export class World {
     })
     sign.position.set(level >= 2 ? 1.7 : 1.4, 0, H + 0.35)
     g.add(sign)
+    if (level >= 3) box(3.0, 0.5, 0.18, 0xe0b13e, level >= 2 ? 1.7 : 1.4, 0, H + 0.74, g) // Sv.3: altın şerit (premium)
     const fx = level >= 2 ? 2.3 : 1.6
     this.facadeLights(g, [[fx, -1.1, 1.0], [fx, 1.1, 1.0]], 1.2, 0.8)
     g.position.set(at.x, at.y, 0)
