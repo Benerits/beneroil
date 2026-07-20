@@ -109,6 +109,17 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
       const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, any> } }).Capacitor
       const isNative = !!cap?.isNativePlatform?.()
       let any = false
+      // Capacitor-iOS: @capgo/capacitor-social-login login öncesi initialize ister (bir kez).
+      // iOS Google client id + Apple native aud (bundle id) — ikisi de public değer.
+      let socialInited = false
+      const initSocial = async (P: Record<string, any>) => {
+        if (socialInited || !P.SocialLogin?.initialize) return
+        await P.SocialLogin.initialize({
+          google: { iOSClientId: '80997572914-8ihbi46csk9ngog7ec1oe2ssb3c08t5e.apps.googleusercontent.com' },
+          apple: { clientId: 'com.benerits.beneloil' },
+        })
+        socialInited = true
+      }
       // Google
       if (isNative && cap?.Plugins) {
         const btn = document.createElement('button')
@@ -117,7 +128,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
         btn.onclick = async () => {
           try {
             const P = cap.Plugins!
-            if (P.SocialLogin) { const r = await P.SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } }); await oauthSubmit('google', r?.result?.idToken ?? r?.idToken) }
+            if (P.SocialLogin) { await initSocial(P); const r = await P.SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } }); await oauthSubmit('google', r?.result?.idToken ?? r?.idToken) }
             else if (P.GoogleAuth) { const u = await P.GoogleAuth.signIn(); await oauthSubmit('google', u?.authentication?.idToken) }
             else gErr.textContent = 'Google plugin bulunamadı.'
           } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
@@ -139,7 +150,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
         aBtn.onclick = async () => {
           try {
             const P = cap.Plugins!
-            if (P.SocialLogin) { const r = await P.SocialLogin.login({ provider: 'apple', options: { scopes: ['email', 'name'] } }); await oauthSubmit('apple', r?.result?.idToken ?? r?.identityToken) }
+            if (P.SocialLogin) { await initSocial(P); const r = await P.SocialLogin.login({ provider: 'apple', options: { scopes: ['email', 'name'] } }); await oauthSubmit('apple', r?.result?.idToken ?? r?.identityToken) }
             else if (P.SignInWithApple) { const r = await P.SignInWithApple.authorize({ scopes: 'email name' }); await oauthSubmit('apple', r?.response?.identityToken) }
             else gErr.textContent = 'Apple plugin bulunamadı.'
           } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
