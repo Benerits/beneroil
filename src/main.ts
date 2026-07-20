@@ -2041,6 +2041,25 @@ let downX = 0, downY = 0, lastX = 0, lastY = 0, isDown = false, isDrag = false
 
 let grabPoint: THREE.Vector3 | null = null
 
+/** arsa/beton hayaletini verilen zemin noktasına göre günceller — hem hover hem
+ *  dokunuş anında çağrılır (mobilde hover yok; valid'i tıklamada hesaplamazsak
+ *  ilk dokunuşlar boşa gider, "3-4 tıklamada alınıyor" bug'ı) */
+function updateZoneAt(x: number, y: number) {
+  if (!zoneMode) return
+  const pc = parcelAt(x, y)
+  if (!pc) return
+  const [c, r] = pc
+  zoneMode.c = c; zoneMode.r = r
+  const [x0, x1] = PARCEL_COLS[c]
+  const [y0, y1] = PARCEL_ROWS[r]
+  zoneMode.ghost.scale.set(x1 - x0 - 0.3, y1 - y0 - 0.3, 1)
+  zoneMode.ghost.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.06)
+  zoneMode.valid = zoneMode.kind === 'land'
+    ? !state.owns(c, r) && state.parcelAdjacentToOwned(c, r) && state.money >= parcelCost(c, r, state)
+    : state.owns(c, r) && !state.isPaved(c, r) && state.money >= PAVE_COST
+  ;(zoneMode.ghost.material as THREE.MeshBasicMaterial).color.setHex(zoneMode.valid ? 0x37c97e : 0xec5b5b)
+}
+
 function groundPointAt(clientX: number, clientY: number): THREE.Vector3 | null {
   pointer.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1)
   raycaster.setFromCamera(pointer, camera)
@@ -2066,19 +2085,7 @@ window.addEventListener('pointermove', e => {
       if (placing) {
         repositionPlacing(pt.x, pt.y)
       } else if (zoneMode) {
-        const pc = parcelAt(pt.x, pt.y)
-        if (pc) {
-          const [c, r] = pc
-          zoneMode.c = c; zoneMode.r = r
-          const [x0, x1] = PARCEL_COLS[c]
-          const [y0, y1] = PARCEL_ROWS[r]
-          zoneMode.ghost.scale.set(x1 - x0 - 0.3, y1 - y0 - 0.3, 1)
-          zoneMode.ghost.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.06)
-          zoneMode.valid = zoneMode.kind === 'land'
-            ? !state.owns(c, r) && state.parcelAdjacentToOwned(c, r) && state.money >= parcelCost(c, r, state)
-            : state.owns(c, r) && !state.isPaved(c, r) && state.money >= PAVE_COST
-          ;(zoneMode.ghost.material as THREE.MeshBasicMaterial).color.setHex(zoneMode.valid ? 0x37c97e : 0xec5b5b)
-        }
+        updateZoneAt(pt.x, pt.y)
       }
     }
   }
@@ -2100,9 +2107,17 @@ window.addEventListener('pointermove', e => {
 window.addEventListener('pointerup', e => {
   if (!isDown) return
   isDown = false
-  if (isDrag || e.target !== renderer.domElement) return
+  // parmak biraz kaysa da dokunuş sayılır (8px eşiği mobilde tıklamaları yutuyordu)
+  const tapDist = Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY)
+  if ((isDrag && tapDist > 12) || e.target !== renderer.domElement) return
   if (placing) {
     if (e.button === 0) {
+      // mobilde hover yok: dokunuş önce hayaleti konumlandırır, aynı yere ikinci
+      // dokunuş (ya da ✓) onaylar — eski konumda yanlışlıkla yerleştirme olmaz
+      const prevX = placing.cx, prevY = placing.cy
+      const pt = groundPointAt(e.clientX, e.clientY)
+      if (pt) repositionPlacing(pt.x, pt.y)
+      if (placing && Math.abs(placing.cx - prevX) + Math.abs(placing.cy - prevY) > 0.5) return
       if (placing.valid) confirmPlacement()
       else ui.toast('🚫 Buraya yerleştiremezsin — sahipli ve betonlu alana koy.', 'bad')
     }
@@ -2110,6 +2125,9 @@ window.addEventListener('pointerup', e => {
   }
   if (zoneMode) {
     if (e.button === 0) {
+      // geçerlilik dokunuş noktasından taze hesaplanır (hover'a güvenme)
+      const pt = groundPointAt(e.clientX, e.clientY)
+      if (pt) updateZoneAt(pt.x, pt.y)
       if (zoneMode.valid) confirmZone()
       else if (zoneMode.kind === 'land') {
         const { c, r } = zoneMode
