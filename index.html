@@ -95,14 +95,16 @@
       /* alt navbar: mobilde HUD'dan taşınan butonlar gizli, navbar görünür */
       #closebtn, #orderbtn, #shopbtn, #accbtn { display: none !important; }
 
-      /* ---- Yakıt levelleri: ekranın sağında dikey ray (dizel/benzin/lpg + varsa şarj) ---- */
+      /* ---- Sol-üst düzen: takvim+para bir satır; altında benzin/dizel/lpg/kwh alt alta (küçük) ---- */
+      #onlinechip { display: none !important; }
       #fuelrail { display: flex !important; flex-direction: column; position: fixed; z-index: 12;
-        right: calc(6px + env(safe-area-inset-right)); top: calc(58px + env(safe-area-inset-top));
-        gap: 6px; width: 122px; pointer-events: none; }
-      #fuelrail .fuelchip { min-width: 0 !important; padding: 4px 9px 5px; }
-      #fuelrail .fuelchip .cl { display: block; font-size: 8px; }   /* hangi yakıt olduğu görünsün */
-      #fuelrail .fuelchip .cv { font-size: 13px; }
-      #fuelrail .fuelchip .bar { flex: 1; width: auto; min-width: 34px; }
+        left: calc(8px + env(safe-area-inset-left)); top: calc(46px + env(safe-area-inset-top));
+        gap: 4px; width: 118px; pointer-events: none; }
+      #fuelrail .fuelchip { min-width: 0 !important; padding: 2px 8px 3px; border-bottom-width: 2px; }
+      #fuelrail .fuelchip .cl { display: block; font-size: 7px; letter-spacing: .08em; }
+      #fuelrail .fuelchip .cv { font-size: 11px; gap: 4px; }   /* daha küçük yakıt/kwh miktarı */
+      #fuelrail .fuelchip .ic { width: 11px; height: 11px; }
+      #fuelrail .fuelchip .bar { flex: 1; width: auto; min-width: 26px; height: 6px; }
 
       /* ---- Popuplar navbarın ÜSTÜNDE; oyun üstte ufaktan görünmeye devam etsin ---- */
       #panel, #infocard { z-index: 25 !important; bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
@@ -123,17 +125,17 @@
         color: var(--muted); cursor: pointer; padding: 6px 2px 5px; border-radius: 15px;
         background: none; border: 1.5px solid transparent; font-family: var(--font);
         transition: transform .08s, background .12s, color .12s; }
-      /* her nav ikonu renkli yuvarlak tile — düz tab bar değil, oyun menüsü hissi */
-      .navbtn .ic { width: 22px; height: 22px; padding: 7px; border-radius: 13px; box-sizing: content-box;
-        transition: transform .1s; }
-      #nav-office .ic  { color: #2f6fed; background: #2f6fed1c; }
-      #nav-build .ic   { color: var(--red); background: #d645451c; }
-      #nav-order .ic   { color: var(--orange); background: #e8862e1c; }
-      #nav-roadmap .ic { color: var(--green); background: #27a05a1c; }
-      #nav-profile .ic { color: #5a6b7c; background: #5a6b7c1c; }
-      .navbtn span { font-size: 10px; font-weight: 800; letter-spacing: .02em; color: var(--ink); }
+      /* her nav item: solid renkli ikon tile (beyaz ikon) — bold oyun menüsü */
+      .navbtn .ic { width: 22px; height: 22px; padding: 9px; border-radius: 15px; box-sizing: content-box;
+        color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.16), var(--shadow); transition: transform .1s; }
+      #nav-office .ic  { background: #2f6fed; }
+      #nav-build .ic   { background: var(--red); }
+      #nav-order .ic   { background: var(--orange); }
+      #nav-roadmap .ic { background: var(--green); }
+      #nav-profile .ic { background: #6b7684; }
+      .navbtn span { font-size: 10.5px; font-weight: 800; letter-spacing: .01em; color: var(--ink); }
       .navbtn:active { transform: translateY(2px) scale(.95); }
-      .navbtn:active .ic { transform: scale(1.12); }
+      .navbtn:active .ic { box-shadow: 0 1px 0 rgba(0,0,0,.16); transform: translateY(1px); }
       /* Sorun Bildir web butonu modalların altında kalsın (üstüne binmesin) */
       #fbbtn { z-index: 15 !important; }
     }
