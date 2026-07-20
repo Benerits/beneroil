@@ -594,7 +594,7 @@ const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
-  'solarDirt', 'smrWear', 'uranium', 'day', 'dayStartMoney', 'closed',
+  'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare',
 ] as const
 
@@ -612,6 +612,9 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.ownedParcels = [...s.ownedParcels]
   out.pavedParcels = [...s.pavedParcels]
   out.achievements = [...s.achievements]
+  // arızalar da kayda girer — çıkış-giriş bedava tamir olmasın
+  out.brokenPumps = [...s.brokenPumps]
+  out.brokenChargers = [...s.brokenChargers]
   return out
 }
 
@@ -669,6 +672,8 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (Array.isArray(data.ownedParcels)) s.ownedParcels = new Set(data.ownedParcels as string[])
   if (Array.isArray(data.pavedParcels)) s.pavedParcels = new Set(data.pavedParcels as string[])
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])
+  if (Array.isArray(data.brokenPumps)) s.brokenPumps = new Set((data.brokenPumps as number[]).filter(n => Number.isInteger(n)))
+  if (Array.isArray(data.brokenChargers)) s.brokenChargers = new Set((data.brokenChargers as number[]).filter(n => Number.isInteger(n)))
 }
 
 export function doMaintenance(s: GameState, id: string): boolean {
