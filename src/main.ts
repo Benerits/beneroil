@@ -190,7 +190,12 @@ app.appendChild(renderer.domElement)
 // Kamera: (1x, 2y, 1z) yönünden ortografik; tekerlek = zoom, sürükle = kaydır
 const VIEW = 26
 const camera = new THREE.OrthographicCamera()
-const camDir = new THREE.Vector3(1, 2, 1).normalize().multiplyScalar(42)
+// Harita açısı: birkaç hazır izometrik yön; oyuncu "açı" butonuyla döner.
+const CAM_ANGLES = [
+  new THREE.Vector3(1, 2, 1), new THREE.Vector3(1.6, 2, 0.5), new THREE.Vector3(0.5, 2.2, 1.6),
+].map(v => v.normalize().multiplyScalar(42))
+let camAngleIdx = 0
+let camDir = CAM_ANGLES[camAngleIdx].clone()
 let camX = 0
 let camY = 0
 let pinching = false // iki parmak zoom sırasında sürükle-kaydırma devre dışı
@@ -198,6 +203,12 @@ let pinching = false // iki parmak zoom sırasında sürükle-kaydırma devre d�
 function updateCamera() {
   camera.position.set(camDir.x + camX, camDir.y + camY, camDir.z)
   camera.lookAt(camX, camY, 0)
+}
+
+function cycleCameraAngle() {
+  camAngleIdx = (camAngleIdx + 1) % CAM_ANGLES.length
+  camDir = CAM_ANGLES[camAngleIdx].clone()
+  updateCamera()
 }
 
 let composer: EffectComposer | null = null
@@ -218,7 +229,7 @@ function resize() {
 window.addEventListener('resize', resize)
 window.addEventListener('wheel', e => {
   // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
-  if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud')) return
+  if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar')) return
   camera.zoom = Math.min(2.6, Math.max(0.78, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
@@ -227,7 +238,7 @@ window.addEventListener('wheel', e => {
 let pinchStartDist = 0, pinchStartZoom = 1
 const touchDist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
 window.addEventListener('touchstart', e => {
-  if (e.touches.length === 2 && !(e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, #authgate')) {
+  if (e.touches.length === 2 && !(e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar, #authgate')) {
     pinching = true; pinchStartDist = touchDist(e.touches); pinchStartZoom = camera.zoom
   }
 }, { passive: true })
@@ -280,6 +291,30 @@ if (!isPromoMode) {
 }
 let promoTick: ((dt: number) => void) | null = null
 const ui = new UI()
+
+// Alt navbar (mobil): sekmeler mevcut HUD handler'larını yeniden kullanır (DRY).
+// HUD butonları mobilde display:none olsa da programatik .click() event'i tetikler.
+for (const [nav, target] of [['nav-build', 'shopbtn'], ['nav-order', 'orderbtn'], ['nav-profile', 'accbtn']] as const) {
+  document.getElementById(nav)?.addEventListener('click', () => document.getElementById(target)?.click())
+}
+document.getElementById('nav-office')?.addEventListener('click', () => openOfficePanel())
+document.getElementById('nav-roadmap')?.addEventListener('click', () => ui.toast(t('Yol haritası yakında!'), ''))
+document.getElementById('anglebtn')?.addEventListener('click', () => cycleCameraAngle())
+
+// Ofis: finansal + performans özeti (salt-okunur) + istasyon aç/kapa
+function openOfficePanel() {
+  const set = (id: string, v: string) => { const e = document.getElementById(id); if (e) e.textContent = v }
+  set('of-cash', `${Math.round(state.money)} ₺`)
+  set('of-rev', `${Math.round(state.stats.revenue)} ₺`)
+  set('of-served', `${state.stats.served}`)
+  set('of-lost', `${state.stats.lost}`)
+  set('of-rep', state.reputation.toFixed(1))
+  document.getElementById('officewrap')?.classList.add('show')
+}
+document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
+document.getElementById('officewrap')?.addEventListener('pointerdown', e => {
+  if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show')
+})
 ui.batteryKwh = () => state.battery
 ui.feedbackContext = () => ({
   day: state.day, money: Math.round(state.money), pumps: state.pumps,

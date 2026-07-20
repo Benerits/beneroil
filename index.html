@@ -69,6 +69,9 @@
     .spacer { flex: 1; }
 
     /* ---------- Mobil: kompakt HUD (buton/chip alanı yer kaplamasın) ---------- */
+    /* alt navbar yalnızca mobilde; masaüstünde gizli (genel kural @media'dan ÖNCE) */
+    .navbar { display: none; }
+
     @media (max-width: 680px) {
       .hud { gap: 5px; padding: calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(8px + env(safe-area-inset-left)); }
       .chip { min-width: 0 !important; padding: 3px 9px 4px; border-bottom-width: 2px; }
@@ -86,7 +89,29 @@
       .hud > .btn .ic { margin: 0; }
       #adbtn { width: 42px !important; }
       #shopdot { right: 4px; top: 4px; }
+      /* Sorun Bildir (web'de görünür) navbar'ı örtmesin — dar ekranda navbar üstüne al */
+      #fbbtn { bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
+      /* alt navbar: mobilde HUD'dan taşınan butonlar gizli, navbar görünür */
+      #closebtn, #orderbtn, #shopbtn, #accbtn { display: none !important; }
+      .navbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+        justify-content: space-around; align-items: center; gap: 2px;
+        background: var(--paper); border-top: 2px solid var(--edge);
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        box-shadow: 0 -4px 14px rgba(34, 48, 60, .16); }
+      .navbtn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+        color: var(--muted); cursor: pointer; padding: 4px 0; border-radius: var(--r-sm);
+        background: none; border: 0; font-family: var(--font); transition: color .12s, transform .05s; }
+      .navbtn .ic { width: 22px; height: 22px; }
+      .navbtn span { font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+      .navbtn:active { transform: translateY(1px); }
+      .navbtn.on { color: var(--red); }
     }
+
+    /* Ofis özet satırları */
+    .stat-row { display: flex; justify-content: space-between; align-items: center;
+      padding: 9px 2px; border-top: 1px solid var(--line); font-weight: 700; color: var(--muted); }
+    .stat-row:first-child { border-top: 0; }
+    .stat-row .num { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--ink); }
 
     /* ---------- Butonlar ---------- */
     .btn { border-radius: var(--r-md); padding: 9px 15px; font-size: 13.5px; font-weight: 800;
@@ -329,6 +354,8 @@
     <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3.5v17M3.5 12h17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.2 6.3 12 3.5l2.8 2.8M9.2 17.7l2.8 2.8 2.8-2.8M6.3 9.2 3.5 12l2.8 2.8M17.7 9.2l2.8 2.8-2.8 2.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-office" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 8h2.5M13.5 8H16M9 12h2.5M13.5 12H16M10.5 20.5v-4h3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4.5 4 6.5v13l5-2 6 2 5-2v-13l-5 2-6-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 4.5v13M15 6.5v13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-angle" viewBox="0 0 24 24"><path d="M12 3.5 20 8v8l-8 4.5L4 16V8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 3.5v17M4 8l8 4.5L20 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
   </svg>
 
   <div class="hud">
@@ -344,12 +371,21 @@
     <div class="spacer"></div>
     <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span>Reklam İzle: Müşteri Patlaması</span></button>
     <button id="editbtn" class="btn" title="Düzenleme modu" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-move"/></svg></button>
+    <button id="anglebtn" class="btn" title="Kamera açısı" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-angle"/></svg></button>
     <button id="closebtn" class="btn" style="width:118px; justify-content:center"><svg class="ic"><use href="#i-power"/></svg><span id="closelabel" data-i18n="Açık">Açık</span></button>
     <button id="orderbtn" class="btn warn" style="width:158px; justify-content:center"><svg class="ic"><use href="#i-truck"/></svg><span id="orderlabel" data-i18n="Yakıt Siparişi">Yakıt Siparişi</span></button>
     <button id="shopbtn" class="btn primary" style="width:118px; justify-content:center; position:relative"><svg class="ic"><use href="#i-build"/></svg><span id="shoplabel" data-i18n="İnşaat">İnşaat</span><span id="shopdot"></span></button>
     <button id="accbtn" class="btn" title="Hesabım"><svg class="ic" style="margin:0"><use href="#i-user"/></svg></button>
     <button id="setbtn" class="btn" title="Ayarlar"><svg class="ic" style="margin:0"><use href="#i-gear"/></svg></button>
   </div>
+
+  <nav class="navbar" id="navbar">
+    <button class="navbtn" id="nav-office"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Ofis">Ofis</span></button>
+    <button class="navbtn" id="nav-build"><svg class="ic"><use href="#i-build"/></svg><span data-i18n="İnşaat">İnşaat</span></button>
+    <button class="navbtn" id="nav-order"><svg class="ic"><use href="#i-truck"/></svg><span data-i18n="Sipariş">Sipariş</span></button>
+    <button class="navbtn" id="nav-roadmap"><svg class="ic"><use href="#i-map"/></svg><span data-i18n="Yol Har.">Yol Har.</span></button>
+    <button class="navbtn" id="nav-profile"><svg class="ic"><use href="#i-user"/></svg><span data-i18n="Profil">Profil</span></button>
+  </nav>
 
   <div id="panel">
     <h3 id="demand">—</h3>
@@ -453,6 +489,23 @@
           <button class="btn sbuy primary" id="fbtn-lpg">Sipariş</button>
         </div>
         <div class="sd" style="text-align:center; padding:6px 0 2px">Her yakıtın tankeri ayrı gelir ve ayrı boşaltır — üçüne de sen yetişeceksin.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="backdrop" id="officewrap">
+    <div class="modal" style="height:auto; max-height:84vh">
+      <div class="mhead">
+        <h3 data-i18n="Ofis">Ofis</h3>
+        <button class="mclose" data-close="officewrap"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="mbody">
+        <div class="stat-row"><span data-i18n="Kasa">Kasa</span><b id="of-cash" class="num">0 ₺</b></div>
+        <div class="stat-row"><span data-i18n="Toplam gelir">Toplam gelir</span><b id="of-rev" class="num">0 ₺</b></div>
+        <div class="stat-row"><span data-i18n="Servis edilen müşteri">Servis edilen müşteri</span><b id="of-served" class="num">0</b></div>
+        <div class="stat-row"><span data-i18n="Kaçan müşteri">Kaçan müşteri</span><b id="of-lost" class="num">0</b></div>
+        <div class="stat-row"><span data-i18n="İtibar">İtibar</span><b id="of-rep" class="num">0</b></div>
+        <button class="btn primary" id="of-toggle" style="width:100%; justify-content:center; margin-top:12px"><svg class="ic"><use href="#i-power"/></svg><span data-i18n="İstasyonu Aç/Kapa">İstasyonu Aç/Kapa</span></button>
       </div>
     </div>
   </div>
