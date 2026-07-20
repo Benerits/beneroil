@@ -86,6 +86,7 @@ export class UI {
   onDismiss: (car: Car) => void = () => {}
   onCleanWindows: (car: Car) => void = () => {}
   onOrderFuel: (f: FuelType) => void = () => {}
+  onOrderQty: (f: FuelType, d: number) => void = () => {}
   onBuy: (id: string) => void = () => {}
   onMaint: (id: string) => void = () => {}
   onRename: (name: string) => void = () => {}
@@ -165,6 +166,11 @@ export class UI {
     for (const f of FUELS) {
       el<HTMLButtonElement>(`fbtn-${f}`).addEventListener('click', () => this.onOrderFuel(f))
     }
+    // sipariş miktarı −/+ (min 800L → full)
+    fuelWrap.addEventListener('click', e => {
+      const b = (e.target as HTMLElement).closest('button.forder') as HTMLButtonElement | null
+      if (b) this.onOrderQty(b.dataset.f as FuelType, Number(b.dataset.d))
+    })
     this.closeBtn.addEventListener('click', () => this.onToggleClosed())
     const accWrap = el<HTMLDivElement>('accwrap')
     el<HTMLButtonElement>('accbtn').addEventListener('click', () => accWrap.classList.add('show'))
@@ -417,7 +423,8 @@ export class UI {
     this.amount.disabled = car.filling || car.wantsFull
     const amt = Math.floor(Number(this.amount.value))
     this.startBtn.disabled = !car.nozzle || !(amt > 0) || car.filling || car.filled > 0 || car.wantsFull
-    el<HTMLButtonElement>('fullbtn').disabled = !car.nozzle || car.filling || car.filled > 0
+    // FULLE yalnızca gerçekten "full" isteyen müşteride (belirli tutar isteyeni FULLE'lemek anlamsız/exploit)
+    el<HTMLButtonElement>('fullbtn').disabled = !car.nozzle || car.filling || car.filled > 0 || !car.wantsFull
     if (!car.filling && car.filled === 0)
       this.setText(this.progress, car.wantsFull
         ? t('Müşteri FULLE istiyor — tabancayı seç, FULLE bas')

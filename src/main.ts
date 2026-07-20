@@ -6,7 +6,7 @@ import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
-  POMPACI_HIRE, EV_ATTENDANT_HIRE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
+  POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { isNativePlatform } from './platform'
@@ -347,6 +347,19 @@ function openOfficePanel() {
     + `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>`
     + `<span class="pv">₺${r.price.toFixed(1)}</span>`
     + `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
+  // muhasebe: girdi-çıktı özeti
+  const acc = document.getElementById('of-account')
+  if (acc) {
+    const rev = Math.round(state.stats.revenue)
+    const fuel = Math.round(state.fuelSpent), wage = Math.round(state.wagesPaid)
+    const net = rev - fuel - wage
+    acc.innerHTML =
+      `<div class="stat"><span class="k">${t('Günlük yovmiye')}</span><span class="v ${state.dailyWages() ? 'bad' : ''}">₺${state.dailyWages().toLocaleString('tr-TR')}/gün</span></div>`
+      + `<div class="stat"><span class="k">${t('Toplam yakıt alımı')}</span><span class="v bad">-₺${fuel.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Toplam yovmiye')}</span><span class="v bad">-₺${wage.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Toplam ciro')}</span><span class="v good">+₺${rev.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Net (kaba)')}</span><span class="v ${net >= 0 ? 'good' : 'bad'}">₺${net.toLocaleString('tr-TR')}</span></div>`
+  }
   document.getElementById('officewrap')?.classList.add('show')
 }
 document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
@@ -968,10 +981,10 @@ function tickEvCharging(dt: number) {
         // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
         c.squatting = true
         c.beingServed = true
-        c.setCounter('MOLADA')
+        c.setCounter('MOLADA · GÖNDER →')
         const visits = facilityVisits(c)
         spawnWalkerFor(c, { visits, score, squat: true })
-        ui.toast('Müşteri şarj bitince tesislere takıldı — araca tıklayıp GÖNDER, yoksa yeni EV müşterileri kaçar!', 'bad')
+        ui.toast('Müşteri molada — üniteyi boşaltmak için araca DOKUN (popup yok), yoksa yeni EV müşterileri kaçar!', 'bad')
       } else {
         concludeService(c, score)
       }
@@ -987,6 +1000,7 @@ ui.onOrderFuel = f => {
   if (state.placeOrder(f)) ui.toast(t('{0} tankeri yola çıktı!', FUEL_LABEL[f]), 'good')
   else ui.toast('Sipariş verilemedi (tank dolu ya da para yetmiyor).', 'bad')
 }
+ui.onOrderQty = (f, d) => { state.adjustOrderQty(f, d) } // −/+ sipariş miktarı (fneed sonraki karede güncellenir)
 
 /** satın alma sonrası sahnedeki görsel karşılığını kurar */
 function buildVisual(id: string, pos?: THREE.Vector2) {
@@ -2157,6 +2171,7 @@ ui.onPriceChange = (f, delta) => {
     syncSignPrices()
   }
   refreshBuildingCard()
+  if (document.getElementById('officewrap')?.classList.contains('show')) openOfficePanel() // ofis fiyat satırlarını canlı güncelle
   persist()
 }
 
@@ -2174,7 +2189,8 @@ function buildingCard(id: string): BuildingCard | null {
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Dolum hızı'), t('{0} L/sn', FILL_RATE)],
-        [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelirin tamamı senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
+        [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelir senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
+        [t('Yovmiye'), t('₺{0}/gün', POMPACI_WAGE), state.autoPumps.has(i) ? 'bad' : undefined],
         [t('Benzin'), `₺${state.prices.benzin}/L`],
         [t('Dizel'), `₺${state.prices.dizel}/L`],
       ],
@@ -2182,7 +2198,7 @@ function buildingCard(id: string): BuildingCard | null {
         ? { label: '🔧 Tamir Et — ₺800', maintId: `fix-pump-${i}` }
         : state.autoPumps.has(i)
           ? { label: t('🧑‍🔧 Pompacıyı işten çıkar'), maintId: `auto-pump-${i}` }
-          : { label: t('🧑‍🔧 Pompacı Çalıştır — ₺{0}', POMPACI_HIRE.toLocaleString('tr-TR')), maintId: `auto-pump-${i}` },
+          : { label: t('🧑‍🔧 Pompacı Tut — ₺{0} + ₺{1}/gün', POMPACI_HIRE.toLocaleString('tr-TR'), POMPACI_WAGE), maintId: `auto-pump-${i}` },
     }
   }
   if (id.startsWith('charger-')) {
@@ -2194,14 +2210,15 @@ function buildingCard(id: string): BuildingCard | null {
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Şarj süresi'), t('Anında')],
-        [t('Şarjcı'), state.autoChargers.has(i) ? t('ÇALIŞIYOR (gelirin tamamı senin)') : t('YOK'), state.autoChargers.has(i) ? 'good' : undefined],
+        [t('Şarjcı'), state.autoChargers.has(i) ? t('ÇALIŞIYOR (gelir senin)') : t('YOK'), state.autoChargers.has(i) ? 'good' : undefined],
+        [t('Yovmiye'), t('₺{0}/gün', EV_ATTENDANT_WAGE), state.autoChargers.has(i) ? 'bad' : undefined],
         [t('Satış'), `₺${state.elecPrice}/kWh`],
       ],
       action: broken
         ? { label: '🔧 Tamir Et — ₺1.000', maintId: `fix-charger-${i}` }
         : state.autoChargers.has(i)
           ? { label: t('🧑‍🔧 Şarjcıyı işten çıkar'), maintId: `auto-charger-${i}` }
-          : { label: t('🧑‍🔧 Şarjcı Çalıştır — ₺{0}', EV_ATTENDANT_HIRE.toLocaleString('tr-TR')), maintId: `auto-charger-${i}` },
+          : { label: t('🧑‍🔧 Şarjcı Tut — ₺{0} + ₺{1}/gün', EV_ATTENDANT_HIRE.toLocaleString('tr-TR'), EV_ATTENDANT_WAGE), maintId: `auto-charger-${i}` },
     }
   }
   switch (id) {
@@ -2601,7 +2618,12 @@ function handleClick(e: PointerEvent) {
   if (carHits.length > 0) {
     let obj: THREE.Object3D | null = carHits[0].object
     while (obj && !obj.userData.car) obj = obj.parent
-    if (obj?.userData.car) ui.selectCar(obj.userData.car as Car)
+    if (obj?.userData.car) {
+      const c = obj.userData.car as Car
+      // molada elektrikli araç: tıklayınca direkt gönder (arıza pill'i gibi, panel/popup açılmadan)
+      if (c.kind === 'ev' && c.squatting) ui.onDismiss(c)
+      else ui.selectCar(c)
+    }
     return
   }
 
@@ -2711,6 +2733,9 @@ function frame() {
     state.day++
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
+    // günlük yovmiye (pompacı + şarjcı) — recurring gider
+    const wages = state.dailyWages()
+    if (wages > 0) { state.money -= wages; state.wagesPaid += wages; ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
     // kredi taksiti (aylık = 1 oyun günü)
     const loanRes = state.processLoanDay()
     if (loanRes === 'done') ui.toast(t('🏦 Kredi tamamen ödendi — teminatların serbest! 🎉'), 'good')
@@ -2861,7 +2886,9 @@ function frame() {
     if (c.nozzle !== c.demandType && c.filled > 1.5) {
       wrongFuel(c)
     } else if (c.fullMode ? c.filled >= c.hiddenNeedL : c.filledValue >= c.targetAmount) {
-      if (c.fullMode) {
+      // Yalnızca GERÇEKTEN full isteyen müşteride talep = doldurulan (tam depo satışı) olur.
+      // Belirli tutar isteyen müşteriyi FULLE'lemek exploit değil: gelir talep ile capli kalır + fazlası spill (ceza).
+      if (c.fullMode && c.wantsFull) {
         c.demandAmount = Math.round(c.filledValue * 100) / 100
         c.demandLiters = c.filled
       }
