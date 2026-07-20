@@ -63,6 +63,24 @@
     #battchip { display: none; }
     .spacer { flex: 1; }
 
+    /* ---------- Mobil: kompakt HUD (buton/chip alanı yer kaplamasın) ---------- */
+    @media (max-width: 680px) {
+      .hud { gap: 5px; padding: calc(6px + env(safe-area-inset-top)) 8px 6px; }
+      .chip { min-width: 0 !important; padding: 3px 8px 4px; border-bottom-width: 2px; }
+      .chip .cl { display: none; }            /* etiketleri gizle, ikon+değer yeter */
+      .chip .cv { font-size: 13px; gap: 4px; }
+      .chip .ic { width: 13px; height: 13px; }
+      .bar { width: 40px; height: 7px; }
+      /* günlük görev + itibar + online: mobilde ikincil, gizle (mağaza/ayarlarda görünür) */
+      #onlinechip, #questchip, #repchip { display: none; }
+      /* aksiyon butonları ikon-only: metni gizle, kare yap */
+      .hud > .btn { width: 42px !important; padding: 8px 0; justify-content: center; }
+      .hud > .btn > span { display: none; }
+      .hud > .btn .ic { margin: 0; }
+      #adbtn { width: 42px !important; }
+      #shopdot { right: 4px; top: 4px; }
+    }
+
     /* ---------- Butonlar ---------- */
     .btn { border-radius: var(--r-md); padding: 9px 15px; font-size: 13.5px; font-weight: 800;
            cursor: pointer; color: var(--ink); background: var(--paper);
@@ -314,8 +332,8 @@
     <div class="chip"><span class="cl" data-i18n="LPG">LPG</span><span class="cv"><svg class="ic" style="color:var(--blue)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-lpg" style="background:var(--blue)"></div></div> <span id="lvl-lpg">0</span></span></div>
     <div class="chip" id="battchip"><span class="cl" data-i18n="BATARYA">BATARYA</span><span class="cv"><svg class="ic"><use href="#i-batt"/></svg> <div class="bar"><div id="battfill"></div></div> <span id="battkwh">0</span></span></div>
     <div class="chip" id="onlinechip" style="min-width:72px; display:none"><span class="cl" data-i18n="OYUNDA">OYUNDA</span><span class="cv"><svg class="ic"><use href="#i-user"/></svg> <span id="hud-online">0</span></span></div>
-    <div class="chip" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
-    <div class="chip" style="min-width:104px"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
+    <div class="chip" id="repchip" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
+    <div class="chip" id="questchip" style="min-width:104px"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
     <div class="spacer"></div>
     <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span>Reklam İzle: Müşteri Patlaması</span></button>
     <button id="editbtn" class="btn" title="Düzenleme modu" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-move"/></svg></button>
@@ -361,7 +379,7 @@
       </div>
       <div id="evnote"></div>
     </div>
-    <div class="row">
+    <div class="row" id="cleanrow">
       <button id="cleanbtn" class="btn" style="flex:1; justify-content:center" data-i18n="🧼 Camları Temizle">🧼 Camları Temizle</button>
     </div>
     <div class="row">
@@ -382,6 +400,7 @@
       <button class="btn danger baction" id="binfo-action" style="display:none">Tamir</button>
       <button class="btn good baction" id="binfo-buy" style="display:none">Yükselt</button>
       <button class="btn baction" id="binfo-move" style="display:none">Taşı</button>
+      <button class="btn danger baction" id="binfo-sell" style="display:none">Sat</button>
     </div>
   </div>
 

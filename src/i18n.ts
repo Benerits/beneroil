@@ -118,6 +118,8 @@ const EN: Record<string, string> = {
   'kâr': 'profit',
   'zarar': 'loss',
   'Otomatik Şarj: {0} — değiştir': 'Auto-charge: {0} — toggle',
+  '🧨 Yık — +₺{0}': '🧨 Demolish — +₺{0}',
+  '🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}': '🧨 Demolished — half your investment back: +₺{0}',
   // --- Pompacı ---
   'Pompacı': 'Attendant',
   'ÇALIŞIYOR (satış başı -₺{0})': 'ON DUTY (-₺{0} per sale)',

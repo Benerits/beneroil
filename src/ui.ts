@@ -24,6 +24,8 @@ export interface BuildingCard {
   stats: [string, string, ('' | 'good' | 'bad')?][]
   action?: { label: string; maintId: string }
   move?: { label: string; id: string }
+  /** binayı sat/yık (%iade) */
+  sell?: { label: string; id: string }
   /** karttan doğrudan yükseltme/satın alma */
   buy?: { label: string; id: string }
   /** ofis kartı: yakıt satış fiyatı kontrolleri */
@@ -140,9 +142,12 @@ export class UI {
   private infoCard = el<HTMLDivElement>('infocard')
   private infoAction = el<HTMLButtonElement>('binfo-action')
   private infoMove = el<HTMLButtonElement>('binfo-move')
+  private infoSell = el<HTMLButtonElement>('binfo-sell')
   private currentAction: string | null = null
   private currentMove: string | null = null
   private currentBuy: string | null = null
+  private currentSell: string | null = null
+  onSell: (id: string) => void = () => {}
 
   private shopOpen = false
   private shopRenderT = 0
@@ -301,6 +306,9 @@ export class UI {
     this.infoAction.addEventListener('click', () => {
       if (this.currentAction) this.onMaint(this.currentAction)
     })
+    this.infoSell.addEventListener('click', () => {
+      if (this.currentSell) this.onSell(this.currentSell)
+    })
     this.infoMove.addEventListener('click', () => {
       if (this.currentMove) this.onMove(this.currentMove)
     })
@@ -347,9 +355,8 @@ export class UI {
     }
     this.panel.classList.add('show')
     el<HTMLButtonElement>('dismissbtn').disabled = car.filling || car.filled > 0
-    const cleanBtn = el<HTMLButtonElement>('cleanbtn')
-    cleanBtn.disabled = car.windowsCleaned
-    this.setText(cleanBtn, car.windowsCleaned ? t('✨ Camlar Temiz') : t('🧼 Camları Temizle'))
+    // camlar temizlenince o satır tamamen kapanır (iş bitti, buton yer kaplamasın)
+    el<HTMLDivElement>('cleanrow').style.display = car.windowsCleaned ? 'none' : 'flex'
 
     if (car.kind === 'ev') {
       this.fuelCtl.style.display = 'none'
@@ -434,6 +441,14 @@ export class UI {
       buyBtn.style.display = 'none'
       this.currentBuy = null
     }
+    if (card.sell) {
+      this.infoSell.style.display = 'flex'
+      this.infoSell.textContent = stripEmoji(card.sell.label)
+      this.currentSell = card.sell.id
+    } else {
+      this.infoSell.style.display = 'none'
+      this.currentSell = null
+    }
     this.infoCard.classList.add('show')
   }
 
@@ -456,6 +471,7 @@ export class UI {
     this.infoCard.classList.remove('show')
     this.currentAction = null
     this.currentMove = null
+    this.currentSell = null
   }
 
   get buildingCardVisible() {

@@ -732,3 +732,68 @@ export function buyItem(s: GameState, id: string): boolean {
   }
   return true
 }
+
+export const SELL_REFUND = 0.5 // yıkımda yatırımın yarısı geri döner
+
+/** Bir binanın satılıp satılamayacağını ve iade tutarını döndürür (mutasyon yapmaz).
+ *  Pompa/şarj/sayılabilir tesislerde yalnızca EN SON eklenen örnek satılabilir —
+ *  böylece indeks boşluğu / yeniden numaralandırma gerekmez. null = satılamaz. */
+export function sellInfo(s: GameState, id: string): { refund: number } | null {
+  const base = id.split('#')[0]
+  const inst = id.includes('#') ? Number(id.split('#')[1]) : 0
+  const half = (c: number) => Math.round(c * SELL_REFUND)
+  if (base === 'pump') {
+    const i = Number(id.slice(5))
+    if (s.pumps <= 1 || i !== s.pumps - 1) return null // en az 1 pompa kalmalı, sadece sonuncu
+    return { refund: half(PUMP_COSTS[s.pumps - 1]) }
+  }
+  if (base === 'charger') {
+    const i = Number(id.slice(8))
+    if (s.evChargers <= 0 || i !== s.evChargers - 1) return null
+    return { refund: half(EV_COSTS[s.evChargers - 1]) }
+  }
+  switch (base) {
+    case 'market': return s.marketLevel > 0 ? { refund: half(MARKET_COSTS.slice(0, s.marketLevel).reduce((a, b) => a + b, 0)) } : null
+    case 'toilet': return s.toiletLevel > 0 ? { refund: half(TOILET_COSTS.slice(0, s.toiletLevel).reduce((a, b) => a + b, 0)) } : null
+    case 'battery': return s.batteryLevel > 0 ? { refund: half(BATTERY_COSTS.slice(0, s.batteryLevel).reduce((a, b) => a + b, 0)) } : null
+    case 'wash': return s.hasWash ? { refund: half(WASH_COST) } : null
+    case 'oil': return s.hasOil ? { refund: half(OIL_COST) } : null
+    case 'coffee': return s.hasCoffee ? { refund: half(COFFEE_COST) } : null
+    case 'restaurant': return s.hasRestaurant ? { refund: half(RESTAURANT_COST) } : null
+    case 'truckpark': return s.hasTruckPark ? { refund: half(TRUCKPARK_COST) } : null
+    case 'dieselgen': return s.hasDiesel ? { refund: half(DIESELGEN_COST) } : null
+    case 'smr': return s.hasSMR ? { refund: half(SMR_COST) } : null
+    case 'solar': return s.solarCount > 0 && inst === s.solarCount - 1 ? { refund: half(SOLAR_COST) } : null
+    case 'parking': return s.parkingCount > 0 && inst === s.parkingCount - 1 ? { refund: half(PARKING_COST) } : null
+    case 'selfwash': return s.selfWashCount > 0 && inst === s.selfWashCount - 1 ? { refund: half(SELFWASH_COST) } : null
+    case 'airwater': return s.airWaterCount > 0 && inst === s.airWaterCount - 1 ? { refund: half(AIRWATER_COST) } : null
+    default: return null // sign/tank/grid/widegate/office: yükseltme ya da kritik altyapı, satılmaz
+  }
+}
+
+/** Satışı uygula: state sayaç/bayraklarını düşür, iadeyi ekle. Görsel kaldırmayı çağıran yapar. */
+export function applySell(s: GameState, id: string): number | null {
+  const info = sellInfo(s, id)
+  if (!info) return null
+  const base = id.split('#')[0]
+  s.money += info.refund
+  if (base === 'pump') { const i = s.pumps - 1; s.pumps--; s.brokenPumps.delete(i); s.autoPumps.delete(i) }
+  else if (base === 'charger') { const i = s.evChargers - 1; s.evChargers--; s.brokenChargers.delete(i); s.autoChargers.delete(i) }
+  else switch (base) {
+    case 'market': s.marketLevel = 0; break
+    case 'toilet': s.toiletLevel = 0; break
+    case 'battery': s.batteryLevel = 0; s.battery = 0; break
+    case 'wash': s.hasWash = false; break
+    case 'oil': s.hasOil = false; break
+    case 'coffee': s.hasCoffee = false; break
+    case 'restaurant': s.hasRestaurant = false; break
+    case 'truckpark': s.hasTruckPark = false; break
+    case 'dieselgen': s.hasDiesel = false; break
+    case 'smr': s.hasSMR = false; s.uranium = 0; s.smrWear = 0; break
+    case 'solar': s.solarCount--; break
+    case 'parking': s.parkingCount--; break
+    case 'selfwash': s.selfWashCount--; break
+    case 'airwater': s.airWaterCount--; break
+  }
+  return info.refund
+}

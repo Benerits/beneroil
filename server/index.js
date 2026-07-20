@@ -433,16 +433,20 @@ async function handleApi(req, res, url) {
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
       // makullük: para, geçen süreye göre imkânsız hızda artamaz (hile freni)
-      if (clean && clean.s) {
-        const prev = await pool.query('SELECT save, updated_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
+      if (clean && clean.s && typeof clean.s.money === 'number') {
+        const prev = await pool.query('SELECT save, updated_at, created_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
         if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
         const prevSave = prev.rows[0]?.save
-        if (prevSave && prevSave.s && typeof prevSave.s.money === 'number') {
-          const elapsed = Math.max(1, (Date.now() - new Date(prev.rows[0].updated_at).getTime()) / 1000)
-          const allowance = 50_000 + elapsed * 600
-          if (clean.s.money > prevSave.s.money + allowance) {
-            clean.s.money = Math.round(prevSave.s.money + allowance)
-          }
+        // taban: önceki kayıt varsa onun parası + o kayıttan beri; yoksa (ilk kayıt)
+        // başlangıç parası + hesap açılışından beri geçen süre. İlk kayıtta fren
+        // uygulanmıyordu → yeni hesap tek POST'ta 2M'ye çıkabiliyordu (bildirilen açık).
+        const START_MONEY = 5000
+        const baseMoney = (prevSave && prevSave.s && typeof prevSave.s.money === 'number') ? prevSave.s.money : START_MONEY
+        const sinceTs = prev.rows[0]?.updated_at || prev.rows[0]?.created_at
+        const elapsed = sinceTs ? Math.max(1, (Date.now() - new Date(sinceTs).getTime()) / 1000) : 1
+        const allowance = 50_000 + elapsed * 600
+        if (clean.s.money > baseMoney + allowance) {
+          clean.s.money = Math.round(baseMoney + allowance)
         }
       }
       await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1', [email, clean])
