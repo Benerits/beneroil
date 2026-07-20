@@ -80,6 +80,88 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
     gPass.addEventListener('keydown', e => {
       if (e.key === 'Enter') (document.getElementById('glogin') as HTMLButtonElement).click()
     })
+
+    // ---- Sosyal giriş: Google + Apple (web GIS/AppleJS · Capacitor-iOS native plugin) ----
+    const loadScript = (src: string) => new Promise<void>((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) return resolve()
+      const s = document.createElement('script'); s.src = src; s.async = true
+      s.onload = () => resolve(); s.onerror = () => reject(new Error('script'))
+      document.head.appendChild(s)
+    })
+    const oauthSubmit = async (provider: 'google' | 'apple', idToken: string, email?: string) => {
+      gErr.style.color = ''; gErr.textContent = ''
+      try {
+        const res = await fetch(`/api/auth/${provider}`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ idToken, email }),
+        })
+        const d = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(d.error ?? t('Giriş başarısız.'))
+        localStorage.setItem('benzinlik-token', d.token)
+        localStorage.setItem('benzinlik-email', d.email)
+        location.reload()
+      } catch (err) { gErr.textContent = (err as Error).message }
+    }
+    const setupOAuth = async () => {
+      let cfg: { googleClientId?: string; appleServicesId?: string } = {}
+      try { cfg = await (await fetch('/api/config')).json() } catch { /* config yoksa sosyal giriş gizli kalır */ }
+      const box = document.getElementById('ag-oauth') as HTMLDivElement
+      const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, any> } }).Capacitor
+      const isNative = !!cap?.isNativePlatform?.()
+      let any = false
+      // Google
+      if (isNative && cap?.Plugins) {
+        const btn = document.createElement('button')
+        btn.className = 'btn'; btn.style.cssText = 'width:100%;justify-content:center'
+        btn.textContent = t('Google ile devam et')
+        btn.onclick = async () => {
+          try {
+            const P = cap.Plugins!
+            if (P.SocialLogin) { const r = await P.SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } }); await oauthSubmit('google', r?.result?.idToken ?? r?.idToken) }
+            else if (P.GoogleAuth) { const u = await P.GoogleAuth.signIn(); await oauthSubmit('google', u?.authentication?.idToken) }
+            else gErr.textContent = 'Google plugin bulunamadı.'
+          } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
+        }
+        document.getElementById('gbtn-google')!.appendChild(btn); any = true
+      } else if (cfg.googleClientId) {
+        try {
+          await loadScript('https://accounts.google.com/gsi/client')
+          const g = (window as unknown as { google: any }).google
+          g.accounts.id.initialize({ client_id: cfg.googleClientId, callback: (resp: { credential: string }) => oauthSubmit('google', resp.credential) })
+          g.accounts.id.renderButton(document.getElementById('gbtn-google'), { theme: 'outline', size: 'large', width: 300, text: 'continue_with', shape: 'pill' })
+          any = true
+        } catch { /* GIS yüklenemedi */ }
+      }
+      // Apple
+      const aBtn = document.getElementById('gbtn-apple') as HTMLButtonElement
+      if (isNative && cap?.Plugins) {
+        aBtn.style.display = 'flex'
+        aBtn.onclick = async () => {
+          try {
+            const P = cap.Plugins!
+            if (P.SocialLogin) { const r = await P.SocialLogin.login({ provider: 'apple', options: { scopes: ['email', 'name'] } }); await oauthSubmit('apple', r?.result?.idToken ?? r?.identityToken) }
+            else if (P.SignInWithApple) { const r = await P.SignInWithApple.authorize({ scopes: 'email name' }); await oauthSubmit('apple', r?.response?.identityToken) }
+            else gErr.textContent = 'Apple plugin bulunamadı.'
+          } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
+        }
+        any = true
+      } else if (cfg.appleServicesId) {
+        try {
+          await loadScript('https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js')
+          const AppleID = (window as unknown as { AppleID: any }).AppleID
+          AppleID.auth.init({ clientId: cfg.appleServicesId, scope: 'name email', redirectURI: location.origin + '/', usePopup: true })
+          aBtn.style.display = 'flex'
+          aBtn.onclick = async () => {
+            try { const data = await AppleID.auth.signIn(); await oauthSubmit('apple', data.authorization.id_token, data.user?.email) }
+            catch (e) { if ((e as { error?: string })?.error !== 'popup_closed_by_user') gErr.textContent = t('Giriş başarısız.') }
+          }
+          any = true
+        } catch { /* Apple JS yüklenemedi */ }
+      }
+      if (any) box.style.display = 'block'
+    }
+    setupOAuth()
+
     await new Promise(() => {}) // giriş yapılana dek modül burada durur
   }
 }

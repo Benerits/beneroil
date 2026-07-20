@@ -34,6 +34,10 @@ const EN: Record<string, string> = {
   've': 'and',
   "Gizlilik Politikası'nı kabul etmiş olursun.": 'Privacy Policy.',
   'Sunucuya ulaşılamadı.': 'Could not reach the server.',
+  'veya': 'or',
+  'Apple ile devam et': 'Continue with Apple',
+  'Google ile devam et': 'Continue with Google',
+  'Giriş başarısız.': 'Sign-in failed.',
   'Sunucu hatası.': 'Server error.',
 
   // --- HUD ---

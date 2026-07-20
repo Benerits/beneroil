@@ -59,6 +59,11 @@ async function initDb() {
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_email_lower ON benzinlik_player (lower(email))`)
+  // sosyal giriş (Google/Apple): sağlayıcı kimliği ile hesap eşleştirme
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS google_id text`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS apple_id text`)
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_google ON benzinlik_player (google_id) WHERE google_id IS NOT NULL`)
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_apple ON benzinlik_player (apple_id) WHERE apple_id IS NOT NULL`)
   console.log('DB hazır (benzinlik_player + benzinlik_feedback).')
 }
 
@@ -95,6 +100,68 @@ function verifyToken(token) {
 const BASE_URL = process.env.PUBLIC_URL || 'https://petrol.benerits.com'
 function requireVerify() { return process.env.REQUIRE_EMAIL_VERIFY === 'true' } // key gelene dek kapalı
 function randToken() { return crypto.randomBytes(24).toString('base64url') }
+
+// ---- Sosyal giriş: Google + Apple (hem web hem Capacitor-iOS) ----
+// Kabul edilen audience'lar: web client + iOS client (Capacitor native). Env ile verilir.
+const GOOGLE_CLIENT_IDS = String(process.env.GOOGLE_CLIENT_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+const APPLE_CLIENT_IDS = String(process.env.APPLE_CLIENT_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+
+const _jwksCache = new Map() // url -> { keys, at }
+async function fetchJwks(url) {
+  const c = _jwksCache.get(url)
+  if (c && Date.now() - c.at < 3600_000) return c.keys
+  const r = await fetch(url)
+  if (!r.ok) throw new Error('jwks ' + r.status)
+  const j = await r.json()
+  _jwksCache.set(url, { keys: j.keys || [], at: Date.now() })
+  return j.keys || []
+}
+const b64u = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64')
+
+// OIDC id_token doğrula (RS256, JWKS ile) — jsonwebtoken bağımlılığı yok, saf node:crypto.
+async function verifyIdToken(idToken, { jwksUrl, issuers, audiences }) {
+  const parts = String(idToken || '').split('.')
+  if (parts.length !== 3) throw new Error('malformed')
+  const [h, p, s] = parts
+  const header = JSON.parse(b64u(h).toString())
+  const payload = JSON.parse(b64u(p).toString())
+  if (header.alg !== 'RS256') throw new Error('alg')
+  const keys = await fetchJwks(jwksUrl)
+  const jwk = keys.find(k => k.kid === header.kid)
+  if (!jwk) throw new Error('kid')
+  const pub = crypto.createPublicKey({ key: jwk, format: 'jwk' })
+  const ok = crypto.verify('RSA-SHA256', Buffer.from(`${h}.${p}`), pub, b64u(s))
+  if (!ok) throw new Error('signature')
+  if (!issuers.includes(payload.iss)) throw new Error('iss')
+  const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
+  if (!auds.some(a => audiences.includes(a))) throw new Error('aud')
+  if (Number(payload.exp) * 1000 < Date.now() - 5000) throw new Error('expired')
+  return payload
+}
+
+// Sağlayıcı kimliğinden hesabı bul/oluştur/birleştir. E-posta gizliyse placeholder kullanılır.
+async function oauthUpsertPlayer(provider, sub, email) {
+  const col = provider === 'google' ? 'google_id' : 'apple_id'
+  let r = await pool.query(`SELECT email, banned_at FROM benzinlik_player WHERE ${col}=$1`, [sub])
+  if (r.rowCount) return r.rows[0]
+  if (email) {
+    r = await pool.query('SELECT email, banned_at FROM benzinlik_player WHERE lower(email)=lower($1)', [email])
+    if (r.rowCount) {
+      await pool.query(`UPDATE benzinlik_player SET ${col}=$1, email_verified=true WHERE lower(email)=lower($2)`, [sub, email])
+      return r.rows[0]
+    }
+  }
+  // yeni hesap: e-posta gizliyse benzersiz placeholder; şifre kullanılamaz (rastgele)
+  const em = (email && /^\S+@\S+\.\S+$/.test(email)) ? email.toLowerCase() : `${provider}_${sub}@login.beneloil`
+  const pass = hashPassword(crypto.randomBytes(24).toString('hex'))
+  const ins = await pool.query(
+    `INSERT INTO benzinlik_player(email, pass, ${col}, email_verified) VALUES ($1,$2,$3,true)
+     ON CONFLICT (email) DO UPDATE SET ${col}=EXCLUDED.${col} RETURNING email, banned_at`,
+    [em, pass, sub])
+  bumpStat('signups')
+  pushSignupNotif() // ekibe "+1 oyuncu" (asla girişi etkilemez)
+  return ins.rows[0]
+}
 async function sendEmail(to, subject, html) {
   const key = process.env.RESEND_API_KEY
   const from = process.env.MAIL_FROM || 'BenelOil <noreply@benerits.com>'
@@ -307,7 +374,11 @@ async function handleApi(req, res, url) {
       return json(res, 200, { ok: true })
     }
     if (url === '/api/config') {
-      return json(res, 200, { adsClient: process.env.ADSENSE_PUB || null })
+      return json(res, 200, {
+        adsClient: process.env.ADSENSE_PUB || null,
+        googleClientId: process.env.GOOGLE_WEB_CLIENT_ID || null, // web GIS için (public)
+        appleServicesId: process.env.APPLE_SERVICES_ID || null,   // web Apple JS için (public)
+      })
     }
     if (url === '/api/register' && req.method === 'POST') {
       const regBody = await readBody(req)
@@ -353,6 +424,47 @@ async function handleApi(req, res, url) {
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [e])
       bumpStat('logins')
       return json(res, 200, { token: sign(e), email: e, emailVerified: !!r.rows[0].email_verified, verifyRequired: requireVerify() })
+    }
+    // Google ile giriş (web GIS id_token VEYA Capacitor-iOS native id_token — ikisi de kabul)
+    if (url === '/api/auth/google' && req.method === 'POST') {
+      if (!rateLimit('oauth:' + clientIp(req), 40, 3600_000)) return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
+      if (!GOOGLE_CLIENT_IDS.length) return json(res, 503, { error: 'Google girişi sunucuda yapılandırılmamış.' })
+      const body = await readBody(req)
+      let p
+      try {
+        p = await verifyIdToken(body.idToken || body.credential, {
+          jwksUrl: 'https://www.googleapis.com/oauth2/v3/certs',
+          issuers: ['accounts.google.com', 'https://accounts.google.com'],
+          audiences: GOOGLE_CLIENT_IDS,
+        })
+      } catch (e) { console.log('[google] doğrulama hata:', e.message); return json(res, 401, { error: 'Google doğrulaması başarısız.' }) }
+      if (p.email && p.email_verified === false) return json(res, 401, { error: 'Google e-postası doğrulanmamış.' })
+      const row = await oauthUpsertPlayer('google', String(p.sub), p.email)
+      if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [row.email])
+      bumpStat('logins')
+      return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
+    }
+    // Apple ile giriş (web AppleID JS id_token VEYA Capacitor-iOS native identityToken)
+    if (url === '/api/auth/apple' && req.method === 'POST') {
+      if (!rateLimit('oauth:' + clientIp(req), 40, 3600_000)) return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
+      if (!APPLE_CLIENT_IDS.length) return json(res, 503, { error: 'Apple girişi sunucuda yapılandırılmamış.' })
+      const body = await readBody(req)
+      let p
+      try {
+        p = await verifyIdToken(body.idToken || body.identityToken, {
+          jwksUrl: 'https://appleid.apple.com/auth/keys',
+          issuers: ['https://appleid.apple.com'],
+          audiences: APPLE_CLIENT_IDS,
+        })
+      } catch (e) { console.log('[apple] doğrulama hata:', e.message); return json(res, 401, { error: 'Apple doğrulaması başarısız.' }) }
+      // Apple e-postayı sadece ilk girişte gönderir; sonrakilerde sub yeterli
+      const email = p.email || (body.email && /^\S+@\S+\.\S+$/.test(body.email) ? body.email : null)
+      const row = await oauthUpsertPlayer('apple', String(p.sub), email)
+      if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [row.email])
+      bumpStat('logins')
+      return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
     }
     if (url === '/api/send-verify' && req.method === 'POST') {
       const svBody = await readBody(req)
