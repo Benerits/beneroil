@@ -610,7 +610,7 @@ export class World {
   }
 
   private makeApron(y: number) {
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.4), this.concreteMat)
+    const apron = new THREE.Mesh(new THREE.PlaneGeometry(1.3, this.wideGates ? 6.2 : 3.4), this.concreteMat)
     apron.position.set(5.5, y, 0.014)
     apron.receiveShadow = true
     this.scene.add(apron)
@@ -626,8 +626,9 @@ export class World {
     const ranges: [number, number][] = [[-10, 10]]
     if (this.isPavedFn(0, 0)) ranges.push([-24, -10])
     if (this.isPavedFn(0, 2)) ranges.push([10, 24])
+    const gapHalf = this.wideGates ? 3.2 : 1.75
     const gaps = [this.gateIn.y, this.gateOut.y]
-      .map(y => [y - 1.75, y + 1.75] as [number, number])
+      .map(y => [y - gapHalf, y + gapHalf] as [number, number])
       .sort((a, b) => a[0] - b[0])
     for (const [ra, rb] of ranges) {
       const segs: [number, number][] = []
@@ -738,6 +739,14 @@ export class World {
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
   gateIn = new THREE.Vector2(4.2, APRON_IN_Y)
   gateOut = new THREE.Vector2(4.2, APRON_OUT_Y)
+  /** geniş giriş/çıkış: kapı ağzı, rampa ve bordür boşluğu büyür */
+  wideGates = false
+  setWideGates(on: boolean) {
+    if (this.wideGates === on) return
+    this.wideGates = on
+    this.buildGate('in')
+    this.buildGate('out') // buildGate bordürü de yeniden kurar
+  }
   private tankLevelNow = 0
 
   /** beton derzleri: hepsi YOLA DİK (x ekseni boyunca), dünya gridine hizalı —
@@ -881,7 +890,7 @@ export class World {
     if (pos) v.set(4.2, pos.y)
     this.removeBuildingGroup(id)
     const g = new THREE.Group()
-    const pad = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.4), lam(0x565e66))
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(2.6, this.wideGates ? 6.2 : 3.4), lam(0x565e66))
     pad.position.z = 0.024
     pad.receiveShadow = true
     g.add(pad)

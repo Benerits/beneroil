@@ -6,6 +6,7 @@ import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
+  POMPACI_HIRE, POMPACI_FEE,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { t, lang, setLang, translateDom } from './i18n'
@@ -201,6 +202,7 @@ const cars = new CarManager(world.scene, modelLib, {
   isChargerBroken: i => state.brokenChargers.has(i),
   parkSpots: () => world.getParkingSpots(),
   extraObstacles: () => tankers.map(x => x.t.group.position),
+  wideGates: () => state.wideGates,
   prices: () => state.prices,
   pumpSlot: i => world.pumpSlots[i],
   evSlot: i => world.evSlots[i],
@@ -513,6 +515,8 @@ function finishSale(car: Car) {
     state.money -= penalty
     score -= 0.8
     ui.toast(t('Taşan yakıt cezası: -₺{0}', penalty), 'bad')
+  } else if (car.autoServed && car.filledValue >= car.demandAmount - 10) {
+    score += 0.6 // pompacı düzgün doldurur ama bahşiş ona kalır
   } else if (car.filledValue >= car.demandAmount - 10) {
     // temiz camlar bahşişi ikiye katlar ve memnuniyeti artırır
     const tip = Math.round(revenue0 * (car.windowsCleaned ? 0.2 : 0.1))
@@ -529,6 +533,10 @@ function finishSale(car: Car) {
     score -= 0.6 // eksik dolum: sessiz, sadece memnuniyet düşer
   }
 
+  if (car.autoServed) {
+    revenue -= POMPACI_FEE
+    ui.toast(t('🧑‍🔧 Pompacı servis etti: -₺{0}', POMPACI_FEE), '', true)
+  }
   state.money += revenue
   state.stats.served++
   state.stats.revenue += revenue
@@ -656,6 +664,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
   switch (base) {
     case 'pump': world.addPump(state.pumps - 1); break
     case 'sign': world.setSign(state.signLevel); break
+    case 'widegate': world.setWideGates(true); break
     case 'tank': world.upgradeTankVisual(state.tankLevel); break
     case 'market': world.buildMarket(state.marketLevel, pos); break
     case 'toilet': world.buildToilet(state.toiletLevel, pos); break
@@ -828,6 +837,7 @@ function rebuildFromState() {
     world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined)
   }
   world.setSign(state.signLevel)
+  if (state.wideGates) world.setWideGates(true)
   if (state.tankLevel > 0) world.upgradeTankVisual(state.tankLevel)
   const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
   if (state.marketLevel > 0) world.buildMarket(state.marketLevel, pv('market'))
@@ -1180,8 +1190,8 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
     world.moveCharger(n, new THREE.Vector2(cx - 0.5, cy))
   }
   else if (id === 'tank') world.moveTank(new THREE.Vector2(cx, cy))
-  else if (id === 'gatein') world.buildGate('in', new THREE.Vector2(cx, cy))
-  else if (id === 'gateout') world.buildGate('out', new THREE.Vector2(cx, cy))
+  else if (id === 'gatein') { world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
+  else if (id === 'gateout') { world.buildGate('out', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
   else {
     world.removeBuildingGroup(id)
     buildVisual(id, new THREE.Vector2(cx, cy))
@@ -1351,6 +1361,7 @@ function buyToast(id: string) {
   switch (id) {
     case 'pump': ui.toast(`⛽ Pompa #${state.pumps} kuruldu!`, 'good'); break
     case 'sign': ui.toast('🪧 Tabela büyüdü — daha çok müşteri gelecek!', 'good'); break
+    case 'widegate': ui.toast(t('🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!'), 'good'); break
     case 'tank': ui.toast(`🛢️ Tank kapasitesi: ${state.tankCapacity}L`, 'good'); break
     case 'market': ui.toast('🛒 Market açıldı!', 'good'); break
     case 'toilet': ui.toast('🚻 Tuvalet hizmete girdi!', 'good'); break
@@ -1636,7 +1647,7 @@ if (isFullMode) {
     world.paveParcel(c, r)
   }
   const FULL_ORDER = [
-    'pump', 'pump', 'pump', 'sign', 'sign', 'sign',
+    'pump', 'pump', 'pump', 'sign', 'sign', 'sign', 'widegate',
     'tank', 'tank', 'tank', 'market', 'market', 'toilet', 'toilet', 'grid', 'grid',
     'battery', 'battery', 'battery', 'evcharger', 'evcharger', 'evcharger', 'evcharger',
     'solar', 'dieselgen', 'smr', 'wash', 'oil',
@@ -1653,6 +1664,25 @@ if (isFullMode) {
 }
 
 ui.onMaint = id => {
+  if (id.startsWith('auto-pump-')) {
+    const i = parseInt(id.slice(10))
+    if (state.autoPumps.has(i)) {
+      state.autoPumps.delete(i)
+      ui.toast(t('Pompa #{0}: pompacı işten çıktı — dolum yine sende.', i + 1), '')
+    } else {
+      if (state.money < POMPACI_HIRE) {
+        ui.toast(t('💸 Para yetmiyor — pompacı işe alma ₺{0}.', POMPACI_HIRE.toLocaleString('tr-TR')), 'bad')
+        return
+      }
+      state.money -= POMPACI_HIRE
+      state.autoPumps.add(i)
+      audio.build()
+      ui.toast(t('🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur. Bahşiş pompacının, satış başı -₺{1}.', i + 1, POMPACI_FEE), 'good')
+    }
+    refreshBuildingCard()
+    persist()
+    return
+  }
   if (id.startsWith('auto-charger-')) {
     const i = parseInt(id.slice(13))
     if (state.autoChargers.has(i)) state.autoChargers.delete(i)
@@ -1758,10 +1788,15 @@ function buildingCard(id: string): BuildingCard | null {
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Dolum hızı'), t('{0} L/sn', FILL_RATE)],
+        [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (satış başı -₺{0})', POMPACI_FEE) : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
         [t('Benzin'), `₺${FUEL_PRICE.benzin}/L`],
         [t('Dizel'), `₺${FUEL_PRICE.dizel}/L`],
       ],
-      action: broken ? { label: '🔧 Tamir Et — ₺800', maintId: `fix-pump-${i}` } : undefined,
+      action: broken
+        ? { label: '🔧 Tamir Et — ₺800', maintId: `fix-pump-${i}` }
+        : state.autoPumps.has(i)
+          ? { label: t('🧑‍🔧 Pompacıyı işten çıkar'), maintId: `auto-pump-${i}` }
+          : { label: t('🧑‍🔧 Pompacı Çalıştır — ₺{0}', POMPACI_HIRE.toLocaleString('tr-TR')), maintId: `auto-pump-${i}` },
     }
   }
   if (id.startsWith('charger-')) {
@@ -2422,6 +2457,18 @@ function frame() {
     if (c.kind === 'ev' && c.phase === 'atPump' && !c.charging && !c.squatting
       && c.chargedKwh === 0 && c.slotIndex >= 0 && state.autoChargers.has(c.slotIndex)) {
       startCharging(c, true)
+    }
+  }
+  // pompacı: işaretli pompaya yanaşan araç doğru yakıtla kendiliğinden dolar,
+  // hedef tutarda durur (dolum döngüsü finishSale'i çağırır)
+  for (const c of cars.cars) {
+    if (c.kind === 'fuel' && c.phase === 'atPump' && !c.filling && c.filled === 0
+      && !c.wrongFuelHandled && !c.autoServed && c.slotIndex >= 0
+      && state.autoPumps.has(c.slotIndex) && !state.brokenPumps.has(c.slotIndex)) {
+      c.autoServed = true
+      c.nozzle = c.demandType
+      c.filling = true
+      c.beingServed = true
     }
   }
   tickEvCharging(dt)

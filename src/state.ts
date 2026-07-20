@@ -26,6 +26,10 @@ export const DIESEL_GEN_FUEL_PER_S = 0.25 // jeneratör çalışırken tanktaki 
 
 const PUMP_COSTS = [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000]
 const SIGN_COSTS = [1500, 4000, 9000]
+export const WIDEGATE_COST = 6000
+/** pompacı: işe alma (pompa başı, bir kez) + satış başına ücret; bahşiş de pompacıya kalır */
+export const POMPACI_HIRE = 1500
+export const POMPACI_FEE = 30
 const TANK_COSTS = [3000, 7000, 15000]
 const MARKET_COSTS = [7000, 12000]
 const TOILET_COSTS = [2500, 5000]
@@ -111,6 +115,10 @@ export class GameState {
   toiletFee = 0
   /** otomatik şarj açık olan üniteler */
   autoChargers = new Set<number>()
+  /** pompacı çalıştırılan pompalar: yanaşan araç doğru yakıtla otomatik dolar */
+  autoPumps = new Set<number>()
+  /** geniş giriş/çıkış: araçlar kapılardan ikili sıra girip çıkar */
+  wideGates = false
   /** tesis bazında bugünkü ciro (gün dönümünde sıfırlanır) */
   facDaily: Record<string, number> = {}
   /** tesis bazında ömür boyu ciro (istatistik için, sıfırlanmaz) */
@@ -464,6 +472,9 @@ export function getShopItems(s: GameState): ShopRow[] {
     s.pumps >= MAX_PUMPS ? null : PUMP_COSTS[s.pumps], null)
   row('sign', 'i-sign', t('Tabela Sv.{0}', Math.min(s.signLevel + 1, 3)), t('+%10 trafik'), t('Yoldan geçenlerin uğrama şansı artar'),
     s.signLevel >= 3 ? null : SIGN_COSTS[s.signLevel], null)
+  row('widegate', 'i-land', t('Geniş Giriş-Çıkış'), t('2 şerit'),
+    t('Kapı ağızları genişler: araçlar ikili sıra girip çıkar, kuyruk yola taşmaz'),
+    s.wideGates ? null : WIDEGATE_COST, s.pumps >= 2 ? null : t('Önce 2. pompayı al'))
   row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
     t('Depo büyür, daha seyrek sipariş verirsin'),
     s.tankLevel >= 3 ? null : TANK_COSTS[s.tankLevel], null)
@@ -595,7 +606,7 @@ const SAVE_FIELDS = [
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'closed',
-  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare',
+  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -606,6 +617,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.facDaily = { ...s.facDaily }
   out.facTotal = { ...s.facTotal }
   out.autoChargers = [...s.autoChargers]
+  out.autoPumps = [...s.autoPumps]
   out.prices = { ...s.prices }
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
   out.pendingCash = { ...s.pendingCash }
@@ -631,6 +643,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
   if (data.facTotal && typeof data.facTotal === 'object') Object.assign(s.facTotal, data.facTotal)
   if (Array.isArray(data.autoChargers)) s.autoChargers = new Set((data.autoChargers as number[]).filter(n => Number.isInteger(n)))
+  if (Array.isArray(data.autoPumps)) s.autoPumps = new Set((data.autoPumps as number[]).filter(n => Number.isInteger(n)))
   const st = data.stats as { liters?: Record<string, number> } & Record<string, number> | undefined
   if (st && typeof st === 'object') {
     for (const k of ['served', 'lost', 'kwh', 'revenue'] as const) {
@@ -697,6 +710,7 @@ export function buyItem(s: GameState, id: string): boolean {
   switch (id) {
     case 'pump': s.pumps++; break
     case 'sign': s.signLevel++; break
+    case 'widegate': s.wideGates = true; break
     case 'tank': s.tankLevel++; break
     case 'market': s.marketLevel++; break
     case 'toilet': s.toiletLevel++; break
