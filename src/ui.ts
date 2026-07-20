@@ -234,15 +234,19 @@ export class UI {
       if (confirm(t('Tüm ilerleme silinecek. Emin misin?'))) this.onReset()
     })
 
-    // ses ayarları
-    const musicBtn = el<HTMLButtonElement>('musicbtn')
+    // ses ayarları: müzik seviyeli slider + efekt aç/kapa
+    const musicVol = el<HTMLInputElement>('musicvol')
+    const musicVolVal = el<HTMLSpanElement>('musicvolval')
     const sfxBtn = el<HTMLButtonElement>('sfxbtn')
-    const syncAudioLabels = () => {
-      musicBtn.textContent = audio.musicOn ? t('Müzik: Açık') : t('Müzik: Kapalı')
-      sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı')
+    const paintSlider = (pct: number) => {
+      musicVol.style.background = `linear-gradient(90deg, var(--red) 0 ${pct}%, var(--paper-2) ${pct}% 100%)`
+      musicVolVal.textContent = `%${pct}`
     }
+    const syncAudioLabels = () => { sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı') }
     syncAudioLabels()
-    musicBtn.addEventListener('click', () => { audio.toggleMusic(); syncAudioLabels() })
+    const initPct = Math.round(audio.musicVolume * 100)
+    musicVol.value = String(initPct); paintSlider(initPct)
+    musicVol.addEventListener('input', () => { const p = Number(musicVol.value); audio.setMusicVolume(p / 100); paintSlider(p) })
     sfxBtn.addEventListener('click', () => { audio.toggleSfx(); syncAudioLabels() })
     const notifBtn = el<HTMLButtonElement>('notifbtn')
     const syncNotif = () => {

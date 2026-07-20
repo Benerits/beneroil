@@ -66,6 +66,7 @@
     #tankfill { background: var(--green); width: 50%; }
     #battfill { background: var(--ev); width: 0%; }
     #battchip { display: none; }
+    #fuelrail { display: contents; } /* masaüstü: chip'ler HUD akışında; mobilde sağ dikey ray */
     .spacer { flex: 1; }
 
     /* ---------- Mobil: kompakt HUD (buton/chip alanı yer kaplamasın) ---------- */
@@ -93,19 +94,50 @@
       #fbbtn { bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
       /* alt navbar: mobilde HUD'dan taşınan butonlar gizli, navbar görünür */
       #closebtn, #orderbtn, #shopbtn, #accbtn { display: none !important; }
+
+      /* ---- Yakıt levelleri: ekranın sağında dikey ray (dizel/benzin/lpg + varsa şarj) ---- */
+      #fuelrail { display: flex !important; flex-direction: column; position: fixed; z-index: 12;
+        right: calc(6px + env(safe-area-inset-right)); top: calc(58px + env(safe-area-inset-top));
+        gap: 6px; width: 122px; pointer-events: none; }
+      #fuelrail .fuelchip { min-width: 0 !important; padding: 4px 9px 5px; }
+      #fuelrail .fuelchip .cl { display: block; font-size: 8px; }   /* hangi yakıt olduğu görünsün */
+      #fuelrail .fuelchip .cv { font-size: 13px; }
+      #fuelrail .fuelchip .bar { flex: 1; width: auto; min-width: 34px; }
+
+      /* ---- Popuplar navbarın ÜSTÜNDE; oyun üstte ufaktan görünmeye devam etsin ---- */
+      #panel, #infocard { z-index: 25 !important; bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
+      /* büyük modallar: alt-sheet + hafif backdrop (oyun üstte görünür), navbar üstünde biter */
+      .backdrop { align-items: flex-end; background: rgba(24, 32, 42, .3); }
+      .backdrop .modal { position: absolute; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom));
+        width: 100%; max-width: 100%; height: auto; max-height: 62vh; margin: 0;
+        border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom-width: 1.5px; animation: sheetup .18s ease; }
+      #setwrap .modal { max-height: 72vh; }
+
+      /* ---- Gamified alt navbar (mobil app değil, oyun hissi) ---- */
       .navbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-        justify-content: space-around; align-items: center; gap: 2px;
-        background: var(--paper); border-top: 2px solid var(--edge);
-        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
-        box-shadow: 0 -4px 14px rgba(34, 48, 60, .16); }
-      .navbtn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-        color: var(--muted); cursor: pointer; padding: 4px 0; border-radius: var(--r-sm);
-        background: none; border: 0; font-family: var(--font); transition: color .12s, transform .05s; }
-      .navbtn .ic { width: 22px; height: 22px; }
-      .navbtn span { font-size: 10px; font-weight: 800; letter-spacing: .02em; }
-      .navbtn:active { transform: translateY(1px); }
-      .navbtn.on { color: var(--red); }
+        justify-content: space-around; align-items: stretch; gap: 5px;
+        background: var(--paper); border-top: 2.5px solid var(--edge);
+        border-radius: 20px 20px 0 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        box-shadow: 0 -6px 20px rgba(34, 48, 60, .2); }
+      .navbtn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+        color: var(--muted); cursor: pointer; padding: 6px 2px 5px; border-radius: 15px;
+        background: none; border: 1.5px solid transparent; font-family: var(--font);
+        transition: transform .08s, background .12s, color .12s; }
+      /* her nav ikonu renkli yuvarlak tile — düz tab bar değil, oyun menüsü hissi */
+      .navbtn .ic { width: 22px; height: 22px; padding: 7px; border-radius: 13px; box-sizing: content-box;
+        transition: transform .1s; }
+      #nav-office .ic  { color: #2f6fed; background: #2f6fed1c; }
+      #nav-build .ic   { color: var(--red); background: #d645451c; }
+      #nav-order .ic   { color: var(--orange); background: #e8862e1c; }
+      #nav-roadmap .ic { color: var(--green); background: #27a05a1c; }
+      #nav-profile .ic { color: #5a6b7c; background: #5a6b7c1c; }
+      .navbtn span { font-size: 10px; font-weight: 800; letter-spacing: .02em; color: var(--ink); }
+      .navbtn:active { transform: translateY(2px) scale(.95); }
+      .navbtn:active .ic { transform: scale(1.12); }
+      /* Sorun Bildir web butonu modalların altında kalsın (üstüne binmesin) */
+      #fbbtn { z-index: 15 !important; }
     }
+    @keyframes sheetup { from { transform: translateY(24px); opacity: .4 } to { transform: none; opacity: 1 } }
 
     /* Ofis özet satırları */
     .stat-row { display: flex; justify-content: space-between; align-items: center;
@@ -130,6 +162,20 @@
                background: var(--red); color: #fff; border-radius: 10px; font-size: 11px; font-weight: 800;
                align-items: center; justify-content: center; padding: 0 5px;
                border: 2px solid var(--paper); }
+
+    /* ---------- Oyun-dokulu ses slider'ı ---------- */
+    .volrow { display: flex; align-items: center; gap: 11px; margin-top: 6px; }
+    .vollbl { font-weight: 800; color: var(--ink); min-width: 52px; }
+    .volval { min-width: 42px; text-align: right; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .gslider { flex: 1; -webkit-appearance: none; appearance: none; height: 16px; border-radius: 9px;
+      background: var(--paper-2); border: 1.5px solid var(--edge); box-shadow: inset 0 2px 3px rgba(34,48,60,.22);
+      outline: none; cursor: pointer; }
+    .gslider::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 10px;
+      background: var(--red); border: 1.5px solid var(--red-dark); border-bottom-width: 4px;
+      box-shadow: var(--shadow); cursor: pointer; }
+    .gslider:active::-webkit-slider-thumb { border-bottom-width: 2px; }
+    .gslider::-moz-range-thumb { width: 26px; height: 26px; border-radius: 10px; background: var(--red);
+      border: 1.5px solid var(--red-dark); border-bottom-width: 4px; box-shadow: var(--shadow); cursor: pointer; }
 
     /* ---------- Servis paneli ---------- */
     #panel { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -328,7 +374,7 @@
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.6 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6-5.1-2.8-5.1 2.8 1.1-5.6L3.8 9.5l5.7-.7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
     <symbol id="i-truck" viewBox="0 0 24 24"><rect x="2.5" y="7" width="12" height="8.5" rx="1.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14.5 10h3.6l2.9 3v2.5h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7" cy="17.2" r="1.9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16.8" cy="17.2" r="1.9" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-build" viewBox="0 0 24 24"><path d="M3.5 20.5h17M6 20.5V10l6-5.5 6 5.5v10.5M10 20.5v-4.5h4v4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
-    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M10.3 1.6a1.4 1.4 0 0 1 1.35-1.05h.7A1.4 1.4 0 0 1 13.7 1.6l.35 1.5c.5.17.98.4 1.42.68l1.47-.5a1.4 1.4 0 0 1 1.66.62l.35.6a1.4 1.4 0 0 1-.3 1.75l-1.13 1.03c.05.26.08.53.08.8s-.03.54-.08.8l1.13 1.03a1.4 1.4 0 0 1 .3 1.75l-.35.6a1.4 1.4 0 0 1-1.66.62l-1.47-.5c-.44.28-.92.51-1.42.68l-.35 1.5A1.4 1.4 0 0 1 12.35 23.4h-.7a1.4 1.4 0 0 1-1.35-1.05l-.35-1.5a7 7 0 0 1-1.42-.68l-1.47.5a1.4 1.4 0 0 1-1.66-.62l-.35-.6a1.4 1.4 0 0 1 .3-1.75l1.13-1.03a5.4 5.4 0 0 1 0-1.6L4.93 13.04a1.4 1.4 0 0 1-.3-1.75l.35-.6a1.4 1.4 0 0 1 1.66-.62l1.47.5c.44-.28.92-.51 1.42-.68zM12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8" clip-rule="evenodd"/></symbol>
     <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3.5v8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M7.2 6.4a8 8 0 1 0 9.6 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
     <symbol id="i-land" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-pave" viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 12h17M10 6v6M14 12v6" stroke="currentColor" stroke-width="1.8"/></symbol>
@@ -361,10 +407,12 @@
   <div class="hud">
     <div class="chip" style="min-width:62px"><span class="cl" data-i18n="GÜN">GÜN</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="day">1</span></span></div>
     <div class="chip" style="min-width:152px"><span class="cl" data-i18n="KASA">KASA</span><span class="cv"><svg class="ic"><use href="#i-coin"/></svg> <span id="money">0</span> ₺</span></div>
-    <div class="chip"><span class="cl" data-i18n="BENZİN">BENZİN</span><span class="cv"><svg class="ic" style="color:var(--green)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-benzin" style="background:var(--green)"></div></div> <span id="lvl-benzin">0</span></span></div>
-    <div class="chip"><span class="cl" data-i18n="DİZEL">DİZEL</span><span class="cv"><svg class="ic" style="color:var(--orange)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-dizel" style="background:var(--orange)"></div></div> <span id="lvl-dizel">0</span></span></div>
-    <div class="chip"><span class="cl" data-i18n="LPG">LPG</span><span class="cv"><svg class="ic" style="color:var(--blue)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-lpg" style="background:var(--blue)"></div></div> <span id="lvl-lpg">0</span></span></div>
-    <div class="chip" id="battchip"><span class="cl" data-i18n="BATARYA">BATARYA</span><span class="cv"><svg class="ic"><use href="#i-batt"/></svg> <div class="bar"><div id="battfill"></div></div> <span id="battkwh">0</span></span></div>
+    <div id="fuelrail">
+    <div class="chip fuelchip"><span class="cl" data-i18n="BENZİN">BENZİN</span><span class="cv"><svg class="ic" style="color:var(--green)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-benzin" style="background:var(--green)"></div></div> <span id="lvl-benzin">0</span></span></div>
+    <div class="chip fuelchip"><span class="cl" data-i18n="DİZEL">DİZEL</span><span class="cv"><svg class="ic" style="color:var(--orange)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-dizel" style="background:var(--orange)"></div></div> <span id="lvl-dizel">0</span></span></div>
+    <div class="chip fuelchip"><span class="cl" data-i18n="LPG">LPG</span><span class="cv"><svg class="ic" style="color:var(--blue)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-lpg" style="background:var(--blue)"></div></div> <span id="lvl-lpg">0</span></span></div>
+    <div class="chip fuelchip" id="battchip"><span class="cl" data-i18n="BATARYA">BATARYA</span><span class="cv"><svg class="ic"><use href="#i-batt"/></svg> <div class="bar"><div id="battfill"></div></div> <span id="battkwh">0</span></span></div>
+    </div>
     <div class="chip" id="onlinechip" style="min-width:72px; display:none"><span class="cl" data-i18n="OYUNDA">OYUNDA</span><span class="cv"><svg class="ic"><use href="#i-user"/></svg> <span id="hud-online">0</span></span></div>
     <div class="chip" id="repchip" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
     <div class="chip" id="questchip" style="min-width:104px"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
@@ -548,8 +596,12 @@
           <button id="stsave" class="btn good" data-i18n="Kaydet">Kaydet</button>
         </div>
         <label style="margin-top:12px" data-i18n="Ses">Ses</label>
-        <div class="row">
-          <button id="musicbtn" class="btn" style="flex:1; justify-content:center">Müzik: Açık</button>
+        <div class="volrow">
+          <span class="vollbl" data-i18n="Müzik">Müzik</span>
+          <input type="range" id="musicvol" class="gslider" min="0" max="100" value="70" aria-label="Müzik sesi">
+          <span id="musicvolval" class="volval">%70</span>
+        </div>
+        <div class="row" style="margin-top:8px">
           <button id="sfxbtn" class="btn" style="flex:1; justify-content:center">Efektler: Açık</button>
         </div>
         <label style="margin-top:12px" data-i18n="Bildirimler (sekme kapalıyken tanker/kumbara haberi)">Bildirimler (sekme kapalıyken tanker/kumbara haberi)</label>
