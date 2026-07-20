@@ -9,6 +9,7 @@ import {
   POMPACI_HIRE, sellInfo, applySell,
 } from './state'
 import { loadModels, loadStatics } from './models'
+import { isNativePlatform } from './platform'
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
 import * as auth from './auth'
@@ -107,7 +108,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
       try { cfg = await (await fetch('/api/config')).json() } catch { /* config yoksa sosyal giriş gizli kalır */ }
       const box = document.getElementById('ag-oauth') as HTMLDivElement
       const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, any> } }).Capacitor
-      const isNative = !!cap?.isNativePlatform?.()
+      const isNative = isNativePlatform()
       let any = false
       // Capacitor-iOS: @capgo/capacitor-social-login login öncesi initialize ister (bir kez).
       // iOS Google client id + Apple native aud (bundle id) — ikisi de public değer.
