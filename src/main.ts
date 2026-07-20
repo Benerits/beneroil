@@ -274,7 +274,15 @@ function notifyIfHidden(text: string) {
   }
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) document.title = `${world?.stationName ?? 'Benzinlik'} — Benzinlik`
+  if (document.hidden) return
+  document.title = `${world?.stationName ?? 'Benzinlik'} — Benzinlik`
+  // odağa dönünce: başka cihaz save'i ilerlettiyse en güncele senkronla (ilerleme karışmasın)
+  if (auth.loggedIn() && !syncedConflict) {
+    auth.fetchUpdatedAt().then(ts => {
+      const base = auth.lastUpdatedAt()
+      if (ts && base && new Date(ts).getTime() > new Date(base).getTime() + 1000) { syncedConflict = true; onRemoteNewer() }
+    }).catch(() => {})
+  }
 })
 
 // Kenney modelleri (yüklenemezse prosedürele düşer)
@@ -580,7 +588,9 @@ const cars = new CarManager(world.scene, modelLib, {
 
 /** pompacı çalışan pompaya yanaşan araç: panel açılmaz, popup kalmaz (pompacı halleder) */
 function isAttendantCar(car: Car): boolean {
-  return car.kind === 'fuel' && car.slotIndex >= 0 && state.autoPumps.has(car.slotIndex)
+  if (car.slotIndex < 0) return false
+  // pompacı VEYA şarjcı devredeyse otomasyon halleder → panel/popup hiç açılmasın
+  return car.kind === 'ev' ? state.autoChargers.has(car.slotIndex) : (car.kind === 'fuel' && state.autoPumps.has(car.slotIndex))
 }
 function nextServableCar(): Car | null {
   return cars.cars.find(c => c.phase === 'atPump' && !isAttendantCar(c)) ?? null
@@ -1078,6 +1088,24 @@ function savePayload() {
   return { s: serializeState(state), placedPos, placedRot, placedRects, at: Date.now() }
 }
 
+// ---- Çoklu cihaz senkronu ----
+let syncing = false
+let syncedConflict = false
+/** Save'i sunucuya yaz; başka cihaz daha yeni yazmışsa (409) en güncele senkronla. */
+async function syncSave() {
+  if (syncing || cloudBlocked || !auth.loggedIn()) return
+  syncing = true
+  try {
+    const r = await auth.pushSave(savePayload())
+    if (r.conflict && !syncedConflict) { syncedConflict = true; onRemoteNewer() }
+  } catch { /* ağ hatası: sessiz geç */ } finally { syncing = false }
+}
+/** başka cihaz daha yeni oynadı → clobber etme, en güncel ilerlemeye temiz reload ile senkronla */
+function onRemoteNewer() {
+  ui.toast(t('🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…'), '')
+  setTimeout(() => location.reload(), 1400)
+}
+
 function showCloudBlockOverlay() {
   if (document.getElementById('cloudblock')) return
   const o = document.createElement('div')
@@ -1153,10 +1181,11 @@ function showVerifyGate() {
 
 function persist() {
   if (isFullMode || isPromoMode || cloudBlocked) return
-  // tek gerçek kaynak SQL: yerel kopya tutulmaz, eski veri asla hortlamaz
+  // tek gerçek kaynak SQL: yerel kopya tutulmaz, eski veri asla hortlamaz.
+  // syncSave çoklu cihaz çakışmasını (409) ele alır — başka cihaz ilerlettiyse senkronlar.
   if (auth.loggedIn() && Date.now() - lastRemotePush > 5_000) {
     lastRemotePush = Date.now()
-    auth.pushSave(savePayload()).catch(() => {})
+    syncSave()
   }
 }
 
@@ -1524,6 +1553,7 @@ function startZoneMode(kind: 'land' | 'pave') {
 
 function cancelPlacement() {
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'none'
+  const zc = document.getElementById('zonecost'); if (zc) zc.style.display = 'none'
   if (placing) {
     world.scene.remove(placing.root)
     placing = null
@@ -2516,10 +2546,24 @@ function updateZoneAt(x: number, y: number) {
     ? !state.owns(c, r) && state.parcelAdjacentToOwned(c, r) && state.money >= parcelCost(c, r, state)
     : state.owns(c, r) && !state.isPaved(c, r) && state.money >= PAVE_COST
   ;(zoneMode.ghost.material as THREE.MeshBasicMaterial).color.setHex(zoneMode.valid ? 0x37c97e : 0xec5b5b)
+  // canlı fiyat + durum etiketi (karşı/uzak arsalar pahalı — sürpriz olmasın)
+  const zc = document.getElementById('zonecost')
+  if (zc) {
+    const cost = zoneMode.kind === 'land' ? parcelCost(c, r, state) : PAVE_COST
+    const across = c >= 3 ? t(' · yol karşısı') : ''
+    zc.style.display = 'block'
+    zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ' ✗'}`
+    zc.style.color = zoneMode.valid ? 'var(--green-dark)' : 'var(--red)'
+  }
 }
 
+/** ekran (client) koordinatını canvas'a göre NDC'ye çevir — safe-area/offset varken mobilde kayma olmaz */
+function toNDC(clientX: number, clientY: number) {
+  const r = renderer.domElement.getBoundingClientRect()
+  pointer.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
+}
 function groundPointAt(clientX: number, clientY: number): THREE.Vector3 | null {
-  pointer.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1)
+  toNDC(clientX, clientY)
   raycaster.setFromCamera(pointer, camera)
   const pt = new THREE.Vector3()
   return raycaster.ray.intersectPlane(groundPlane, pt) ? pt : null
@@ -2536,7 +2580,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
 window.addEventListener('pointermove', e => {
   // yerleştirme / arsa seçim hayaleti imleci takip eder
   if (placing || zoneMode) {
-    pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1)
+    toNDC(e.clientX, e.clientY)
     raycaster.setFromCamera(pointer, camera)
     const pt = new THREE.Vector3()
     if (raycaster.ray.intersectPlane(groundPlane, pt)) {
@@ -2609,7 +2653,7 @@ window.addEventListener('pointerup', e => {
 })
 
 function handleClick(e: PointerEvent) {
-  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1)
+  toNDC(e.clientX, e.clientY)
   raycaster.setFromCamera(pointer, camera)
 
   // 1) pompadaki araçlar

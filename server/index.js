@@ -541,13 +541,22 @@ async function handleApi(req, res, url) {
     if (url === '/api/save' && req.method === 'POST') {
       const email = auth(); if (!email) return
       if (!rateLimit('save:' + email, 1, 3_000)) return json(res, 429, { error: 'rate' })
-      const { save } = await readBody(req)
+      const { save, baseUpdatedAt } = await readBody(req)
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
+      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
+      if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      // çoklu cihaz guard: bu istemci save'i yükledikten SONRA başka cihaz yazdıysa çakışma —
+      // clobber etme, istemciye güncel kaydı dön (ilerleme karışmaz, senkronlanır).
+      if (baseUpdatedAt && prev.rows[0]?.updated_at) {
+        const serverTs = new Date(prev.rows[0].updated_at).getTime()
+        const baseTs = new Date(baseUpdatedAt).getTime()
+        if (Number.isFinite(serverTs) && Number.isFinite(baseTs) && serverTs > baseTs + 1000) {
+          return json(res, 409, { conflict: true, save: prev.rows[0].save, updatedAt: prev.rows[0].updated_at })
+        }
+      }
       // makullük: para, geçen süreye göre imkânsız hızda artamaz (hile freni)
       if (clean && clean.s && typeof clean.s.money === 'number') {
-        const prev = await pool.query('SELECT save, updated_at, created_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
-        if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
         const prevSave = prev.rows[0]?.save
         // taban: önceki kayıt varsa onun parası + o kayıttan beri; yoksa (ilk kayıt)
         // başlangıç parası + hesap açılışından beri geçen süre. İlk kayıtta fren
@@ -561,8 +570,8 @@ async function handleApi(req, res, url) {
           clean.s.money = Math.round(baseMoney + allowance)
         }
       }
-      await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1', [email, clean])
-      return json(res, 200, { ok: true })
+      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1 RETURNING updated_at', [email, clean])
+      return json(res, 200, { ok: true, updatedAt: upd.rows[0]?.updated_at })
     }
     json(res, 404, { error: 'not found' })
   } catch (err) {
