@@ -192,6 +192,7 @@ const camera = new THREE.OrthographicCamera()
 const camDir = new THREE.Vector3(1, 2, 1).normalize().multiplyScalar(42)
 let camX = 0
 let camY = 0
+let pinching = false // iki parmak zoom sırasında sürükle-kaydırma devre dışı
 
 function updateCamera() {
   camera.position.set(camDir.x + camX, camDir.y + camY, camDir.z)
@@ -220,6 +221,31 @@ window.addEventListener('wheel', e => {
   camera.zoom = Math.min(2.6, Math.max(0.78, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
+
+// ---- Mobil: iki parmak = kamera zoom (tekerlek yok) + sayfa zoom'unu engelle ----
+let pinchStartDist = 0, pinchStartZoom = 1
+const touchDist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+window.addEventListener('touchstart', e => {
+  if (e.touches.length === 2 && !(e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, #authgate')) {
+    pinching = true; pinchStartDist = touchDist(e.touches); pinchStartZoom = camera.zoom
+  }
+}, { passive: true })
+window.addEventListener('touchmove', e => {
+  if (pinching && e.touches.length === 2) {
+    e.preventDefault()
+    const d = touchDist(e.touches)
+    if (pinchStartDist > 0) {
+      camera.zoom = Math.min(2.6, Math.max(0.78, pinchStartZoom * (d / pinchStartDist)))
+      camera.updateProjectionMatrix()
+    }
+  }
+}, { passive: false })
+window.addEventListener('touchend', e => { if (e.touches.length < 2) pinching = false }, { passive: true })
+// iOS/WKWebView'in kendi pinch/çift-dokunuş zoom jestlerini kapat (UI kaymasın)
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(ev, e => e.preventDefault(), { passive: false })
+}
+
 resize()
 updateCamera()
 
@@ -2243,6 +2269,7 @@ window.addEventListener('pointermove', e => {
     }
   }
   if (!isDown) return
+  if (pinching) { isDown = false; isDrag = false; grabPoint = null; return } // pinch sırasında pan yok
   // sol tuş bırakılmış ama pointerup kaçmışsa (ör. sağ tık menüsü araya girdi) sürüklemeyi kes
   if ((e.buttons & 1) === 0) { isDown = false; isDrag = false; grabPoint = null; return }
   lastX = e.clientX; lastY = e.clientY
