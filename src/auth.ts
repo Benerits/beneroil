@@ -41,6 +41,12 @@ export function logout() {
   localStorage.removeItem(EMAIL_KEY)
 }
 
+/** App Store zorunluluğu: kullanıcı hesabını tamamen siler (kayıt + save), sonra çıkış yapar */
+export async function deleteAccount(): Promise<void> {
+  await api('/api/account', 'DELETE')
+  logout()
+}
+
 let _verifyRequired = false
 let _emailVerified = true
 /** e-posta doğrulaması gerekli mi (env açık + kullanıcı doğrulanmamış) */
