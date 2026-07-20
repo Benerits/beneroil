@@ -38,6 +38,16 @@ const EN: Record<string, string> = {
   'Apple ile devam et': 'Continue with Apple',
   'Google ile devam et': 'Continue with Google',
   'Giriş başarısız.': 'Sign-in failed.',
+  // --- Alt navbar + Ofis paneli ---
+  'Ofis': 'Office',
+  'Yol Har.': 'Roadmap',
+  'Profil': 'Profile',
+  'Kasa': 'Cash',
+  'Toplam gelir': 'Total revenue',
+  'Servis edilen müşteri': 'Customers served',
+  'İstasyonu Aç/Kapa': 'Open/Close station',
+  'Yol haritası yakında!': 'Roadmap coming soon!',
+  'Kamera açısı': 'Camera angle',
   'Sunucu hatası.': 'Server error.',
 
   // --- HUD ---
