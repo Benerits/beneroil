@@ -48,15 +48,26 @@ function mark(w, d, color, x, z, rotY = 0) {
   m.rotation.x = -Math.PI / 2; m.rotation.z = rotY; m.position.set(x, 0.06, z); scene.add(m); return m
 }
 
-// ---- zemin ----
-ground(320, 320, GRASS, 0, 0, 0)
-ground(72, 26, ASPHALT, 0, 0.03, 7)              // asfalt rampa
-for (const [w, d, x, z] of [[72, 0.5, 0, -6], [72, 0.5, 0, 20], [0.5, 26, -36, 7], [0.5, 26, 36, 7]])
-  mark(w, d, RED, x, z)                            // kırmızı çerçeve
+// ---- zemin + yol ağı ----
+const LANE_Z = 15                                 // ana yol (sağ-sol)
+const JX = [-52, 52]                              // yan kavşakların x'i
+ground(400, 400, GRASS, 0, 0, 0)                  // çim
+ground(56, 18, ASPHALT, 0, 0.03, 4)               // yükleme rampası (bays)
+ground(200, 11, ASPHALT, 0, 0.028, LANE_Z)        // UZUN ana yol
+for (const jx of JX) ground(11, 70, ASPHALT, jx, 0.026, LANE_Z + 33)  // yan yollar (öne doğru kavşak)
 
-// ============ KÜRE RAFİNERİ (arka) ============
-const refinery = new THREE.Group(); refinery.position.set(0, 0, -3); scene.add(refinery)
-cyl(15, 15.5, 0.5, CONCRETE2, 0, 0.25, -3, refinery, 56)
+// ============ KÜRE RAFİNERİ (arkada, yoldan uzakta) ============
+function roundedRect(w, d, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -d / 2
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r)
+  s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d)
+  s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r)
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s
+}
+const refinery = new THREE.Group(); refinery.position.set(0, 0, -21); scene.add(refinery)
+// yuvarlatılmış dikdörtgen platform (border yok) — geriye doğru derin, tüm küreleri kapsar
+const pad = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(44, 28, 5)), std(CONCRETE2, { roughness: 1 }))
+pad.rotation.x = -Math.PI / 2; pad.position.set(0, 0.04, -3); pad.receiveShadow = true; refinery.add(pad)
 function sphereTank(x, z, R) {
   const cy = 0.5 + R + 1.4
   const sp = new THREE.Mesh(new THREE.SphereGeometry(R, 40, 28), std(CREAM, { metalness: 0.15, roughness: 0.5 }))
@@ -66,7 +77,10 @@ function sphereTank(x, z, R) {
   cyl(R * 0.28, R * 0.34, 0.5, RED2, x, cy + R * 0.92, z, refinery, 12)
   for (let l = 0; l < 4; l++) { const a = l * Math.PI / 2 + Math.PI / 4; cyl(0.2, 0.24, cy - R + 0.3, CONCRETE2, x + Math.cos(a) * R * 0.62, (cy - R + 0.3) / 2 + 0.5, z + Math.sin(a) * R * 0.62, refinery, 8) }
 }
-sphereTank(-12, -6, 3.2); sphereTank(-2, -8, 3.6); sphereTank(9, -6, 3.0); sphereTank(3, -1, 2.5); sphereTank(-6, 0, 2.3)
+// küreler: geriye doğru azalan sıralar (daha çok tank, derinlik hissi)
+sphereTank(-12, 6, 2.5); sphereTank(-1, 6.5, 2.8); sphereTank(11, 6, 2.5)         // ön sıra (küçük)
+sphereTank(-14, -1, 3.4); sphereTank(-5, -1.5, 3.0); sphereTank(5, -1.5, 3.4); sphereTank(14, -1, 3.0)  // orta sıra
+sphereTank(-10, -9, 3.9); sphereTank(1, -9.5, 4.1); sphereTank(11, -9, 3.7)       // arka sıra (büyük, uzak)
 
 // ============ 3 YÜKLEME BÖLMESİ (bay) + gantry + çizgiler ============
 const BAYS = [{ x: -13 }, { x: 0 }, { x: 13 }]
@@ -81,22 +95,20 @@ for (const b of BAYS) {
 }
 const hoses = BAYS.map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1, 8), std(DARK)); m.visible = false; scene.add(m); return m })
 
-// ---- yer çizgileri: ana şerit + bölme kutuları + sarı dolum bölgesi + oklar ----
-const LANE_Z = 15                    // ana sürüş şeridi
-mark(72, 0.28, WHITE, 0, LANE_Z - 3.2)                 // şerit üst kenar
-mark(72, 0.28, WHITE, 0, LANE_Z + 3.2)                 // şerit alt kenar
-for (let x = -32; x <= 32; x += 4.5) mark(2.4, 0.24, WHITE, x, LANE_Z)   // orta kesik çizgi
-for (const b of BAYS) {
-  // bölme dikdörtgeni (arka + iki yan; ön şeride açık)
-  mark(2 * HALF, 0.26, WHITE, b.x, FILL_Z - 3.6)                          // arka kenar
-  mark(0.26, 8.2, WHITE, b.x - HALF, FILL_Z + 0.5)                        // sol kenar
-  mark(0.26, 8.2, WHITE, b.x + HALF, FILL_Z + 0.5)                        // sağ kenar
-  // sarı dolum bölgesi kutusu
+// ---- yer çizgileri (ok yok) ----
+mark(200, 0.3, WHITE, 0, LANE_Z + 4)                                  // ana yol ön kenar (uzun)
+for (let x = -96; x <= 96; x += 5) mark(2.6, 0.26, WHITE, x, LANE_Z)  // ana yol orta kesik çizgi
+for (const jx of JX) {                                                // yan kavşak yolları
+  mark(0.3, 70, WHITE, jx - 4.4, LANE_Z + 33); mark(0.3, 70, WHITE, jx + 4.4, LANE_Z + 33)
+  for (let z = LANE_Z + 8; z <= LANE_Z + 66; z += 5) mark(0.26, 2.6, WHITE, jx, z)
+}
+for (const b of BAYS) {                                               // yükleme bölmeleri
+  mark(2 * HALF, 0.26, WHITE, b.x, FILL_Z - 3.6)
+  mark(0.26, 8.2, WHITE, b.x - HALF, FILL_Z + 0.5)
+  mark(0.26, 8.2, WHITE, b.x + HALF, FILL_Z + 0.5)
   for (const [w, d, dx, dz] of [[3.4, 0.24, 0, -1.6], [3.4, 0.24, 0, 1.6], [0.24, 3.4, -1.6, 0], [0.24, 3.4, 1.6, 0]])
     mark(w, d, YELLOW, b.x + dx, FILL_Z + dz)
 }
-// ana şeritte yön okları (sola akış): chevron'lar
-for (let x = -26; x <= 26; x += 13) { mark(1.8, 0.24, WHITE, x - 0.6, LANE_Z - 0.7, Math.PI / 4); mark(1.8, 0.24, WHITE, x - 0.6, LANE_Z + 0.7, -Math.PI / 4) }
 
 // ============ TANKER (gerçek oyun asset'i) ============
 let tankerProto = null
@@ -119,8 +131,8 @@ const V = (x, z) => new THREE.Vector3(x, 0, z)
 function bayCurve(b) {
   const bx = BAYS[b].x, ez = [17, 14.5, 12][b]     // ayrı giriş şeritleri (üst üste binmesin)
   return new THREE.CatmullRomCurve3([
-    V(40, ez), V(bx + 11, LANE_Z), V(bx + 4, 10), V(bx, FILL_Z),   // index 3 = DUR (dolum)
-    V(bx - 4, 10), V(bx - 11, LANE_Z), V(-40, ez),
+    V(90, ez), V(bx + 12, LANE_Z), V(bx + 4, 10), V(bx, FILL_Z),   // index 3 = DUR (dolum)
+    V(bx - 4, 10), V(bx - 12, LANE_Z), V(-90, ez),
   ], false, 'catmullrom', 0.5)
 }
 const FACE = 0
@@ -197,8 +209,10 @@ function animate() {
 
 // ---- ağaçlar (oyunun Kenney asset'leri) ----
 const TREE_SPOTS = [
-  [-30, -12, 4.0, 0], [-40, 4, 3.4, 1], [30, -14, 4.2, 0], [42, 4, 4.0, 0],
-  [-42, -4, 3.4, 1], [40, 18, 3.2, 0], [-20, 24, 3.6, 0], [16, 24, 3.2, 1], [-4, 26, 4.2, 0],
+  [-30, -18, 4.0, 0], [-44, 2, 3.4, 1], [30, -18, 4.2, 0], [46, 2, 4.0, 0], [-46, -8, 3.4, 1],
+  [-24, -26, 3.6, 0], [22, -26, 3.2, 1], [2, -30, 4.2, 0], [-12, -30, 3.4, 1], [14, -32, 3.6, 0],
+  [-70, 20, 3.8, 0], [70, 20, 3.8, 0], [-40, 30, 3.4, 1], [40, 30, 3.4, 1], [-64, 44, 4.0, 0],
+  [64, 44, 4.0, 0], [-34, 58, 3.6, 1], [34, 58, 3.6, 0], [0, 40, 3.2, 1], [-18, 62, 3.8, 0], [18, 62, 3.4, 1],
 ]
 function placeTrees(proto, small) {
   const box = new THREE.Box3().setFromObject(proto), h = box.max.y - box.min.y
