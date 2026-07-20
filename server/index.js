@@ -573,6 +573,12 @@ async function handleApi(req, res, url) {
       const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1 RETURNING updated_at', [email, clean])
       return json(res, 200, { ok: true, updatedAt: upd.rows[0]?.updated_at })
     }
+    // App Store 5.1.1(v): kullanıcı kendi hesabını uygulama içinden silebilmeli
+    if (url === '/api/account' && req.method === 'DELETE') {
+      const email = auth(); if (!email) return
+      await pool.query('DELETE FROM benzinlik_player WHERE email=$1', [email])
+      return json(res, 200, { ok: true })
+    }
     json(res, 404, { error: 'not found' })
   } catch (err) {
     console.error(err)

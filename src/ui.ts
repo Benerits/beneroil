@@ -246,6 +246,12 @@ export class UI {
     el<HTMLButtonElement>('resetbtn').addEventListener('click', () => {
       if (confirm(t('Tüm ilerleme silinecek. Emin misin?'))) this.onReset()
     })
+    // App Store zorunluluğu: uygulama içinden hesap silme
+    el<HTMLButtonElement>('delaccbtn')?.addEventListener('click', async () => {
+      if (!confirm(t('Hesabın ve TÜM verilerin kalıcı olarak silinecek. Bu işlem geri alınamaz. Emin misin?'))) return
+      try { await auth.deleteAccount(); location.href = '/' }
+      catch (e) { this.toast((e as Error).message || t('Silinemedi, tekrar dene.'), 'bad') }
+    })
 
     // ses ayarları: müzik seviyeli slider + efekt aç/kapa
     const musicVol = el<HTMLInputElement>('musicvol')
