@@ -118,6 +118,25 @@ const EN: Record<string, string> = {
   'kâr': 'profit',
   'zarar': 'loss',
   'Otomatik Şarj: {0} — değiştir': 'Auto-charge: {0} — toggle',
+  // --- Pompacı ---
+  'Pompacı': 'Attendant',
+  'ÇALIŞIYOR (satış başı -₺{0})': 'ON DUTY (-₺{0} per sale)',
+  'YOK': 'NONE',
+  '🧑‍🔧 Pompacı Çalıştır — ₺{0}': '🧑‍🔧 Hire Attendant — ₺{0}',
+  '🧑‍🔧 Pompacıyı işten çıkar': '🧑‍🔧 Dismiss attendant',
+  'Pompa #{0}: pompacı işten çıktı — dolum yine sende.': 'Pump #{0}: attendant dismissed — filling is on you again.',
+  '💸 Para yetmiyor — pompacı işe alma ₺{0}.': '💸 Not enough cash — hiring costs ₺{0}.',
+  '🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur. Bahşiş pompacının, satış başı -₺{1}.':
+    '🧑‍🔧 Pump #{0}: attendant hired — fills the right fuel automatically. Tips go to them, -₺{1} per sale.',
+  '🧑‍🔧 Pompacı servis etti: -₺{0}': '🧑‍🔧 Attendant served: -₺{0}',
+  // --- Geniş giriş/çıkış ---
+  'Geniş Giriş-Çıkış': 'Wide Entry & Exit',
+  '2 şerit': '2 lanes',
+  'Kapı ağızları genişler: araçlar ikili sıra girip çıkar, kuyruk yola taşmaz':
+    'Gate mouths widen: cars enter and exit two abreast, queues stay off the road',
+  'Önce 2. pompayı al': 'Buy the 2nd pump first',
+  '🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!':
+    '🛣️ Entry & exit widened — cars now flow two abreast!',
   'Ücreti Değiştir ({0} → {1})': 'Change Fee ({0} → {1})',
   'Müzik: {0}': 'Music: {0}',
   'Efektler: {0}': 'Effects: {0}',

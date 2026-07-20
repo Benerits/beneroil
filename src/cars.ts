@@ -181,6 +181,8 @@ export class Car {
   phase: CarPhase = 'transit'
   lane: 'near' | 'far' | null = null
   wantsEnter = false
+  /** pompacı servis etti (bahşiş pompacıya, ücret kesilir) */
+  autoServed = false
   converted = false
   wantsMarket: boolean
   wantsToilet: boolean
@@ -634,6 +636,8 @@ export interface CarManagerOpts {
   parkSpots: () => THREE.Vector3[]
   /** araçların kaçınacağı ek engeller (ör. tanker) */
   extraObstacles: () => THREE.Vector3[]
+  /** geniş giriş/çıkış satın alındı mı — kapılardan ikili sıra geçilir */
+  wideGates: () => boolean
   /** güncel satış fiyatları (oyuncu belirler) */
   prices: () => Record<FuelType, number>
   /** dinamik servis noktaları — pompa/şarj taşınınca değişir */
@@ -905,12 +909,27 @@ export class CarManager {
     this.cars.push(car)
   }
 
+  /** geniş kapıda araçlar iki koldan geçer: her çağrıda ±1.2 dönüşümlü ofset */
+  private gateInFlip = false
+  private gateOutFlip = false
+  private gateInOff(): number {
+    if (!this.opts.wideGates()) return 0
+    this.gateInFlip = !this.gateInFlip
+    return this.gateInFlip ? 1.2 : -1.2
+  }
+  private gateOutOff(): number {
+    if (!this.opts.wideGates()) return 0
+    this.gateOutFlip = !this.gateOutFlip
+    return this.gateOutFlip ? 1.2 : -1.2
+  }
+
   /** rampadan girip hedef noktaya giden yol */
   private entryPath(p: THREE.Vector3): THREE.Vector3[] {
     const apronY = this.opts.gateInY()
+    const off = this.gateInOff()
     return [
-      new THREE.Vector3(LANE_NEAR, apronY - 3.5, 0),
-      new THREE.Vector3(4.2, apronY, 0),
+      new THREE.Vector3(LANE_NEAR, apronY - 3.5 + off, 0),
+      new THREE.Vector3(4.2, apronY + off, 0),
       new THREE.Vector3(3.2, p.y - 2.5, 0),
       p.clone(),
     ]
@@ -974,6 +993,34 @@ export class CarManager {
   }
 
   private truckOcc: (Car | null)[] = []
+
+  /** kapı taşındı: rotası eski kapıdan geçen araçları güncel kapıya yönlendir.
+   *  Yalnızca henüz istasyona girmemiş (yolda, x>5.5) ve çıkışa yönelmiş ama
+   *  henüz yola çıkmamış (x<3.9) araçlar — apron ortasındakiler yerinde kalır. */
+  rerouteForGates() {
+    for (const c of this.cars) {
+      const p = c.group.position
+      if (c.phase === 'driving' && p.x > 5.5) {
+        if (c.slotIndex >= 0) {
+          const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
+          c.setPath(this.entryPath(slot), () => this.arriveAtSlot(c))
+        } else if (c.waitIndex >= 0) {
+          c.setPath([
+            new THREE.Vector3(LANE_NEAR, this.opts.gateInY() - 3.5, 0),
+            new THREE.Vector3(4.2, this.opts.gateInY(), 0),
+            WAIT_SPOTS[c.waitIndex],
+          ], () => { c.phase = 'waiting' })
+        }
+      } else if (c.phase === 'leaving' && p.x < 3.9) {
+        const outY = this.opts.gateOutY()
+        c.setPath([
+          new THREE.Vector3(4.2, outY, 0),
+          new THREE.Vector3(LANE_NEAR, outY + 4, 0),
+          new THREE.Vector3(LANE_NEAR, 44, 0),
+        ])
+      }
+    }
+  }
 
   private tryEnter(car: Car) {
     if (this.opts.entryChance() <= 0) return // istasyon kapalı: kimse girmez
@@ -1171,11 +1218,12 @@ export class CarManager {
     car.hideBubble()
     car.hideBars()
     const outY = this.opts.gateOutY()
+    const off = this.gateOutOff()
     if (fromPark) {
       car.setPath([
         new THREE.Vector3(car.group.position.x, PARK_LANE_Y, 0),
         new THREE.Vector3(3.0, PARK_LANE_Y, 0),
-        new THREE.Vector3(4.2, outY, 0),
+        new THREE.Vector3(4.2, outY + off, 0),
         new THREE.Vector3(LANE_NEAR, outY + 4, 0),
         new THREE.Vector3(LANE_NEAR, 44, 0),
       ])
@@ -1184,7 +1232,7 @@ export class CarManager {
     const y = car.group.position.y
     car.setPath([
       new THREE.Vector3(3.4, Math.min(y + 3, outY - 1.8), 0),
-      new THREE.Vector3(4.2, outY, 0),
+      new THREE.Vector3(4.2, outY + off, 0),
       new THREE.Vector3(LANE_NEAR, outY + 4, 0),
       new THREE.Vector3(LANE_NEAR, 44, 0),
     ])
