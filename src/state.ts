@@ -32,6 +32,8 @@ export const WIDEGATE_COST = 6000
  *  servis hâlâ bahşişle daha kârlı, ama pompacı yetişemediğin pompayı net kâra çevirir). */
 export const POMPACI_HIRE = 800
 const TANK_COSTS = [3000, 7000, 15000]
+export const MAX_TANKS_PER_FUEL = 4
+export const TANK_ADD_COSTS = [0, 6000, 12000, 20000] // index = mevcut adet → 2., 3., 4. tankın maliyeti
 const MARKET_COSTS = [7000, 12000]
 const TOILET_COSTS = [2500, 5000]
 const LAND_COST = 6000
@@ -103,6 +105,8 @@ export class GameState {
   pumps = 1
   signLevel = 0
   tankLevel = 0
+  /** yakıt başına fiziksel tank adedi (kapasite çarpanı) — additive, eski kayıtta default 1 */
+  tankCounts: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
   marketLevel = 0
   toiletLevel = 0
 
@@ -209,6 +213,8 @@ export class GameState {
   exploded = false
 
   get tankCapacity() { return TANK_CAPACITY[this.tankLevel] }
+  /** yakıt başına toplam kapasite = seviye kapasitesi × tank adedi (adet=1 → tankCapacity) */
+  fuelCapacity(f: FuelType): number { return TANK_CAPACITY[this.tankLevel] * this.tankCounts[f] }
   get batteryCapacity() { return BATTERY_CAP[this.batteryLevel] }
 
   /** elektrik fiyatının EV müşteri talebine etkisi (1.0 = nötr) */
@@ -378,7 +384,7 @@ export class GameState {
     return Math.min(0.95, Math.max(0.08, c))
   }
 
-  orderNeed(f: FuelType) { return Math.floor(this.tankCapacity - this.tanks[f]) }
+  orderNeed(f: FuelType) { return Math.floor(this.fuelCapacity(f) - this.tanks[f]) }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     return Math.ceil(this.orderNeed(f) * FUEL_COST[f] * disc)
@@ -398,7 +404,7 @@ export class GameState {
   }
 
   deliverFuel(f: FuelType) {
-    this.tanks[f] = this.tankCapacity
+    this.tanks[f] = this.fuelCapacity(f)
   }
 
   /** tesis geliri: doğrudan kasaya + günlük ciroya işlenir */
@@ -614,6 +620,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const f of SAVE_FIELDS) out[f] = (s as any)[f]
   out.tanks = { ...s.tanks }
+  out.tankCounts = { ...s.tankCounts }
   out.stats = { ...s.stats, liters: { ...s.stats.liters } }
   out.facDaily = { ...s.facDaily }
   out.facTotal = { ...s.facTotal }
@@ -641,6 +648,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.hasAirWater && !s.airWaterCount) s.airWaterCount = 1
   if (data.hasSelfWash && !s.selfWashCount) s.selfWashCount = 1
   if (data.tanks && typeof data.tanks === 'object') Object.assign(s.tanks, data.tanks)
+  if (data.tankCounts && typeof data.tankCounts === 'object') Object.assign(s.tankCounts, data.tankCounts)
   if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
   if (data.facTotal && typeof data.facTotal === 'object') Object.assign(s.facTotal, data.facTotal)
   if (Array.isArray(data.autoChargers)) s.autoChargers = new Set((data.autoChargers as number[]).filter(n => Number.isInteger(n)))
