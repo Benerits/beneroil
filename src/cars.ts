@@ -1011,7 +1011,9 @@ export class CarManager {
             WAIT_SPOTS[c.waitIndex],
           ], () => { c.phase = 'waiting' })
         }
-      } else if (c.phase === 'leaving' && p.x < 3.9) {
+      } else if (c.phase === 'leaving' && p.x < 5.5) {
+        // henüz yola çıkmamış (apron/kapı şeridindeki) çıkan araç: yeni çıkışa yönlendir.
+        // Eşik 3.9 idi; kapı şeridine (x≈4.2) çıkmış araç kaçıyor, eski çıkışa gidiyordu.
         const outY = this.opts.gateOutY()
         c.setPath([
           new THREE.Vector3(4.2, outY, 0),

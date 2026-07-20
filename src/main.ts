@@ -6,7 +6,7 @@ import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
-  POMPACI_HIRE, POMPACI_FEE,
+  POMPACI_HIRE, POMPACI_FEE, sellInfo, applySell,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { t, lang, setLang, translateDom } from './i18n'
@@ -1356,6 +1356,28 @@ ui.onMove = id => {
   startPlacement(id, true)
 }
 
+ui.onSell = id => {
+  if (!sellInfo(state, id)) return
+  const refund = applySell(state, id)
+  if (refund === null) return
+  const base = id.split('#')[0]
+  // servis noktasındaki aracı serbest bırak, sonra görseli kaldır
+  if (base === 'pump') cars.evictSlot('fuel', Number(id.slice(5)))
+  else if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
+  world.removeBuildingGroup(id)
+  delete placedPos[id]
+  delete placedRot[id]
+  const ri = placedRects.findIndex(r => r.id === id)
+  if (ri >= 0) placedRects.splice(ri, 1)
+  audio.build()
+  ui.toast(t('🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}', refund.toLocaleString('tr-TR')), 'good', true)
+  selectedBuilding = null
+  world.setSelected(null)
+  ui.hideBuildingCard()
+  Car.solids = hardRects()
+  persist()
+}
+
 function buyToast(id: string) {
   audio.build()
   switch (id) {
@@ -2020,6 +2042,8 @@ function refreshBuildingCard() {
   if (footprintOf(selectedBuilding)) {
     card.move = { label: t('Taşı'), id: selectedBuilding }
   }
+  const si = sellInfo(state, selectedBuilding)
+  if (si) card.sell = { label: t('🧨 Yık — +₺{0}', si.refund.toLocaleString('tr-TR')), id: selectedBuilding }
   ui.showBuildingCard(card)
 }
 
