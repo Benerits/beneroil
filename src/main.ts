@@ -2376,6 +2376,10 @@ function handleClick(e: PointerEvent) {
   selectedBuilding = null
   world.setSelected(null)
   ui.hideBuildingCard()
+  // Mobilde: sahne boşluğuna dokunma servis panelini de kapatır (backdrop yok).
+  // selectCar(null) mevcut "paneli kapat" kalıbı; doldurma sürerken activeCar zaten
+  // null olduğundan (START'a basınca) doldurmayı etkilemez, müşteri sahnede kalır.
+  if (isNativePlatform() && ui.activeCar) ui.selectCar(null)
 }
 
 // ---- Oyun döngüsü ----
