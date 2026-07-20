@@ -483,8 +483,15 @@ export function getShopItems(s: GameState): ShopRow[] {
     t('Kapı ağızları genişler: araçlar ikili sıra girip çıkar, kuyruk yola taşmaz'),
     s.wideGates ? null : WIDEGATE_COST, s.pumps >= 2 ? null : t('Önce 2. pompayı al'))
   row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
-    t('Depo büyür, daha seyrek sipariş verirsin'),
+    t('Depo büyür (tüm yakıtlar), daha seyrek sipariş verirsin'),
     s.tankLevel >= 3 ? null : TANK_COSTS[s.tankLevel], null)
+  for (const f of FUELS) {
+    const c = s.tankCounts[f]
+    row(`tankadd-${f}`, 'i-tank', t('{0} Tankı #{1}', FUEL_LABEL[f], c + 1),
+      c >= MAX_TANKS_PER_FUEL ? t('Maks') : `+${TANK_CAPACITY[s.tankLevel]}L`,
+      t('Bu yakıta özel ek depo — kapasite artar, sipariş seyrekleşir'),
+      c >= MAX_TANKS_PER_FUEL ? null : TANK_ADD_COSTS[c], null)
+  }
   row('airwater', 'i-air', s.airWaterCount ? t('Hava-Su Ünitesi ({0})', s.airWaterCount) : t('Hava-Su Ünitesi'), '+₺10-20',
     t('Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)'), AIRWATER_COST, null)
   row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
@@ -716,6 +723,8 @@ export function buyItem(s: GameState, id: string): boolean {
   const item = getShopItems(s).find(r => r.id === id)
   if (!item || item.status !== 'buy' || item.cost === null || s.money < item.cost) return false
   s.money -= item.cost
+  // yakıt başına ek tank (dinamik id — switch'e girmeden ele alınır)
+  if (id.startsWith('tankadd-')) { s.tankCounts[id.slice('tankadd-'.length) as FuelType]++; return true }
   switch (id) {
     case 'pump': s.pumps++; break
     case 'sign': s.signLevel++; break

@@ -36,6 +36,7 @@ export interface BuildingCard {
 /** ikon kutusu renkleri — her kalem kendi kimliğinde */
 const ICON_COLORS: Record<string, string> = {
   land: '#27a05a', pave: '#7a8290', pump: '#d64545', sign: '#2f6fed', tank: '#5a6b7c',
+  'tankadd-benzin': '#27a05a', 'tankadd-dizel': '#e8862e', 'tankadd-lpg': '#2f6fed',
   airwater: '#1fa8bc', parking: '#2f6fed', market: '#e8862e', toilet: '#2f6fed', wash: '#2f9fd6',
   selfwash: '#1fa8bc', oil: '#b08a3f', coffee: '#8a5a3c', restaurant: '#c9484f', truckpark: '#5a6b7c',
   grid: '#e0a121', battery: '#27a05a', evcharger: '#1fa8bc', solar: '#e8862e', dieselgen: '#b08a3f', smr: '#d64545',
@@ -69,6 +70,7 @@ const DIMS: Record<string, (s: GameState) => string> = {
 const CATEGORY_MAP: Record<string, string> = {
   land: 'arsa', pave: 'arsa',
   pump: 'istasyon', sign: 'istasyon', tank: 'istasyon', airwater: 'istasyon', parking: 'istasyon',
+  'tankadd-benzin': 'istasyon', 'tankadd-dizel': 'istasyon', 'tankadd-lpg': 'istasyon',
   market: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
   coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis',
   grid: 'enerji', battery: 'enerji', evcharger: 'enerji', solar: 'enerji', dieselgen: 'enerji', smr: 'enerji',
