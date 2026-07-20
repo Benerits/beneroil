@@ -6,7 +6,7 @@ import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
-  POMPACI_HIRE, sellInfo, applySell,
+  POMPACI_HIRE, EV_ATTENDANT_HIRE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { isNativePlatform } from './platform'
@@ -183,6 +183,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)) // performans: 2x retina yerine 1.5x yeterli
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.localClippingEnabled = true // küre tank sıvısı: yatay düzlemle alttan-yukarı dolum kırpması
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 1.1
 app.appendChild(renderer.domElement)
@@ -230,7 +231,7 @@ window.addEventListener('resize', resize)
 window.addEventListener('wheel', e => {
   // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
   if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar')) return
-  camera.zoom = Math.min(2.6, Math.max(0.78, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
+  camera.zoom = Math.min(2.6, Math.max(0.58, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
 
@@ -247,7 +248,7 @@ window.addEventListener('touchmove', e => {
     e.preventDefault()
     const d = touchDist(e.touches)
     if (pinchStartDist > 0) {
-      camera.zoom = Math.min(2.6, Math.max(0.78, pinchStartZoom * (d / pinchStartDist)))
+      camera.zoom = Math.min(2.6, Math.max(0.58, pinchStartZoom * (d / pinchStartDist)))
       camera.updateProjectionMatrix()
     }
   }
@@ -292,30 +293,207 @@ if (!isPromoMode) {
 let promoTick: ((dt: number) => void) | null = null
 const ui = new UI()
 
-// Alt navbar (mobil): sekmeler mevcut HUD handler'larını yeniden kullanır (DRY).
-// HUD butonları mobilde display:none olsa da programatik .click() event'i tetikler.
-for (const [nav, target] of [['nav-build', 'shopbtn'], ['nav-order', 'orderbtn'], ['nav-profile', 'accbtn']] as const) {
-  document.getElementById(nav)?.addEventListener('click', () => document.getElementById(target)?.click())
+// Alt navbar + uygulama-sheet (mobil): tüm bölümler tek 'openSection' üzerinden açılır.
+// Sekme değişince diğer bölüm sheet'i kapanır → mobil-uygulama gibi sekmeli tek yüzey.
+const NAV_WRAPS: Record<string, string> = { office: 'officewrap', build: 'shopwrap', order: 'fuelwrap', profile: 'accwrap' }
+function openSection(sec: string) {
+  // zaten bir sheet açıksa bu bir SEKME GEÇİŞİdir → yeniden slide-up animasyonu oynatma (flash olmasın)
+  const wasOpen = Object.values(NAV_WRAPS).some(w => document.getElementById(w)?.classList.contains('show'))
+  document.documentElement.classList.toggle('no-sheet-anim', wasOpen)
+  for (const [s, w] of Object.entries(NAV_WRAPS)) if (s !== sec) document.getElementById(w)?.classList.remove('show')
+  if (sec === 'office') openOfficePanel()
+  else if (sec === 'build') document.getElementById('shopbtn')?.click()
+  else if (sec === 'order') document.getElementById('orderbtn')?.click()
+  else if (sec === 'profile') document.getElementById('accbtn')?.click()
+  else if (sec === 'roadmap') ui.toast(t('Yol haritası yakında!'), '')
 }
-document.getElementById('nav-office')?.addEventListener('click', () => openOfficePanel())
-document.getElementById('nav-roadmap')?.addEventListener('click', () => ui.toast(t('Yol haritası yakında!'), ''))
+for (const elx of document.querySelectorAll<HTMLElement>('#navbar .navbtn, #sheettabs .stab')) {
+  const sec = elx.id ? elx.id.replace('nav-', '') : elx.dataset.sec
+  if (sec) elx.addEventListener('click', () => openSection(sec))
+}
+// Açık nav-section'ı izle → sekme şeridini göster/gizle + aktif sekmeyi işaretle + alt navbar'ı gizle.
+let sheetSyncQueued = false
+function syncSheetTabs() {
+  if (sheetSyncQueued) return
+  sheetSyncQueued = true
+  requestAnimationFrame(() => {
+    sheetSyncQueued = false
+    let active: string | null = null
+    for (const [s, w] of Object.entries(NAV_WRAPS)) if (document.getElementById(w)?.classList.contains('show')) active = s
+    const tabs = document.getElementById('sheettabs')
+    document.getElementById('navbar')?.classList.toggle('hidden', !!active)
+    tabs?.classList.toggle('show', !!active)
+    tabs?.querySelectorAll<HTMLElement>('.stab').forEach(b => b.classList.toggle('on', b.dataset.sec === active))
+    if (!active) document.documentElement.classList.remove('no-sheet-anim')
+  })
+}
+const sheetObs = new MutationObserver(syncSheetTabs)
+for (const w of Object.values(NAV_WRAPS)) {
+  const e = document.getElementById(w); if (e) sheetObs.observe(e, { attributes: true, attributeFilter: ['class'] })
+}
 document.getElementById('anglebtn')?.addEventListener('click', () => cycleCameraAngle())
 
 // Ofis: finansal + performans özeti (salt-okunur) + istasyon aç/kapa
 function openOfficePanel() {
-  const set = (id: string, v: string) => { const e = document.getElementById(id); if (e) e.textContent = v }
-  set('of-cash', `${Math.round(state.money)} ₺`)
-  set('of-rev', `${Math.round(state.stats.revenue)} ₺`)
-  set('of-served', `${state.stats.served}`)
-  set('of-lost', `${state.stats.lost}`)
-  set('of-rep', state.reputation.toFixed(1))
+  // Navbar Ofis = bina kartıyla AYNI kapsamlı içerik: kasa + performans özeti + fiyat yönetimi.
+  const card = buildingCard('office')
+  const cashEl = document.getElementById('of-cash'); if (cashEl) cashEl.textContent = `${Math.round(state.money)} ₺`
+  const statsEl = document.getElementById('of-stats')
+  if (statsEl && card) statsEl.innerHTML = card.stats.map(([k, v, cls]) =>
+    `<div class="stat"><span class="k">${k}</span><span class="v ${cls ?? ''}">${v}</span></div>`).join('')
+  const pricesEl = document.getElementById('of-prices')
+  if (pricesEl && card?.priceRows) pricesEl.innerHTML = card.priceRows.map(r =>
+    `<div class="prow"><span class="pl">${r.label}</span><span class="pc">${typeof r.cost === 'number' ? `alış ₺${r.cost}` : r.cost}</span>`
+    + `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>`
+    + `<span class="pv">₺${r.price.toFixed(1)}</span>`
+    + `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
   document.getElementById('officewrap')?.classList.add('show')
 }
 document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
+// Ofis fiyat yönetimi butonları officewrap içinde de çalışsın (bina kartıyla aynı handler)
+document.getElementById('of-prices')?.addEventListener('click', e => {
+  const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
+  if (btn) ui.onPriceChange(btn.dataset.pf as FuelType | 'elec', Number(btn.dataset.pd))
+})
+const isMobileView = () => window.matchMedia('(max-width: 680px)').matches
+
+// Mobilde Profil + Ayarlar tek sheet: 2 alt-sekme (segmented control).
+function activateSub(sub: string) {
+  document.querySelectorAll<HTMLElement>('#accwrap .subtab').forEach(b => b.classList.toggle('on', b.dataset.sub === sub))
+  document.querySelectorAll<HTMLElement>('#accwrap .subpane').forEach(p => { p.hidden = p.dataset.pane !== sub })
+}
+document.querySelectorAll<HTMLElement>('#accwrap .subtab').forEach(b => b.addEventListener('click', () => activateSub(b.dataset.sub!)))
+if (isMobileView()) {
+  // Ayarlar içeriğini setwrap'ten Profil sheet'inin "Ayarlar" paneline taşı (ID'ler korunur → wiring çalışır)
+  const setBody = document.querySelector('#setwrap .mbody')
+  const ayarlarPane = document.querySelector('#accwrap .subpane[data-pane="ayarlar"]')
+  if (setBody && ayarlarPane) while (setBody.firstChild) ayarlarPane.appendChild(setBody.firstChild)
+  // dişli (setbtn) → boş setwrap yerine Profil sheet'in Ayarlar sekmesi
+  document.getElementById('setbtn')?.addEventListener('click', e => {
+    e.stopImmediatePropagation(); openSection('profile'); activateSub('ayarlar')
+  }, true)
+  // Profil sekmesine basınca Profil alt-sekmesiyle başla
+  document.getElementById('nav-profile')?.addEventListener('click', () => activateSub('profil'))
+}
+
+// ---- Banka / kredi ekranı ----
+let bankSelected = new Set<string>()
+function collateralLabel(id: string): string {
+  return state.eligibleCollateral().find(e => e.id === id)?.label ?? id
+}
+function renderBank() {
+  const body = document.getElementById('bank-body'); if (!body) return
+  // 1) banka ortaklığı aktif (teminatsız temerrüt sonrası)
+  if (state.partner.active) {
+    body.innerHTML =
+      `<div class="ofsec">${t('Banka Ortaklığı')}</div>`
+      + `<div class="stat"><span class="k">${t('Kalan borç payı')}</span><span class="v bad">₺${state.partner.remaining.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Günlük kâr payı')}</span><span class="v">%${Math.round(state.partner.share * 100)}</span></div>`
+      + `<div class="sd" style="margin:8px 0 12px; color:var(--red)">${t('Teminatsız borcunu ödeyemedin — banka istasyona ortak oldu. Her gün kârının bir kısmı borç bitene dek bankaya gider. Peşin kapatabilirsin:')}</div>`
+      + `<button class="btn good" id="bank-buyout" style="width:100%; justify-content:center">${t('Ortaklığı Kapat — ₺{0}', state.partner.remaining.toLocaleString('tr-TR'))}</button>`
+    return
+  }
+  // 2) aktif kredi
+  const l = state.loan
+  if (l.active) {
+    const unsec = l.collateral.length === 0
+    body.innerHTML =
+      `<div class="stat"><span class="k">${t('Anapara')}</span><span class="v">₺${l.principal.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Aylık taksit')}</span><span class="v">₺${l.monthly.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Kalan taksit')}</span><span class="v">${l.remaining} / 12</span></div>`
+      + `<div class="stat"><span class="k">${t('Gecikme')}</span><span class="v ${l.overdue ? 'bad' : 'good'}">${l.overdue}</span></div>`
+      + `<div class="sd" style="margin:9px 0 4px">${unsec ? t('Teminatsız avans') : t('Teminatların') + ': ' + l.collateral.map(collateralLabel).join(', ')}</div>`
+      + `<div class="sd" style="margin:4px 0 12px; color:var(--red)">${unsec ? t('Ödenmezse banka istasyona ORTAK olur (kâr payından tahsil).') : t('Ödenmezse teminatların haczedilir.')}</div>`
+      + `<button class="btn good" id="bank-payoff" style="width:100%; justify-content:center">${t('Erken Kapat — ₺{0}', state.loanPayoff().toLocaleString('tr-TR'))}</button>`
+    return
+  }
+  // 3) teklif ekranı: teminatsız avans (herkes) + teminatlı kredi (asseti varsa)
+  const advLimit = state.advanceLimit()
+  const advMonthly = state.loanMonthly(advLimit, ADVANCE_RATE)
+  let html =
+    `<div class="ofsec">${t('Teminatsız Avans — asset gerekmez')}</div>`
+    + `<div class="stat"><span class="k">${t('Tutar')}</span><span class="v">₺${advLimit.toLocaleString('tr-TR')}</span></div>`
+    + `<div class="stat"><span class="k">${t('Aylık taksit')}</span><span class="v">₺${advMonthly.toLocaleString('tr-TR')}</span></div>`
+    + `<div class="sd" style="margin:4px 0 10px">${t('aylık %5 · 12 taksit · ödenmezse banka istasyona ortak olur')}</div>`
+    + `<button class="btn primary" id="bank-adv" style="width:100%; justify-content:center">${t('Avans Al — +₺{0}', advLimit.toLocaleString('tr-TR'))}</button>`
+  const elig = state.eligibleCollateral()
+  if (elig.length) {
+    let total = 0
+    const rows = elig.map(e => {
+      const on = bankSelected.has(e.id); if (on) total += e.value
+      return `<div class="prow"><span class="pl">${e.label}</span><span class="pc">${t('teminat')} ₺${e.value.toLocaleString('tr-TR')}</span>`
+        + `<button class="btn pbtn bank-col${on ? ' good' : ''}" data-col="${e.id}">${on ? '✓' : '+'}</button></div>`
+    }).join('')
+    const monthly = total > 0 ? state.loanMonthly(total) : 0
+    html += `<div class="ofsec" style="margin-top:16px">${t('Teminatlı Kredi — değerin %50si')}</div>${rows}`
+      + `<div class="stat" style="margin-top:8px"><span class="k">${t('Kredi tutarı')}</span><span class="v">₺${total.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Aylık taksit')}</span><span class="v">₺${monthly.toLocaleString('tr-TR')}</span></div>`
+      + `<button class="btn primary" id="bank-take" style="width:100%; justify-content:center; margin-top:6px" ${total <= 0 ? 'disabled' : ''}>${t('Krediyi Al — +₺{0}', total.toLocaleString('tr-TR'))}</button>`
+  }
+  body.innerHTML = html
+}
+function openBank() {
+  document.getElementById('officewrap')?.classList.remove('show') // ofis sheet'i kapat, bankayı normal alt-sheet olarak aç
+  bankSelected = new Set()
+  renderBank()
+  document.getElementById('bankwrap')?.classList.add('show')
+}
+document.getElementById('of-bank')?.addEventListener('click', () => openBank())
+document.getElementById('bankwrap')?.addEventListener('pointerdown', e => {
+  if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show')
+})
+document.getElementById('bank-body')?.addEventListener('click', e => {
+  const tgt = e.target as HTMLElement
+  const col = tgt.closest('button.bank-col') as HTMLElement | null
+  if (col) { const id = col.dataset.col!; bankSelected.has(id) ? bankSelected.delete(id) : bankSelected.add(id); renderBank(); return }
+  if (tgt.closest('#bank-take')) {
+    let total = 0; for (const id of bankSelected) total += state.collateralValue(id)
+    if (total > 0 && state.takeLoan(total, [...bankSelected])) {
+      ui.toast(t('🏦 Kredi onaylandı — +₺{0} kasana geçti!', total.toLocaleString('tr-TR')), 'good')
+      renderBank(); persist()
+    }
+    return
+  }
+  if (tgt.closest('#bank-adv')) {
+    const amt = state.advanceLimit()
+    if (state.takeAdvance(amt)) { ui.toast(t('🏦 Avans onaylandı — +₺{0} kasana geçti!', amt.toLocaleString('tr-TR')), 'good'); renderBank(); persist() }
+    return
+  }
+  if (tgt.closest('#bank-payoff')) {
+    if (state.repayLoanFull()) { ui.toast(t('🏦 Kredi kapatıldı — teminatların serbest!'), 'good'); renderBank(); persist() }
+    else ui.toast(t('💸 Erken kapatmaya kasan yetmiyor.'), 'bad')
+    return
+  }
+  if (tgt.closest('#bank-buyout')) {
+    if (state.buyoutPartner()) { ui.toast(t('🏦 Ortaklık kapatıldı — istasyon tamamen senin!'), 'good'); renderBank(); persist() }
+    else ui.toast(t('💸 Ortaklığı kapatmaya kasan yetmiyor.'), 'bad')
+  }
+})
+
+/** Ödeme yapılamayınca teminatları haczet: binaları istasyondan kaldır (iade YOK), krediyi kapat. */
+function seizeCollateral() {
+  for (const id of [...state.loan.collateral]) {
+    if (!sellInfo(state, id)) continue // zaten satılmış/kaldırılmış olabilir
+    const refund = applySell(state, id) // state sayaçlarını düşürür + iade ekler
+    if (refund) state.money -= refund   // haciz: iade geri alınır (banka borca karşılık alır)
+    const base = id.split('#')[0]
+    if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
+    world.removeBuildingGroup(id)
+    delete placedPos[id]; delete placedRot[id]
+    const ri = placedRects.findIndex(r => r.id === id); if (ri >= 0) placedRects.splice(ri, 1)
+  }
+  state.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+  Car.solids = hardRects()
+  ui.toast(t('🏦 Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!'), 'bad')
+  if (selectedBuilding) refreshBuildingCard()
+  persist()
+}
 document.getElementById('officewrap')?.addEventListener('pointerdown', e => {
   if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show')
 })
 ui.batteryKwh = () => state.battery
+ui.attendantAt = car => car.slotIndex >= 0 &&
+  (car.kind === 'ev' ? state.autoChargers.has(car.slotIndex) : state.autoPumps.has(car.slotIndex))
 ui.feedbackContext = () => ({
   day: state.day, money: Math.round(state.money), pumps: state.pumps,
   rep: Number(state.reputation.toFixed(2)), ua: navigator.userAgent.slice(0, 120),
@@ -1723,6 +1901,13 @@ function tutAdvance(to: number) {
     setTimeout(() => { if (tutEl) tutEl.style.display = 'none' }, 9000)
   }
 }
+/** onboarding ipucunu kapat — pompacı işi devraldığında (manuel servis olmayacak) takılı kalmasın */
+function tutDismiss() {
+  if (!tutEl || tutStep >= 3) return
+  tutStep = 3
+  localStorage.setItem('beneloil-onboarded', '1')
+  tutEl.style.display = 'none'
+}
 
 // oyun içi canlı t("OYUNDA") sayacı — 60 sn'de bir tazelenir (sosyal kanıt)
 function refreshOnline() {
@@ -1857,6 +2042,7 @@ if (isFullMode) {
 }
 
 ui.onMaint = id => {
+  if (id === 'open-order') { ui.hideBuildingCard(); openSection('order'); return } // tanka tıkla → yakıt siparişi
   if (id.startsWith('auto-pump-')) {
     const i = parseInt(id.slice(10))
     if (state.autoPumps.has(i)) {
@@ -1878,11 +2064,18 @@ ui.onMaint = id => {
   }
   if (id.startsWith('auto-charger-')) {
     const i = parseInt(id.slice(13))
-    if (state.autoChargers.has(i)) state.autoChargers.delete(i)
-    else state.autoChargers.add(i)
-    ui.toast(state.autoChargers.has(i)
-      ? t('DC Şarj #{0}: otomatik şarj AÇIK — EV sormadan şarj alır.', i + 1)
-      : t('DC Şarj #{0}: otomatik şarj kapalı.', i + 1), 'good')
+    if (state.autoChargers.has(i)) {
+      state.autoChargers.delete(i)
+      ui.toast(t('DC Şarj #{0}: şarjcı işten çıktı — şarjı yine sen yaparsın.', i + 1), '')
+    } else {
+      if (state.money < EV_ATTENDANT_HIRE) {
+        ui.toast(t('💸 Para yetmiyor — şarjcı işe alma ₺{0}.', EV_ATTENDANT_HIRE.toLocaleString('tr-TR')), 'bad')
+        return
+      }
+      state.money -= EV_ATTENDANT_HIRE
+      state.autoChargers.add(i)
+      ui.toast(t('⚡ DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!', i + 1), 'good')
+    }
     refreshBuildingCard()
     persist()
     return
@@ -1982,8 +2175,8 @@ function buildingCard(id: string): BuildingCard | null {
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Dolum hızı'), t('{0} L/sn', FILL_RATE)],
         [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelirin tamamı senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
-        [t('Benzin'), `₺${FUEL_PRICE.benzin}/L`],
-        [t('Dizel'), `₺${FUEL_PRICE.dizel}/L`],
+        [t('Benzin'), `₺${state.prices.benzin}/L`],
+        [t('Dizel'), `₺${state.prices.dizel}/L`],
       ],
       action: broken
         ? { label: '🔧 Tamir Et — ₺800', maintId: `fix-pump-${i}` }
@@ -2001,11 +2194,14 @@ function buildingCard(id: string): BuildingCard | null {
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Şarj süresi'), t('Anında')],
+        [t('Şarjcı'), state.autoChargers.has(i) ? t('ÇALIŞIYOR (gelirin tamamı senin)') : t('YOK'), state.autoChargers.has(i) ? 'good' : undefined],
         [t('Satış'), `₺${state.elecPrice}/kWh`],
       ],
       action: broken
         ? { label: '🔧 Tamir Et — ₺1.000', maintId: `fix-charger-${i}` }
-        : { label: t('Otomatik Şarj: {0} — değiştir', state.autoChargers.has(i) ? t('AÇIK') : t('KAPALI')), maintId: `auto-charger-${i}` },
+        : state.autoChargers.has(i)
+          ? { label: t('🧑‍🔧 Şarjcıyı işten çıkar'), maintId: `auto-charger-${i}` }
+          : { label: t('🧑‍🔧 Şarjcı Çalıştır — ₺{0}', EV_ATTENDANT_HIRE.toLocaleString('tr-TR')), maintId: `auto-charger-${i}` },
     }
   }
   switch (id) {
@@ -2040,18 +2236,32 @@ function buildingCard(id: string): BuildingCard | null {
         ],
       }
     }
-    case 'gatein':
+    case 'gatein': {
+      const wg = getShopItems(state).find(r => r.id === 'widegate')
       return {
         icon: 'i-move', name: t('Giriş Kapısı'),
         desc: t('Müşteriler ve tankerler istasyona buradan girer. Taşı butonuyla yol kenarında istediğin yere al — trafik akışı kendini uyarlar.'),
-        stats: [['Konum', `y ${Math.round(world.gateIn.y)}`], ['Kural', t('Çıkışla arası en az 5 birim')]],
+        stats: [
+          [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
+          ['Kural', t('Çıkışla arası en az 5 birim')]],
+        buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
+          ? { label: t('🛣️ Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          : undefined,
       }
-    case 'gateout':
+    }
+    case 'gateout': {
+      const wg = getShopItems(state).find(r => r.id === 'widegate')
       return {
         icon: 'i-move', name: t('Çıkış Kapısı'),
         desc: t('Araçlar istasyondan buradan çıkıp yola karışır. Taşı butonuyla yerini belirle.'),
-        stats: [['Konum', `y ${Math.round(world.gateOut.y)}`], ['Kural', t('Girişle arası en az 5 birim')]],
+        stats: [
+          [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
+          ['Kural', t('Girişle arası en az 5 birim')]],
+        buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
+          ? { label: t('🛣️ Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          : undefined,
       }
+    }
     case 'tank':
       return {
         icon: 'i-tank', name: t('Yakıt Tankı'),
@@ -2062,6 +2272,7 @@ function buildingCard(id: string): BuildingCard | null {
           [t('LPG'), `${Math.round(state.tanks.lpg)} / ${state.tankCapacity}L`, state.tanks.lpg < state.tankCapacity * 0.15 ? 'bad' : ''],
           ['Kapasite seviyesi', `${state.tankLevel + 1}/4 (maks ${TANK_CAPACITY[3]}L)`],
         ],
+        action: { label: t('🛢️ Yakıt Siparişi Ver'), maintId: 'open-order' },
       }
     case 'battery':
       return {
@@ -2260,7 +2471,7 @@ editBtn.addEventListener('click', () => {
   editBtn.classList.toggle('danger', editMode)
   cancelPlacement()
   ui.toast(editMode
-    ? t('Düzenleme modu AÇIK: taşımak istediğin binaya tıkla (pompa, şarj ve tank sabittir)')
+    ? t('✏️ Düzenleme AÇIK — binaya dokun ve taşı')
     : t('Düzenleme modu kapandı.'), '')
 })
 
@@ -2417,6 +2628,8 @@ function handleClick(e: PointerEvent) {
       }
       selectedBuilding = bid
       world.setSelected(selectedBuilding)
+      // Ofis binası → kapsamlı Ofis paneli (özet + fiyat yönetimi + banka). Mobil sheet / masaüstü ortalı modal.
+      if (bid === 'office') { openSection('office'); return }
       refreshBuildingCard()
       return
     }
@@ -2498,6 +2711,19 @@ function frame() {
     state.day++
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
+    // kredi taksiti (aylık = 1 oyun günü)
+    const loanRes = state.processLoanDay()
+    if (loanRes === 'done') ui.toast(t('🏦 Kredi tamamen ödendi — teminatların serbest! 🎉'), 'good')
+    else if (loanRes === 'warn') ui.toast(t('🏦 Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.'), 'bad')
+    else if (loanRes === 'seize') {
+      if (state.loan.collateral.length) seizeCollateral() // teminatlı → haciz
+      else { state.startPartnership(); ui.toast(t('🏦 Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!', Math.round(PARTNER_SHARE * 100)), 'bad') }
+    }
+    // banka ortaklığı aktifse günlük kârdan payını al
+    const pc = state.applyPartnerCut(profit)
+    if (pc?.kind === 'ended') ui.toast(t('🏦 Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin! 🎉'), 'good')
+    else if (pc?.kind === 'cut' && pc.amount > 0) ui.toast(t('🏦 Banka ortağı kâr payı aldı: -₺{0}', pc.amount.toLocaleString('tr-TR')), '')
+    if (document.getElementById('bankwrap')?.classList.contains('show')) renderBank()
     state.dayStartMoney = state.money
     state.facDaily = {}
     if (state.day >= 3 && !isFullMode && !isPromoMode) interstitial('gun-sonu')
@@ -2630,7 +2856,8 @@ function frame() {
     const amount = Math.min(FILL_RATE * dt, state.tanks[c.nozzle])
     c.filled += amount
     state.tanks[c.nozzle] -= amount
-    c.setCounter(`${c.filled.toFixed(1)}L · ₺${c.filledValue.toFixed(0)}`)
+    c.bubbleT -= dt // sayaç ~9/sn güncellensin (her frame değil) — okunur, çok hızlı akmaz
+    if (c.bubbleT <= 0) { c.bubbleT = 0.11; c.setCounter(`${c.filled.toFixed(1)}L · ₺${c.filledValue.toFixed(0)}`) }
     if (c.nozzle !== c.demandType && c.filled > 1.5) {
       wrongFuel(c)
     } else if (c.fullMode ? c.filled >= c.hiddenNeedL : c.filledValue >= c.targetAmount) {
@@ -2678,6 +2905,8 @@ function frame() {
       else c.targetAmount = c.demandAmount
       c.filling = true
       c.beingServed = true
+      if (Math.random() < 0.6) c.cleanWindows() // pompacı bazen camları da siler (rastgele) — oyuncunun işi değil
+      tutDismiss() // pompacı devraldı → "hoşgeldin patron" ipucu takılı kalmasın
     }
   }
   tickEvCharging(dt)

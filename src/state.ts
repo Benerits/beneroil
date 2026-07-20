@@ -12,6 +12,13 @@ export function priceBounds(f: FuelType): [number, number] {
   return [Math.ceil(FUEL_COST[f]), Math.round(FUEL_COST[f] * 2.2)]
 }
 export const ORDER_ETA = 25 // saniye
+// Banka/kredi: aylık %3 faiz (1 taksit = 1 oyun günü), 12 taksit; teminat = varlık değerinin %50'si
+export const LOAN_RATE = 0.03
+export const ADVANCE_RATE = 0.05 // teminatsız avans: daha yüksek faiz (risk primi)
+export const LOAN_TERMS = 12
+export const PARTNER_SHARE = 0.25 // teminatsız borç ödenmezse banka günlük kârın %25'ine ortak olur
+export type Loan = { active: boolean; principal: number; monthly: number; remaining: number; overdue: number; collateral: string[]; rate: number }
+export type Partner = { active: boolean; remaining: number; share: number }
 export const FILL_RATE = 7 // L/sn
 export const SPILL_PENALTY_PER_L = 3
 export const WRONG_FUEL_PENALTY = 300
@@ -31,6 +38,7 @@ export const WIDEGATE_COST = 6000
  *  pompacının tek "maliyeti" işe alma + oyuncunun bahşişten feragat etmesidir (manuel
  *  servis hâlâ bahşişle daha kârlı, ama pompacı yetişemediğin pompayı net kâra çevirir). */
 export const POMPACI_HIRE = 800
+export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) işe alma bedeli
 const TANK_COSTS = [3000, 7000, 15000]
 export const MAX_TANKS_PER_FUEL = 4
 export const TANK_ADD_COSTS = [0, 6000, 12000, 20000] // index = mevcut adet → 2., 3., 4. tankın maliyeti
@@ -96,10 +104,12 @@ export class GameState {
   /** yakıt türü başına ayrı yer altı tankı */
   tanks: Record<FuelType, number> = { benzin: 250, dizel: 150, lpg: 100 }
   /** yakıt türü başına ayrı sipariş/tanker takibi */
-  orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean }> = {
-    benzin: { pending: false, eta: 0, arrived: false, delivering: false },
-    dizel: { pending: false, eta: 0, arrived: false, delivering: false },
-    lpg: { pending: false, eta: 0, arrived: false, delivering: false },
+  loan: Loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+  partner: Partner = { active: false, remaining: 0, share: PARTNER_SHARE } // banka ortaklığı (teminatsız temerrüt)
+  orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }> = {
+    benzin: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
+    dizel: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
+    lpg: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
   }
 
   pumps = 1
@@ -384,7 +394,9 @@ export class GameState {
     return Math.min(0.95, Math.max(0.08, c))
   }
 
-  orderNeed(f: FuelType) { return Math.floor(this.fuelCapacity(f) - this.tanks[f]) }
+  /** Sipariş partisi = level-1 depo kadar (800L). Level 3 tankta bile ucuz parti hâlinde sipariş;
+   *  böylece oyuncu tek seferde devasa maliyetle batmaz. Kalan boşluktan fazlası sipariş edilmez. */
+  orderNeed(f: FuelType) { return Math.floor(Math.min(TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f])) }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     return Math.ceil(this.orderNeed(f) * FUEL_COST[f] * disc)
@@ -400,11 +412,94 @@ export class GameState {
     this.money -= this.orderCost(f)
     this.orders[f].pending = true
     this.orders[f].eta = ORDER_ETA
+    this.orders[f].amount = this.orderNeed(f) // teslimatta bu kadar eklenecek (parti miktarı)
     return true
   }
 
   deliverFuel(f: FuelType) {
-    this.tanks[f] = this.fuelCapacity(f)
+    // sipariş edilen partiyi ekle (tam doldurma değil); kapasiteyi aşma
+    const add = this.orders[f].amount || this.orderNeed(f)
+    this.tanks[f] = Math.min(this.fuelCapacity(f), this.tanks[f] + add)
+    this.orders[f].amount = 0
+  }
+
+  // ---- Banka / kredi ----
+  /** teminat değeri = varlığın %50 iade (market) değeri */
+  collateralValue(id: string): number { return sellInfo(this, id)?.refund ?? 0 }
+  /** teminat gösterilebilir varlıklar (demirbaş=pompa/tank hariç; her tesis türü tek kalem) */
+  eligibleCollateral(): { id: string; label: string; value: number }[] {
+    const c: [string, string][] = [
+      ['market', t('Market')], ['toilet', t('Tuvalet')], ['battery', t('Batarya Deposu')],
+      ['wash', t('Oto Yıkama')], ['oil', t('Yağ Değişimi')], ['coffee', t('Kahveci')],
+      ['restaurant', t('Restoran')], ['truckpark', t('Tır Parkı')], ['dieselgen', t('Jeneratör')], ['smr', t('Reaktör')],
+    ]
+    if (this.evChargers > 0) c.push([`charger#${this.evChargers - 1}`, t('DC Şarj')])
+    if (this.solarCount > 0) c.push([`solar#${this.solarCount - 1}`, t('Güneş Santrali')])
+    if (this.parkingCount > 0) c.push([`parking#${this.parkingCount - 1}`, t('Otopark')])
+    if (this.selfWashCount > 0) c.push([`selfwash#${this.selfWashCount - 1}`, t('Self Yıkama')])
+    if (this.airWaterCount > 0) c.push([`airwater#${this.airWaterCount - 1}`, t('Hava-Su Ünitesi')])
+    const out: { id: string; label: string; value: number }[] = []
+    for (const [id, label] of c) { const v = this.collateralValue(id); if (v > 0) out.push({ id, label, value: v }) }
+    return out
+  }
+  loanMonthly(principal: number, rate = LOAN_RATE): number {
+    const n = LOAN_TERMS
+    return Math.ceil(principal * rate / (1 - Math.pow(1 + rate, -n)))
+  }
+  /** teminatsız avans limiti — herkes çekebilir; itibar + oyun günüyle küçük ölçüde büyür */
+  advanceLimit(): number {
+    return Math.min(6000, Math.round((800 + this.reputation * 500 + Math.min(this.day, 25) * 120) / 100) * 100)
+  }
+  takeLoan(principal: number, collateral: string[], rate = LOAN_RATE): boolean {
+    if (this.loan.active || this.partner.active || principal <= 0) return false
+    const p = Math.round(principal)
+    this.loan = { active: true, principal: p, monthly: this.loanMonthly(p, rate), remaining: LOAN_TERMS, overdue: 0, collateral: [...collateral], rate }
+    this.money += p
+    return true
+  }
+  /** teminatsız avans (asset gerekmez, küçük, yüksek faiz) */
+  takeAdvance(principal: number): boolean {
+    return this.takeLoan(Math.min(principal, this.advanceLimit()), [], ADVANCE_RATE)
+  }
+  loanPayoff(): number { return this.loan.active ? this.loan.monthly * this.loan.remaining : 0 }
+  repayLoanFull(): boolean {
+    if (!this.loan.active || this.money < this.loanPayoff()) return false
+    this.money -= this.loanPayoff(); this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+    return true
+  }
+  /** her oyun günü çağrılır: taksiti kasadan tahsil et; üst üste 2 gecikme + para yetmezse 'seize' (haczi/ortaklığı çağıran yapar) */
+  processLoanDay(): 'done' | 'seize' | 'warn' | 'ok' | null {
+    const l = this.loan
+    if (!l.active) return null
+    l.overdue += 1
+    while (l.overdue > 0 && l.remaining > 0 && this.money >= l.monthly) {
+      this.money -= l.monthly; l.remaining -= 1; l.overdue -= 1
+    }
+    if (l.remaining <= 0) { l.active = false; return 'done' }
+    if (l.overdue >= 2) return 'seize'
+    if (l.overdue === 1) return 'warn'
+    return 'ok'
+  }
+  /** teminatsız temerrüt: banka istasyona ortak olur (kalan borç × 1.3'ü kâr payından tahsil edilir) */
+  startPartnership() {
+    const debt = Math.max(1, this.loan.monthly * this.loan.remaining)
+    this.partner = { active: true, remaining: Math.round(debt * 1.3), share: PARTNER_SHARE }
+    this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+  }
+  /** gün sonu: ortaklık aktifse günlük kârdan payı al; borç bitince ortaklık sona erer. Döner: 'ended' | 'cut' | null */
+  applyPartnerCut(dayProfit: number): { kind: 'ended' | 'cut'; amount: number } | null {
+    if (!this.partner.active) return null
+    const cut = Math.min(this.partner.remaining, Math.max(0, Math.round(dayProfit * this.partner.share)))
+    if (cut > 0) { this.money -= cut; this.partner.remaining -= cut }
+    if (this.partner.remaining <= 0) { this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }; return { kind: 'ended', amount: cut } }
+    return { kind: 'cut', amount: cut }
+  }
+  /** ortaklığı peşin kapat (kalan borç payını öde) */
+  buyoutPartner(): boolean {
+    if (!this.partner.active || this.money < this.partner.remaining) return false
+    this.money -= this.partner.remaining
+    this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }
+    return true
   }
 
   /** tesis geliri: doğrudan kasaya + günlük ciroya işlenir */
@@ -620,7 +715,7 @@ const SAVE_FIELDS = [
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'closed',
-  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates',
+  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -635,6 +730,8 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.autoPumps = [...s.autoPumps]
   out.prices = { ...s.prices }
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
+  out.loan = { ...s.loan, collateral: [...s.loan.collateral] } // kredi durumu kayda girsin
+  out.partner = { ...s.partner } // banka ortaklığı durumu
   out.pendingCash = { ...s.pendingCash }
   out.ownedParcels = [...s.ownedParcels]
   out.pavedParcels = [...s.pavedParcels]

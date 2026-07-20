@@ -119,12 +119,37 @@ function liveSprite(text: string, accent: string): { sp: THREE.Sprite; set: (t: 
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     ctx.fillText(t, 256, 100)
   }
+  // dolum sırasında (set): gerçek pompa gibi dijital LCD — koyu ekran + parlayan monospace rakamlar
+  const drawDigital = (t: string) => {
+    ctx.clearRect(0, 0, 512, 192)
+    // koyu LCD ekran (hafif dikey gradyan + ince çerçeve)
+    const g = ctx.createLinearGradient(0, 0, 0, 192)
+    g.addColorStop(0, '#15271e'); g.addColorStop(1, '#0a130f')
+    ctx.fillStyle = g
+    ctx.lineWidth = 8
+    ctx.beginPath(); ctx.roundRect(10, 10, 492, 172, 34)
+    ctx.fill()
+    ctx.strokeStyle = '#334339'; ctx.stroke()
+    let fs = 80
+    ctx.font = `700 ${fs}px "SF Mono", Menlo, "Courier New", monospace`
+    while (fs > 34 && ctx.measureText(t).width > 444) { fs -= 4; ctx.font = `700 ${fs}px "SF Mono", Menlo, "Courier New", monospace` }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    // renkli halo (glow)
+    ctx.shadowColor = accent; ctx.shadowBlur = 28
+    ctx.fillStyle = accent
+    ctx.fillText(t, 256, 100)
+    ctx.shadowBlur = 14; ctx.fillText(t, 256, 100)
+    ctx.shadowBlur = 0
+    // parlak çekirdek — segmentlerin yanan kısmı gibi okunur
+    ctx.fillStyle = 'rgba(238,255,247,0.94)'
+    ctx.fillText(t, 256, 100)
+  }
   draw(text)
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, color: 0xdedede }))
   sp.scale.set(2.6, 0.98, 1)
-  return { sp, set: (t: string) => { draw(t); tex.needsUpdate = true } }
+  return { sp, set: (t: string) => { drawDigital(t); tex.needsUpdate = true } }
 }
 
 function textSprite(text: string, accent: string): THREE.Sprite {
@@ -216,6 +241,8 @@ export class Car {
   truckStagePos: THREE.Vector3 | null = null
   /** aracın gizli yakıt ihtiyacı (litre) — tipine göre: binek/SUV/kamyon */
   hiddenNeedL = 30
+  /** araç-üstü dijital sayaç güncelleme throttle'ı (çok hızlı akmasın) */
+  bubbleT = 0
   slotIndex = -1
   /** rezerve edilen bekleme noktası (yoksa -1) */
   waitIndex = -1
