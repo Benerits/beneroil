@@ -955,7 +955,8 @@ function rebuildFromState() {
   }
   for (let i = 0; i < state.evChargers; i++) {
     const sp = pvv(`charger-${i}`)
-    world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined)
+    // Kayıtlı açıyla kur → araç yanaşma slotu da doğru hesaplanır (rotateBuilding slot güncellemez).
+    world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined, placedRot[`charger-${i}`] ?? 0)
   }
   world.setSign(state.signLevel)
   if (state.wideGates) world.setWideGates(true)
@@ -998,7 +999,8 @@ function rebuildFromState() {
     if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]))
   }
   if (placedPos.tank) world.moveTank(new THREE.Vector2(placedPos.tank[0], placedPos.tank[1]))
-  for (const [id, rot] of Object.entries(placedRot)) world.rotateBuilding(id, rot)
+  // charger'lar yukarıda açılarıyla (slot dahil) kuruldu; burada atlanır.
+  for (const [id, rot] of Object.entries(placedRot)) if (!id.startsWith('charger-')) world.rotateBuilding(id, rot)
   world.setClosed(state.closed)
 }
 
@@ -1308,7 +1310,7 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
   else if (id.startsWith('charger-')) {
     const n = parseInt(id.slice(8))
     cars.evictSlot('ev', n)
-    world.moveCharger(n, new THREE.Vector2(cx - 0.5, cy))
+    world.moveCharger(n, new THREE.Vector2(cx - 0.5, cy), placedRot[`charger-${n}`] ?? 0) // taşırken açıyı koru
   }
   else if (id === 'tank') world.moveTank(new THREE.Vector2(cx, cy))
   else if (id === 'gatein') { world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
@@ -1362,8 +1364,13 @@ function confirmPlacement() {
     buildVisual(p.id, new THREE.Vector2(p.cx, p.cy))
     buyToast(p.id.split('#')[0].replace(/^pump-\d+$/, 'pump').replace(/^charger-\d+$/, 'evcharger'))
   }
-  if (!p.id.startsWith('pump-') && !p.id.startsWith('charger-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout')
+  if (p.id.startsWith('charger-')) {
+    // Charger döndürülebilir: pozisyon + açı + araç yanaşma slotu birlikte kurulur.
+    const idx = Number(p.id.slice('charger-'.length))
+    world.moveCharger(idx, new THREE.Vector2(p.cx, p.cy), p.rot)
+  } else if (!p.id.startsWith('pump-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout') {
     world.rotateBuilding(p.id, p.rot)
+  }
   placedPos[p.id] = [p.cx, p.cy]
   placedRot[p.id] = p.rot
   const i = placedRects.findIndex(r => r.id === p.id)
@@ -1400,7 +1407,7 @@ function confirmZone() {
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') cancelPlacement()
   if ((e.key === 'r' || e.key === 'R') && placing) {
-    if (placing.id.startsWith('pump-') || placing.id.startsWith('charger-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
+    if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
       ui.toast('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.', '')
       return
     }

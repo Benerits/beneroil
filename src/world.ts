@@ -1068,9 +1068,12 @@ export class World {
     this.addPump(index, at)
   }
 
-  addEvCharger(index: number, at?: THREE.Vector2) {
+  addEvCharger(index: number, at?: THREE.Vector2, rot = 0) {
     const base = at ?? new THREE.Vector2(0.7, EV_SLOTS_POS[Math.min(index, 3)].y)
-    this.evSlots[index] = new THREE.Vector3(base.x + 1.1, base.y, 0)
+    // Araç yanaşma noktası varsayılan sağda (+1.1). Ünite döndükçe bu offset de döner,
+    // böylece araç her zaman ünitenin şarj kablosu tarafından yanaşır.
+    const ang = rot * Math.PI / 2
+    this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.1, base.y + Math.sin(ang) * 1.1, 0)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({
       color: 0x2f8fd6, transparent: true, opacity: 0.28,
@@ -1086,13 +1089,14 @@ export class World {
     cyl(0.03, 0.5, 0x23272b, 0.15, 0.3, 0.6, 'z', g)
     box(0.1, 0.08, 0.2, 0x35c7d6, 0.15, 0.3, 0.35, g)
     g.position.set(base.x, base.y, 0)
+    g.rotation.z = ang
     this.scene.add(g)
     this.register(`charger-${index}`, t('DC ŞARJ #{0}', index + 1), g, 2.3)
   }
 
-  moveCharger(index: number, at: THREE.Vector2) {
+  moveCharger(index: number, at: THREE.Vector2, rot = 0) {
     this.removeBuildingGroup(`charger-${index}`)
-    this.addEvCharger(index, at)
+    this.addEvCharger(index, at, rot)
   }
 
   setStationName(name: string) {
