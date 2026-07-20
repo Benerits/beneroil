@@ -1073,7 +1073,7 @@ function footprintGrid(w: number, d: number): THREE.LineSegments {
 let zoneMode: { kind: 'land' | 'pave'; ghost: THREE.Mesh; c: number; r: number; valid: boolean } | null = null
 
 function parcelAt(x: number, y: number): [number, number] | null {
-  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) {
+  for (let c = 0; c < PARCEL_COLS.length; c++) for (let r = 0; r < PARCEL_ROWS.length; r++) {
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]
     if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return [c, r]
@@ -1089,6 +1089,11 @@ function landOk(x: number, y: number, grassOk: boolean): boolean {
 }
 
 function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
+  // servis ekipmanı (pompa/şarj/tank) yol karşısına kurulamaz — araçlar oraya giremiyor
+  if (/^(pump-|charger-)/.test(skipId) || skipId === 'tank') {
+    const pc = parcelAt(p.cx, p.cy)
+    if (pc && pc[0] >= 3) return false
+  }
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
     if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
   }
@@ -1281,6 +1286,25 @@ const COUNTABLE: Record<string, () => number> = {
   airwater: () => state.airWaterCount,
 }
 
+/** varsayılan slot sahipli+betonlu ve boş mu? değilse alım yerleştirme moduna düşer
+ *  (kaçak arazi bug'ı: 3-4. pompa/şarj varsayılan slotları güney parseline (0,0) düşüyor,
+ *  oyuncu orayı almamışsa oyun sahipsiz araziye kuruyordu) */
+function defaultSlotFree(kind: 'pump' | 'evcharger'): boolean {
+  const i = kind === 'pump' ? state.pumps : state.evChargers
+  const y = (kind === 'pump' ? PUMP_SLOTS_POS : EV_SLOTS_POS)[Math.min(i, 3)].y
+  const p = kind === 'pump'
+    ? { cx: 0.9, cy: y, w: 4.4, d: 4.0 }
+    : { cx: 0.5, cy: y, w: 4.0, d: 2.6 }
+  // arazi yasal mı? (tam isValidPlacement değil: varsayılan yerleşim tabela gibi sabit
+  // engellerle tasarım gereği köşeden kesişir, onlar sorun değil)
+  for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
+    if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), false)) return false
+  }
+  const skip = kind === 'pump' ? `pump-${i}` : `charger-${i}`
+  for (const o of placedRects) if (o.id !== skip && overlaps(p, o)) return false
+  return true
+}
+
 ui.onBuy = id => {
   audio.click()
   if (id === 'land' || id === 'pave') {
@@ -1294,12 +1318,12 @@ ui.onBuy = id => {
     startPlacement(n === 0 ? id : `${id}#${n}`)
     return
   }
-  if (id === 'pump' && state.pumps >= 4) {
+  if (id === 'pump' && (state.pumps >= 4 || !defaultSlotFree('pump'))) {
     if (!item0 || item0.status !== 'buy' || state.money < (item0.cost ?? Infinity)) return
     startPlacement(`pump-${state.pumps}`)
     return
   }
-  if (id === 'evcharger' && state.evChargers >= 4) {
+  if (id === 'evcharger' && (state.evChargers >= 4 || !defaultSlotFree('evcharger'))) {
     if (!item0 || item0.status !== 'buy' || state.money < (item0.cost ?? Infinity)) return
     startPlacement(`charger-${state.evChargers}`)
     return

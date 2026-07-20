@@ -555,7 +555,8 @@ export class Tanker {
         w.position.set(wx, wy, 0.32); g.add(w)
       }
     }
-    g.position.set(ROAD_X, -44, 0)
+    // yakın şeritte gel: ROAD_X (yol ortası) iki şeridi de bloke edip karşı trafiği kilitliyordu
+    g.position.set(LANE_NEAR, -44, 0)
     scene.add(g)
     this.group = g
     // tank nereye taşınırsa taşınsın: şeritten tank hizasına gel, en yakın kenara park et
