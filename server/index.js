@@ -267,7 +267,7 @@ function sanitizeSave(save) {
   s.evChargers = clamp(s.evChargers, 0, 8, 0)
   s.signLevel = clamp(s.signLevel, 0, 3, 0)
   s.tankLevel = clamp(s.tankLevel, 0, 3, 0)
-  s.marketLevel = clamp(s.marketLevel, 0, 2, 0)
+  s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
   s.toiletLevel = clamp(s.toiletLevel, 0, 2, 0)
   s.gridLevel = clamp(s.gridLevel, 0, 2, 0)
   s.batteryLevel = clamp(s.batteryLevel, 0, 3, 0)
@@ -275,8 +275,17 @@ function sanitizeSave(save) {
   s.uranium = clamp(s.uranium, 0, 100, 0)
   s.loginStreak = clamp(s.loginStreak, 0, 3650, 0)
   s.dailyServed = clamp(s.dailyServed, 0, 10000, 0)
+  // Tank kapasitesi = seviye hacmi × tank adedi (adet 1-4). Sabit 5000 clamp'i çok-tanklı
+  // oyuncunun dolu deposunu (20.000L'ye kadar) durduk yere 5000'e düşürüyordu.
+  const TANK_CAP = [800, 1500, 3000, 5000]
+  if (s.tankCounts && typeof s.tankCounts === 'object') {
+    for (const k of ['benzin', 'dizel', 'lpg']) s.tankCounts[k] = clamp(s.tankCounts[k], 1, 4, 1)
+  }
   if (s.tanks && typeof s.tanks === 'object') {
-    for (const k of ['benzin', 'dizel', 'lpg']) s.tanks[k] = clamp(s.tanks[k], 0, 5000, 0)
+    for (const k of ['benzin', 'dizel', 'lpg']) {
+      const cnt = (s.tankCounts && typeof s.tankCounts[k] === 'number') ? clamp(s.tankCounts[k], 1, 4, 1) : 1
+      s.tanks[k] = clamp(s.tanks[k], 0, TANK_CAP[s.tankLevel] * cnt, 0)
+    }
   }
   if (s.pendingCash && typeof s.pendingCash === 'object') {
     for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 600, 0)
