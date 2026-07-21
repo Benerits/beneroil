@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BenelOil — 1000 İstasyon</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1117; font-family: "Baloo 2", system-ui, sans-serif; }
+    #c { display: block; width: 100vw; height: 100vh; }
+    /* Teşekkür plakası — oyunun tabela dili (krem plaka + kırmızı) */
+    #thanks {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 1.1s ease;
+    }
+    #thanks.show { opacity: 1; }
+    .plate {
+      background: linear-gradient(180deg, #fdfaf2, #f1ebdb);
+      border: 3px solid #d8cbb3; border-bottom-width: 8px; border-radius: 30px;
+      padding: 44px 64px; text-align: center;
+      box-shadow: 0 30px 80px rgba(10,14,20,.55), inset 0 2px 0 rgba(255,255,255,.7);
+      transform: scale(.9); transition: transform 1.1s cubic-bezier(.2,1.3,.4,1);
+    }
+    #thanks.show .plate { transform: scale(1); }
+    .brand { color: #d64545; font-size: 30px; font-weight: 800; letter-spacing: 5px; }
+    .big { color: #1e2a36; font-size: 84px; font-weight: 800; line-height: 1; margin: 6px 0 2px; }
+    .sub { color: #7a6152; font-size: 26px; font-weight: 700; letter-spacing: 1px; margin-top: 10px; }
+    .tesekkur { color: #d64545; font-size: 46px; font-weight: 800; letter-spacing: 2px; margin-top: 18px; }
+    /* konfeti */
+    .confetti { position: fixed; top: -20px; width: 12px; height: 18px; opacity: 0; border-radius: 2px; }
+    /* alt bilgi / kontrol */
+    #hint { position: fixed; left: 14px; bottom: 12px; color: #ffffffaa; font-size: 13px; font-weight: 600;
+            background: #0009; padding: 6px 12px; border-radius: 10px; }
+    #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+               color: #f5ecda; font-size: 22px; font-weight: 700; background: #0d1117; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="thanks">
+    <div class="plate">
+      <div class="brand">BENELOIL</div>
+      <div class="big" id="t-count">1000</div>
+      <div class="sub" id="t-sub">İSTASYONUN HEPSİ BURADA</div>
+      <div class="tesekkur">TEŞEKKÜRLER ⛽</div>
+    </div>
+  </div>
+  <div id="hint">Otomatik oynatılıyor · <b>R</b> tekrar · <b>Boşluk</b> duraklat</div>
+  <div id="loading">İstasyonlar yükleniyor…</div>
+  <script type="module" src="/src/promo1k.ts"></script>
+</body>
+</html>
