@@ -47,13 +47,14 @@ let rcProducts: any[] = [] // RevenueCat StoreProduct nesneleri (satın almada g
  * RevenueCat panelinde ürün ID'leri PRODUCTS ile birebir aynı olmalı; remove_ads non-consumable,
  * coins_* consumable. (Efektleri oyun uyguluyor; RC yalnız ödeme + doğrulama katmanı.)
  */
-export async function initStore(apiKey?: string | null): Promise<void> {
+export async function initStore(apiKey?: string | null, appUserId?: string | null): Promise<void> {
   if (configured) return
   const P = rc()
   if (!P || !apiKey) return
   configured = true
   try {
-    await P.configure({ apiKey })
+    // appUserID = kullanıcının e-postası → sunucu satın almayı bu id ile RevenueCat'te doğrular
+    await P.configure(appUserId ? { apiKey, appUserID: appUserId } : { apiKey })
     const res = await P.getProducts({ productIdentifiers: PRODUCTS.map(p => p.id) })
     rcProducts = res?.products ?? []
     for (const rp of rcProducts) {
@@ -78,16 +79,18 @@ async function productFor(productId: string): Promise<any | null> {
  * Satın alma (RevenueCat). Temiz başarıda true → çağıran efekti uygular (grantProduct).
  * Kullanıcı iptal ederse / hata olursa false. Plugin yoksa false (buton zaten devre dışı).
  */
-export async function purchase(productId: string): Promise<boolean> {
+export async function purchase(productId: string): Promise<{ ok: boolean; transactionId?: string }> {
   const P = rc()
-  if (!P) return false
+  if (!P) return { ok: false }
   const product = await productFor(productId)
-  if (!product) return false
+  if (!product) return { ok: false }
   try {
     const r = await P.purchaseStoreProduct({ product })
-    // hata fırlatmadıysa satın alındı; iptalde plugin hata fırlatır (aşağıda yakalanır)
-    return !r?.userCancelled
-  } catch { return false } // userCancelled dahil tüm hatalar → efekt verme
+    if (r?.userCancelled) return { ok: false }
+    // sunucu doğrulaması için store transaction id (dedup/replay önleme)
+    const tx = r?.transaction?.transactionIdentifier ?? r?.transaction?.transactionId
+    return { ok: true, transactionId: tx ? String(tx) : undefined }
+  } catch { return { ok: false } } // userCancelled dahil tüm hatalar → efekt verme
 }
 
 /**

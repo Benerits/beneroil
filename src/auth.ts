@@ -48,8 +48,8 @@ export async function deleteAccount(): Promise<void> {
 }
 
 /** IAP efektini sunucu-otoriter uygula (hile-freni cap'ini bypass). Döner: {money, noAds}. */
-export async function iapGrant(productId: string): Promise<{ money: number; noAds: boolean }> {
-  const d = await api('/api/iap', 'POST', { productId })
+export async function iapGrant(productId: string, transactionId?: string): Promise<{ money: number; noAds: boolean }> {
+  const d = await api('/api/iap', 'POST', { productId, transactionId })
   return { money: Number(d.money) || 0, noAds: !!d.noAds }
 }
 
