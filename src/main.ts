@@ -528,18 +528,18 @@ function renderStore() {
 }
 async function openStore() {
   document.getElementById('officewrap')?.classList.remove('show')
-  await initStore(appConfig?.revenuecatIos)
+  await initStore(appConfig?.revenuecatIos, auth.currentEmail())
   renderStore()
   document.getElementById('storewrap')?.classList.add('show')
 }
-async function grantProduct(id: string) {
+async function grantProduct(id: string, transactionId?: string) {
   const p = PRODUCTS.find(x => x.id === id); if (!p) return
   if (p.kind === 'noads') {
-    try { await auth.iapGrant(id) } catch { /* offline: yine de yerelde aç */ }
+    try { await auth.iapGrant(id, transactionId) } catch { /* offline: yine de yerelde aç */ }
     state.noAds = true; setPremium(true)
     ui.toast(t('✅ Reklamlar kaldırıldı — teşekkürler!'), 'good')
   } else if (p.kind === 'coins' && p.coins) {
-    try { const r = await auth.iapGrant(id); state.money = r.money; lastRemotePush = Date.now() }
+    try { const r = await auth.iapGrant(id, transactionId); state.money = r.money; lastRemotePush = Date.now() }
     catch { state.money += p.coins }
     ui.toast(t('✅ +₺{0} kasana eklendi!', p.coins.toLocaleString('tr-TR')), 'good')
   }
@@ -552,8 +552,8 @@ document.getElementById('store-body')?.addEventListener('click', async e => {
   if (buy) {
     const pid = buy.dataset.pid!
     buy.disabled = true; buy.textContent = t('İşleniyor…')
-    const ok = await purchase(pid)
-    if (ok) await grantProduct(pid)
+    const r = await purchase(pid)
+    if (r.ok) await grantProduct(pid, r.transactionId)
     else { ui.toast(t('Satın alma tamamlanamadı.'), 'bad'); renderStore() }
     return
   }

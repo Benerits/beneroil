@@ -59,6 +59,11 @@ async function initDb() {
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_email_lower ON benzinlik_player (lower(email))`)
+  // IAP: verilmiş satın alma transaction'ları (replay/çift-verme önleme) — transaction_id PK ile idempotent
+  await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_iap_grant (
+    transaction_id text PRIMARY KEY, email text NOT NULL, product_id text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`)
   // sosyal giriş (Google/Apple): sağlayıcı kimliği ile hesap eşleştirme
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS google_id text`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS apple_id text`)
@@ -599,13 +604,55 @@ async function handleApi(req, res, url) {
     // TODO(prod): App Store receipt doğrulaması ekle (şu an demo: client bildirimini uygular).
     if (url === '/api/iap' && req.method === 'POST') {
       const email = auth(); if (!email) return
-      const { productId } = await readBody(req)
+      const { productId, transactionId } = await readBody(req)
       const COINS = { coins_5k: 5000, coins_20k: 20000, coins_75k: 75000 }
+      if (productId !== 'remove_ads' && !COINS[productId]) return json(res, 400, { error: 'Geçersiz ürün.' })
+
+      // ---- Güvenlik: satın almayı RevenueCat ile doğrula + transaction dedup (replay önleme) ----
+      // REVENUECAT_SECRET_KEY set ise PROD modu: doğrulanmadan asla verilmez (fail-closed).
+      // Key yoksa (pre-launch/dev) eski davranış korunur ama uyarı loglanır.
+      const RC_SECRET = process.env.REVENUECAT_SECRET_KEY || ''
+      if (RC_SECRET) {
+        // consumable (coins): transactionId zorunlu + dedup (replay önleme)
+        if (productId !== 'remove_ads') {
+          if (!transactionId) return json(res, 400, { error: 'transactionId gerekli.' })
+          const dup = await pool.query('SELECT 1 FROM benzinlik_iap_grant WHERE transaction_id=$1', [String(transactionId)])
+          if (dup.rowCount > 0) {
+            const cur = await pool.query('SELECT save FROM benzinlik_player WHERE email=$1', [email])
+            const s0 = cur.rows[0]?.save?.s || {}
+            return json(res, 200, { ok: true, already: true, money: Math.round(Number(s0.money) || 0), noAds: !!s0.noAds })
+          }
+        }
+        // RevenueCat'te bu app_user_id (= email) altında satın alma gerçekten var mı?
+        let sub = null
+        try {
+          const rcRes = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(email)}`,
+            { headers: { Authorization: `Bearer ${RC_SECRET}` } })
+          if (rcRes.ok) sub = (await rcRes.json())?.subscriber
+        } catch (e) { console.error('RevenueCat doğrulama hatası:', e) }
+        if (!sub) return json(res, 502, { error: 'Satın alma doğrulanamadı (RevenueCat).' })
+        if (productId === 'remove_ads') {
+          const ent = sub.entitlements || {}
+          const ok = !!(ent.remove_ads || ent.no_ads || ent.premium) || Array.isArray(sub.non_subscriptions?.remove_ads)
+          if (!ok) return json(res, 403, { error: 'Satın alma bulunamadı/doğrulanamadı.' })
+          // non-consumable → tekrar vermek zararsız (idempotent), dedup kaydı gerekmez
+        } else {
+          const arr = sub.non_subscriptions?.[productId]
+          const ok = Array.isArray(arr) && arr.some(x => x && (x.store_transaction_id === transactionId || x.id === transactionId))
+          if (!ok) return json(res, 403, { error: 'Satın alma bulunamadı/doğrulanamadı.' })
+          const ins = await pool.query(
+            'INSERT INTO benzinlik_iap_grant(transaction_id, email, product_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+            [String(transactionId), email, String(productId)])
+          if (ins.rowCount === 0) return json(res, 200, { ok: true, already: true })
+        }
+      } else {
+        console.warn('[IAP] REVENUECAT_SECRET_KEY yok — doğrulamasız grant (yalnız dev/pre-launch olmalı!)')
+      }
+
       const r = await pool.query('SELECT save FROM benzinlik_player WHERE email=$1', [email])
       const save = r.rows[0]?.save || { s: {} }; save.s = save.s || {}
       if (productId === 'remove_ads') save.s.noAds = true
-      else if (COINS[productId]) save.s.money = Math.round((Number(save.s.money) || 0) + COINS[productId])
-      else return json(res, 400, { error: 'Geçersiz ürün.' })
+      else save.s.money = Math.round((Number(save.s.money) || 0) + COINS[productId])
       await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now() WHERE email=$1', [email, JSON.stringify(save)])
       return json(res, 200, { ok: true, money: Math.round(Number(save.s.money) || 0), noAds: !!save.s.noAds })
     }
