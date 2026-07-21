@@ -551,9 +551,12 @@ export class Tanker {
   done = false
   unloading = false
 
-  private outY: number
-  constructor(scene: THREE.Scene, lib: ModelLib | null, fuel: FuelType = 'benzin', queueIdx = 0, target = new THREE.Vector3(TANK_POS.x, TANK_POS.y, 0), inY = APRON_IN_Y, outY = APRON_OUT_Y) {
-    this.outY = outY
+  // Kapı konumları CANLI okunur (snapshot değil): çıkış taşınırsa tanker eski
+  // noktaya gidip dönmez — güncel çıkışa yönelir. (Oyuncu "trafik" şikayeti fixi.)
+  private gateOutYFn: () => number
+  constructor(scene: THREE.Scene, lib: ModelLib | null, fuel: FuelType = 'benzin', queueIdx = 0, target = new THREE.Vector3(TANK_POS.x, TANK_POS.y, 0), gateInY: () => number = () => APRON_IN_Y, gateOutY: () => number = () => APRON_OUT_Y) {
+    this.gateOutYFn = gateOutY
+    const inY = gateInY()
     const tint = fuel === 'benzin' ? 0xa8d6b8 : fuel === 'dizel' ? 0xe3c49b : 0xaccdf0
     let g: THREE.Group
     if (lib?.tankerBase) {
@@ -632,10 +635,11 @@ export class Tanker {
         delivered = true
         this.unloading = false
         this.leaving = true
+        const outY = this.gateOutYFn() // canlı çıkış konumu (taşınmış olabilir)
         this.path = [
           new THREE.Vector3(4.2, this.group.position.y, 0), // düz doğuya, şeride çık
-          new THREE.Vector3(4.2, this.outY, 0),             // şerit boyunca çıkışa
-          new THREE.Vector3(LANE_NEAR, this.outY + 4, 0),
+          new THREE.Vector3(4.2, outY, 0),                  // şerit boyunca GÜNCEL çıkışa
+          new THREE.Vector3(LANE_NEAR, outY + 4, 0),
           new THREE.Vector3(LANE_NEAR, 44, 0),
         ]
       }
