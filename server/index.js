@@ -374,8 +374,17 @@ async function handleApi(req, res, url) {
       return json(res, 200, { ok: true })
     }
     if (url === '/api/config') {
+      // AdMob unit'leri env ile gelirse native onları kullanır; yoksa istemci TEST reklamlarını kullanır (public değerler)
+      const admob = {
+        iosInterstitial: process.env.ADMOB_IOS_INTERSTITIAL || null,
+        iosRewarded: process.env.ADMOB_IOS_REWARDED || null,
+        androidInterstitial: process.env.ADMOB_ANDROID_INTERSTITIAL || null,
+        androidRewarded: process.env.ADMOB_ANDROID_REWARDED || null,
+        testMode: process.env.ADMOB_TEST === '1' || undefined,
+      }
       return json(res, 200, {
         adsClient: process.env.ADSENSE_PUB || null,
+        admob: (admob.iosInterstitial || admob.androidInterstitial || admob.testMode) ? admob : undefined,
         googleClientId: process.env.GOOGLE_WEB_CLIENT_ID || null, // web GIS için (public)
         appleServicesId: process.env.APPLE_SERVICES_ID || null,   // web Apple JS için (public)
       })
