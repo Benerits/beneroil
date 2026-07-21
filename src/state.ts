@@ -110,6 +110,10 @@ export class GameState {
   partner: Partner = { active: false, remaining: 0, share: PARTNER_SHARE } // banka ortaklığı (teminatsız temerrüt)
   wagesPaid = 0 // muhasebe: toplam ödenen yovmiye
   fuelSpent = 0 // muhasebe: toplam yakıt alım gideri
+  /** muhasebe: son yakıt alımları (gün/yakıt/litre/tutar) — ofis geçmişi, son 40 kayıt */
+  fuelLog: { day: number; f: FuelType; liters: number; cost: number }[] = []
+  /** muhasebe: günlük yovmiye ödeme geçmişi (gün/tutar) — son 40 kayıt */
+  wageLog: { day: number; amount: number }[] = []
   noAds = false // "Reklamları Kaldır" satın alındı mı (IAP) — interstitial gösterilmez
   orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }> = {
     benzin: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
@@ -420,6 +424,8 @@ export class GameState {
     const cost = this.orderCost(f)
     this.money -= cost
     this.fuelSpent += cost // muhasebe
+    this.fuelLog.push({ day: this.day, f, liters: this.orderNeed(f), cost })
+    if (this.fuelLog.length > 40) this.fuelLog.shift()
     this.orders[f].pending = true
     this.orders[f].eta = ORDER_ETA
     this.orders[f].amount = this.orderNeed(f) // teslimatta bu kadar eklenecek (parti miktarı)
@@ -739,6 +745,8 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.stats = { ...s.stats, liters: { ...s.stats.liters } }
   out.facDaily = { ...s.facDaily }
   out.facTotal = { ...s.facTotal }
+  out.fuelLog = s.fuelLog.slice(-40)
+  out.wageLog = s.wageLog.slice(-40)
   out.autoChargers = [...s.autoChargers]
   out.autoPumps = [...s.autoPumps]
   out.prices = { ...s.prices }
@@ -767,6 +775,8 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.tanks && typeof data.tanks === 'object') Object.assign(s.tanks, data.tanks)
   if (data.tankCounts && typeof data.tankCounts === 'object') Object.assign(s.tankCounts, data.tankCounts)
   if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
+  if (Array.isArray(data.fuelLog)) s.fuelLog = (data.fuelLog as any[]).filter(x => x && typeof x.cost === 'number').slice(-40)
+  if (Array.isArray(data.wageLog)) s.wageLog = (data.wageLog as any[]).filter(x => x && typeof x.amount === 'number').slice(-40)
   if (data.facTotal && typeof data.facTotal === 'object') Object.assign(s.facTotal, data.facTotal)
   if (Array.isArray(data.autoChargers)) s.autoChargers = new Set((data.autoChargers as number[]).filter(n => Number.isInteger(n)))
   if (Array.isArray(data.autoPumps)) s.autoPumps = new Set((data.autoPumps as number[]).filter(n => Number.isInteger(n)))
