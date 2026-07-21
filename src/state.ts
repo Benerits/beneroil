@@ -110,6 +110,7 @@ export class GameState {
   partner: Partner = { active: false, remaining: 0, share: PARTNER_SHARE } // banka ortaklığı (teminatsız temerrüt)
   wagesPaid = 0 // muhasebe: toplam ödenen yovmiye
   fuelSpent = 0 // muhasebe: toplam yakıt alım gideri
+  noAds = false // "Reklamları Kaldır" satın alındı mı (IAP) — interstitial gösterilmez
   orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }> = {
     benzin: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
     dizel: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
@@ -727,7 +728,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent',
+  'wagesPaid', 'fuelSpent', 'noAds',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {

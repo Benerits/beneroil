@@ -573,6 +573,20 @@ async function handleApi(req, res, url) {
       const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1 RETURNING updated_at', [email, clean])
       return json(res, 200, { ok: true, updatedAt: upd.rows[0]?.updated_at })
     }
+    // IAP efektini SUNUCU-otoriter uygula (hile-freni cap'ini bypass eder; sonraki save tutarlı olur).
+    // TODO(prod): App Store receipt doğrulaması ekle (şu an demo: client bildirimini uygular).
+    if (url === '/api/iap' && req.method === 'POST') {
+      const email = auth(); if (!email) return
+      const { productId } = await readBody(req)
+      const COINS = { coins_5k: 5000, coins_20k: 20000, coins_75k: 75000 }
+      const r = await pool.query('SELECT save FROM benzinlik_player WHERE email=$1', [email])
+      const save = r.rows[0]?.save || { s: {} }; save.s = save.s || {}
+      if (productId === 'remove_ads') save.s.noAds = true
+      else if (COINS[productId]) save.s.money = Math.round((Number(save.s.money) || 0) + COINS[productId])
+      else return json(res, 400, { error: 'Geçersiz ürün.' })
+      await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now() WHERE email=$1', [email, JSON.stringify(save)])
+      return json(res, 200, { ok: true, money: Math.round(Number(save.s.money) || 0), noAds: !!save.s.noAds })
+    }
     // App Store 5.1.1(v): kullanıcı kendi hesabını uygulama içinden silebilmeli
     if (url === '/api/account' && req.method === 'DELETE') {
       const email = auth(); if (!email) return
