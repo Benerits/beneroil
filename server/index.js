@@ -387,6 +387,7 @@ async function handleApi(req, res, url) {
         admob: (admob.iosInterstitial || admob.androidInterstitial || admob.testMode) ? admob : undefined,
         googleClientId: process.env.GOOGLE_WEB_CLIENT_ID || null, // web GIS için (public)
         appleServicesId: process.env.APPLE_SERVICES_ID || null,   // web Apple JS için (public)
+        revenuecatIos: process.env.REVENUECAT_IOS_KEY || null,    // RevenueCat public SDK key (iOS) — IAP
       })
     }
     if (url === '/api/register' && req.method === 'POST') {

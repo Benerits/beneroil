@@ -1,12 +1,13 @@
 /**
- * Uygulama içi satın alma (IAP) altyapısı.
- *  - NATIVE (iOS): Capacitor IAP plugin'i üzerinden gerçek satın alma.
- *    (iOS repo'da @capacitor-community/in-app-purchases veya RevenueCat kurulur;
- *     ürün ID'leri App Store Connect'te tanımlanır. Kod plugin'i otomatik bulur,
- *     yoksa satın alma butonları "yakında" olarak devre dışı kalır.)
+ * Uygulama içi satın alma (IAP) altyapısı — RevenueCat.
+ *  - NATIVE (iOS): @revenuecat/purchases-capacitor üzerinden gerçek satın alma.
+ *    Kurulum (sende): 1) RevenueCat panelinde iOS app + public SDK key → sunucuda
+ *    REVENUECAT_IOS_KEY env. 2) App Store Connect'te ürünler PRODUCTS ID'leriyle
+ *    (remove_ads non-consumable, coins_* consumable). 3) RC panelinde ürünleri ekle
+ *    (remove_ads için 'remove_ads' entitlement önerilir). Key yoksa butonlar devre dışı.
  *  - WEB: IAP yok → satın alma devre dışı (yalnız uygulamada).
  *
- * Efektler (reklam kaldır / nakit) TAM implemente; yalnız plugin+key katmanı sende.
+ * Efektler (reklam kaldır / nakit) TAM implemente; yalnız RC key + ASC ürünleri sende.
  */
 import { isNativePlatform } from './platform'
 
@@ -27,61 +28,82 @@ export const PRODUCTS: Product[] = [
   { id: 'coins_75k', title: '75.000 ₺ Nakit', desc: 'Kasana anında +75.000 ₺ — en avantajlı paket.', kind: 'coins', coins: 75000, price: '₺99,99' },
 ]
 
-function iapPlugin(): any {
-  const P = (window as unknown as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins
-  return P?.InAppPurchases ?? P?.Purchases ?? P?.CdvPurchase ?? null
+// RevenueCat Capacitor plugin (@revenuecat/purchases-capacitor) → window.Capacitor.Plugins.Purchases
+function rc(): any {
+  return (window as unknown as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins?.Purchases ?? null
 }
 
-/** IAP kullanılabilir mi (native + plugin kurulu) */
+/** IAP kullanılabilir mi (native + RevenueCat plugin kurulu) */
 export function storeAvailable(): boolean {
-  return isNativePlatform() && !!iapPlugin()
+  return isNativePlatform() && !!rc()
 }
 
-let inited = false
-/** Store'u başlat + ürünleri (gerçek fiyatlarıyla) yükle. Plugin yoksa sessiz. */
-export async function initStore(): Promise<void> {
-  if (inited) return
-  const P = iapPlugin()
-  if (!P) return
-  inited = true
+let configured = false
+let rcProducts: any[] = [] // RevenueCat StoreProduct nesneleri (satın almada gerekli)
+
+/**
+ * RevenueCat'i başlat + ürünleri gerçek App Store fiyatlarıyla yükle.
+ * apiKey = /api/config → revenuecatIos (RevenueCat public SDK key). Yoksa sessizce pas geçer.
+ * RevenueCat panelinde ürün ID'leri PRODUCTS ile birebir aynı olmalı; remove_ads non-consumable,
+ * coins_* consumable. (Efektleri oyun uyguluyor; RC yalnız ödeme + doğrulama katmanı.)
+ */
+export async function initStore(apiKey?: string | null): Promise<void> {
+  if (configured) return
+  const P = rc()
+  if (!P || !apiKey) return
+  configured = true
   try {
-    // @capacitor-community/in-app-purchases şeması (gerekirse iOS repo'da uyarlanır)
-    if (P.getProducts) {
-      const res = await P.getProducts({ productIds: PRODUCTS.map(p => p.id) })
-      const list = res?.products ?? res ?? []
-      for (const rp of list) {
-        const local = PRODUCTS.find(p => p.id === (rp.id ?? rp.productId))
-        if (local && (rp.price ?? rp.priceString)) local.price = rp.price ?? rp.priceString
-      }
+    await P.configure({ apiKey })
+    const res = await P.getProducts({ productIdentifiers: PRODUCTS.map(p => p.id) })
+    rcProducts = res?.products ?? []
+    for (const rp of rcProducts) {
+      const local = PRODUCTS.find(p => p.id === rp.identifier)
+      if (local && rp.priceString) local.price = rp.priceString
     }
-  } catch { /* yok say */ }
+  } catch { /* yok say — butonlar varsayılan fiyatla kalır */ }
+}
+
+async function productFor(productId: string): Promise<any | null> {
+  let p = rcProducts.find(x => x.identifier === productId)
+  if (p) return p
+  try { // henüz yüklenmediyse tek ürünü çek
+    const res = await rc()?.getProducts({ productIdentifiers: [productId] })
+    p = (res?.products ?? [])[0]
+    if (p) rcProducts.push(p)
+  } catch { /* yok */ }
+  return p ?? null
 }
 
 /**
- * Satın alma. Başarılıysa true döner → çağıran efekti uygular (grantEffect).
- * Plugin yoksa false (buton zaten devre dışı olmalı).
+ * Satın alma (RevenueCat). Temiz başarıda true → çağıran efekti uygular (grantProduct).
+ * Kullanıcı iptal ederse / hata olursa false. Plugin yoksa false (buton zaten devre dışı).
  */
 export async function purchase(productId: string): Promise<boolean> {
-  const P = iapPlugin()
+  const P = rc()
   if (!P) return false
+  const product = await productFor(productId)
+  if (!product) return false
   try {
-    const fn = P.purchaseProduct ?? P.purchase ?? P.order
-    if (!fn) return false
-    const r = await fn.call(P, { productId })
-    // başarı sinyali plugin'e göre değişir; hata fırlatmadıysa satın alındı say
-    return r?.transaction?.transactionState !== 'failed' && r?.responseCode !== 'error'
-  } catch { return false }
+    const r = await P.purchaseStoreProduct({ product })
+    // hata fırlatmadıysa satın alındı; iptalde plugin hata fırlatır (aşağıda yakalanır)
+    return !r?.userCancelled
+  } catch { return false } // userCancelled dahil tüm hatalar → efekt verme
 }
 
-/** Satın almaları geri yükle (App Store zorunluluğu — non-consumable remove_ads için). */
+/**
+ * Satın almaları geri yükle (App Store zorunluluğu — non-consumable remove_ads için).
+ * RevenueCat customerInfo.allPurchasedProductIdentifiers'tan sahip olunan ID'leri döner.
+ */
 export async function restore(): Promise<string[]> {
-  const P = iapPlugin()
+  const P = rc()
   if (!P) return []
   try {
-    const fn = P.restorePurchases ?? P.restore
-    if (!fn) return []
-    const r = await fn.call(P)
-    const items = r?.purchases ?? r?.transactions ?? r ?? []
-    return items.map((x: any) => x.productId ?? x.id).filter(Boolean)
+    const r = await P.restorePurchases()
+    const ci = r?.customerInfo ?? r
+    const ids = new Set<string>(ci?.allPurchasedProductIdentifiers ?? [])
+    // entitlement adı panelde farklı olabilir → aktif entitlement'ları da remove_ads say
+    const active = ci?.entitlements?.active ?? {}
+    if (active['remove_ads'] || active['no_ads'] || active['premium']) ids.add('remove_ads')
+    return [...ids]
   } catch { return [] }
 }

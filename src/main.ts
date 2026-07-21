@@ -318,11 +318,13 @@ const [modelLib, staticLib] = await Promise.all([loadModels(), loadStatics()])
 const world = new World(staticLib)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
+let appConfig: any = null // /api/config yanıtı (RevenueCat key vb. lazy kullanım için)
 const isPromoMode = new URLSearchParams(location.search).has('promo')
 if (!isPromoMode) {
   const test = new URLSearchParams(location.search).has('adstest')
   beginAdSession()
   fetch('/api/config').then(r => r.json()).then(cfg => {
+    appConfig = cfg
     // native → AdMob (config'te gerçek unit yoksa TEST reklamları); web → AdSense (adsClient varsa)
     initAds({ adsensePub: cfg.adsClient, admob: cfg.admob, test })
   }).catch(() => { initAds({ test }) })
@@ -507,7 +509,7 @@ function renderStore() {
 }
 async function openStore() {
   document.getElementById('officewrap')?.classList.remove('show')
-  await initStore()
+  await initStore(appConfig?.revenuecatIos)
   renderStore()
   document.getElementById('storewrap')?.classList.add('show')
 }
