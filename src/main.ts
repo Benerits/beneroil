@@ -2175,7 +2175,7 @@ if (isFullMode) {
     if (buyItem(state, id)) buildVisual(id)
   }
   state.money = 50_000
-  for (const f of FUELS) state.tanks[f] = state.tankCapacity
+  for (const f of FUELS) state.tanks[f] = state.fuelCapacity(f)
   state.battery = state.batteryCapacity
   ui.toast('🧪 FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!', 'good')
 }
@@ -2418,9 +2418,9 @@ function buildingCard(id: string): BuildingCard | null {
         icon: 'i-tank', name: t('Yakıt Tankı'),
         desc: t('Sattığın benzin ve dizel buradan çıkar. Bitirmeden tanker siparişi vermeyi unutma.'),
         stats: [
-          [t('Benzin'), `${Math.round(state.tanks.benzin)} / ${state.tankCapacity}L`, state.tanks.benzin < state.tankCapacity * 0.15 ? 'bad' : ''],
-          [t('Dizel'), `${Math.round(state.tanks.dizel)} / ${state.tankCapacity}L`, state.tanks.dizel < state.tankCapacity * 0.15 ? 'bad' : ''],
-          [t('LPG'), `${Math.round(state.tanks.lpg)} / ${state.tankCapacity}L`, state.tanks.lpg < state.tankCapacity * 0.15 ? 'bad' : ''],
+          [t('Benzin'), `${Math.round(state.tanks.benzin)} / ${state.fuelCapacity('benzin')}L`, state.tanks.benzin < state.fuelCapacity('benzin') * 0.15 ? 'bad' : ''],
+          [t('Dizel'), `${Math.round(state.tanks.dizel)} / ${state.fuelCapacity('dizel')}L`, state.tanks.dizel < state.fuelCapacity('dizel') * 0.15 ? 'bad' : ''],
+          [t('LPG'), `${Math.round(state.tanks.lpg)} / ${state.fuelCapacity('lpg')}L`, state.tanks.lpg < state.fuelCapacity('lpg') * 0.15 ? 'bad' : ''],
           ['Kapasite seviyesi', `${state.tankLevel + 1}/4 (maks ${TANK_CAPACITY[3]}L)`],
         ],
         action: { label: t('🛢️ Yakıt Siparişi Ver'), maintId: 'open-order' },
