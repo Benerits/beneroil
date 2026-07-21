@@ -2856,6 +2856,9 @@ function nightFactor(t: number): number {
 
 function frame() {
   requestAnimationFrame(frame)
+  // sekme/uygulama arka planda: hesaplama+render durur (pil/CPU tasarrufu, ısınma azalır).
+  // dt zaten 0.05 ile capli → geri dönünce güvenli devam.
+  if (document.hidden) { clock.getDelta(); return }
   const dt = Math.min(clock.getDelta(), 0.05)
   promoTick?.(dt)
   if (exploding) { composer!.render(); return }
