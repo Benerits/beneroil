@@ -372,6 +372,17 @@ for (const w of Object.values(NAV_WRAPS)) {
 }
 document.getElementById('anglebtn')?.addEventListener('click', () => cycleCameraAngle())
 
+// Ofis muhasebe: son yakıt alımları (yeni→eski, en çok 8 kayıt)
+const FUEL_DOT: Record<string, string> = { benzin: '#27a05a', dizel: '#e8862e', lpg: '#2f6fed' }
+function accHistory(): string {
+  if (!state.fuelLog.length) return `<div class="acc-sec">${t('Yakıt alım geçmişi')}</div><div class="acc-empty">${t('Henüz yakıt siparişi verilmedi.')}</div>`
+  const rows = state.fuelLog.slice(-8).reverse().map(x =>
+    `<div class="acc-row"><span class="acc-day">${t('Gün')} ${x.day}</span>`
+    + `<span class="acc-fuel"><i style="background:${FUEL_DOT[x.f] ?? '#888'}"></i>${t(FUEL_LABEL[x.f])} ${x.liters.toLocaleString('tr-TR')}L</span>`
+    + `<span class="acc-cost">-₺${Math.round(x.cost).toLocaleString('tr-TR')}</span></div>`).join('')
+  return `<div class="acc-sec">${t('Yakıt alım geçmişi')}</div>${rows}`
+}
+
 // Ofis: finansal + performans özeti (salt-okunur) + istasyon aç/kapa
 function openOfficePanel() {
   // Navbar Ofis = bina kartıyla AYNI kapsamlı içerik: kasa + performans özeti + fiyat yönetimi.
@@ -392,12 +403,20 @@ function openOfficePanel() {
     const rev = Math.round(state.stats.revenue)
     const fuel = Math.round(state.fuelSpent), wage = Math.round(state.wagesPaid)
     const net = rev - fuel - wage
+    // dönem dökümü: son 30 oyun günü ("ay") gider/gelir
+    const since = state.day - 30
+    const perFuel = state.fuelLog.filter(x => x.day > since).reduce((a, x) => a + x.cost, 0)
+    const perWage = state.wageLog.filter(x => x.day > since).reduce((a, x) => a + x.amount, 0)
     acc.innerHTML =
       `<div class="stat"><span class="k">${t('Günlük yovmiye')}</span><span class="v ${state.dailyWages() ? 'bad' : ''}">₺${state.dailyWages().toLocaleString('tr-TR')}/gün</span></div>`
       + `<div class="stat"><span class="k">${t('Toplam yakıt alımı')}</span><span class="v bad">-₺${fuel.toLocaleString('tr-TR')}</span></div>`
       + `<div class="stat"><span class="k">${t('Toplam yovmiye')}</span><span class="v bad">-₺${wage.toLocaleString('tr-TR')}</span></div>`
       + `<div class="stat"><span class="k">${t('Toplam ciro')}</span><span class="v good">+₺${rev.toLocaleString('tr-TR')}</span></div>`
       + `<div class="stat"><span class="k">${t('Net (kaba)')}</span><span class="v ${net >= 0 ? 'good' : 'bad'}">₺${net.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="acc-sec">${t('Son 30 gün (giderler)')}</div>`
+      + `<div class="stat"><span class="k">${t('Yakıt alımı')}</span><span class="v bad">-₺${Math.round(perFuel).toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Yovmiye')}</span><span class="v bad">-₺${Math.round(perWage).toLocaleString('tr-TR')}</span></div>`
+      + accHistory()
   }
   document.getElementById('officewrap')?.classList.add('show')
 }
@@ -2914,7 +2933,7 @@ function frame() {
     ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
     const wages = state.dailyWages()
-    if (wages > 0) { state.money -= wages; state.wagesPaid += wages; ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
+    if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
     // kredi taksiti (aylık = 1 oyun günü)
     const loanRes = state.processLoanDay()
     if (loanRes === 'done') ui.toast(t('🏦 Kredi tamamen ödendi — teminatların serbest! 🎉'), 'good')
