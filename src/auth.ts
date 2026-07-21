@@ -47,6 +47,12 @@ export async function deleteAccount(): Promise<void> {
   logout()
 }
 
+/** IAP efektini sunucu-otoriter uygula (hile-freni cap'ini bypass). Döner: {money, noAds}. */
+export async function iapGrant(productId: string): Promise<{ money: number; noAds: boolean }> {
+  const d = await api('/api/iap', 'POST', { productId })
+  return { money: Number(d.money) || 0, noAds: !!d.noAds }
+}
+
 let _verifyRequired = false
 let _emailVerified = true
 /** e-posta doğrulaması gerekli mi (env açık + kullanıcı doğrulanmamış) */

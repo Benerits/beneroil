@@ -13,7 +13,8 @@ import { isNativePlatform } from './platform'
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
 import * as auth from './auth'
-import { initAds, adsEnabled, interstitial, rewarded } from './ads'
+import { initAds, adsEnabled, interstitial, rewarded, rewardedReady, setPremium, beginAdSession, mayShowInterstitial } from './ads'
+import { PRODUCTS, initStore, purchase, restore, storeAvailable } from './store'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
@@ -319,10 +320,12 @@ const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
 const isPromoMode = new URLSearchParams(location.search).has('promo')
 if (!isPromoMode) {
+  const test = new URLSearchParams(location.search).has('adstest')
+  beginAdSession()
   fetch('/api/config').then(r => r.json()).then(cfg => {
-    const test = new URLSearchParams(location.search).has('adstest')
-    if (cfg.adsClient || test) initAds(cfg.adsClient || 'ca-pub-0000000000000000', test)
-  }).catch(() => {})
+    // native → AdMob (config'te gerçek unit yoksa TEST reklamları); web → AdSense (adsClient varsa)
+    initAds({ adsensePub: cfg.adsClient, admob: cfg.admob, test })
+  }).catch(() => { initAds({ test }) })
 }
 let promoTick: ((dt: number) => void) | null = null
 const ui = new UI()
@@ -486,6 +489,59 @@ function openBank() {
   document.getElementById('bankwrap')?.classList.add('show')
 }
 document.getElementById('of-bank')?.addEventListener('click', () => openBank())
+
+// ---- Mağaza (IAP) ----
+function renderStore() {
+  const body = document.getElementById('store-body'); if (!body) return
+  const avail = storeAvailable()
+  let html = ''
+  if (!avail) html += `<div class="sd" style="text-align:center; padding:6px 4px 12px; line-height:1.5">${t('Satın almalar yalnızca iOS uygulamasında aktiftir (web önizleme).')}</div>`
+  html += PRODUCTS.map(p => {
+    const owned = p.kind === 'noads' && state.noAds
+    return `<div class="shoprow"><div class="sicon" style="color:#8a5cf6;background:#8a5cf61c;border-color:#8a5cf644"><svg class="ic"><use href="#${p.kind === 'noads' ? 'i-star' : 'i-coin'}"/></svg></div>`
+      + `<div class="sinfo"><div class="st">${p.title}</div><div class="sd">${p.desc}</div></div>`
+      + `<button class="btn sbuy ${p.kind === 'noads' ? 'primary' : 'good'} store-buy" data-pid="${p.id}" ${(!avail || owned) ? 'disabled' : ''}>${owned ? t('Sahipsin ✓') : p.price}</button></div>`
+  }).join('')
+  html += `<div class="row" style="margin-top:10px"><button class="btn" id="store-restore" style="flex:1; justify-content:center" ${avail ? '' : 'disabled'}>${t('Satın Alımları Geri Yükle')}</button></div>`
+  body.innerHTML = html
+}
+async function openStore() {
+  document.getElementById('officewrap')?.classList.remove('show')
+  await initStore()
+  renderStore()
+  document.getElementById('storewrap')?.classList.add('show')
+}
+async function grantProduct(id: string) {
+  const p = PRODUCTS.find(x => x.id === id); if (!p) return
+  if (p.kind === 'noads') {
+    try { await auth.iapGrant(id) } catch { /* offline: yine de yerelde aç */ }
+    state.noAds = true; setPremium(true)
+    ui.toast(t('✅ Reklamlar kaldırıldı — teşekkürler!'), 'good')
+  } else if (p.kind === 'coins' && p.coins) {
+    try { const r = await auth.iapGrant(id); state.money = r.money; lastRemotePush = Date.now() }
+    catch { state.money += p.coins }
+    ui.toast(t('✅ +₺{0} kasana eklendi!', p.coins.toLocaleString('tr-TR')), 'good')
+  }
+  persist(); renderStore()
+}
+document.getElementById('of-store')?.addEventListener('click', () => openStore())
+document.getElementById('storewrap')?.addEventListener('pointerdown', e => { if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show') })
+document.getElementById('store-body')?.addEventListener('click', async e => {
+  const buy = (e.target as HTMLElement).closest('button.store-buy') as HTMLButtonElement | null
+  if (buy) {
+    const pid = buy.dataset.pid!
+    buy.disabled = true; buy.textContent = t('İşleniyor…')
+    const ok = await purchase(pid)
+    if (ok) await grantProduct(pid)
+    else { ui.toast(t('Satın alma tamamlanamadı.'), 'bad'); renderStore() }
+    return
+  }
+  if ((e.target as HTMLElement).closest('#store-restore')) {
+    const ids = await restore()
+    if (ids.includes('remove_ads')) await grantProduct('remove_ads')
+    ui.toast(ids.length ? t('Satın alımlar geri yüklendi.') : t('Geri yüklenecek satın alma yok.'), ids.length ? 'good' : '')
+  }
+})
 document.getElementById('bankwrap')?.addEventListener('pointerdown', e => {
   if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show')
 })
@@ -1226,6 +1282,7 @@ let loadedSaveAt = 0
 function applySaveData(d: Record<string, unknown>) {
   loadedSaveAt = Number(d.at ?? 0)
   hydrateState(state, (d.s ?? {}) as Record<string, unknown>)
+  setPremium(state.noAds) // remove-ads satın alındıysa interstitial kapalı
   Object.assign(placedPos, (d.placedPos ?? {}) as Record<string, [number, number]>)
   Object.assign(placedRot, (d.placedRot ?? {}) as Record<string, number>)
   if (Array.isArray(d.placedRects)) placedRects.push(...(d.placedRects as (Rect & { id: string })[]).filter(r => r.id !== 'gatein' && r.id !== 'gateout'))
@@ -2523,35 +2580,60 @@ function refreshBuildingCard() {
 
 // ---- Ödüllü reklam: izle → müşteri patlaması ----
 const adBtn = document.getElementById('adbtn') as HTMLButtonElement
+const adBtnLabel = adBtn.querySelector('span') as HTMLSpanElement
 let adCooldown = 120 // ilk fırsat: 2. dakika (baştan değil, biraz ilerleyince)
+// fırsat-temelli ödüllü reklam teklifi (tycoon tarzı): müşteri patlaması VEYA gün kârını 2x
+let adOffer: { kind: 'rush' | 'double'; profit: number } = { kind: 'rush', profit: 0 }
+let doubleOfferT = 0 // 2x teklifi ekranda kalma süresi
+
+function showAdOffer(kind: 'rush' | 'double', profit = 0) {
+  adOffer = { kind, profit }
+  adBtnLabel.textContent = kind === 'double'
+    ? t('🎬 Reklam İzle: Günü 2x Yap (+₺{0})', profit.toLocaleString('tr-TR'))
+    : t('🎬 Reklam İzle: Müşteri Patlaması')
+  adBtn.style.display = 'flex'
+}
 adBtn.addEventListener('click', () => {
   adBtn.disabled = true
-  rewarded('musteri-patlamasi',
+  const offer = adOffer
+  rewarded(offer.kind === 'double' ? 'gun-2x' : 'musteri-patlamasi',
     () => {
-      state.promo = { type: 'rush', until: Date.now() + 90_000 }
-      ui.toast(t('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!'), 'good')
-      audio.achieve()
+      if (offer.kind === 'double') {
+        state.money += offer.profit
+        ui.toast(t('🎬 Günün kârı 2 katına çıktı: +₺{0}!', offer.profit.toLocaleString('tr-TR')), 'good')
+      } else {
+        state.promo = { type: 'rush', until: Date.now() + 90_000 }
+        ui.toast(t('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!'), 'good')
+      }
+      audio.achieve(); persist()
     },
     watched => {
       adBtn.disabled = false
       adBtn.style.display = 'none'
-      adCooldown = watched ? 420 : 90 // izlediyse 7 dk, vazgeçtiyse 1.5 dk sonra tekrar
+      doubleOfferT = 0
+      if (adOffer.kind === 'rush') adCooldown = watched ? 420 : 90 // izlediyse 7 dk, vazgeçtiyse 1.5 dk sonra tekrar
     })
 })
+/** gün sonu 2x-kâr fırsatı (kârlı gün + reklam varsa) — kısa süre görünür */
+function offerDoubleProfit(profit: number) {
+  if (!adsEnabled() || isFullMode || isPromoMode || profit <= 0) return
+  showAdOffer('double', profit)
+  doubleOfferT = 22 // 22 sn içinde izlemezsen kaçar
+}
 
 function tickAdOffer(dt: number) {
   if (!adsEnabled() || isFullMode || isPromoMode) return
-  if (adCooldown > 0) {
-    adCooldown -= dt
+  // 2x teklifi süreli
+  if (doubleOfferT > 0) {
+    doubleOfferT -= dt
+    if (doubleOfferT <= 0 && adOffer.kind === 'double') { adBtn.style.display = 'none'; adCooldown = 60 }
     return
   }
-  // teklif koşulu: promosyon yokken ve oyun biraz ilerlemişken
-  if (!state.promo && state.day >= 1 && adBtn.style.display === 'none') {
-    adBtn.style.display = 'flex'
-  }
-  if (state.promo && adBtn.style.display !== 'none') {
-    adBtn.style.display = 'none'
-    adCooldown = 300
+  if (adCooldown > 0) { adCooldown -= dt; return }
+  // periyodik müşteri-patlaması teklifi: promosyon yokken
+  if (!state.promo && state.day >= 1 && adBtn.style.display === 'none') showAdOffer('rush')
+  if (state.promo && adOffer.kind === 'rush' && adBtn.style.display !== 'none') {
+    adBtn.style.display = 'none'; adCooldown = 300
   }
 }
 
@@ -2843,7 +2925,11 @@ function frame() {
     if (document.getElementById('bankwrap')?.classList.contains('show')) renderBank()
     state.dayStartMoney = state.money
     state.facDaily = {}
-    if (state.day >= 3 && !isFullMode && !isPromoMode) interstitial('gun-sonu')
+    // gün sonu: policy interstitial'a izin veriyorsa forced reklam; vermiyorsa opt-in "günü 2x" fırsatı sun
+    if (!isFullMode && !isPromoMode) {
+      if (mayShowInterstitial(state.day, profit >= 0)) interstitial('gun-sonu', { day: state.day, won: profit >= 0 })
+      else offerDoubleProfit(profit)
+    }
     persist()
   }
   prevCycleT = cycleT
