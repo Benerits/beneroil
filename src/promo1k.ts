@@ -26,7 +26,7 @@ renderer.toneMappingExposure = 1.05
 
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0xbfe0ef) // açık gökyüzü
-scene.fog = new THREE.Fog(0xbfe0ef, 180, 560) // uzak istasyonlar zarifçe silinsin + derinlik
+scene.fog = new THREE.Fog(0xbfe0ef, 340, 950) // uzaklaşınca 1000 istasyon görünür kalsın, sadece çok uzak zarifçe silinsin
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 2000)
 
@@ -78,9 +78,12 @@ async function boot() {
     + (s.wash ? 15 : 0) + (s.oil ? 18 : 0) + (s.coffee ? 12 : 0) + (s.restaurant ? 22 : 0) + (s.truckpark ? 20 : 0)
     + (s.toilet ? 8 : 0) + s.solar * 12 + (s.smr ? 120 : 0) + s.battery * 10 + Math.min(200, s.money / 4000)
   stations.sort((a, b) => score(b) - score(a))
+  // 1000'e tamamla (gerçek konfigleri döngüyle çoğalt) — daha dolu alan + yuvarlak "1000"
+  const real = stations.length
+  if (real > 0) while (stations.length < 1000) stations.push(stations[stations.length % real])
   const N = stations.length
   document.getElementById('t-count')!.textContent = N.toLocaleString('tr-TR')
-  document.getElementById('t-sub')!.textContent = N === 1 ? 'İSTASYON BURADA' : 'İSTASYONUN HEPSİ BURADA'
+  document.getElementById('t-sub')!.textContent = 'OYUNCUYA ULAŞTIK 🎉'
 
   // phyllotaxis (ayçiçeği) yerleşimi: rank0=merkez, dışa doğru dairesel
   const SP = 6.6 // istasyonlar arası sıkışıklık
@@ -152,9 +155,10 @@ async function boot() {
 
 // ---- kamera sinematiği: kuşbakışı (hepsi) → merkeze zoom → teşekkür ----
 function runCinematic(fieldR: number) {
-  const wide = { pos: new THREE.Vector3(0, -fieldR * 1.05, fieldR * 1.15), look: new THREE.Vector3(0, 0, 2) }
-  const mid = { pos: new THREE.Vector3(0, -fieldR * 0.42, fieldR * 0.5), look: new THREE.Vector3(0, 0, 3) }
-  const close = { pos: new THREE.Vector3(0, -24, 15), look: new THREE.Vector3(0, -1, 3.5) }
+  // geniş açı 1000 istasyonun HEPSİNİ kadraja alacak kadar uzakta
+  const wide = { pos: new THREE.Vector3(0, -fieldR * 1.35, fieldR * 1.5), look: new THREE.Vector3(0, 0, 2) }
+  const mid = { pos: new THREE.Vector3(0, -fieldR * 0.5, fieldR * 0.55), look: new THREE.Vector3(0, 0, 3) }
+  const close = { pos: new THREE.Vector3(0, -22, 14), look: new THREE.Vector3(0, -1, 3.5) }
   const HOLD = 2.4, ZOOM = 9.0, END = HOLD + ZOOM
   const tmpP = new THREE.Vector3(), tmpL = new THREE.Vector3()
   const thanks = document.getElementById('thanks')!
@@ -168,9 +172,9 @@ function runCinematic(fieldR: number) {
     if (t < HOLD) phase = 0
     else phase = Math.min(1, (t - HOLD) / ZOOM)
     const e = phase < 0.5 ? 2 * phase * phase : 1 - Math.pow(-2 * phase + 2, 2) / 2 // easeInOutQuad
-    // iki kademeli lerp: wide→mid→close (daha sinematik derinlik)
-    if (e < 0.5) { const k = e / 0.5; tmpP.lerpVectors(wide.pos, mid.pos, k); tmpL.lerpVectors(wide.look, mid.look, k) }
-    else { const k = (e - 0.5) / 0.5; tmpP.lerpVectors(mid.pos, close.pos, k); tmpL.lerpVectors(mid.look, close.look, k) }
+    // iki kademeli lerp: close→mid→wide (YAKINDAN UZAĞA — sonda 1000 istasyon kadraja sığar)
+    if (e < 0.5) { const k = e / 0.5; tmpP.lerpVectors(close.pos, mid.pos, k); tmpL.lerpVectors(close.look, mid.look, k) }
+    else { const k = (e - 0.5) / 0.5; tmpP.lerpVectors(mid.pos, wide.pos, k); tmpL.lerpVectors(mid.look, wide.look, k) }
     camera.position.copy(tmpP); camera.lookAt(tmpL)
     // hafif sinematik yörünge dönüşü
     const orbit = 0.06 * Math.sin(t * 0.25)
