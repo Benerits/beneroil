@@ -293,7 +293,9 @@ function sanitizeSave(save) {
     }
   }
   if (s.pendingCash && typeof s.pendingCash === 'object') {
-    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 600, 0)
+    // kumbara cap'i tesis gelişmişliğine göre 1800'e kadar çıkabilir (istemci pendingCap);
+    // sabit 600 clamp'i geliştirilmiş kumbarayı senkronda kırpıyordu → 2500'e (güvenli tavan) çıkarıldı
+    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 2500, 0)
   }
   if (typeof s.stationName === 'string') s.stationName = s.stationName.slice(0, 14)
   if (s.prices && typeof s.prices === 'object') {
