@@ -350,6 +350,13 @@ for (const elx of document.querySelectorAll<HTMLElement>('#navbar .navbtn, #shee
   const sec = elx.id ? elx.id.replace('nav-', '') : elx.dataset.sec
   if (sec) elx.addEventListener('click', () => openSection(sec))
 }
+// Genişleyen FAB: ana buton menüyü aç/kapat; öğe seçilince veya dışarı dokununca kapanır.
+const fabNav = document.getElementById('navbar')
+document.getElementById('nav-fab')?.addEventListener('click', e => { e.stopPropagation(); fabNav?.classList.toggle('fab-open') })
+for (const b of document.querySelectorAll<HTMLElement>('#navbar .navbtn')) b.addEventListener('click', () => fabNav?.classList.remove('fab-open'))
+document.addEventListener('pointerdown', e => {
+  if (fabNav?.classList.contains('fab-open') && !fabNav.contains(e.target as Node)) fabNav.classList.remove('fab-open')
+})
 // Açık nav-section'ı izle → sekme şeridini göster/gizle + aktif sekmeyi işaretle + alt navbar'ı gizle.
 let sheetSyncQueued = false
 function syncSheetTabs() {
