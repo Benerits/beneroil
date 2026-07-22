@@ -1174,6 +1174,34 @@ ui.onOrderFuel = f => {
 }
 ui.onOrderQty = (f, d) => { state.adjustOrderQty(f, d) } // −/+ sipariş miktarı (fneed sonraki karede güncellenir)
 
+/** Karşı kapının (x≈10.3–12.9 bandı) verilen y'de mevcut bir karşı-yapıyla çakışıp çakışmadığı */
+function farGateBlockedAt(y: number): boolean {
+  return placedRects.some(p => {
+    if (p.id === 'gatein2' || p.id === 'gateout2') return false
+    const px0 = p.cx - p.w / 2, px1 = p.cx + p.w / 2
+    if (px1 < 10.3 || px0 > 12.9) return false // kapı x-bandıyla kesişmiyor
+    return Math.abs(p.cy - y) < 1.9 + p.d / 2
+  })
+}
+/** Tercih edilen y'den başlayıp mevcut karşı-yapıdan KAÇAN boş kapı y'si bul (avoidY'den ≥6 uzak) */
+function clearFarGateY(prefY: number, avoidY: number | null): number {
+  for (let step = 0; step <= 26; step += 2) {
+    for (const y of (step === 0 ? [prefY] : [prefY + step, prefY - step])) {
+      if (y < -22 || y > 22) continue
+      if (avoidY !== null && Math.abs(y - avoidY) < 6) continue
+      if (!farGateBlockedAt(y)) return y
+    }
+  }
+  return prefY // temiz yer yok (çok nadir) — varsayılana düş
+}
+/** Karşı istasyonu, kapıları mevcut karşı-yapılardan kaçıran boş y'lere kurarak aç */
+function enableFarStationClear() {
+  if (world.farStationOn) return
+  const inY = clearFarGateY(8, null)      // giriş üstte (+y), far araç güneye iner
+  const outY = clearFarGateY(-8, inY)     // çıkış altta (-y), girişten ≥6 uzak
+  world.enableFarStation(inY, outY)
+}
+
 /** satın alma sonrası sahnedeki görsel karşılığını kurar */
 function buildVisual(id: string, pos?: THREE.Vector2) {
   const base = id.split('#')[0]
@@ -1450,7 +1478,7 @@ function rebuildFromState() {
   // (Yalnız karşıya EKİPMAN koymuş oyuncular; sadece arsa/tesis olan mevcut oyuncular ETKİLENMEZ.)
   if (world.pumpSlots.slice(0, state.pumps).some(s => s.x > ROAD_X)
       || world.evSlots.slice(0, state.evChargers).some(s => s.x > ROAD_X)) {
-    world.enableFarStation()
+    enableFarStationClear()
   }
   world.setSign(state.signLevel, placedPos.sign ? new THREE.Vector2(placedPos.sign[0], placedPos.sign[1]) : undefined)
   if (state.wideGates) world.setWideGates(true)
@@ -1890,7 +1918,7 @@ function confirmPlacement() {
   placedRot[p.id] = p.rot
   // karşıya (yol karşısı) İLK pompa/şarj konunca karşı istasyon aktive olur: otomatik giriş-çıkış + karşı şerit trafiği
   if ((p.id.startsWith('pump-') || p.id.startsWith('charger-')) && p.cx > ROAD_X && !world.farStationOn) {
-    world.enableFarStation()
+    enableFarStationClear() // kapıları mevcut karşı-yapılardan kaçırarak kur
     ui.toast('🚧 Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.', 'good', true)
   }
   const i = placedRects.findIndex(r => r.id === p.id)
