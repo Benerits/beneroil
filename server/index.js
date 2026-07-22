@@ -308,6 +308,7 @@ function sanitizeSave(save) {
   // muhasebe log'ları: şişmeyi/abuse'ı önlemek için son 40 kayda kırp
   if (Array.isArray(s.fuelLog) && s.fuelLog.length > 40) s.fuelLog = s.fuelLog.slice(-40)
   if (Array.isArray(s.wageLog) && s.wageLog.length > 40) s.wageLog = s.wageLog.slice(-40)
+  if (Array.isArray(s.salesLog) && s.salesLog.length > 370) s.salesLog = s.salesLog.slice(-370)
   // parsel koordinatlarını doğrula: sınır dışı (0,4 gibi) key'ler client'ı açılışta crash ettiriyordu
   const validParcelKey = k => {
     const p = String(k).split(','); if (p.length !== 2) return false
