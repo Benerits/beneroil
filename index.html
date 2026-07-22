@@ -495,7 +495,8 @@
     #agerr { font-size: 12px; color: var(--red-dark); font-weight: 700; min-height: 15px; text-align: center; }
 
     /* ---------- Tanker takip paneli (sağ alt) ---------- */
-    #tankerpanel { position: fixed; right: 14px; bottom: 14px; z-index: 10; display: none;
+    /* sağ-alttaki "Sorun/Öneri Bildir" butonuyla çakışmasın diye tanker paneli onun ÜSTÜNE alınır */
+    #tankerpanel { position: fixed; right: 14px; bottom: 64px; z-index: 10; display: none;
                    flex-direction: column; gap: 6px; align-items: stretch; }
     .trow { background: var(--paper); border: 1.5px solid var(--edge); border-bottom-width: 3px;
             border-radius: var(--r-md); padding: 7px 12px; display: flex; align-items: center; gap: 8px;
