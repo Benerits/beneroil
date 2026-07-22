@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { World, ROAD_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
+import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import {
@@ -1479,6 +1479,9 @@ function rebuildFromState() {
   if (world.pumpSlots.slice(0, state.pumps).some(s => s.x > ROAD_X)
       || world.evSlots.slice(0, state.evChargers).some(s => s.x > ROAD_X)) {
     enableFarStationClear()
+    // oyuncu karşı kapıları TAŞIDIYSA kayıtlı konumlarına geri kur
+    if (placedPos.gatein2) world.buildGate('in', new THREE.Vector2(placedPos.gatein2[0], placedPos.gatein2[1]), 'far')
+    if (placedPos.gateout2) world.buildGate('out', new THREE.Vector2(placedPos.gateout2[0], placedPos.gateout2[1]), 'far')
   }
   world.setSign(state.signLevel, placedPos.sign ? new THREE.Vector2(placedPos.sign[0], placedPos.sign[1]) : undefined)
   if (state.wideGates) world.setWideGates(true)
@@ -1775,7 +1778,7 @@ function footprintOf(id: string, move = false): { w: number; d: number; grass?: 
   if (id.startsWith('pump-')) return { w: 4.4, d: 4.0 }
   if (id.startsWith('charger-')) return { w: 4.0, d: 2.6 }
   if (id === 'tank') return { w: 2.0, d: 2.0 } // CANLI/main ile birebir (save uyumu)
-  if (id === 'gatein' || id === 'gateout') return { w: 2.6, d: 3.4, grass: true }
+  if (id === 'gatein' || id === 'gateout' || id === 'gatein2' || id === 'gateout2') return { w: 2.6, d: 3.4, grass: true }
   return id in PLACEABLE ? PLACEABLE[id](move) : null
 }
 
@@ -1843,6 +1846,8 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
   else if (id === 'tank') world.moveTank(new THREE.Vector2(cx, cy))
   else if (id === 'gatein') { world.removeLampNear(cy); world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
   else if (id === 'gateout') { world.removeLampNear(cy); world.buildGate('out', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
+  else if (id === 'gatein2') { world.buildGate('in', new THREE.Vector2(cx, cy), 'far'); cars.rerouteForGates() }
+  else if (id === 'gateout2') { world.buildGate('out', new THREE.Vector2(cx, cy), 'far'); cars.rerouteForGates() }
   else {
     world.removeBuildingGroup(id)
     buildVisual(id, new THREE.Vector2(cx, cy))
@@ -1858,6 +1863,13 @@ function repositionPlacing(x: number, y: number) {
     placing.root.position.set(placing.cx, placing.cy, 0)
     const otherY = placing.id === 'gatein' ? world.gateOut.y : world.gateIn.y
     placing.valid = Math.abs(placing.cy - otherY) >= 5
+  } else if (placing.id === 'gatein2' || placing.id === 'gateout2') {
+    // karşı kapı yol karşısı kenarda sabit x'te (FAR_GATE_X), yalnız y ayarlanır; diğer kapıdan ≥5 uzak + karşı-yapıya binmesin
+    placing.cx = FAR_GATE_X
+    placing.cy = Math.max(-22, Math.min(22, Math.round(y)))
+    placing.root.position.set(placing.cx, placing.cy, 0)
+    const otherY = placing.id === 'gatein2' ? world.gateOut2.y : world.gateIn2.y
+    placing.valid = Math.abs(placing.cy - otherY) >= 5 && !farGateBlockedAt(placing.cy)
   } else if (placing.id === 'sign') {
     // tabela istasyon çevresinde / yol kenarında kalsın (çok uzağa taşınmasın)
     placing.cx = Math.max(-11, Math.min(6, Math.round(x)))
@@ -1904,7 +1916,7 @@ function confirmPlacement() {
     // Charger döndürülebilir: pozisyon + açı + araç yanaşma slotu birlikte kurulur.
     const idx = Number(p.id.slice('charger-'.length))
     world.moveCharger(idx, new THREE.Vector2(p.cx, p.cy), p.rot)
-  } else if (!p.id.startsWith('pump-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout') {
+  } else if (!p.id.startsWith('pump-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout' && p.id !== 'gatein2' && p.id !== 'gateout2') {
     world.rotateBuilding(p.id, p.rot)
   }
   placedPos[p.id] = [p.cx, p.cy]
@@ -1916,7 +1928,7 @@ function confirmPlacement() {
   }
   const i = placedRects.findIndex(r => r.id === p.id)
   if (i >= 0) placedRects.splice(i, 1)
-  if (p.id !== 'gatein' && p.id !== 'gateout') {
+  if (p.id !== 'gatein' && p.id !== 'gateout' && p.id !== 'gatein2' && p.id !== 'gateout2') {
     const odd = p.rot % 2 === 1
     placedRects.push({ id: p.id, cx: p.cx, cy: p.cy, w: odd ? p.d : p.w, d: odd ? p.w : p.d })
   }
@@ -1949,7 +1961,7 @@ function confirmZone() {
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') cancelPlacement()
   if ((e.key === 'r' || e.key === 'R') && placing) {
-    if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
+    if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
       ui.toast('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.', '')
       return
     }
@@ -2191,7 +2203,7 @@ connectLive()
     document.getElementById('mv-rot')?.addEventListener('click', () => {
       if (!placing) return
       // pompa/tank/kapı yönü sabittir (araç yanaşması) — mobilde de döndürülemez (klavye ile aynı)
-      if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
+      if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
         ui.toast(t('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.'), '')
         return
       }
@@ -2601,6 +2613,18 @@ function buildingCard(id: string): BuildingCard | null {
           : undefined,
       }
     }
+    case 'gatein2':
+      return {
+        icon: 'i-move', name: t('Karşı Giriş Kapısı'),
+        desc: t('Karşı (yol karşısı) istasyona müşteriler buradan girer. Taşı ile yol kenarında yerini ayarla.'),
+        stats: [['Kural', t('Çıkışla arası en az 5 birim')]],
+      }
+    case 'gateout2':
+      return {
+        icon: 'i-move', name: t('Karşı Çıkış Kapısı'),
+        desc: t('Karşı istasyondan araçlar buradan çıkıp yola karışır. Taşı ile yerini belirle.'),
+        stats: [['Kural', t('Girişle arası en az 5 birim')]],
+      }
     case 'sign':
       return {
         icon: 'i-sign', name: t('Tabela'),
