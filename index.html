@@ -137,11 +137,11 @@
       /* ana tetikleyici — yakıt ikonu, açılınca X'e cross-fade + hafif nabız halkası */
       .fab-main { position: absolute; left: 0; bottom: 0; width: 62px; height: 62px; z-index: 3; cursor: pointer;
         display: flex; align-items: center; justify-content: center; border-radius: 50%;
-        background: radial-gradient(120% 120% at 50% 22%, #ee6a6a, var(--red) 68%); color: #fff4ec;
-        border: 2px solid var(--red-dark); border-bottom-width: 5px;
-        box-shadow: 0 10px 22px rgba(178,52,52,.4), inset 0 2px 0 rgba(255,255,255,.28);
-        transition: transform .12s, border-bottom-width .12s; -webkit-tap-highlight-color: transparent; }
-      .fab-main:active { transform: translateY(2.5px); border-bottom-width: 2.5px; }
+        background: radial-gradient(130% 130% at 50% 20%, #f07373, var(--red)); color: #fff4ec;
+        border: 1.5px solid var(--red-dark);
+        box-shadow: 0 0 0 3px rgba(214,69,69,.14), 0 10px 22px rgba(178,52,52,.42), inset 0 2px 0 rgba(255,255,255,.3);
+        transition: transform .12s; -webkit-tap-highlight-color: transparent; }
+      .fab-main:active { transform: translateY(2px); }
       .fab-main::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2.5px solid var(--red);
         opacity: 0; animation: fabpulse 2.8s ease-out infinite; }
       .navbar.fab-open .fab-main::after { animation: none; opacity: 0; }
@@ -150,27 +150,27 @@
       .fab-main .ic-close { opacity: 0; transform: rotate(-90deg) scale(.5); }
       .navbar.fab-open .fab-main .ic-open { opacity: 0; transform: rotate(90deg) scale(.5); }
       .navbar.fab-open .fab-main .ic-close { opacity: 1; transform: none; }
-      /* öğeler — tabela plakaları (ikon + minik etiket), yay şeklinde açılır */
-      .navbtn { position: absolute; left: 6px; bottom: 8px; width: 52px; height: 52px; z-index: 2; cursor: pointer;
-        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0;
-        font-family: var(--font); border-radius: 17px; color: #5a6470;
-        background: linear-gradient(180deg, #fffdf8, #efe7d6); border: 1.5px solid #e4dcc9; border-bottom: 3.5px solid #cfc4ab;
-        box-shadow: 0 7px 16px rgba(34,48,60,.22), inset 0 1.5px 0 rgba(255,255,255,.85);
+      /* öğeler — candy-emboss yuvarlaklar (ikon + minik etiket), yay şeklinde açılır */
+      .navbtn { position: absolute; left: 6px; bottom: 6px; width: 52px; height: 52px; z-index: 2; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0;
+        font-family: var(--font); border-radius: 50%; color: #8a7c62;
+        background: radial-gradient(130% 130% at 50% 22%, #fffdf9, #eee4d0); border: 1.5px solid #e7dec9;
+        box-shadow: inset 0 2px 3px rgba(255,255,255,.95), inset 0 -3px 5px rgba(198,182,150,.42), 0 5px 13px rgba(34,48,60,.2);
         opacity: 0; pointer-events: none; transform: translate(0,0) scale(.4);
-        transition: transform .42s cubic-bezier(.34,1.56,.64,1), opacity .2s, border-bottom-width .08s, background .12s, color .12s;
+        transition: transform .42s cubic-bezier(.34,1.56,.64,1), opacity .2s, background .12s, color .12s;
         -webkit-tap-highlight-color: transparent; }
-      .navbtn .ic { width: 21px; height: 21px; }
-      .navbtn span { display: block; font-size: 7.5px; font-weight: 800; letter-spacing: .01em; color: #8a8478; line-height: 1; white-space: nowrap; }
-      .navbtn:active { border-bottom-width: 1.5px; }
+      .navbtn .ic { width: 22px; height: 22px; }
+      .navbtn span { display: block; font-size: 7px; font-weight: 800; letter-spacing: .01em; color: #a89a80; line-height: 1; white-space: nowrap; margin-top: 1px; }
+      .navbtn:active { transform: translateY(1.5px) scale(1); }
       .navbar.fab-open .navbtn { opacity: 1; pointer-events: auto; }
       .navbar.fab-open .navbtn:nth-child(1) { transform: translate(0, -160px) scale(1); transition-delay: .05s; }
       .navbar.fab-open .navbtn:nth-child(2) { transform: translate(61px, -148px) scale(1); transition-delay: .1s; }
       .navbar.fab-open .navbtn:nth-child(3) { transform: translate(113px, -113px) scale(1); transition-delay: .15s; }
       .navbar.fab-open .navbtn:nth-child(4) { transform: translate(148px, -61px) scale(1); transition-delay: .2s; }
       .navbar.fab-open .navbtn:nth-child(5) { transform: translate(160px, 0) scale(1); transition-delay: .25s; }
-      /* aktif bölüm: kırmızı marka vurgusu */
-      .navbtn.on { background: linear-gradient(180deg, #ec6a6a, var(--red)); color: #fff; border-color: var(--red-dark);
-        box-shadow: 0 7px 16px rgba(178,52,52,.32), inset 0 1px 0 rgba(255,255,255,.3); }
+      /* aktif bölüm: kırmızı candy + yumuşak glow */
+      .navbtn.on { color: #fff; background: radial-gradient(130% 130% at 50% 20%, #f07373, var(--red)); border-color: var(--red-dark);
+        box-shadow: 0 0 0 3px rgba(214,69,69,.16), 0 6px 16px rgba(214,69,69,.42); }
       .navbtn.on span { color: #ffeaea; }
 
       /* ---- Uygulama-sheet: bir bölüm açıkken alt navbar gizlenir; sekmeler ÜSTTE, içerik altta (mobil-app hissi) ---- */
