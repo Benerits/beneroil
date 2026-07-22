@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BenelOil — İstasyonunu Bul</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1117; font-family: "Baloo 2", system-ui, sans-serif; }
+    #c { display: block; width: 100vw; height: 100vh; }
+    /* üst başlık — oyunun tabela dili */
+    #head {
+      position: fixed; top: 26px; left: 50%; transform: translateX(-50%); text-align: center;
+      background: linear-gradient(180deg, #fdfaf2, #f1ebdb); border: 2.5px solid #d8cbb3; border-bottom-width: 6px;
+      border-radius: 20px; padding: 14px 34px; box-shadow: 0 14px 40px rgba(10,14,20,.4);
+    }
+    #head .b { color: #d64545; font-size: 18px; font-weight: 800; letter-spacing: 3px; }
+    #head .q { color: #1e2a36; font-size: 30px; font-weight: 800; margin-top: 2px; }
+    /* alt orta: aktif istasyonun stat kartı (isim YOK) */
+    #stat {
+      position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; justify-content: center; max-width: 92vw;
+    }
+    .chip {
+      background: linear-gradient(180deg, #fdfaf2, #f1ebdb); border: 1.5px solid #d8cbb3; border-bottom-width: 4px;
+      border-radius: 14px; padding: 9px 15px; text-align: center; box-shadow: 0 8px 22px rgba(10,14,20,.32); min-width: 84px;
+    }
+    .chip .k { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; color: #7a8290; }
+    .chip .v { font-size: 22px; font-weight: 800; color: #1e2a36; line-height: 1.05; font-variant-numeric: tabular-nums; }
+    .chip .v.red { color: #d64545; }
+    .chip.fac { min-width: 0; padding: 9px 13px; }
+    .chip.fac .v { font-size: 20px; letter-spacing: 2px; }
+    #hint { position: fixed; left: 14px; bottom: 12px; color: #ffffffb0; font-size: 12px; font-weight: 600;
+            background: #0009; padding: 5px 11px; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="head"><div class="b">BENELOIL</div><div class="q">Kendi istasyonunu bulabildin mi? 👀</div></div>
+  <div id="stat"></div>
+  <div id="hint"><b>↑/↓</b> hız · <b>Boşluk</b> duraklat</div>
+  <script type="module" src="/src/promostrip.ts"></script>
+</body>
+</html>

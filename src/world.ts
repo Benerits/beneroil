@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { StaticLib, fitModel } from './models'
-import { PARCEL_COLS, PARCEL_ROWS } from './state'
+import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
 // Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
@@ -10,6 +10,8 @@ import { PARCEL_COLS, PARCEL_ROWS } from './state'
 export const ROAD_X = 7.9
 export const LANE_NEAR = 6.95
 export const LANE_FAR = 8.85
+/** Karşı (yol karşısı) istasyonun kapı x'i — near kapı 4.2'nin ROAD_X etrafında aynası (15.8-4.2). */
+export const FAR_GATE_X = 11.6
 export const PUMP_SLOTS_POS = [
   new THREE.Vector3(1.8, -2.2, 0), new THREE.Vector3(1.8, 2.2, 0),
   new THREE.Vector3(1.8, -14, 0), new THREE.Vector3(1.8, -18, 0),
@@ -289,14 +291,15 @@ export class World {
       }, undefined, () => {})
       return mat
     }
-    const grassMat = aiGround('/gen/ground_grass.png', 18, 20,
+    const grassMat = aiGround('/gen/ground_grass.png', 40, 44,
       noiseTex('#86b06a', [['#79a25e', 900], ['#93bd77', 900], ['#6d9454', 300]], 30))
     this.concreteMat = aiGround('/gen/ground_concrete.png', 2.5, 4.5,
       noiseTex('#9aa1a9', [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 8))
-    const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 38,
+    const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 84,
       noiseTex('#4a5058', [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(190, 170), grassMat)
+    // zemin geniş tutulur: mobilde en fazla uzaklaşıldığında bile kenarı görünüp arka plan (gök) sızmasın
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(720, 660), grassMat)
     ground.position.x = 8
     ground.receiveShadow = true
     s.add(ground)
@@ -310,21 +313,22 @@ export class World {
 
     // yol (arada yeşil bant kalır) + şerit çizgileri
     // gidiş-geliş yol: çift sarı orta çizgi + şerit içi beyaz kesikler + kenar çizgileri
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 100), roadMat)
+    // yol uzatıldı (100→220): zoom-out yapınca yolun bittiği görünmesin
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 220), roadMat)
     road.position.set(ROAD_X, 0, 0.01)
     road.receiveShadow = true
     s.add(road)
     for (const off of [-0.1, 0.1]) {
-      const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 100), lam(0xe0b13e))
+      const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 220), lam(0xe0b13e))
       center.position.set(ROAD_X + off, 0, 0.022)
       s.add(center)
     }
     for (const off of [-2.16, 2.16]) {
-      const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 100), lam(0xe8e4d8))
+      const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 220), lam(0xe8e4d8))
       edgeLine.position.set(ROAD_X + off, 0, 0.02)
       s.add(edgeLine)
     }
-    for (let y = -48; y < 49; y += 5) {
+    for (let y = -108; y < 109; y += 5) {
       for (const off of [-1.1, 1.1]) {
         const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 1.5), lam(0xd9d5c9))
         dash.position.set(ROAD_X + off, y, 0.02)
@@ -609,9 +613,9 @@ export class World {
     }
   }
 
-  private makeApron(y: number) {
+  private makeApron(y: number, x = 5.5) {
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(1.3, this.wideGates ? 6.2 : 3.4), this.concreteMat)
-    apron.position.set(5.5, y, 0.014)
+    apron.position.set(x, y, 0.014)
     apron.receiveShadow = true
     this.scene.add(apron)
     return apron
@@ -646,36 +650,85 @@ export class World {
     }
     this.roadEdgeMeshes.push(this.makeApron(this.gateIn.y))
     this.roadEdgeMeshes.push(this.makeApron(this.gateOut.y))
+    // karşı istasyon rampaları (yol karşısı, x≈10.3 = 5.5'in ROAD_X aynası)
+    if (this.farStationOn) {
+      this.roadEdgeMeshes.push(this.makeApron(this.gateIn2.y, 10.3))
+      this.roadEdgeMeshes.push(this.makeApron(this.gateOut2.y, 10.3))
+    }
   }
 
-  private addSphereTank(x: number, y: number, R = 1.15, bandColor = 0xd64545) {
+  /** Saydam küre tank + içeride yakıt seviyesi (kırpma düzlemiyle alttan dolar). Dönen mesh = iç sıvı.
+   *  KONUM/BOYUT (x,y yarıçap R) CANLI/main ile BİREBİR → footprint aynı, komşu binalarla çakışmaz. */
+  private addSphereTank(x: number, y: number, R: number, color: number): THREE.Mesh {
     const g = new THREE.Group()
-    const sp = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 18), lam(0xdfe3e8))
-    sp.position.z = R + 0.55
-    sp.castShadow = true
-    g.add(sp)
-    const band = new THREE.Mesh(new THREE.TorusGeometry(R * 0.97, 0.05, 8, 28), lam(bandColor))
-    band.position.z = R + 0.55
-    g.add(band)
+    const centerZ = R + 0.55           // küre merkezi main ile aynı yükseklikte
+    const fillR = R * 0.9
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 18),
+      new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.42, depthWrite: false }))
+    shell.position.z = centerZ
+    shell.castShadow = true
+    g.add(shell)
+    // iç sıvı: yatay düzlemle kırpılır → alttan yukarı dolar (%50 = yarım küre)
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), centerZ - fillR)
+    const fillMat = lam(color)
+    fillMat.clippingPlanes = [plane]
+    fillMat.clipShadows = true
+    const fill = new THREE.Mesh(new THREE.SphereGeometry(fillR, 24, 18), fillMat)
+    fill.position.z = centerZ
+    fill.castShadow = true
+    g.add(fill)
+    const cap = new THREE.Mesh(new THREE.CircleGeometry(1, 28),
+      new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }))
+    cap.position.z = centerZ - fillR
+    cap.visible = false
+    g.add(cap)
+    fill.userData = { plane, cap, fillR, centerZ }
+    // ayaklar/valf — main ile aynı yerleşim (footprint korunur)
     for (const [lx, ly] of [[0.6, 0.6], [0.6, -0.6], [-0.6, 0.6], [-0.6, -0.6]] as const) {
       cyl(0.09, R + 0.35, 0x8f979e, lx * (R / 1.15), ly * (R / 1.15), (R + 0.35) / 2, 'z', g)
     }
     cyl(0.05, 0.45, 0x8f979e, 0, 0, R * 2 + 0.6, 'z', g)
     g.position.set(x, y, 0)
     this.tankGroup.add(g)
+    return fill
   }
 
-  /** seviye arttıkça küre sayısı, boyutu ve kuşak rengi değişir */
+  /** KONUMLAR CANLI/main ile BİREBİR (spots, level+1 küre, R) → footprint aynı, eski save'lerle çakışmaz.
+   *  Görsel: saydam + içeride yakıt seviyesi. Küreler yakıtlara eşlenir (benzin/dizel/lpg döngüsel). */
   buildTankCluster(level: number) {
     this.tankLevelNow = level
+    this.tankFillMeshes = { benzin: [], dizel: [], lpg: [] }
     for (const ch of [...this.tankGroup.children]) {
       if (!(ch as THREE.Sprite).isSprite) this.tankGroup.remove(ch)
     }
     this.tankGroup.position.set(this.tankAnchor.x, this.tankAnchor.y, 0)
     const spots: [number, number][] = [[0, 0], [0, 0.9], [0.9, 0], [0.9, 0.9]]
     const R = 0.4 + level * 0.04
-    const bandColor = [0xd64545, 0x2f6fed, 0xe8862e, 0x39424e][level]
-    for (let i = 0; i <= level; i++) this.addSphereTank(spots[i][0], spots[i][1], R, bandColor)
+    const colors: Record<FuelType, number> = { benzin: 0x27a05a, dizel: 0xe8862e, lpg: 0x2f6fed }
+    const fuels: FuelType[] = ['benzin', 'dizel', 'lpg']
+    for (let i = 0; i <= level; i++) {
+      const f = fuels[i % 3]
+      const fill = this.addSphereTank(spots[i][0], spots[i][1], R, colors[f])
+      this.tankFillMeshes[f].push(fill)
+    }
+  }
+
+  /** Her yakıtın doluluk oranıyla (0..1) sıvı seviyesini alttan yukarı ayarlar. */
+  updateTankFill(ratios: Record<FuelType, number>) {
+    for (const f of ['benzin', 'dizel', 'lpg'] as FuelType[]) {
+      const r = Math.max(0, Math.min(1, ratios[f] || 0))
+      for (const m of this.tankFillMeshes[f]) {
+        const ud = m.userData as { plane: THREE.Plane; cap: THREE.Mesh; fillR: number; centerZ: number }
+        if (!ud?.plane) continue
+        const surfaceZ = ud.centerZ + ud.fillR * (2 * r - 1)
+        ud.plane.constant = surfaceZ
+        m.visible = r > 0.001
+        const crossR = ud.fillR * Math.sqrt(Math.max(0, 1 - (2 * r - 1) ** 2))
+        ud.cap.visible = r > 0.02 && r < 0.99
+        ud.cap.position.z = surfaceZ
+        ud.cap.scale.setScalar(Math.max(0.0001, crossR))
+      }
+    }
   }
 
   /** tank kümesini taşı (merkezden çapaya çevirir) */
@@ -702,26 +755,42 @@ export class World {
     }
   }
 
+  // sokak lambaları izlenir → kapı (giriş/çıkış) üzerine gelince kaldırılabilir
+  private lamps: { x: number; y: number; group: THREE.Group; bulbMat: THREE.Material; light: THREE.PointLight }[] = []
   private placeLamp(x: number, y: number) {
+    const lg = new THREE.Group()
     if (this.statics?.lamp) {
       const l = fitModel(this.statics.lamp, 3.4, 'z')
       l.position.set(x, y, 0)
       l.rotation.z = Math.PI
       l.traverse(m => { m.castShadow = true })
-      this.scene.add(l)
+      lg.add(l)
     } else {
-      buildLampProc(x, y, this.scene)
+      buildLampProc(x, y, lg)
     }
     // gece yanan ampul + gerçek ışık kaynağı
     const bulbMat = glow(0xfff3c4, 0.05)
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), bulbMat)
     bulb.position.set(x + 0.6, y, 3.0)
-    this.scene.add(bulb)
+    lg.add(bulb)
     this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner: 'lamp' })
     const light = new THREE.PointLight(0xffd9a0, 0, 18, 1.7)
     light.position.set(x + 0.6, y, 3.2)
-    this.scene.add(light)
+    lg.add(light)
     this.nightLights.push(light)
+    this.scene.add(lg)
+    this.lamps.push({ x, y, group: lg, bulbMat, light })
+  }
+
+  /** kapı yerleştirilen y'ye yakın sokak lambasını kaldır (giriş/çıkış üstünde lamba kalmasın) */
+  removeLampNear(y: number, dy = 2.6) {
+    this.lamps = this.lamps.filter(l => {
+      if (Math.abs(l.y - y) > dy) return true
+      this.scene.remove(l.group)
+      this.nightMats = this.nightMats.filter(m => m.mat !== l.bulbMat)
+      this.nightLights = this.nightLights.filter(li => li !== l.light)
+      return false
+    })
   }
 
   private placePlanter(x: number, y: number) {
@@ -739,6 +808,19 @@ export class World {
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
   gateIn = new THREE.Vector2(4.2, APRON_IN_Y)
   gateOut = new THREE.Vector2(4.2, APRON_OUT_Y)
+  /** karşı istasyon kapıları — far araç GÜNEYE gittiği için giriş yukarıda (+y), çıkış aşağıda (-y):
+   *  near'ın (ROAD_X,0) etrafında 180° dönmüşü. Yalnızca karşı parsel claim'lenince kurulur. */
+  gateIn2 = new THREE.Vector2(FAR_GATE_X, APRON_OUT_Y)
+  gateOut2 = new THREE.Vector2(FAR_GATE_X, APRON_IN_Y)
+  farStationOn = false
+  /** Karşıya ilk pompa/şarj konunca otomatik giriş-çıkış kapılarını kurar (bir kez).
+   *  inY/outY: çağıran (main) mevcut karşı-yapılardan KAÇAN boş y'leri geçirir → kapı build üstüne binmez. */
+  enableFarStation(inY = APRON_OUT_Y, outY = APRON_IN_Y) {
+    if (this.farStationOn) return
+    this.farStationOn = true
+    this.buildGate('in', new THREE.Vector2(FAR_GATE_X, inY), 'far')
+    this.buildGate('out', new THREE.Vector2(FAR_GATE_X, outY), 'far')
+  }
   /** geniş giriş/çıkış: kapı ağzı, rampa ve bordür boşluğu büyür */
   wideGates = false
   setWideGates(on: boolean) {
@@ -748,6 +830,7 @@ export class World {
     this.buildGate('out') // buildGate bordürü de yeniden kurar
   }
   private tankLevelNow = 0
+  private tankFillMeshes: Record<FuelType, THREE.Mesh[]> = { benzin: [], dizel: [], lpg: [] }
 
   /** beton derzleri: hepsi YOLA DİK (x ekseni boyunca), dünya gridine hizalı —
    *  komşu betonlarda çizgi aynı hizada devam eder, bütünlük bozulmaz */
@@ -884,18 +967,19 @@ export class World {
   }
 
   /** istasyon giriş/çıkış kapısı — oyuncu yerini belirler, trafik buna uyar */
-  buildGate(kind: 'in' | 'out', pos?: THREE.Vector2) {
-    const id = kind === 'in' ? 'gatein' : 'gateout'
-    const v = kind === 'in' ? this.gateIn : this.gateOut
-    if (pos) v.set(4.2, pos.y)
+  buildGate(kind: 'in' | 'out', pos?: THREE.Vector2, side: 'near' | 'far' = 'near') {
+    const far = side === 'far'
+    const id = (kind === 'in' ? 'gatein' : 'gateout') + (far ? '2' : '')
+    const v = far ? (kind === 'in' ? this.gateIn2 : this.gateOut2) : (kind === 'in' ? this.gateIn : this.gateOut)
+    if (pos) v.set(far ? FAR_GATE_X : 4.2, pos.y)
     this.removeBuildingGroup(id)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(2.6, this.wideGates ? 6.2 : 3.4), lam(0x565e66))
     pad.position.z = 0.024
     pad.receiveShadow = true
     g.add(pad)
-    // yön oku: giriş istasyona (-x), çıkış yola (+x) bakar
-    const dir = kind === 'in' ? -1 : 1
+    // yön oku: giriş istasyona, çıkış yola bakar. Near istasyon batıda (in→-x); far istasyon doğuda → ok tersine döner.
+    const dir = (kind === 'in' ? -1 : 1) * (far ? -1 : 1)
     const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.34), lam(0xe8e4d8))
     shaft.position.set(-dir * 0.35, 0, 0.03)
     g.add(shaft)
@@ -1049,7 +1133,9 @@ export class World {
 
   addPump(index: number, at?: THREE.Vector2) {
     const base = at ?? new THREE.Vector2(0, PUMP_SLOTS_POS[Math.min(index, 3)].y)
-    this.pumpSlots[index] = new THREE.Vector3(base.x + 1.8, base.y, 0)
+    // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında (-1.8), ünite 180° döner.
+    const far = base.x > ROAD_X
+    this.pumpSlots[index] = new THREE.Vector3(base.x + (far ? -1.8 : 1.8), base.y, 0)
     const g = new THREE.Group()
     box(1.7, 3.4, 0.2, 0xc7ccd1, 0, 0, 0.1, g)
     box(1.75, 3.45, 0.05, 0xe0b13e, 0, 0, 0.02, g)
@@ -1059,6 +1145,7 @@ export class World {
     p.position.z = 0.2
     g.add(p)
     g.position.set(base.x, base.y, 0)
+    if (far) g.rotation.z = Math.PI // nozül batıya (araç tarafına) baksın
     this.scene.add(g)
     this.register(`pump-${index}`, t('POMPA #{0}', index + 1), g, 2.5)
   }
@@ -1068,9 +1155,14 @@ export class World {
     this.addPump(index, at)
   }
 
-  addEvCharger(index: number, at?: THREE.Vector2) {
+  addEvCharger(index: number, at?: THREE.Vector2, rot = 0) {
     const base = at ?? new THREE.Vector2(0.7, EV_SLOTS_POS[Math.min(index, 3)].y)
-    this.evSlots[index] = new THREE.Vector3(base.x + 1.1, base.y, 0)
+    // Araç yanaşma noktası varsayılan sağda (+1.1). Ünite döndükçe bu offset de döner,
+    // böylece araç her zaman ünitenin şarj kablosu tarafından yanaşır.
+    const ang = rot * Math.PI / 2
+    // karşı istasyonda yanaşma batıdan (araç yuvası batıda) — x ofseti terslenir
+    const evFlip = base.x > ROAD_X ? -1 : 1
+    this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.1 * evFlip, base.y + Math.sin(ang) * 1.1, 0)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({
       color: 0x2f8fd6, transparent: true, opacity: 0.28,
@@ -1086,13 +1178,14 @@ export class World {
     cyl(0.03, 0.5, 0x23272b, 0.15, 0.3, 0.6, 'z', g)
     box(0.1, 0.08, 0.2, 0x35c7d6, 0.15, 0.3, 0.35, g)
     g.position.set(base.x, base.y, 0)
+    g.rotation.z = ang
     this.scene.add(g)
     this.register(`charger-${index}`, t('DC ŞARJ #{0}', index + 1), g, 2.3)
   }
 
-  moveCharger(index: number, at: THREE.Vector2) {
+  moveCharger(index: number, at: THREE.Vector2, rot = 0) {
     this.removeBuildingGroup(`charger-${index}`)
-    this.addEvCharger(index, at)
+    this.addEvCharger(index, at, rot)
   }
 
   setStationName(name: string) {
@@ -1100,9 +1193,11 @@ export class World {
     this.setSign(this.signLevel)
   }
 
-  setSign(level: number) {
+  signPos = new THREE.Vector2(4.0, -11.5) // taşınabilir tabela konumu
+  setSign(level: number, pos?: THREE.Vector2) {
     this.signLevel = level
-    if (this.signGroup) this.scene.remove(this.signGroup)
+    if (pos) this.signPos.copy(pos)
+    if (this.signGroup) { this.scene.remove(this.signGroup); this.unregister('sign') }
     const g = new THREE.Group()
     const H = [2.4, 3.2, 4.2, 5.4][level]
     const pw = [1.5, 1.9, 2.4, 3.0][level]
@@ -1162,9 +1257,18 @@ export class World {
       g.add(panel)
     }
     if (level >= 3) box(pw + 0.3, 0.22, 0.18, 0xe0b13e, 0, 0, H + ph + 0.15, g)
-    g.position.set(4.0, -11.5, 0)
+    // Görünmez tıklama hedefi: ince+yüksek tabela mobilde raycast'i ıskalıyordu; tüm gövdeyi kaplayan
+    // saydam kutu (çizilmez ama raycast edilir) sayesinde tabelaya güvenle tıklanır (fiyat panelini açar).
+    const hit = new THREE.Mesh(
+      new THREE.BoxGeometry(pw + 0.7, 1.5, H + ph),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    )
+    hit.position.set(0, 0, (H + ph) / 2)
+    g.add(hit)
+    g.position.set(this.signPos.x, this.signPos.y, 0)
     this.scene.add(g)
     this.signGroup = g
+    this.register('sign', t('TABELA'), g, H + ph + 0.6) // tıklanabilir + etiketli (taşınabilir)
   }
 
   buildMarket(level: number, pos?: THREE.Vector2) {
@@ -1193,6 +1297,7 @@ export class World {
     })
     sign.position.set(level >= 2 ? 1.7 : 1.4, 0, H + 0.35)
     g.add(sign)
+    if (level >= 3) box(3.0, 0.5, 0.18, 0xe0b13e, level >= 2 ? 1.7 : 1.4, 0, H + 0.74, g) // Sv.3: altın şerit (premium)
     const fx = level >= 2 ? 2.3 : 1.6
     this.facadeLights(g, [[fx, -1.1, 1.0], [fx, 1.1, 1.0]], 1.2, 0.8)
     g.position.set(at.x, at.y, 0)

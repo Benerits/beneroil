@@ -12,6 +12,13 @@ export function priceBounds(f: FuelType): [number, number] {
   return [Math.ceil(FUEL_COST[f]), Math.round(FUEL_COST[f] * 2.2)]
 }
 export const ORDER_ETA = 25 // saniye
+// Banka/kredi: aylık %3 faiz (1 taksit = 1 oyun günü), 12 taksit; teminat = varlık değerinin %50'si
+export const LOAN_RATE = 0.03
+export const ADVANCE_RATE = 0.05 // teminatsız avans: daha yüksek faiz (risk primi)
+export const LOAN_TERMS = 12
+export const PARTNER_SHARE = 0.25 // teminatsız borç ödenmezse banka günlük kârın %25'ine ortak olur
+export type Loan = { active: boolean; principal: number; monthly: number; remaining: number; overdue: number; collateral: string[]; rate: number }
+export type Partner = { active: boolean; remaining: number; share: number }
 export const FILL_RATE = 7 // L/sn
 export const SPILL_PENALTY_PER_L = 3
 export const WRONG_FUEL_PENALTY = 300
@@ -31,8 +38,13 @@ export const WIDEGATE_COST = 6000
  *  pompacının tek "maliyeti" işe alma + oyuncunun bahşişten feragat etmesidir (manuel
  *  servis hâlâ bahşişle daha kârlı, ama pompacı yetişemediğin pompayı net kâra çevirir). */
 export const POMPACI_HIRE = 800
+export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) işe alma bedeli
+export const POMPACI_WAGE = 120       // pompacı GÜNLÜK yovmiyesi (her oyun günü kasadan)
+export const EV_ATTENDANT_WAGE = 150  // şarjcı günlük yovmiyesi
 const TANK_COSTS = [3000, 7000, 15000]
-const MARKET_COSTS = [7000, 12000]
+export const MAX_TANKS_PER_FUEL = 4
+export const TANK_ADD_COSTS = [0, 6000, 12000, 20000] // index = mevcut adet → 2., 3., 4. tankın maliyeti
+const MARKET_COSTS = [7000, 12000, 20000] // 3 seviye: kur → Sv.2 → Sv.3 (yerinde, aynı footprint)
 const TOILET_COSTS = [2500, 5000]
 const LAND_COST = 6000
 const GRID_COSTS = [8000, 15000]
@@ -94,15 +106,30 @@ export class GameState {
   /** yakıt türü başına ayrı yer altı tankı */
   tanks: Record<FuelType, number> = { benzin: 250, dizel: 150, lpg: 100 }
   /** yakıt türü başına ayrı sipariş/tanker takibi */
-  orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean }> = {
-    benzin: { pending: false, eta: 0, arrived: false, delivering: false },
-    dizel: { pending: false, eta: 0, arrived: false, delivering: false },
-    lpg: { pending: false, eta: 0, arrived: false, delivering: false },
+  loan: Loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+  partner: Partner = { active: false, remaining: 0, share: PARTNER_SHARE } // banka ortaklığı (teminatsız temerrüt)
+  wagesPaid = 0 // muhasebe: toplam ödenen yovmiye
+  fuelSpent = 0 // muhasebe: toplam yakıt alım gideri
+  /** muhasebe: son yakıt alımları (gün/yakıt/litre/tutar) — ofis geçmişi, son 40 kayıt */
+  fuelLog: { day: number; f: FuelType; liters: number; cost: number }[] = []
+  /** muhasebe: günlük yovmiye ödeme geçmişi (gün/tutar) — son 40 kayıt */
+  wageLog: { day: number; amount: number }[] = []
+  /** muhasebe: günlük satış cirosu (gün/ciro) — dönemsel satış/kâr için, son ~370 kayıt */
+  salesLog: { day: number; rev: number }[] = []
+  /** o günün başındaki toplam ciro (günlük satış = stats.revenue - dayStartRevenue) */
+  dayStartRevenue = 0
+  noAds = false // "Reklamları Kaldır" satın alındı mı (IAP) — interstitial gösterilmez
+  orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }> = {
+    benzin: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
+    dizel: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
+    lpg: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
   }
 
   pumps = 1
   signLevel = 0
   tankLevel = 0
+  /** yakıt başına fiziksel tank adedi (kapasite çarpanı) — additive, eski kayıtta default 1 */
+  tankCounts: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
   marketLevel = 0
   toiletLevel = 0
 
@@ -209,6 +236,8 @@ export class GameState {
   exploded = false
 
   get tankCapacity() { return TANK_CAPACITY[this.tankLevel] }
+  /** yakıt başına kapasite = seviye kapasitesi (CANLI/main ile birebir; per-fuel adet devre dışı — save uyumu) */
+  fuelCapacity(_f: FuelType): number { return TANK_CAPACITY[this.tankLevel] }
   get batteryCapacity() { return BATTERY_CAP[this.batteryLevel] }
 
   /** elektrik fiyatının EV müşteri talebine etkisi (1.0 = nötr) */
@@ -223,21 +252,21 @@ export class GameState {
       && this.battery < this.batteryCapacity - 0.01
   }
 
-  /** anlık üretim gücü kWh/sn (kir, yakıt vs. dahil) */
-  /** şebekeden gelen kWh/sn (faturalı) */
+  /** şebekeden gelen kWh/sn (faturalı taban) */
   gridRate() {
     return this.gridLevel >= 1 ? 2 * (this.gridLevel >= 2 ? 1.3 : 1) : 0
   }
-
-  genRate() {
+  /** BEDAVA üretim kWh/sn: güneş + reaktör + jeneratör (altyapı Sv.2 bonusu dahil) */
+  freeRate() {
     let r = 0
-    if (this.gridLevel >= 1) r += 2 // şebeke: altyapı varsa temel akış
     if (this.solarCount > 0) r += 3 * this.solarCount * (1 - 0.7 * this.solarDirt)
     if (this.dieselRunning()) r += 7
     if (this.hasSMR && this.uranium > 0) r += 15
-    if (this.gridLevel >= 2) r *= 1.3
+    if (this.gridLevel >= 2) r *= 1.3 // altyapı bonusu bedava üretimi de güçlendirir
     return r
   }
+  /** anlık toplam üretim gücü kWh/sn (bedava + şebeke) */
+  genRate() { return this.freeRate() + this.gridRate() }
 
   tick(dt: number) {
     for (const f of FUELS) {
@@ -253,12 +282,14 @@ export class GameState {
     // batarya şarjı
     if (this.batteryLevel > 0 && this.battery < this.batteryCapacity) {
       const before = this.battery
-      const total = this.genRate()
+      const free = this.freeRate(), grid = this.gridRate(), total = free + grid
       this.battery = Math.min(this.batteryCapacity, this.battery + total * dt)
       const added = this.battery - before
-      // şebeke payı faturalanır — santral üretimi bedava, o yüzden daha kârlı
+      // ŞEBEKE yalnız BEDAVA üretimin (solar/reaktör/jeneratör) KARŞILAMADIĞI payı faturalar.
+      // Solar üretimi şebeke tabanını (2 kWh/sn) karşılıyorsa fatura 0 → "solar var santral çekmiyor".
       if (added > 0 && total > 0) {
-        this.money -= added * Math.min(1, this.gridRate() / total) * GRID_COST_PER_KWH
+        const billedRate = Math.max(0, grid - free)
+        if (billedRate > 0) this.money -= added * (billedRate / total) * GRID_COST_PER_KWH
       }
       if (this.dieselRunning()) {
         this.tanks.dizel = Math.max(0, this.tanks.dizel - DIESEL_GEN_FUEL_PER_S * dt)
@@ -378,7 +409,12 @@ export class GameState {
     return Math.min(0.95, Math.max(0.08, c))
   }
 
-  orderNeed(f: FuelType) { return Math.floor(this.tankCapacity - this.tanks[f]) }
+  /** Sipariş miktar çarpanı (× 800L parti). 1 = minimum (en düşük tank hacmi); + ile full'e kadar step. */
+  orderQty: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
+  orderMaxQty(f: FuelType) { return Math.max(1, Math.ceil((this.fuelCapacity(f) - this.tanks[f]) / TANK_CAPACITY[0])) }
+  adjustOrderQty(f: FuelType, d: number) { this.orderQty[f] = Math.min(this.orderMaxQty(f), Math.max(1, this.orderQty[f] + d)) }
+  /** Sipariş miktarı = çarpan × 800L, kalan boşlukla capli. Min 800L (level-1 hacmi), full'e kadar step'lenebilir. */
+  orderNeed(f: FuelType) { return Math.floor(Math.min(this.orderQty[f] * TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f])) }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     return Math.ceil(this.orderNeed(f) * FUEL_COST[f] * disc)
@@ -391,14 +427,103 @@ export class GameState {
 
   placeOrder(f: FuelType) {
     if (!this.canOrder(f)) return false
-    this.money -= this.orderCost(f)
+    const cost = this.orderCost(f)
+    this.money -= cost
+    this.fuelSpent += cost // muhasebe
+    this.fuelLog.push({ day: this.day, f, liters: this.orderNeed(f), cost })
+    if (this.fuelLog.length > 40) this.fuelLog.shift()
     this.orders[f].pending = true
     this.orders[f].eta = ORDER_ETA
+    this.orders[f].amount = this.orderNeed(f) // teslimatta bu kadar eklenecek (parti miktarı)
     return true
   }
 
   deliverFuel(f: FuelType) {
-    this.tanks[f] = this.tankCapacity
+    // sipariş edilen partiyi ekle (tam doldurma değil); kapasiteyi aşma
+    const add = this.orders[f].amount || this.orderNeed(f)
+    this.tanks[f] = Math.min(this.fuelCapacity(f), this.tanks[f] + add)
+    this.orders[f].amount = 0
+  }
+
+  // ---- Banka / kredi ----
+  /** teminat değeri = varlığın %50 iade (market) değeri */
+  collateralValue(id: string): number { return sellInfo(this, id)?.refund ?? 0 }
+  /** teminat gösterilebilir varlıklar (demirbaş=pompa/tank hariç; her tesis türü tek kalem) */
+  eligibleCollateral(): { id: string; label: string; value: number }[] {
+    const c: [string, string][] = [
+      ['market', t('Market')], ['toilet', t('Tuvalet')], ['battery', t('Batarya Deposu')],
+      ['wash', t('Oto Yıkama')], ['oil', t('Yağ Değişimi')], ['coffee', t('Kahveci')],
+      ['restaurant', t('Restoran')], ['truckpark', t('Tır Parkı')], ['dieselgen', t('Jeneratör')], ['smr', t('Reaktör')],
+    ]
+    if (this.evChargers > 0) c.push([`charger#${this.evChargers - 1}`, t('DC Şarj')])
+    if (this.solarCount > 0) c.push([`solar#${this.solarCount - 1}`, t('Güneş Santrali')])
+    if (this.parkingCount > 0) c.push([`parking#${this.parkingCount - 1}`, t('Otopark')])
+    if (this.selfWashCount > 0) c.push([`selfwash#${this.selfWashCount - 1}`, t('Self Yıkama')])
+    if (this.airWaterCount > 0) c.push([`airwater#${this.airWaterCount - 1}`, t('Hava-Su Ünitesi')])
+    const out: { id: string; label: string; value: number }[] = []
+    for (const [id, label] of c) { const v = this.collateralValue(id); if (v > 0) out.push({ id, label, value: v }) }
+    return out
+  }
+  /** günlük toplam yovmiye (pompacı + şarjcı) — her oyun günü kasadan çekilir */
+  dailyWages(): number { return this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE }
+  loanMonthly(principal: number, rate = LOAN_RATE): number {
+    const n = LOAN_TERMS
+    return Math.ceil(principal * rate / (1 - Math.pow(1 + rate, -n)))
+  }
+  /** teminatsız avans limiti — herkes çekebilir; itibar + oyun günüyle küçük ölçüde büyür */
+  advanceLimit(): number {
+    return Math.min(6000, Math.round((800 + this.reputation * 500 + Math.min(this.day, 25) * 120) / 100) * 100)
+  }
+  takeLoan(principal: number, collateral: string[], rate = LOAN_RATE): boolean {
+    if (this.loan.active || this.partner.active || principal <= 0) return false
+    const p = Math.round(principal)
+    this.loan = { active: true, principal: p, monthly: this.loanMonthly(p, rate), remaining: LOAN_TERMS, overdue: 0, collateral: [...collateral], rate }
+    this.money += p
+    return true
+  }
+  /** teminatsız avans (asset gerekmez, küçük, yüksek faiz) */
+  takeAdvance(principal: number): boolean {
+    return this.takeLoan(Math.min(principal, this.advanceLimit()), [], ADVANCE_RATE)
+  }
+  loanPayoff(): number { return this.loan.active ? this.loan.monthly * this.loan.remaining : 0 }
+  repayLoanFull(): boolean {
+    if (!this.loan.active || this.money < this.loanPayoff()) return false
+    this.money -= this.loanPayoff(); this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+    return true
+  }
+  /** her oyun günü çağrılır: taksiti kasadan tahsil et; üst üste 2 gecikme + para yetmezse 'seize' (haczi/ortaklığı çağıran yapar) */
+  processLoanDay(): 'done' | 'seize' | 'warn' | 'ok' | null {
+    const l = this.loan
+    if (!l.active) return null
+    l.overdue += 1
+    while (l.overdue > 0 && l.remaining > 0 && this.money >= l.monthly) {
+      this.money -= l.monthly; l.remaining -= 1; l.overdue -= 1
+    }
+    if (l.remaining <= 0) { l.active = false; return 'done' }
+    if (l.overdue >= 2) return 'seize'
+    if (l.overdue === 1) return 'warn'
+    return 'ok'
+  }
+  /** teminatsız temerrüt: banka istasyona ortak olur (kalan borç × 1.3'ü kâr payından tahsil edilir) */
+  startPartnership() {
+    const debt = Math.max(1, this.loan.monthly * this.loan.remaining)
+    this.partner = { active: true, remaining: Math.round(debt * 1.3), share: PARTNER_SHARE }
+    this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+  }
+  /** gün sonu: ortaklık aktifse günlük kârdan payı al; borç bitince ortaklık sona erer. Döner: 'ended' | 'cut' | null */
+  applyPartnerCut(dayProfit: number): { kind: 'ended' | 'cut'; amount: number } | null {
+    if (!this.partner.active) return null
+    const cut = Math.min(this.partner.remaining, Math.max(0, Math.round(dayProfit * this.partner.share)))
+    if (cut > 0) { this.money -= cut; this.partner.remaining -= cut }
+    if (this.partner.remaining <= 0) { this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }; return { kind: 'ended', amount: cut } }
+    return { kind: 'cut', amount: cut }
+  }
+  /** ortaklığı peşin kapat (kalan borç payını öde) */
+  buyoutPartner(): boolean {
+    if (!this.partner.active || this.money < this.partner.remaining) return false
+    this.money -= this.partner.remaining
+    this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }
+    return true
   }
 
   /** tesis geliri: doğrudan kasaya + günlük ciroya işlenir */
@@ -409,10 +534,29 @@ export class GameState {
   }
 
   /** tesise para biriktir (kumbara dolarsa haber ver) */
+  /** Kumbara hacmi tesisin gelişmişliğine göre büyür (getiriyle AYNI oranda):
+   *  market seviyeyle, self-yıkama/hava-su/otopark adetle; tek-seviyeli tesisler
+   *  gelir düzeylerine göre sabit. Böylece geliştirilen market daha çok biriktirir. */
+  pendingCap(id: string): number {
+    switch (id) {
+      case 'market': return 600 * Math.max(1, this.marketLevel)                          // gelir ×level → cap ×level
+      case 'toilet': return 500 * Math.max(1, this.toiletLevel)                          // seviyeyle büyür
+      case 'selfwash': return 400 * Math.min(5, Math.max(1, this.selfWashCount))
+      case 'airwater': return 250 * Math.min(6, Math.max(1, this.airWaterCount))
+      case 'parking': return 300 * Math.min(6, Math.max(1, this.parkingCount))
+      case 'truckpark': return 1200   // pasif yüksek kazanan
+      case 'restaurant': return 1200  // ₺80-160/ziyaret
+      case 'oil': return 1000         // ₺150-250/servis
+      case 'wash': return 700         // ₺60-120/yıkama
+      case 'coffee': return 500       // düşük getiri
+      default: return 600
+    }
+  }
+
   addPending(id: string, amt: number, name: string) {
     this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
     this.facTotal[id] = (this.facTotal[id] ?? 0) + amt
-    const cap = 600
+    const cap = this.pendingCap(id)
     const cur = this.pendingCash[id] ?? 0
     this.pendingCash[id] = Math.min(cap, cur + amt)
     if (cur < cap && this.pendingCash[id] >= cap) {
@@ -428,6 +572,19 @@ export class GameState {
     }
     return amt
   }
+
+  // ---- Ofis muhasebe yardımcıları ----
+  private pendingTotal(): number { return Object.values(this.pendingCash).reduce((a, v) => a + (v || 0), 0) }
+  /** Aktif (toplam varlık): kasa + kumbaralar + satılabilir ekipman değeri */
+  assets(): number { return this.money + this.pendingTotal() + this.eligibleCollateral().reduce((a, c) => a + c.value, 0) }
+  /** Net işletme sermayesi = likit varlık (kasa+kumbara) − kısa vadeli borç (kalan kredi) */
+  netWorkingCapital(): number { return this.money + this.pendingTotal() - (this.loan.active ? this.loan.remaining : 0) }
+  /** son N güne ait satış cirosu */
+  salesInPeriod(days: number): number { const s = this.day - days; return this.salesLog.filter(x => x.day > s).reduce((a, x) => a + x.rev, 0) }
+  /** son N güne ait yakıt alım gideri */
+  fuelCostInPeriod(days: number): number { const s = this.day - days; return this.fuelLog.filter(x => x.day > s).reduce((a, x) => a + x.cost, 0) }
+  /** son N güne ait yovmiye gideri */
+  wagesInPeriod(days: number): number { const s = this.day - days; return this.wageLog.filter(x => x.day > s).reduce((a, x) => a + x.amount, 0) }
 
   /** yeni oyuncu koruması: ilk 2 gün cezalar yumuşar (ilerleme HIZLANMAZ, sadece erken ölüm sarmalı kırılır) */
   get graceActive() { return this.day <= 2 }
@@ -463,9 +620,12 @@ export function getShopItems(s: GameState): ShopRow[] {
   }
   const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
 
-  row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size), t('2 blok 3×3'),
-    t('Bitişik arsalardan birini seç — istasyon geliştikçe emlak fiyatları artar'),
-    s.ownedParcels.size >= 18 ? null : parcelCost(0, 0, s), null)
+  // arsa fiyatı konuma göre değişir (yakın ucuz, uzak/karşı pahalı) → tek sayı yerine ARALIK göster
+  const pcMin = parcelCost(0, 0, s), pcMax = parcelCost(2, 0, s)
+  row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size),
+    `₺${pcMin.toLocaleString('tr-TR')}–${pcMax.toLocaleString('tr-TR')}`,
+    t('Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — yakın arsalar ucuz, uzak/karşı arsalar pahalı; istasyon geliştikçe artar. Seçince o parselin gerçek fiyatı görünür.'),
+    s.ownedParcels.size >= 18 ? null : pcMin, null)
   row('pave', 'i-pave', t('Zemin Betonu'), t('arsa başı'),
     t('Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)'),
     PAVE_COST, hasUnpaved ? null : t('Betonsuz arsan yok'))
@@ -477,16 +637,17 @@ export function getShopItems(s: GameState): ShopRow[] {
     t('Kapı ağızları genişler: araçlar ikili sıra girip çıkar, kuyruk yola taşmaz'),
     s.wideGates ? null : WIDEGATE_COST, s.pumps >= 2 ? null : t('Önce 2. pompayı al'))
   row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
-    t('Depo büyür, daha seyrek sipariş verirsin'),
+    t('Depo büyür (tüm yakıtlar), daha seyrek sipariş verirsin'),
     s.tankLevel >= 3 ? null : TANK_COSTS[s.tankLevel], null)
+  // Not: per-fuel ek tank (tankadd) satırları kaldırıldı — CANLI/main'de yok, eski save uyumu için tank sistemi main ile birebir.
   row('airwater', 'i-air', s.airWaterCount ? t('Hava-Su Ünitesi ({0})', s.airWaterCount) : t('Hava-Su Ünitesi'), '+₺10-20',
     t('Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)'), AIRWATER_COST, null)
   row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
     t('Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)'), PARKING_COST, null)
 
-  row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.2'), `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
-    t('Müşteriler ekstra alışveriş yapar'),
-    s.marketLevel >= 2 ? null : MARKET_COSTS[s.marketLevel], null)
+  row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1), `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
+    t('Müşteriler ekstra alışveriş yapar. Yerinde yükselir (aynı yer), gelir seviyeyle artar.'),
+    s.marketLevel >= 3 ? null : MARKET_COSTS[s.marketLevel], null)
   row('toilet', 'i-toilet', s.toiletLevel === 0 ? t('Tuvalet') : t('Tuvalet Sv.2'), t('+moral'),
     t('Müşteri memnuniyetini ve itibarı artırır'),
     s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel], null)
@@ -606,21 +767,28 @@ const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
-  'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'closed',
-  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates',
+  'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
+  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
+  'wagesPaid', 'fuelSpent', 'noAds',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const f of SAVE_FIELDS) out[f] = (s as any)[f]
   out.tanks = { ...s.tanks }
+  out.tankCounts = { ...s.tankCounts }
   out.stats = { ...s.stats, liters: { ...s.stats.liters } }
   out.facDaily = { ...s.facDaily }
   out.facTotal = { ...s.facTotal }
+  out.fuelLog = s.fuelLog.slice(-40)
+  out.wageLog = s.wageLog.slice(-40)
+  out.salesLog = s.salesLog.slice(-370)
   out.autoChargers = [...s.autoChargers]
   out.autoPumps = [...s.autoPumps]
   out.prices = { ...s.prices }
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
+  out.loan = { ...s.loan, collateral: [...s.loan.collateral] } // kredi durumu kayda girsin
+  out.partner = { ...s.partner } // banka ortaklığı durumu
   out.pendingCash = { ...s.pendingCash }
   out.ownedParcels = [...s.ownedParcels]
   out.pavedParcels = [...s.pavedParcels]
@@ -641,7 +809,13 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.hasAirWater && !s.airWaterCount) s.airWaterCount = 1
   if (data.hasSelfWash && !s.selfWashCount) s.selfWashCount = 1
   if (data.tanks && typeof data.tanks === 'object') Object.assign(s.tanks, data.tanks)
+  if (data.tankCounts && typeof data.tankCounts === 'object') Object.assign(s.tankCounts, data.tankCounts)
   if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
+  if (Array.isArray(data.fuelLog)) s.fuelLog = (data.fuelLog as any[]).filter(x => x && typeof x.cost === 'number').slice(-40)
+  if (Array.isArray(data.wageLog)) s.wageLog = (data.wageLog as any[]).filter(x => x && typeof x.amount === 'number').slice(-40)
+  if (Array.isArray(data.salesLog)) s.salesLog = (data.salesLog as any[]).filter(x => x && typeof x.rev === 'number').slice(-370)
+  // eski kayıt (salesLog yok): ilk gün-sonunun tüm kümülatif ciroyu tek güne yazmasını önle
+  if (!s.salesLog.length && !s.dayStartRevenue && s.stats.revenue > 0) s.dayStartRevenue = s.stats.revenue
   if (data.facTotal && typeof data.facTotal === 'object') Object.assign(s.facTotal, data.facTotal)
   if (Array.isArray(data.autoChargers)) s.autoChargers = new Set((data.autoChargers as number[]).filter(n => Number.isInteger(n)))
   if (Array.isArray(data.autoPumps)) s.autoPumps = new Set((data.autoPumps as number[]).filter(n => Number.isInteger(n)))
@@ -708,6 +882,8 @@ export function buyItem(s: GameState, id: string): boolean {
   const item = getShopItems(s).find(r => r.id === id)
   if (!item || item.status !== 'buy' || item.cost === null || s.money < item.cost) return false
   s.money -= item.cost
+  // yakıt başına ek tank (dinamik id — switch'e girmeden ele alınır)
+  if (id.startsWith('tankadd-')) { s.tankCounts[id.slice('tankadd-'.length) as FuelType]++; return true }
   switch (id) {
     case 'pump': s.pumps++; break
     case 'sign': s.signLevel++; break

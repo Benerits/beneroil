@@ -11,6 +11,7 @@ class AudioMan {
   sfxOn = localStorage.getItem('benzinlik-sfx') !== '0'
   private dieselNodes: { gain: GainNode; stop: () => void } | null = null
   private pumpNodes: { gain: GainNode; stop: () => void } | null = null
+  private resumeHooked = false
 
   /** tabanca takılınca kısa 'klik-tak' */
   clunk() {
@@ -95,10 +96,12 @@ class AudioMan {
     }
   }
   musicOn = localStorage.getItem('benzinlik-music') !== '0'
+  /** müzik ses seviyesi 0..1 (seviyeli slider) */
+  musicVolume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('benzinlik-music-vol') ?? '0.7')))
 
   ensure() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume()
+      this.resumeIfNeeded()
       return
     }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -108,9 +111,36 @@ class AudioMan {
     this.master.gain.value = 0.9
     this.master.connect(this.ctx.destination)
     this.musicGain = this.ctx.createGain()
-    this.musicGain.gain.value = this.musicOn ? 1 : 0
+    this.musicGain.gain.value = this.musicOn ? this.musicVolume : 0
     this.musicGain.connect(this.master)
+    this.installResumeHooks()
     this.startMusic()
+  }
+
+  /** iOS: telefon/Siri/kontrol merkezi AudioContext'i 'interrupted' (WebKit) ya da
+   *  'suspended' yapar; ensure yalnız 'suspended'ı yakalıyordu → ses geri gelmiyordu.
+   *  Artık 'running' dışındaki her durumda resume dener; müzik durduysa yeniden başlatır. */
+  private resumeIfNeeded() {
+    const ctx = this.ctx
+    if (!ctx || ctx.state === 'running') return
+    ctx.resume().then(() => {
+      // kesinti müzik zamanlamasını bozmuş olabilir → çalışıyorsa ve müzik yoksa yeniden kur
+      if (this.musicOn && this.musicTimer === null) this.startMusic()
+    }).catch(() => { /* jest bekliyor olabilir; sonraki hook denemesinde toparlar */ })
+  }
+
+  /** Kesinti sonrası otomatik devam: statechange (kesinti bitince atılır), öne gelme,
+   *  odak ve kullanıcı jesti — iOS bazen ancak jestle resume eder, hepsini dinleriz. */
+  private installResumeHooks() {
+    if (this.resumeHooked) return
+    this.resumeHooked = true
+    this.ctx?.addEventListener('statechange', () => this.resumeIfNeeded())
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.resumeIfNeeded() })
+    window.addEventListener('focus', () => this.resumeIfNeeded())
+    window.addEventListener('pageshow', () => this.resumeIfNeeded())
+    const onGesture = () => this.resumeIfNeeded()
+    window.addEventListener('pointerdown', onGesture, { passive: true })
+    window.addEventListener('touchstart', onGesture, { passive: true })
   }
 
   private tone(freq: number, dur: number, type: OscillatorType, vol: number, when = 0, dest?: AudioNode) {
@@ -249,8 +279,18 @@ class AudioMan {
     this.musicOn = !this.musicOn
     localStorage.setItem('benzinlik-music', this.musicOn ? '1' : '0')
     this.ensure()
-    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? 1 : 0
+    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? this.musicVolume : 0
     return this.musicOn
+  }
+
+  /** seviyeli müzik ses ayarı (0..1). 0 = kapalı. */
+  setMusicVolume(v: number): void {
+    this.musicVolume = Math.min(1, Math.max(0, v))
+    this.musicOn = this.musicVolume > 0.001
+    localStorage.setItem('benzinlik-music-vol', String(this.musicVolume))
+    localStorage.setItem('benzinlik-music', this.musicOn ? '1' : '0')
+    this.ensure()
+    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? this.musicVolume : 0
   }
 
   toggleSfx(): boolean {
