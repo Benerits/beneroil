@@ -707,16 +707,36 @@ export class World {
       if (!(ch as THREE.Sprite).isSprite) this.tankGroup.remove(ch)
     }
     this.tankGroup.position.set(this.tankAnchor.x, this.tankAnchor.y, 0)
-    const R = 0.4 + level * 0.04
+    const { R, rowGap, colGap } = this.tankLayout()
     const colors: Record<FuelType, number> = { benzin: 0x27a05a, dizel: 0xe8862e, lpg: 0x2f6fed }
     const fuels: FuelType[] = ['benzin', 'dizel', 'lpg']
-    const gap = 0.82
     fuels.forEach((f, col) => {
       for (let i = 0; i < counts[f]; i++) {
-        const fill = this.addSphereTank(col * gap, i * gap, R, colors[f])
+        const fill = this.addSphereTank(col * colGap, i * rowGap, R, colors[f])
         this.tankFillMeshes[f].push(fill)
       }
     })
+  }
+
+  /** Tank kümesi yerleşim ölçüleri — küreler ÇAKIŞMASIN (yakıtlar net ayrı görünsün).
+   *  buildTankCluster + tankClusterBBox aynı ölçüyü kullanır → görsel ve footprint her zaman senkron. */
+  private tankLayout() {
+    const R = 0.4 + this.tankLevelNow * 0.04
+    const rowGap = 2 * R + 0.45          // aynı yakıtın tankları arası (dikey) — çakışma yok
+    const colGap = 2 * R + 0.9           // yakıt sütunları arası (benzin/dizel/lpg ayrımı belirgin)
+    return { R, rowGap, colGap }
+  }
+
+  /** Tank kümesinin çapaya göre gerçek sınır kutusu (main.ts footprint/obstacle bununla eşleşir). */
+  tankClusterBBox() {
+    const { R, rowGap, colGap } = this.tankLayout()
+    const maxRows = Math.max(1, this.tankCountsNow.benzin, this.tankCountsNow.dizel, this.tankCountsNow.lpg)
+    return {
+      offX: colGap,                       // 3 sütunun (0, colGap, 2·colGap) ortası
+      offY: (maxRows - 1) * rowGap / 2,   // en uzun sütunun ortası
+      w: 2 * colGap + 2 * R + 0.5,
+      d: (maxRows - 1) * rowGap + 2 * R + 0.5,
+    }
   }
 
   /** Her yakıtın doluluk oranıyla (0..1) sıvı seviyesini alttan yukarı ayarlar (kırpma düzlemi + yüzey diski). */
@@ -1264,6 +1284,14 @@ export class World {
       g.add(panel)
     }
     if (level >= 3) box(pw + 0.3, 0.22, 0.18, 0xe0b13e, 0, 0, H + ph + 0.15, g)
+    // Görünmez tıklama hedefi: ince+yüksek tabela mobilde raycast'i ıskalıyordu; tüm gövdeyi kaplayan
+    // saydam kutu (çizilmez ama raycast edilir) sayesinde tabelaya güvenle tıklanır (fiyat panelini açar).
+    const hit = new THREE.Mesh(
+      new THREE.BoxGeometry(pw + 0.7, 1.5, H + ph),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    )
+    hit.position.set(0, 0, (H + ph) / 2)
+    g.add(hit)
     g.position.set(this.signPos.x, this.signPos.y, 0)
     this.scene.add(g)
     this.signGroup = g

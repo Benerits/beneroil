@@ -1767,14 +1767,8 @@ function makeGhost(w: number, d: number): THREE.Mesh {
 /** Tank kümesinin GERÇEK footprint'i: 3 sütun (benzin/dizel/lpg) × yakıt-başına-adet satır.
  *  Adet arttıkça küme +y'de büyür → çarpışma kutusu da büyümeli (yoksa tanklar dışarı taşar). */
 function tankFootprint(): { cx: number; cy: number; w: number; d: number } {
-  const R = 0.4 + state.tankLevel * 0.04
-  const maxRows = Math.max(1, state.tankCounts.benzin, state.tankCounts.dizel, state.tankCounts.lpg)
-  return {
-    cx: world.tankAnchor.x + 0.82,                       // 3 sütunun ortası
-    cy: world.tankAnchor.y + (maxRows - 1) * 0.41,       // en uzun sütunun ortası
-    w: 1.64 + 2 * R + 0.5,                               // 3 sütun genişliği + pay
-    d: (maxRows - 1) * 0.82 + 2 * R + 0.5,               // satır sayısı × gap + pay
-  }
+  const b = world.tankClusterBBox() // world tek kaynak → görsel spacing ile footprint her zaman senkron
+  return { cx: world.tankAnchor.x + b.offX, cy: world.tankAnchor.y + b.offY, w: b.w, d: b.d }
 }
 
 function footprintOf(id: string, move = false): { w: number; d: number; grass?: boolean } | null {
