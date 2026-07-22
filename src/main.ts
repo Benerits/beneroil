@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { World, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
+import { World, ROAD_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import {
@@ -1430,7 +1430,6 @@ function rebuildFromState() {
     const [c, r] = key.split(',').map(Number)
     if ((c === 0 && r === 1) || !validParcel(c, r)) continue // sınır dışı / bozuk parsel atlanır
     world.markOwned(c, r)
-    if (c >= 3) world.enableFarStation() // yol karşısı parsel: otomatik giriş-çıkış kapıları
   }
   for (const key of state.pavedParcels) {
     const [c, r] = key.split(',').map(Number)
@@ -1446,6 +1445,12 @@ function rebuildFromState() {
     const sp = pvv(`charger-${i}`)
     // Kayıtlı açıyla kur → araç yanaşma slotu da doğru hesaplanır (rotateBuilding slot güncellemez).
     world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined, placedRot[`charger-${i}`] ?? 0)
+  }
+  // Karşıda (yol karşısı) pompa/şarj varsa karşı istasyonu aktive et — otomatik giriş-çıkış + karşı şerit trafiği.
+  // (Yalnız karşıya EKİPMAN koymuş oyuncular; sadece arsa/tesis olan mevcut oyuncular ETKİLENMEZ.)
+  if (world.pumpSlots.slice(0, state.pumps).some(s => s.x > ROAD_X)
+      || world.evSlots.slice(0, state.evChargers).some(s => s.x > ROAD_X)) {
+    world.enableFarStation()
   }
   world.setSign(state.signLevel, placedPos.sign ? new THREE.Vector2(placedPos.sign[0], placedPos.sign[1]) : undefined)
   if (state.wideGates) world.setWideGates(true)
@@ -1713,12 +1718,9 @@ function landOk(x: number, y: number, grassOk: boolean): boolean {
 }
 
 function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
-  // servis ekipmanı (pompa/şarj/tank) yol karşısına ancak KARŞI İSTASYON kurulunca (parsel claim'lenip
-  // otomatik kapılar geldikten sonra) yerleştirilebilir — o zaman karşı şeritten araçlar servise gelir.
-  if (/^(pump-|charger-)/.test(skipId) || skipId === 'tank') {
-    const pc = parcelAt(p.cx, p.cy)
-    if (pc && pc[0] >= 3 && !world.farStationOn) return false
-  }
+  // Not: pompa/şarj/tank artık yol karşısına da konabilir (sahip olunan+betonlanmış karşı parsele).
+  // İlk karşı pompa/şarj konunca karşı istasyon (otomatik giriş-çıkış + karşı şerit trafiği) aktive olur.
+  // Sahiplik/beton kısıtı aşağıdaki landOk tarafından zaten uygulanır.
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
     if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
   }
@@ -1874,6 +1876,11 @@ function confirmPlacement() {
   }
   placedPos[p.id] = [p.cx, p.cy]
   placedRot[p.id] = p.rot
+  // karşıya (yol karşısı) İLK pompa/şarj konunca karşı istasyon aktive olur: otomatik giriş-çıkış + karşı şerit trafiği
+  if ((p.id.startsWith('pump-') || p.id.startsWith('charger-')) && p.cx > ROAD_X && !world.farStationOn) {
+    world.enableFarStation()
+    ui.toast('🚧 Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.', 'good', true)
+  }
   const i = placedRects.findIndex(r => r.id === p.id)
   if (i >= 0) placedRects.splice(i, 1)
   if (p.id !== 'gatein' && p.id !== 'gateout') {
@@ -1893,10 +1900,7 @@ function confirmZone() {
     state.money -= cost
     state.ownedParcels.add(key)
     world.markOwned(z.c, z.r)
-    if (z.c >= 3 && !world.farStationOn) {
-      world.enableFarStation() // yol karşısı arsa: sıfırdan istasyon → otomatik giriş-çıkış geldi
-      ui.toast('🚧 Yol karşısı istasyon açıldı! Giriş-çıkış hazır — pompa/şarj kur, karşı şeritten müşteri gelsin.', 'good', true)
-    }
+    if (z.c >= 3) ui.toast('🏞️ Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.', 'good', true)
     ui.toast(t('🏞️ Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.', cost.toLocaleString('tr-TR')), 'good')
   } else {
     if (state.money < PAVE_COST) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
