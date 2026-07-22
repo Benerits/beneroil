@@ -2664,7 +2664,11 @@ function buildingCard(id: string): BuildingCard | null {
       return {
         icon: 'i-parking', name: t('Otopark'),
         desc: t('Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.'),
-        stats: [['Kapasite', t('4 araç')], ['Doluluk', `${cars.cars.filter(c => c.phase === 'parked' || c.phase === 'toPark').length}/4`]],
+        stats: (() => {
+          const cap = world.getParkingSpots().length || 4
+          const occ = Math.min(cars.cars.filter(c => c.phase === 'parked' || c.phase === 'toPark').length, cap)
+          return [['Kapasite', t('{0} araç', cap)], ['Doluluk', `${occ}/${cap}`]]
+        })(),
       }
     case 'oil':
       return {
