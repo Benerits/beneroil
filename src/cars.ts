@@ -10,7 +10,7 @@ const DECISION_Y = -26 // yakın şeritte istasyona girme kararının verildiği
 
 export type CarPhase = 'transit' | 'driving' | 'waiting' | 'atPump' | 'toPark' | 'parked' | 'leaving' | 'gone'
 export type CarKind = 'fuel' | 'ev'
-type BodyKind = 'sedan' | 'hatch' | 'suv'
+export type BodyKind = 'sedan' | 'hatch' | 'suv'
 
 const lam = (color: number) => new THREE.MeshLambertMaterial({ color })
 
@@ -61,7 +61,7 @@ function extrude(points: [number, number][], width: number, color: number): THRE
   return m
 }
 
-function buildCarMesh(kind: BodyKind, color: number): THREE.Group {
+export function buildCarMesh(kind: BodyKind, color: number): THREE.Group {
   const g = new THREE.Group()
   const spec = SPECS[kind]
   g.add(extrude(spec.body, spec.width, color))
