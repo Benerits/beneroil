@@ -1871,13 +1871,16 @@ function repositionPlacing(x: number, y: number) {
     const otherY = placing.id === 'gatein2' ? world.gateOut2.y : world.gateIn2.y
     placing.valid = Math.abs(placing.cy - otherY) >= 5 && !farGateBlockedAt(placing.cy)
   } else if (placing.id === 'sign') {
-    // tabela istasyon çevresinde / yol kenarında kalsın (çok uzağa taşınmasın)
-    placing.cx = Math.max(-11, Math.min(6, Math.round(x)))
-    placing.cy = Math.max(-15, Math.min(15, Math.round(y)))
+    // Tabela dekoratif (araç engeli DEĞİL) → yol kenarına konabilir, sahiplik/beton aranmaz.
+    // İstasyon çevresi + yol kenarı boyunca UZUN yerleştirme (yola çok uzaklaşmasın: cx≤6.5).
+    placing.cx = Math.max(-11, Math.min(6.5, Math.round(x * 2) / 2))
+    placing.cy = Math.max(-26, Math.min(26, Math.round(y))) // yol boyunca uzun
     placing.root.position.set(placing.cx, placing.cy, 0)
     const odd = placing.rot % 2 === 1
     const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
-    placing.valid = isValidPlacement(eff, placing.id, placing.grass)
+    // yalnız BİNA/pompa üstüne binmesin (servis şeridi hariç — tabela şeritte araç engeli değil)
+    placing.valid = !placedRects.some(o => o.id !== 'sign' && overlaps(eff, o))
+      && !fixedObstacles('sign').some(o => !(o.cx === 4.3 && o.d === 48) && !(o.cx === 11.6 && o.d === 48) && overlaps(eff, o))
   } else {
     placing.cx = Math.round(x)
     placing.cy = Math.round(y)
