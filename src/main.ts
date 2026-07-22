@@ -1425,6 +1425,7 @@ function rebuildFromState() {
     const [c, r] = key.split(',').map(Number)
     if ((c === 0 && r === 1) || !validParcel(c, r)) continue // sınır dışı / bozuk parsel atlanır
     world.markOwned(c, r)
+    if (c >= 3) world.enableFarStation() // yol karşısı parsel: otomatik giriş-çıkış kapıları
   }
   for (const key of state.pavedParcels) {
     const [c, r] = key.split(',').map(Number)
@@ -1705,10 +1706,11 @@ function landOk(x: number, y: number, grassOk: boolean): boolean {
 }
 
 function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
-  // servis ekipmanı (pompa/şarj/tank) yol karşısına kurulamaz — araçlar oraya giremiyor
+  // servis ekipmanı (pompa/şarj/tank) yol karşısına ancak KARŞI İSTASYON kurulunca (parsel claim'lenip
+  // otomatik kapılar geldikten sonra) yerleştirilebilir — o zaman karşı şeritten araçlar servise gelir.
   if (/^(pump-|charger-)/.test(skipId) || skipId === 'tank') {
     const pc = parcelAt(p.cx, p.cy)
-    if (pc && pc[0] >= 3) return false
+    if (pc && pc[0] >= 3 && !world.farStationOn) return false
   }
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
     if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
@@ -1884,6 +1886,10 @@ function confirmZone() {
     state.money -= cost
     state.ownedParcels.add(key)
     world.markOwned(z.c, z.r)
+    if (z.c >= 3 && !world.farStationOn) {
+      world.enableFarStation() // yol karşısı arsa: sıfırdan istasyon → otomatik giriş-çıkış geldi
+      ui.toast('🚧 Yol karşısı istasyon açıldı! Giriş-çıkış hazır — pompa/şarj kur, karşı şeritten müşteri gelsin.', 'good', true)
+    }
     ui.toast(t('🏞️ Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.', cost.toLocaleString('tr-TR')), 'good')
   } else {
     if (state.money < PAVE_COST) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
