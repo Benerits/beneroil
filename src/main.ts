@@ -1249,13 +1249,31 @@ let syncing = false
 let syncedConflict = false
 /** Save'i sunucuya yaz; başka cihaz daha yeni yazmışsa (409) en güncele senkronla. */
 async function syncSave() {
-  if (syncing || cloudBlocked || !auth.loggedIn()) return
+  if (syncing || cloudBlocked || auth.isKicked() || !auth.loggedIn()) return
   syncing = true
   try {
     const r = await auth.pushSave(savePayload())
+    if (r.kicked) { showKickedOverlay(); return }
     if (r.conflict && !syncedConflict) { syncedConflict = true; onRemoteNewer() }
   } catch { /* ağ hatası: sessiz geç */ } finally { syncing = false }
 }
+// Tek-cihaz kilidi: başka cihaz oturumu devralınca burası duraklar (ilerleme güvende).
+function showKickedOverlay() {
+  cloudBlocked = true // kayıt + oyun + WS durur
+  if (document.getElementById('kickedblock')) return
+  const o = document.createElement('div')
+  o.id = 'kickedblock'
+  o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#1a0d0df5;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px)'
+  o.innerHTML = `<div style="max-width:420px;text-align:center;color:#eaf1fb;font-family:system-ui,sans-serif">
+    <div style="font-size:44px;margin-bottom:8px">📱🔒</div>
+    <div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('Başka cihazda açıldı')}</div>
+    <div style="font-size:14px;line-height:1.5;color:#e0b8b8;margin-bottom:20px">${t('Bu hesap başka bir cihazda açıldığı için burada duraklatıldı. İlerlemen güvende — hiçbir şey silinmedi. Buradan devam etmek için yenile.')}</div>
+    <button id="kicked-retry" style="padding:12px 22px;font-size:15px;font-weight:700;border:0;border-radius:12px;background:#d64545;color:#fff;cursor:pointer">${t('Buradan devam et (Yenile)')}</button>
+  </div>`
+  document.body.appendChild(o)
+  document.getElementById('kicked-retry')?.addEventListener('click', () => location.reload())
+}
+auth.onKicked(showKickedOverlay)
 /** başka cihaz daha yeni oynadı → clobber etme, en güncel ilerlemeye temiz reload ile senkronla */
 function onRemoteNewer() {
   ui.toast(t('🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…'), '')

@@ -47,6 +47,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT false`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS verify_token text`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_token text`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS session_id text`) // tek-cihaz kilidi
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_expires timestamptz`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open'`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_note text`)
@@ -601,7 +602,10 @@ async function handleApi(req, res, url) {
       const email = auth(); if (!email) return
       const r = await pool.query('SELECT save, updated_at, banned_at, email_verified FROM benzinlik_player WHERE email=$1', [email])
       if (r.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
-      await pool.query('UPDATE benzinlik_player SET last_seen_at=now() WHERE email=$1', [email])
+      // tek-cihaz kilidi: yükleyen cihaz oturumu DEVRALIR (session_id claim) → eski cihaz kick olur
+      const sess = String(req.headers['x-session'] || '')
+      if (sess) await pool.query('UPDATE benzinlik_player SET last_seen_at=now(), session_id=$2 WHERE email=$1', [email, sess])
+      else await pool.query('UPDATE benzinlik_player SET last_seen_at=now() WHERE email=$1', [email])
       return json(res, 200, { save: r.rows[0]?.save ?? null, updatedAt: r.rows[0]?.updated_at ?? null, emailVerified: !!r.rows[0]?.email_verified, verifyRequired: requireVerify() })
     }
     if (url === '/api/save' && req.method === 'POST') {
@@ -610,8 +614,13 @@ async function handleApi(req, res, url) {
       const { save, baseUpdatedAt } = await readBody(req)
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
-      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
+      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at, session_id FROM benzinlik_player WHERE email=$1', [email])
       if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      // tek-cihaz kilidi: başka cihaz oturumu devraldıysa bu (eski) cihaz YAZMASIN → kicked.
+      // Bağlantı kopması yanlış kick yapmaz: session yalnız BAŞKA cihaz GET/POST yapınca değişir.
+      const sess = String(req.headers['x-session'] || '')
+      const dbSess = prev.rows[0]?.session_id
+      if (sess && dbSess && dbSess !== sess) return json(res, 200, { kicked: true })
       // çoklu cihaz guard: bu istemci save'i yükledikten SONRA başka cihaz yazdıysa çakışma —
       // clobber etme, istemciye güncel kaydı dön (ilerleme karışmaz, senkronlanır).
       if (baseUpdatedAt && prev.rows[0]?.updated_at) {
@@ -653,7 +662,8 @@ async function handleApi(req, res, url) {
           if (clean.s.day > maxDay) clean.s.day = maxDay
         }
       }
-      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1 RETURNING updated_at', [email, clean])
+      // save yazarken oturumu da bu cihaza sabitle (session_id null'sa claim et)
+      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now(), session_id=COALESCE($3, session_id) WHERE email=$1 RETURNING updated_at', [email, clean, sess || null])
       return json(res, 200, { ok: true, updatedAt: upd.rows[0]?.updated_at })
     }
     // IAP efektini SUNUCU-otoriter uygula (hile-freni cap'ini bypass eder; sonraki save tutarlı olur).
