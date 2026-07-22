@@ -125,42 +125,53 @@
       .mhead h3 { font-size: 15px; }
       .mbody { padding: 9px 12px 12px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 
-      /* ---- Alt navbar → GENİŞLEYEN FAB (sol-alt mobil oyun menüsü): tek kırmızı buton,
-             dokununca 5 kontrol yay şeklinde açılır. Oyunun signage/krem-kırmızı dili +
-             "basılı kart" derinliği + yaylı animasyon. Jenerik tab bar değil. ---- */
+      /* ---- Alt navbar → GENİŞLEYEN FAB v2 (sol-alt imza menüsü): yakıt-pompası ikonlu
+             tetikleyici (açılınca X'e cross-fade), geniş yay + etiketli TABELA PLAKALARI,
+             açılınca scrim. Oyunun signage/krem-kırmızı dili. Jenerik tab bar değil. ---- */
       .navbar { display: block; position: fixed; z-index: 22; padding: 0; background: none; border: 0; box-shadow: none;
-        left: calc(16px + env(safe-area-inset-left)); bottom: calc(16px + env(safe-area-inset-bottom)); width: 60px; height: 60px; }
-      /* ana tetikleyici — her zaman görünür kırmızı yuvarlak buton */
-      .fab-main { position: absolute; left: 0; bottom: 0; width: 60px; height: 60px; z-index: 3; cursor: pointer;
+        left: calc(18px + env(safe-area-inset-left)); bottom: calc(18px + env(safe-area-inset-bottom)); width: 62px; height: 62px; }
+      /* scrim: açıkken oyunu hafif karart → menü öne çıkar; dışarı dokununca kapatır */
+      #fab-scrim { position: fixed; inset: 0; z-index: 21; pointer-events: none; opacity: 0;
+        background: radial-gradient(130% 100% at 14% 100%, rgba(15,22,30,.36), rgba(15,22,30,0) 58%); transition: opacity .3s; }
+      .navbar.fab-open + #fab-scrim { opacity: 1; pointer-events: auto; }
+      /* ana tetikleyici — yakıt ikonu, açılınca X'e cross-fade + hafif nabız halkası */
+      .fab-main { position: absolute; left: 0; bottom: 0; width: 62px; height: 62px; z-index: 3; cursor: pointer;
         display: flex; align-items: center; justify-content: center; border-radius: 50%;
-        background: linear-gradient(180deg, #e05656, var(--red)); color: #faf6ec;
+        background: radial-gradient(120% 120% at 50% 22%, #ee6a6a, var(--red) 68%); color: #fff4ec;
         border: 2px solid var(--red-dark); border-bottom-width: 5px;
-        box-shadow: 0 8px 18px rgba(178,52,52,.35), inset 0 2px 0 rgba(255,255,255,.25);
-        transition: transform .1s, border-bottom-width .1s; -webkit-tap-highlight-color: transparent; }
+        box-shadow: 0 10px 22px rgba(178,52,52,.4), inset 0 2px 0 rgba(255,255,255,.28);
+        transition: transform .12s, border-bottom-width .12s; -webkit-tap-highlight-color: transparent; }
       .fab-main:active { transform: translateY(2.5px); border-bottom-width: 2.5px; }
-      .fab-main .ic { width: 26px; height: 26px; transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
-      .navbar.fab-open .fab-main .ic { transform: rotate(135deg); }
-      /* açılır öğeler — kapalıyken ana butonun altında gizli, açıkken yaya dizilir */
-      .navbtn { position: absolute; left: 5px; bottom: 5px; width: 50px; height: 50px; z-index: 2; cursor: pointer;
-        display: flex; align-items: center; justify-content: center; padding: 0; font-family: var(--font);
-        border-radius: 50%; color: #58626d; background: linear-gradient(180deg, #fefbf5, #f0e9d9);
-        border: 1.5px solid #e2dac8; border-bottom: 3px solid #d4cab2;
-        box-shadow: 0 5px 12px rgba(34,48,60,.18), inset 0 1.5px 0 rgba(255,255,255,.7);
-        opacity: 0; pointer-events: none; transform: translate(0,0);
-        transition: transform .38s cubic-bezier(.34,1.56,.64,1), opacity .22s, border-bottom-width .08s, background .12s, color .12s;
+      .fab-main::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2.5px solid var(--red);
+        opacity: 0; animation: fabpulse 2.8s ease-out infinite; }
+      .navbar.fab-open .fab-main::after { animation: none; opacity: 0; }
+      @keyframes fabpulse { 0% { opacity: .45; transform: scale(1); } 70% { opacity: 0; transform: scale(1.45); } 100% { opacity: 0; } }
+      .fab-main .ic { position: absolute; width: 29px; height: 29px; transition: opacity .26s, transform .38s cubic-bezier(.34,1.56,.64,1); }
+      .fab-main .ic-close { opacity: 0; transform: rotate(-90deg) scale(.5); }
+      .navbar.fab-open .fab-main .ic-open { opacity: 0; transform: rotate(90deg) scale(.5); }
+      .navbar.fab-open .fab-main .ic-close { opacity: 1; transform: none; }
+      /* öğeler — tabela plakaları (ikon + minik etiket), yay şeklinde açılır */
+      .navbtn { position: absolute; left: 6px; bottom: 8px; width: 52px; height: 52px; z-index: 2; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0;
+        font-family: var(--font); border-radius: 17px; color: #5a6470;
+        background: linear-gradient(180deg, #fffdf8, #efe7d6); border: 1.5px solid #e4dcc9; border-bottom: 3.5px solid #cfc4ab;
+        box-shadow: 0 7px 16px rgba(34,48,60,.22), inset 0 1.5px 0 rgba(255,255,255,.85);
+        opacity: 0; pointer-events: none; transform: translate(0,0) scale(.4);
+        transition: transform .42s cubic-bezier(.34,1.56,.64,1), opacity .2s, border-bottom-width .08s, background .12s, color .12s;
         -webkit-tap-highlight-color: transparent; }
-      .navbtn .ic { width: 23px; height: 23px; }
-      .navbtn span { display: none; } /* FAB: ikon-odaklı */
+      .navbtn .ic { width: 21px; height: 21px; }
+      .navbtn span { display: block; font-size: 7.5px; font-weight: 800; letter-spacing: .01em; color: #8a8478; line-height: 1; white-space: nowrap; }
       .navbtn:active { border-bottom-width: 1.5px; }
       .navbar.fab-open .navbtn { opacity: 1; pointer-events: auto; }
-      .navbar.fab-open .navbtn:nth-child(1) { transform: translate(0, -116px); transition-delay: .04s; }
-      .navbar.fab-open .navbtn:nth-child(2) { transform: translate(44px, -108px); transition-delay: .08s; }
-      .navbar.fab-open .navbtn:nth-child(3) { transform: translate(82px, -82px); transition-delay: .12s; }
-      .navbar.fab-open .navbtn:nth-child(4) { transform: translate(108px, -44px); transition-delay: .16s; }
-      .navbar.fab-open .navbtn:nth-child(5) { transform: translate(116px, 0); transition-delay: .2s; }
+      .navbar.fab-open .navbtn:nth-child(1) { transform: translate(0, -160px) scale(1); transition-delay: .05s; }
+      .navbar.fab-open .navbtn:nth-child(2) { transform: translate(61px, -148px) scale(1); transition-delay: .1s; }
+      .navbar.fab-open .navbtn:nth-child(3) { transform: translate(113px, -113px) scale(1); transition-delay: .15s; }
+      .navbar.fab-open .navbtn:nth-child(4) { transform: translate(148px, -61px) scale(1); transition-delay: .2s; }
+      .navbar.fab-open .navbtn:nth-child(5) { transform: translate(160px, 0) scale(1); transition-delay: .25s; }
       /* aktif bölüm: kırmızı marka vurgusu */
-      .navbtn.on { background: linear-gradient(180deg, #e05656, var(--red)); color: #fff; border-color: var(--red-dark);
-        box-shadow: 0 5px 12px rgba(178,52,52,.3), inset 0 1px 0 rgba(255,255,255,.3); }
+      .navbtn.on { background: linear-gradient(180deg, #ec6a6a, var(--red)); color: #fff; border-color: var(--red-dark);
+        box-shadow: 0 7px 16px rgba(178,52,52,.32), inset 0 1px 0 rgba(255,255,255,.3); }
+      .navbtn.on span { color: #ffeaea; }
 
       /* ---- Uygulama-sheet: bir bölüm açıkken alt navbar gizlenir; sekmeler ÜSTTE, içerik altta (mobil-app hissi) ---- */
       .navbar.hidden { display: none !important; }
@@ -564,8 +575,12 @@
     <button class="navbtn" id="nav-order"><svg class="ic"><use href="#i-truck"/></svg><span data-i18n="Sipariş">Sipariş</span></button>
     <button class="navbtn" id="nav-roadmap"><svg class="ic"><use href="#i-map"/></svg><span data-i18n="Yol Har.">Yol Har.</span></button>
     <button class="navbtn" id="nav-profile"><svg class="ic"><use href="#i-user"/></svg><span data-i18n="Profil">Profil</span></button>
-    <button class="fab-main" id="nav-fab" aria-label="Menü"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="fab-main" id="nav-fab" aria-label="Menü">
+      <svg class="ic ic-open"><use href="#i-fuel"/></svg>
+      <svg class="ic ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </nav>
+  <div id="fab-scrim"></div>
   <!-- Uygulama-sheet sekme şeridi: bir bölüm açıkken alt navbar yerine üstte görünür -->
   <div id="sheettabs" role="tablist">
     <button class="stab" data-sec="office"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Ofis">Ofis</span></button>
