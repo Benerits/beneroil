@@ -299,7 +299,7 @@ function sanitizeSave(save) {
   if (typeof save !== 'object' || Array.isArray(save)) return undefined
   const s = save.s
   if (!s || typeof s !== 'object') return undefined
-  s.money = clamp(s.money, 0, 2_000_000, 5000)
+  s.money = clamp(s.money, 0, 10_000_000_000, 5000) // ileri oyuncular 2M'yi aşabilir — sağlık tavanı yükseltildi
   s.reputation = clamp(s.reputation, 0, 5, 3)
   s.day = clamp(s.day, 1, 100000, 1)
   s.pumps = clamp(s.pumps, 1, 8, 1)
@@ -639,7 +639,7 @@ async function handleApi(req, res, url) {
         const prevSave = prev.rows[0]?.save
         const sinceTs = prev.rows[0]?.updated_at || prev.rows[0]?.created_at
         const elapsed = sinceTs ? Math.max(1, (Date.now() - new Date(sinceTs).getTime()) / 1000) : 1
-        const allowance = 50_000 + elapsed * 600
+        const allowance = 100_000 + elapsed * 2500 // ileri istasyon (8 pompa+EV+rush) hızlı kazanabilir; legit tavan yükseltildi
         const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
         const bval = buildingValue(clean.s)
         let money = Number(clean.s.money) || 0
@@ -651,7 +651,7 @@ async function handleApi(req, res, url) {
           // bina değeri tek başına tavanı aşıyorsa = bina/seviye ENJEKSİYONU → reddet, öncekini koru.
           // 60k tampon: maliyet-tablosu yaklaşımından (parsel dinamik fiyatı vb.) doğabilecek
           // her türlü sapmaya karşı legit oyuncuyu korur; gerçek enjeksiyon (300k+) yine yakalanır.
-          if (money + bval > prevWealth + allowance + 60_000) {
+          if (money + bval > prevWealth + allowance + 250_000) {
             return json(res, 409, { conflict: true, save: prevSave || null, updatedAt: prev.rows[0]?.updated_at || null })
           }
         }

@@ -237,7 +237,7 @@ export class GameState {
 
   get tankCapacity() { return TANK_CAPACITY[this.tankLevel] }
   /** yakıt başına kapasite = seviye kapasitesi (CANLI/main ile birebir; per-fuel adet devre dışı — save uyumu) */
-  fuelCapacity(_f: FuelType): number { return TANK_CAPACITY[this.tankLevel] }
+  fuelCapacity(f: FuelType): number { return TANK_CAPACITY[this.tankLevel] * this.tankCounts[f] }
   get batteryCapacity() { return BATTERY_CAP[this.batteryLevel] }
 
   /** elektrik fiyatının EV müşteri talebine etkisi (1.0 = nötr) */
@@ -639,7 +639,14 @@ export function getShopItems(s: GameState): ShopRow[] {
   row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
     t('Depo büyür (tüm yakıtlar), daha seyrek sipariş verirsin'),
     s.tankLevel >= 3 ? null : TANK_COSTS[s.tankLevel], null)
-  // Not: per-fuel ek tank (tankadd) satırları kaldırıldı — CANLI/main'de yok, eski save uyumu için tank sistemi main ile birebir.
+  // Yakıt başına ek tank: SADECE kapasiteyi büyütür (×adet), görsel/footprint DEĞİŞMEZ (yer kaplamaz).
+  for (const f of FUELS) {
+    if (s.tankCounts[f] < MAX_TANKS_PER_FUEL)
+      row(`tankadd-${f}`, 'i-tank', t('Ek {0} Tankı ({1}/{2})', FUEL_LABEL[f], s.tankCounts[f] + 1, MAX_TANKS_PER_FUEL),
+        `+${TANK_CAPACITY[s.tankLevel]}L`,
+        t('Yalnızca {0} deposunu {1}L büyütür — yer kaplamaz, daha seyrek sipariş.', FUEL_LABEL[f], TANK_CAPACITY[s.tankLevel]),
+        TANK_ADD_COSTS[s.tankCounts[f]], null)
+  }
   row('airwater', 'i-air', s.airWaterCount ? t('Hava-Su Ünitesi ({0})', s.airWaterCount) : t('Hava-Su Ünitesi'), '+₺10-20',
     t('Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)'), AIRWATER_COST, null)
   row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
