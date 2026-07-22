@@ -1332,6 +1332,48 @@ function applySaveData(d: Record<string, unknown>) {
   if (Array.isArray(d.placedRects)) placedRects.push(...(d.placedRects as (Rect & { id: string })[]).filter(r => r.id !== 'gatein' && r.id !== 'gateout'))
 }
 
+/**
+ * Offline (arka plan) gelir: oyuncu yokken geçen süre kadar pasif kazanç.
+ * İstasyonun gelişmişliğine göre ₺/sn hız × süre × verim (aktif oyundan düşük).
+ * En fazla 6 saat + ₺150.000 tavan. İstasyon kapalıysa gelir yok.
+ * Anti-cheat uyumlu: income ≤ 150k, sunucu allowance'ı (50k + elapsed×600) hep kapsar.
+ */
+function applyOfflineEarnings() {
+  if (state.closed || !loadedSaveAt) return
+  const elapsedSec = (Date.now() - loadedSaveAt) / 1000
+  if (elapsedSec < 120) return // <2 dk: anlamsız
+  const capped = Math.min(elapsedSec, 6 * 3600) // en fazla 6 saat
+  const facilities = (state.marketLevel > 0 ? state.marketLevel : 0)
+    + (state.hasCoffee ? 1 : 0) + (state.hasRestaurant ? 1 : 0) + (state.hasWash ? 1 : 0)
+    + (state.hasOil ? 1 : 0) + (state.hasTruckPark ? 1 : 0) + state.selfWashCount + (state.hasSMR ? 2 : 0)
+  const ratePerSec = 1 + state.pumps * 1.2 + state.evChargers * 0.8 + facilities * 0.6
+  const income = Math.min(150_000, Math.round(ratePerSec * capped * 0.4)) // %40 offline verim
+  if (income < 50) return
+  state.money += income
+  showOfflineModal(income, elapsedSec)
+}
+
+/** "Tekrar hoş geldin — yokken istasyonun kazandı" modalı (oyunun krem/kırmızı dili) */
+function showOfflineModal(income: number, elapsedSec: number) {
+  const h = Math.floor(elapsedSec / 3600), m = Math.floor((elapsedSec % 3600) / 60)
+  const dur = h > 0 ? `${h} sa ${m} dk` : `${m} dk`
+  const o = document.createElement('div')
+  o.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#0d1420cc;display:flex;align-items:center;justify-content:center;padding:22px;font-family:var(--font,system-ui)'
+  o.innerHTML =
+    `<div style="background:linear-gradient(180deg,#fdfaf2,#f1ebdb);border:2px solid #e0d4bd;border-bottom-width:7px;border-radius:22px;padding:22px 26px;max-width:340px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(10,14,20,.5)">`
+    + `<div style="font-size:44px;line-height:1">🏭💤</div>`
+    + `<div style="font-size:22px;font-weight:800;color:#1e2a36;margin:8px 0 2px">Tekrar hoş geldin!</div>`
+    + `<div style="font-size:13px;font-weight:700;color:#7a6152">${dur} yoktun — istasyonun senin için çalıştı ⛽</div>`
+    + `<div style="font-size:34px;font-weight:800;color:#2fa05a;margin:14px 0 2px">+₺${income.toLocaleString('tr-TR')}</div>`
+    + `<div style="font-size:11px;font-weight:700;color:#9aa4b0;margin-bottom:16px">kasana eklendi</div>`
+    + `<button id="off-ok" style="width:100%;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">Devam et 🚀</button>`
+    + `</div>`
+  document.body.appendChild(o)
+  const close = () => o.remove()
+  o.querySelector('#off-ok')?.addEventListener('click', close)
+  o.addEventListener('click', e => { if (e.target === o) close() })
+}
+
 /** kayıttan gelen state'e göre sahneyi yeniden kurar */
 function rebuildFromState() {
   const validParcel = (c: number, r: number) => Number.isInteger(c) && Number.isInteger(r) && c >= 0 && c < PARCEL_COLS.length && r >= 0 && r < PARCEL_ROWS.length
@@ -1944,6 +1986,7 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
       applySaveData(remote as Record<string, unknown>)
       saveLoaded = true
       ui.toast(t('Bulut kaydı yüklendi — Gün {0} ({1})', state.day, auth.currentEmail() ?? ''), 'good', true)
+      applyOfflineEarnings() // yokken geçen süre kadar pasif gelir
     }
   } catch {
     // Bulut kaydı yüklenemedi: TAZE oturumla oynamaya izin verme — yoksa
