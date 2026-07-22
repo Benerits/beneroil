@@ -291,14 +291,15 @@ export class World {
       }, undefined, () => {})
       return mat
     }
-    const grassMat = aiGround('/gen/ground_grass.png', 18, 20,
+    const grassMat = aiGround('/gen/ground_grass.png', 40, 44,
       noiseTex('#86b06a', [['#79a25e', 900], ['#93bd77', 900], ['#6d9454', 300]], 30))
     this.concreteMat = aiGround('/gen/ground_concrete.png', 2.5, 4.5,
       noiseTex('#9aa1a9', [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 8))
     const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 84,
       noiseTex('#4a5058', [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(320, 300), grassMat)
+    // zemin geniş tutulur: mobilde en fazla uzaklaşıldığında bile kenarı görünüp arka plan (gök) sızmasın
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(720, 660), grassMat)
     ground.position.x = 8
     ground.receiveShadow = true
     s.add(ground)
