@@ -1455,8 +1455,8 @@ function rebuildFromState() {
     world.removeBuildingGroup('office')
     world.buildOffice(pv('office'))
   }
-  if (placedPos.gatein) world.buildGate('in', pv('gatein'))
-  if (placedPos.gateout) world.buildGate('out', pv('gateout'))
+  if (placedPos.gatein) { const g = pv('gatein'); if (g) { world.removeLampNear(g.y); world.buildGate('in', g) } }
+  if (placedPos.gateout) { const g = pv('gateout'); if (g) { world.removeLampNear(g.y); world.buildGate('out', g) } }
   {
     const s0 = placedPos['pump-0']
     if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]))
@@ -1777,8 +1777,8 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
     world.moveCharger(n, new THREE.Vector2(cx - 0.5, cy), placedRot[`charger-${n}`] ?? 0) // taşırken açıyı koru
   }
   else if (id === 'tank') world.moveTank(new THREE.Vector2(cx, cy))
-  else if (id === 'gatein') { world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
-  else if (id === 'gateout') { world.buildGate('out', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
+  else if (id === 'gatein') { world.removeLampNear(cy); world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
+  else if (id === 'gateout') { world.removeLampNear(cy); world.buildGate('out', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
   else {
     world.removeBuildingGroup(id)
     buildVisual(id, new THREE.Vector2(cx, cy))
@@ -1794,6 +1794,14 @@ function repositionPlacing(x: number, y: number) {
     placing.root.position.set(placing.cx, placing.cy, 0)
     const otherY = placing.id === 'gatein' ? world.gateOut.y : world.gateIn.y
     placing.valid = Math.abs(placing.cy - otherY) >= 5
+  } else if (placing.id === 'sign') {
+    // tabela istasyon çevresinde / yol kenarında kalsın (çok uzağa taşınmasın)
+    placing.cx = Math.max(-11, Math.min(6, Math.round(x)))
+    placing.cy = Math.max(-15, Math.min(15, Math.round(y)))
+    placing.root.position.set(placing.cx, placing.cy, 0)
+    const odd = placing.rot % 2 === 1
+    const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
+    placing.valid = isValidPlacement(eff, placing.id, placing.grass)
   } else {
     placing.cx = Math.round(x)
     placing.cy = Math.round(y)

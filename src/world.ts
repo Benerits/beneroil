@@ -753,26 +753,42 @@ export class World {
     }
   }
 
+  // sokak lambaları izlenir → kapı (giriş/çıkış) üzerine gelince kaldırılabilir
+  private lamps: { x: number; y: number; group: THREE.Group; bulbMat: THREE.Material; light: THREE.PointLight }[] = []
   private placeLamp(x: number, y: number) {
+    const lg = new THREE.Group()
     if (this.statics?.lamp) {
       const l = fitModel(this.statics.lamp, 3.4, 'z')
       l.position.set(x, y, 0)
       l.rotation.z = Math.PI
       l.traverse(m => { m.castShadow = true })
-      this.scene.add(l)
+      lg.add(l)
     } else {
-      buildLampProc(x, y, this.scene)
+      buildLampProc(x, y, lg)
     }
     // gece yanan ampul + gerçek ışık kaynağı
     const bulbMat = glow(0xfff3c4, 0.05)
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), bulbMat)
     bulb.position.set(x + 0.6, y, 3.0)
-    this.scene.add(bulb)
+    lg.add(bulb)
     this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner: 'lamp' })
     const light = new THREE.PointLight(0xffd9a0, 0, 18, 1.7)
     light.position.set(x + 0.6, y, 3.2)
-    this.scene.add(light)
+    lg.add(light)
     this.nightLights.push(light)
+    this.scene.add(lg)
+    this.lamps.push({ x, y, group: lg, bulbMat, light })
+  }
+
+  /** kapı yerleştirilen y'ye yakın sokak lambasını kaldır (giriş/çıkış üstünde lamba kalmasın) */
+  removeLampNear(y: number, dy = 2.6) {
+    this.lamps = this.lamps.filter(l => {
+      if (Math.abs(l.y - y) > dy) return true
+      this.scene.remove(l.group)
+      this.nightMats = this.nightMats.filter(m => m.mat !== l.bulbMat)
+      this.nightLights = this.nightLights.filter(li => li !== l.light)
+      return false
+    })
   }
 
   private placePlanter(x: number, y: number) {
