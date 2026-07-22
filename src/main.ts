@@ -2930,6 +2930,8 @@ function handleClick(e: PointerEvent) {
       const c = obj.userData.car as Car
       // molada elektrikli araç: tıklayınca direkt gönder (arıza pill'i gibi, panel/popup açılmadan)
       if (c.kind === 'ev' && c.squatting) ui.onDismiss(c)
+      // pompacı/şarjcı devredeyse otomasyon hallediyor → dokunulsa bile panel/popup AÇMA
+      else if (isAttendantCar(c)) ui.toast(t('🧑‍🔧 Pompacı bu aracı hallediyor.'), '', true)
       else ui.selectCar(c)
     }
     return
