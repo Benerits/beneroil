@@ -1793,7 +1793,13 @@ function startPlacement(id: string, move = false) {
   root.add(plane)
   root.add(footprintGrid(f.w, f.d))
   const preview = makePreview(id)
-  if (preview) root.add(preview)
+  if (preview) {
+    // pompa/şarj gövdesi footprint merkezinin BATISINDA kurulur (commit: pompa cx-0.9, şarj cx-0.5);
+    // hayaleti de aynı offsetle göster → onaylanınca göründüğü yere oturur (WYSIWYG, "1 kare geri" bug'ı biter)
+    if (id.startsWith('pump-')) preview.position.x = -0.9
+    else if (id.startsWith('charger-')) preview.position.x = -0.5
+    root.add(preview)
+  }
   world.scene.add(root)
   placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, valid: false, cx: 0, cy: 0, rot: placedRot[id] ?? 0 }
   root.rotation.z = placing.rot * Math.PI / 2
