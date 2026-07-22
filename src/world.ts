@@ -293,10 +293,10 @@ export class World {
       noiseTex('#86b06a', [['#79a25e', 900], ['#93bd77', 900], ['#6d9454', 300]], 30))
     this.concreteMat = aiGround('/gen/ground_concrete.png', 2.5, 4.5,
       noiseTex('#9aa1a9', [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 8))
-    const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 38,
+    const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 84,
       noiseTex('#4a5058', [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(190, 170), grassMat)
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(320, 300), grassMat)
     ground.position.x = 8
     ground.receiveShadow = true
     s.add(ground)
@@ -310,21 +310,22 @@ export class World {
 
     // yol (arada yeşil bant kalır) + şerit çizgileri
     // gidiş-geliş yol: çift sarı orta çizgi + şerit içi beyaz kesikler + kenar çizgileri
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 100), roadMat)
+    // yol uzatıldı (100→220): zoom-out yapınca yolun bittiği görünmesin
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 220), roadMat)
     road.position.set(ROAD_X, 0, 0.01)
     road.receiveShadow = true
     s.add(road)
     for (const off of [-0.1, 0.1]) {
-      const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 100), lam(0xe0b13e))
+      const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 220), lam(0xe0b13e))
       center.position.set(ROAD_X + off, 0, 0.022)
       s.add(center)
     }
     for (const off of [-2.16, 2.16]) {
-      const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 100), lam(0xe8e4d8))
+      const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 220), lam(0xe8e4d8))
       edgeLine.position.set(ROAD_X + off, 0, 0.02)
       s.add(edgeLine)
     }
-    for (let y = -48; y < 49; y += 5) {
+    for (let y = -108; y < 109; y += 5) {
       for (const off of [-1.1, 1.1]) {
         const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 1.5), lam(0xd9d5c9))
         dash.position.set(ROAD_X + off, y, 0.02)
