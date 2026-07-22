@@ -1520,6 +1520,8 @@ function fixedObstacles(skipId = ''): Rect[] {
     { cx: 4.3, cy: 0, w: 2.0, d: 48 },       // servis şeridi (araç yolu, daraltıldı)
     { cx: 4.0, cy: -11.5, w: 2.4, d: 3.4 },  // tabela
   ]
+  // karşı istasyon açıksa: otomatik giriş-çıkış + araç koridoru korunur (üstüne pompa/şarj konamaz)
+  if (world.farStationOn) r.push({ cx: 11.5, cy: 0, w: 2.0, d: 48 })
   if (skipId !== 'tank')
     r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.0, d: 2.0 })
   if (skipId !== 'office') {
