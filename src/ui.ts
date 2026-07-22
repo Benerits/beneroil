@@ -3,6 +3,7 @@ import { t } from './i18n'
 import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems } from './state'
 import { audio } from './audio'
 import * as auth from './auth'
+import { isNativePlatform } from './platform'
 
 function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T
@@ -35,6 +36,7 @@ export interface BuildingCard {
 /** ikon kutusu renkleri — her kalem kendi kimliğinde */
 const ICON_COLORS: Record<string, string> = {
   land: '#27a05a', pave: '#7a8290', pump: '#d64545', sign: '#2f6fed', tank: '#5a6b7c',
+  'tankadd-benzin': '#27a05a', 'tankadd-dizel': '#e8862e', 'tankadd-lpg': '#2f6fed',
   airwater: '#1fa8bc', parking: '#2f6fed', market: '#e8862e', toilet: '#2f6fed', wash: '#2f9fd6',
   selfwash: '#1fa8bc', oil: '#b08a3f', coffee: '#8a5a3c', restaurant: '#c9484f', truckpark: '#5a6b7c',
   grid: '#e0a121', battery: '#27a05a', evcharger: '#1fa8bc', solar: '#e8862e', dieselgen: '#b08a3f', smr: '#d64545',
@@ -68,6 +70,7 @@ const DIMS: Record<string, (s: GameState) => string> = {
 const CATEGORY_MAP: Record<string, string> = {
   land: 'arsa', pave: 'arsa',
   pump: 'istasyon', sign: 'istasyon', tank: 'istasyon', airwater: 'istasyon', parking: 'istasyon',
+  'tankadd-benzin': 'istasyon', 'tankadd-dizel': 'istasyon', 'tankadd-lpg': 'istasyon',
   market: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
   coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis',
   grid: 'enerji', battery: 'enerji', evcharger: 'enerji', solar: 'enerji', dieselgen: 'enerji', smr: 'enerji',
@@ -83,6 +86,7 @@ export class UI {
   onDismiss: (car: Car) => void = () => {}
   onCleanWindows: (car: Car) => void = () => {}
   onOrderFuel: (f: FuelType) => void = () => {}
+  onOrderQty: (f: FuelType, d: number) => void = () => {}
   onBuy: (id: string) => void = () => {}
   onMaint: (id: string) => void = () => {}
   onRename: (name: string) => void = () => {}
@@ -106,6 +110,8 @@ export class UI {
   onRegister: (email: string, pass: string) => void = () => {}
   onLogout: () => void = () => {}
   batteryKwh: () => number = () => 0
+  /** bu aracın pompasında/şarjında pompacı/şarjcı var mı (cam-sil butonunu gizlemek için) */
+  attendantAt: (car: Car) => boolean = () => false
   /** canlı tanker durumu satırları (main bağlar) */
   tankerStatus: () => string[] = () => []
   /** gerçek 3D modelin PNG render'ı (main bağlar) */
@@ -160,6 +166,11 @@ export class UI {
     for (const f of FUELS) {
       el<HTMLButtonElement>(`fbtn-${f}`).addEventListener('click', () => this.onOrderFuel(f))
     }
+    // sipariş miktarı −/+ (min 800L → full)
+    fuelWrap.addEventListener('click', e => {
+      const b = (e.target as HTMLElement).closest('button.forder') as HTMLButtonElement | null
+      if (b) this.onOrderQty(b.dataset.f as FuelType, Number(b.dataset.d))
+    })
     this.closeBtn.addEventListener('click', () => this.onToggleClosed())
     const accWrap = el<HTMLDivElement>('accwrap')
     el<HTMLButtonElement>('accbtn').addEventListener('click', () => accWrap.classList.add('show'))
@@ -206,7 +217,15 @@ export class UI {
     el<HTMLButtonElement>('stsave').addEventListener('click', save)
     nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') save() })
     const fbWrap = el<HTMLDivElement>('fbwrap')
-    el<HTMLButtonElement>('fbbtn').addEventListener('click', () => fbWrap.classList.add('show'))
+    const fbBtn = el<HTMLButtonElement>('fbbtn')
+    // Sorun Bildir yalnızca web'de; native app'te gizli (mobil UI temiz kalsın).
+    if (isNativePlatform()) fbBtn.style.display = 'none'
+    fbBtn.addEventListener('click', () => fbWrap.classList.add('show'))
+    // ayarların içindeki Sorun Bildir: ayarları kapat, geri bildirim modalını aç (mobil/native dahil)
+    el<HTMLButtonElement>('set-feedback')?.addEventListener('click', () => {
+      el<HTMLDivElement>('setwrap').classList.remove('show')
+      fbWrap.classList.add('show')
+    })
     fbWrap.addEventListener('pointerdown', e => { if (e.target === fbWrap) fbWrap.classList.remove('show') })
     el<HTMLButtonElement>('fbsend').addEventListener('click', async () => {
       const ta = el<HTMLTextAreaElement>('fbtext')
@@ -227,26 +246,45 @@ export class UI {
     el<HTMLButtonElement>('resetbtn').addEventListener('click', () => {
       if (confirm(t('Tüm ilerleme silinecek. Emin misin?'))) this.onReset()
     })
+    // App Store zorunluluğu: uygulama içinden hesap silme
+    el<HTMLButtonElement>('delaccbtn')?.addEventListener('click', async () => {
+      if (!confirm(t('Hesabın ve TÜM verilerin kalıcı olarak silinecek. Bu işlem geri alınamaz. Emin misin?'))) return
+      try { await auth.deleteAccount(); location.href = '/' }
+      catch (e) { this.toast((e as Error).message || t('Silinemedi, tekrar dene.'), 'bad') }
+    })
 
-    // ses ayarları
-    const musicBtn = el<HTMLButtonElement>('musicbtn')
+    // ses ayarları: müzik seviyeli slider + efekt aç/kapa
+    const musicVol = el<HTMLInputElement>('musicvol')
+    const musicVolVal = el<HTMLSpanElement>('musicvolval')
     const sfxBtn = el<HTMLButtonElement>('sfxbtn')
-    const syncAudioLabels = () => {
-      musicBtn.textContent = audio.musicOn ? t('Müzik: Açık') : t('Müzik: Kapalı')
-      sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı')
+    const paintSlider = (pct: number) => {
+      musicVol.style.background = `linear-gradient(90deg, var(--red) 0 ${pct}%, var(--paper-2) ${pct}% 100%)`
+      musicVolVal.textContent = `%${pct}`
     }
+    const syncAudioLabels = () => { sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı') }
     syncAudioLabels()
-    musicBtn.addEventListener('click', () => { audio.toggleMusic(); syncAudioLabels() })
+    const initPct = Math.round(audio.musicVolume * 100)
+    musicVol.value = String(initPct); paintSlider(initPct)
+    musicVol.addEventListener('input', () => { const p = Number(musicVol.value); audio.setMusicVolume(p / 100); paintSlider(p) })
     sfxBtn.addEventListener('click', () => { audio.toggleSfx(); syncAudioLabels() })
     const notifBtn = el<HTMLButtonElement>('notifbtn')
-    const syncNotif = () => {
+    const capLN = () => (window as unknown as { Capacitor?: { Plugins?: { LocalNotifications?: any } } }).Capacitor?.Plugins?.LocalNotifications
+    const syncNotif = async () => {
+      if (isNativePlatform() && capLN()) {
+        let st = 'prompt'
+        try { st = (await capLN().checkPermissions())?.display ?? 'prompt' } catch { /* yok say */ }
+        notifBtn.textContent = st === 'granted' ? t('Bildirimler: Açık') : st === 'denied' ? t('Bildirimler: Engelli') : t('Bildirimlere İzin Ver')
+        notifBtn.disabled = st === 'granted' || st === 'denied'
+        return
+      }
       const p = 'Notification' in window ? Notification.permission : 'unsupported'
       notifBtn.textContent = p === 'granted' ? t('Bildirimler: Açık') : p === 'denied' ? t('Bildirimler: Engelli') : t('Bildirimlere İzin Ver')
       notifBtn.disabled = p === 'granted' || p === 'denied' || p === 'unsupported'
     }
     syncNotif()
     notifBtn.addEventListener('click', async () => {
-      if ('Notification' in window) await Notification.requestPermission()
+      if (isNativePlatform() && capLN()) { try { await capLN().requestPermissions() } catch { /* yok say */ } }
+      else if ('Notification' in window) await Notification.requestPermission()
       syncNotif()
     })
 
@@ -355,12 +393,13 @@ export class UI {
     }
     this.panel.classList.add('show')
     el<HTMLButtonElement>('dismissbtn').disabled = car.filling || car.filled > 0
-    // camlar temizlenince o satır tamamen kapanır (iş bitti, buton yer kaplamasın)
-    el<HTMLDivElement>('cleanrow').style.display = car.windowsCleaned ? 'none' : 'flex'
+    // camlar temizlenince VEYA bu pompa/şarjda pompacı/şarjcı varsa cam-sil butonu gizlenir (artık onun işi)
+    el<HTMLDivElement>('cleanrow').style.display = (car.windowsCleaned || this.attendantAt(car)) ? 'none' : 'flex'
 
     if (car.kind === 'ev') {
       this.fuelCtl.style.display = 'none'
       this.evCtl.style.display = 'block'
+      el<HTMLDivElement>('pumpdisp').style.display = 'none'
       this.setHtml(this.demand, `<span class="dlabel">${t('MÜŞTERİ İSTEĞİ')}</span>` +
         `<span class="fpill" style="background:#1fa8bc">${t('ELEKTRİK')}</span><span class="damt">${car.demandKwh} kWh</span>`)
       const have = this.batteryKwh()
@@ -382,6 +421,9 @@ export class UI {
 
     this.fuelCtl.style.display = 'block'
     this.evCtl.style.display = 'none'
+    el<HTMLDivElement>('pumpdisp').style.display = 'flex'
+    el<HTMLSpanElement>('pd-liters').textContent = car.filled.toFixed(1)
+    el<HTMLSpanElement>('pd-total').textContent = Math.round(car.filledValue).toString()
     const fc = car.demandType === 'benzin' ? '#27a05a' : car.demandType === 'dizel' ? '#e8862e' : '#2f6fed'
     this.setHtml(this.demand, `<span class="dlabel">${t('MÜŞTERİ İSTEĞİ')}</span>` +
       `<span class="fpill" style="background:${fc}">${FUEL_LABEL[car.demandType]}</span>` +
@@ -396,7 +438,8 @@ export class UI {
     this.amount.disabled = car.filling || car.wantsFull
     const amt = Math.floor(Number(this.amount.value))
     this.startBtn.disabled = !car.nozzle || !(amt > 0) || car.filling || car.filled > 0 || car.wantsFull
-    el<HTMLButtonElement>('fullbtn').disabled = !car.nozzle || car.filling || car.filled > 0
+    // FULLE yalnızca gerçekten "full" isteyen müşteride (belirli tutar isteyeni FULLE'lemek anlamsız/exploit)
+    el<HTMLButtonElement>('fullbtn').disabled = !car.nozzle || car.filling || car.filled > 0 || !car.wantsFull
     if (!car.filling && car.filled === 0)
       this.setText(this.progress, car.wantsFull
         ? t('Müşteri FULLE istiyor — tabancayı seç, FULLE bas')
@@ -418,7 +461,7 @@ export class UI {
       `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
     if (card.action) {
       this.infoAction.style.display = 'flex'
-      this.infoAction.textContent = stripEmoji(card.action.label)
+      this.infoAction.textContent = stripEmoji(t(card.action.label))
       this.currentAction = card.action.maintId
     } else {
       this.infoAction.style.display = 'none'
@@ -426,7 +469,7 @@ export class UI {
     }
     if (card.move) {
       this.infoMove.style.display = 'flex'
-      this.infoMove.textContent = stripEmoji(card.move.label)
+      this.infoMove.textContent = stripEmoji(t(card.move.label))
       this.currentMove = card.move.id
     } else {
       this.infoMove.style.display = 'none'
@@ -435,7 +478,7 @@ export class UI {
     const buyBtn = el<HTMLButtonElement>('binfo-buy')
     if (card.buy) {
       buyBtn.style.display = 'flex'
-      buyBtn.textContent = stripEmoji(card.buy.label)
+      buyBtn.textContent = stripEmoji(t(card.buy.label))
       this.currentBuy = card.buy.id
     } else {
       buyBtn.style.display = 'none'
@@ -443,7 +486,7 @@ export class UI {
     }
     if (card.sell) {
       this.infoSell.style.display = 'flex'
-      this.infoSell.textContent = stripEmoji(card.sell.label)
+      this.infoSell.textContent = stripEmoji(t(card.sell.label))
       this.currentSell = card.sell.id
     } else {
       this.infoSell.style.display = 'none'
@@ -533,16 +576,15 @@ export class UI {
       tpanel.innerHTML = ts.map(t =>
         `<div class="trow">${icon('i-truck')} <span>${t}</span></div>`).join('')
     }
-    this.setText(el<HTMLDivElement>('acc-email'), this.accountEmail ?? '—')
-    this.setText(el<HTMLDivElement>('acc-streak'), t('Giriş serisi: {0} gün · Oyun günü: {1}', state.loginStreak, state.day))
-    this.setText(el<HTMLDivElement>('acc-ach'), t('Başarımlar: {0}/8 · Görev: {1}', state.achievements.size, state.dailyDone ? t('tamamlandı') : state.dailyServed + '/15'))
+    // profil kartı açıldığında renderProfile() ile doldurulur (her frame değil)
 
     // yakıt türü başına tank barları + sipariş modalı satırları
     let anyLow = false
     for (const f of FUELS) {
       const lvl = state.tanks[f]
-      if (lvl < state.tankCapacity * 0.15) anyLow = true
-      el<HTMLDivElement>(`fill-${f}`).style.width = `${(lvl / state.tankCapacity) * 100}%`
+      const cap = state.fuelCapacity(f)
+      if (lvl < cap * 0.15) anyLow = true
+      el<HTMLDivElement>(`fill-${f}`).style.width = `${(lvl / cap) * 100}%`
       this.setText(el<HTMLSpanElement>(`lvl-${f}`), `${Math.round(lvl)}L`)
       const o = state.orders[f]
       const need = state.orderNeed(f)
@@ -557,7 +599,7 @@ export class UI {
         this.setText(btn, t('Dolu'))
         btn.disabled = true
       } else {
-        this.setText(info, `${Math.round(state.tanks[f])} / ${state.tankCapacity}L — ${need}L eksik`)
+        this.setText(info, `${Math.round(state.tanks[f])} / ${cap}L · +${need}L sipariş`)
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }
@@ -597,10 +639,14 @@ export class UI {
     }
 
     const car = this.activeCar
-    if (car && car.phase === 'atPump' && car.kind === 'fuel' && (car.filling || car.filled > 0)) {
-      this.progress.textContent = car.fullMode
-        ? `${car.filled.toFixed(1)}L · ₺${car.filledValue.toFixed(0)} / FULL`
-        : `${car.filled.toFixed(1)}L · ₺${car.filledValue.toFixed(0)} / ₺${car.targetAmount}`
+    if (car && car.phase === 'atPump' && car.kind === 'fuel') {
+      // dijital pompa ekranı canlı artar
+      el<HTMLSpanElement>('pd-liters').textContent = car.filled.toFixed(1)
+      el<HTMLSpanElement>('pd-total').textContent = Math.round(car.filledValue).toString()
+      if (car.filling || car.filled > 0)
+        this.progress.textContent = car.fullMode
+          ? t('doluyor… hedef FULL')
+          : t('doluyor… hedef ₺{0}', car.targetAmount)
     }
   }
 
@@ -611,12 +657,13 @@ export class UI {
     }
     const box = el<HTMLDivElement>('toasts')
     while (box.children.length >= 4) box.firstElementChild?.remove()
-    const t = document.createElement('div')
-    t.className = `toast ${kind}`
-    t.textContent = stripEmoji(msg)
-    box.appendChild(t)
-    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .4s' }, 3000)
-    setTimeout(() => t.remove(), 3500)
+    const node = document.createElement('div')
+    node.className = `toast ${kind}`
+    // sarılmamış Türkçe toast'lar da İngilizce moda çevrilsin (t() bilinen key'i çevirir, değilse aynen bırakır)
+    node.textContent = stripEmoji(t(msg))
+    box.appendChild(node)
+    setTimeout(() => { node.style.opacity = '0'; node.style.transition = 'opacity .4s' }, 3000)
+    setTimeout(() => node.remove(), 3500)
   }
 
   showBoom() {

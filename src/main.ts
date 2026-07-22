@@ -1,18 +1,20 @@
 import * as THREE from 'three'
-import { World, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
+import { World, ROAD_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
-  POMPACI_HIRE, sellInfo, applySell,
+  POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
 } from './state'
 import { loadModels, loadStatics } from './models'
+import { isNativePlatform } from './platform'
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
 import * as auth from './auth'
-import { initAds, adsEnabled, interstitial, rewarded } from './ads'
+import { initAds, adsEnabled, interstitial, rewarded, rewardedReady, setPremium, beginAdSession, mayShowInterstitial } from './ads'
+import { PRODUCTS, initStore, purchase, restore, storeAvailable } from './store'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
@@ -80,6 +82,99 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
     gPass.addEventListener('keydown', e => {
       if (e.key === 'Enter') (document.getElementById('glogin') as HTMLButtonElement).click()
     })
+
+    // ---- Sosyal giriş: Google + Apple (web GIS/AppleJS · Capacitor-iOS native plugin) ----
+    const loadScript = (src: string) => new Promise<void>((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) return resolve()
+      const s = document.createElement('script'); s.src = src; s.async = true
+      s.onload = () => resolve(); s.onerror = () => reject(new Error('script'))
+      document.head.appendChild(s)
+    })
+    const oauthSubmit = async (provider: 'google' | 'apple', idToken: string, email?: string) => {
+      gErr.style.color = ''; gErr.textContent = ''
+      try {
+        const res = await fetch(`/api/auth/${provider}`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ idToken, email }),
+        })
+        const d = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(d.error ?? t('Giriş başarısız.'))
+        localStorage.setItem('benzinlik-token', d.token)
+        localStorage.setItem('benzinlik-email', d.email)
+        location.reload()
+      } catch (err) { gErr.textContent = (err as Error).message }
+    }
+    const setupOAuth = async () => {
+      let cfg: { googleClientId?: string; appleServicesId?: string } = {}
+      try { cfg = await (await fetch('/api/config')).json() } catch { /* config yoksa sosyal giriş gizli kalır */ }
+      const box = document.getElementById('ag-oauth') as HTMLDivElement
+      const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, any> } }).Capacitor
+      const isNative = isNativePlatform()
+      let any = false
+      // Capacitor-iOS: @capgo/capacitor-social-login login öncesi initialize ister (bir kez).
+      // iOS Google client id + Apple native aud (bundle id) — ikisi de public değer.
+      let socialInited = false
+      const initSocial = async (P: Record<string, any>) => {
+        if (socialInited || !P.SocialLogin?.initialize) return
+        await P.SocialLogin.initialize({
+          google: { iOSClientId: '80997572914-8ihbi46csk9ngog7ec1oe2ssb3c08t5e.apps.googleusercontent.com' },
+          apple: { clientId: 'com.benerits.beneloil' },
+        })
+        socialInited = true
+      }
+      // Google
+      if (isNative && cap?.Plugins) {
+        const btn = document.createElement('button')
+        btn.className = 'btn'; btn.style.cssText = 'width:100%;justify-content:center'
+        btn.textContent = t('Google ile devam et')
+        btn.onclick = async () => {
+          try {
+            const P = cap.Plugins!
+            if (P.SocialLogin) { await initSocial(P); const r = await P.SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } }); await oauthSubmit('google', r?.result?.idToken ?? r?.idToken) }
+            else if (P.GoogleAuth) { const u = await P.GoogleAuth.signIn(); await oauthSubmit('google', u?.authentication?.idToken) }
+            else gErr.textContent = 'Google plugin bulunamadı.'
+          } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
+        }
+        document.getElementById('gbtn-google')!.appendChild(btn); any = true
+      } else if (cfg.googleClientId) {
+        try {
+          await loadScript('https://accounts.google.com/gsi/client')
+          const g = (window as unknown as { google: any }).google
+          g.accounts.id.initialize({ client_id: cfg.googleClientId, callback: (resp: { credential: string }) => oauthSubmit('google', resp.credential) })
+          g.accounts.id.renderButton(document.getElementById('gbtn-google'), { theme: 'outline', size: 'large', width: 300, text: 'continue_with', shape: 'pill' })
+          any = true
+        } catch { /* GIS yüklenemedi */ }
+      }
+      // Apple
+      const aBtn = document.getElementById('gbtn-apple') as HTMLButtonElement
+      if (isNative && cap?.Plugins) {
+        aBtn.style.display = 'flex'
+        aBtn.onclick = async () => {
+          try {
+            const P = cap.Plugins!
+            if (P.SocialLogin) { await initSocial(P); const r = await P.SocialLogin.login({ provider: 'apple', options: { scopes: ['email', 'name'] } }); await oauthSubmit('apple', r?.result?.idToken ?? r?.identityToken) }
+            else if (P.SignInWithApple) { const r = await P.SignInWithApple.authorize({ scopes: 'email name' }); await oauthSubmit('apple', r?.response?.identityToken) }
+            else gErr.textContent = 'Apple plugin bulunamadı.'
+          } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
+        }
+        any = true
+      } else if (cfg.appleServicesId) {
+        try {
+          await loadScript('https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js')
+          const AppleID = (window as unknown as { AppleID: any }).AppleID
+          AppleID.auth.init({ clientId: cfg.appleServicesId, scope: 'name email', redirectURI: location.origin + '/', usePopup: true })
+          aBtn.style.display = 'flex'
+          aBtn.onclick = async () => {
+            try { const data = await AppleID.auth.signIn(); await oauthSubmit('apple', data.authorization.id_token, data.user?.email) }
+            catch (e) { if ((e as { error?: string })?.error !== 'popup_closed_by_user') gErr.textContent = t('Giriş başarısız.') }
+          }
+          any = true
+        } catch { /* Apple JS yüklenemedi */ }
+      }
+      if (any) box.style.display = 'block'
+    }
+    setupOAuth()
+
     await new Promise(() => {}) // giriş yapılana dek modül burada durur
   }
 }
@@ -89,6 +184,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)) // performans: 2x retina yerine 1.5x yeterli
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.localClippingEnabled = true // küre tank sıvısı: yatay düzlemle alttan-yukarı dolum kırpması
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 1.1
 app.appendChild(renderer.domElement)
@@ -96,13 +192,25 @@ app.appendChild(renderer.domElement)
 // Kamera: (1x, 2y, 1z) yönünden ortografik; tekerlek = zoom, sürükle = kaydır
 const VIEW = 26
 const camera = new THREE.OrthographicCamera()
-const camDir = new THREE.Vector3(1, 2, 1).normalize().multiplyScalar(42)
+// Harita açısı: birkaç hazır izometrik yön; oyuncu "açı" butonuyla döner.
+const CAM_ANGLES = [
+  new THREE.Vector3(1, 2, 1), new THREE.Vector3(1.6, 2, 0.5), new THREE.Vector3(0.5, 2.2, 1.6),
+].map(v => v.normalize().multiplyScalar(42))
+let camAngleIdx = 0
+let camDir = CAM_ANGLES[camAngleIdx].clone()
 let camX = 0
 let camY = 0
+let pinching = false // iki parmak zoom sırasında sürükle-kaydırma devre dışı
 
 function updateCamera() {
   camera.position.set(camDir.x + camX, camDir.y + camY, camDir.z)
   camera.lookAt(camX, camY, 0)
+}
+
+function cycleCameraAngle() {
+  camAngleIdx = (camAngleIdx + 1) % CAM_ANGLES.length
+  camDir = CAM_ANGLES[camAngleIdx].clone()
+  updateCamera()
 }
 
 let composer: EffectComposer | null = null
@@ -117,32 +225,91 @@ function resize() {
   camera.top = VIEW / 2
   camera.bottom = -VIEW / 2
   camera.near = 0.1
-  camera.far = 200
+  camera.far = 400 // zoom-out artınca (min 0.42) + uzun yol/geniş zemin kırpılmasın
   camera.updateProjectionMatrix()
 }
 window.addEventListener('resize', resize)
 window.addEventListener('wheel', e => {
   // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
-  if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud')) return
-  camera.zoom = Math.min(2.6, Math.max(0.78, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
+  if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar')) return
+  camera.zoom = Math.min(2.6, Math.max(0.42, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
+
+// ---- Mobil: iki parmak = kamera zoom (tekerlek yok) + sayfa zoom'unu engelle ----
+let pinchStartDist = 0, pinchStartZoom = 1
+const touchDist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+window.addEventListener('touchstart', e => {
+  if (e.touches.length === 2 && !(e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar, #authgate')) {
+    pinching = true; pinchStartDist = touchDist(e.touches); pinchStartZoom = camera.zoom
+  }
+}, { passive: true })
+window.addEventListener('touchmove', e => {
+  if (pinching && e.touches.length === 2) {
+    e.preventDefault()
+    const d = touchDist(e.touches)
+    if (pinchStartDist > 0) {
+      camera.zoom = Math.min(2.6, Math.max(0.42, pinchStartZoom * (d / pinchStartDist)))
+      camera.updateProjectionMatrix()
+    }
+  }
+}, { passive: false })
+window.addEventListener('touchend', e => { if (e.touches.length < 2) pinching = false }, { passive: true })
+// iOS/WKWebView'in kendi pinch/çift-dokunuş zoom jestlerini kapat (UI kaymasın)
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(ev, e => e.preventDefault(), { passive: false })
+}
+
 resize()
 updateCamera()
 
 // tarayıcı autoplay kuralı: ilk dokunuşta ses sistemini aç
 window.addEventListener('pointerdown', () => audio.ensure(), { once: true })
 
-// sekme arka plandayken önemli olayları bildir (izin verildiyse) + başlıkta işaret
-function notifyIfHidden(text: string) {
-  if (!document.hidden) return
-  document.title = `(!) ${text.slice(0, 40)}`
+// ---- Bildirim sistemi: arka planda önemli olayları haber ver (web + native), spam yapma ----
+const notifCooldown = new Map<string, number>()
+function capPlugins(): Record<string, any> | null {
+  return (window as unknown as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins ?? null
+}
+/** Önemli olay bildirimi: sekme gizliyken (web) veya native'de fırlatılır; tag başına 60 sn throttle. */
+function notifyIfHidden(text: string, tag = text.slice(0, 24)) {
+  // ön planda web'de darlamayalım — toast zaten var; native'de yine de bildir (kullanıcı başka app'te olabilir)
+  if (!document.hidden && !isNativePlatform()) return
+  const now = Date.now()
+  if ((notifCooldown.get(tag) ?? 0) > now) return
+  notifCooldown.set(tag, now + 60_000)
+  if (document.hidden) document.title = `(!) ${text.slice(0, 40)}`
+  const title = world?.stationName ?? 'BenelOil'
   if ('Notification' in window && Notification.permission === 'granted') {
-    try { new Notification('Benzinlik', { body: text }) } catch { /* mobil kısıt */ }
+    try { new Notification(title, { body: text, tag }) } catch { /* mobil kısıt */ }
+  }
+  const P = capPlugins()
+  if (isNativePlatform() && P?.LocalNotifications) {
+    try { P.LocalNotifications.schedule({ notifications: [{ id: Math.floor(now % 2000000000), title, body: text }] }) } catch { /* yok say */ }
   }
 }
+/** Arka plana geçerken: yaklaşan tankerler için ETA'da native bildirim planla (WebView uykuda olsa bile ping gelir). */
+function scheduleBackgroundReminders() {
+  const P = capPlugins()
+  if (!isNativePlatform() || !P?.LocalNotifications) return
+  const notifs: any[] = []
+  for (const tk of tankers) {
+    const eta = state.orders[tk.fuel]?.eta ?? 0
+    if (eta > 3) notifs.push({ id: 1_700_000_000 + tk.slot, title: world?.stationName ?? 'BenelOil',
+      body: t('🚚 {0} tankeri istasyona ulaştı!', FUEL_LABEL[tk.fuel]), schedule: { at: new Date(Date.now() + eta * 1000) } })
+  }
+  if (notifs.length) { try { P.LocalNotifications.schedule({ notifications: notifs }) } catch { /* yok say */ } }
+}
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) document.title = `${world?.stationName ?? 'Benzinlik'} — Benzinlik`
+  if (document.hidden) { scheduleBackgroundReminders(); return } // arka plana geçerken yaklaşan olayları planla
+  document.title = `${world?.stationName ?? 'Benzinlik'} — Benzinlik`
+  // odağa dönünce: başka cihaz save'i ilerlettiyse en güncele senkronla (ilerleme karışmasın)
+  if (auth.loggedIn() && !syncedConflict) {
+    auth.fetchUpdatedAt().then(ts => {
+      const base = auth.lastUpdatedAt()
+      if (ts && base && new Date(ts).getTime() > new Date(base).getTime() + 1000) { syncedConflict = true; onRemoteNewer() }
+    }).catch(() => {})
+  }
 })
 
 // Kenney modelleri (yüklenemezse prosedürele düşer)
@@ -151,16 +318,355 @@ const [modelLib, staticLib] = await Promise.all([loadModels(), loadStatics()])
 const world = new World(staticLib)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
+let appConfig: any = null // /api/config yanıtı (RevenueCat key vb. lazy kullanım için)
 const isPromoMode = new URLSearchParams(location.search).has('promo')
 if (!isPromoMode) {
+  const test = new URLSearchParams(location.search).has('adstest')
+  beginAdSession()
   fetch('/api/config').then(r => r.json()).then(cfg => {
-    const test = new URLSearchParams(location.search).has('adstest')
-    if (cfg.adsClient || test) initAds(cfg.adsClient || 'ca-pub-0000000000000000', test)
-  }).catch(() => {})
+    appConfig = cfg
+    // native → AdMob (config'te gerçek unit yoksa TEST reklamları); web → AdSense (adsClient varsa)
+    initAds({ adsensePub: cfg.adsClient, admob: cfg.admob, test })
+  }).catch(() => { initAds({ test }) })
 }
 let promoTick: ((dt: number) => void) | null = null
 const ui = new UI()
+
+// Alt navbar + uygulama-sheet (mobil): tüm bölümler tek 'openSection' üzerinden açılır.
+// Sekme değişince diğer bölüm sheet'i kapanır → mobil-uygulama gibi sekmeli tek yüzey.
+const NAV_WRAPS: Record<string, string> = { office: 'officewrap', build: 'shopwrap', order: 'fuelwrap', profile: 'accwrap' }
+function openSection(sec: string) {
+  // zaten bir sheet açıksa bu bir SEKME GEÇİŞİdir → yeniden slide-up animasyonu oynatma (flash olmasın)
+  const wasOpen = Object.values(NAV_WRAPS).some(w => document.getElementById(w)?.classList.contains('show'))
+  document.documentElement.classList.toggle('no-sheet-anim', wasOpen)
+  for (const [s, w] of Object.entries(NAV_WRAPS)) if (s !== sec) document.getElementById(w)?.classList.remove('show')
+  if (sec === 'office') openOfficePanel()
+  else if (sec === 'build') document.getElementById('shopbtn')?.click()
+  else if (sec === 'order') document.getElementById('orderbtn')?.click()
+  else if (sec === 'profile') document.getElementById('accbtn')?.click()
+  else if (sec === 'roadmap') ui.toast(t('Yol haritası yakında!'), '')
+}
+for (const elx of document.querySelectorAll<HTMLElement>('#navbar .navbtn, #sheettabs .stab')) {
+  const sec = elx.id ? elx.id.replace('nav-', '') : elx.dataset.sec
+  if (sec) elx.addEventListener('click', () => openSection(sec))
+}
+// Genişleyen FAB: ana buton menüyü aç/kapat; öğe seçilince veya dışarı dokununca kapanır.
+const fabNav = document.getElementById('navbar')
+document.getElementById('nav-fab')?.addEventListener('click', e => { e.stopPropagation(); fabNav?.classList.toggle('fab-open') })
+for (const b of document.querySelectorAll<HTMLElement>('#navbar .navbtn')) b.addEventListener('click', () => fabNav?.classList.remove('fab-open'))
+document.addEventListener('pointerdown', e => {
+  if (fabNav?.classList.contains('fab-open') && !fabNav.contains(e.target as Node)) fabNav.classList.remove('fab-open')
+})
+// Açık nav-section'ı izle → sekme şeridini göster/gizle + aktif sekmeyi işaretle + alt navbar'ı gizle.
+let sheetSyncQueued = false
+function syncSheetTabs() {
+  if (sheetSyncQueued) return
+  sheetSyncQueued = true
+  requestAnimationFrame(() => {
+    sheetSyncQueued = false
+    let active: string | null = null
+    for (const [s, w] of Object.entries(NAV_WRAPS)) if (document.getElementById(w)?.classList.contains('show')) active = s
+    const tabs = document.getElementById('sheettabs')
+    document.getElementById('navbar')?.classList.toggle('hidden', !!active)
+    tabs?.classList.toggle('show', !!active)
+    tabs?.querySelectorAll<HTMLElement>('.stab').forEach(b => b.classList.toggle('on', b.dataset.sec === active))
+    if (!active) document.documentElement.classList.remove('no-sheet-anim')
+  })
+}
+const sheetObs = new MutationObserver(syncSheetTabs)
+for (const w of Object.values(NAV_WRAPS)) {
+  const e = document.getElementById(w); if (e) sheetObs.observe(e, { attributes: true, attributeFilter: ['class'] })
+}
+document.getElementById('anglebtn')?.addEventListener('click', () => cycleCameraAngle())
+
+// Ofis muhasebe: son yakıt alımları (yeni→eski, en çok 8 kayıt)
+const FUEL_DOT: Record<string, string> = { benzin: '#27a05a', dizel: '#e8862e', lpg: '#2f6fed' }
+function accHistory(): string {
+  if (!state.fuelLog.length) return `<div class="acc-sec">${t('Yakıt alım geçmişi')}</div><div class="acc-empty">${t('Henüz yakıt siparişi verilmedi.')}</div>`
+  const rows = state.fuelLog.slice(-8).reverse().map(x =>
+    `<div class="acc-row"><span class="acc-day">${t('Gün')} ${x.day}</span>`
+    + `<span class="acc-fuel"><i style="background:${FUEL_DOT[x.f] ?? '#888'}"></i>${t(FUEL_LABEL[x.f])} ${x.liters.toLocaleString('tr-TR')}L</span>`
+    + `<span class="acc-cost">-₺${Math.round(x.cost).toLocaleString('tr-TR')}</span></div>`).join('')
+  return `<div class="acc-sec">${t('Yakıt alım geçmişi')}</div>${rows}`
+}
+
+// Ofis: finansal durum → fiyatlar → müşteri&itibar → dönemsel satış/kâr → yakıt geçmişi
+function openOfficePanel() {
+  const card = buildingCard('office')
+  const tl = (n: number) => Math.round(n).toLocaleString('tr-TR')
+  const row = (k: string, v: string, cls = '') => `<div class="stat"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`
+
+  // 1) Finansal durum
+  const nwc = state.netWorkingCapital()
+  const fin = document.getElementById('of-financial')
+  if (fin) fin.innerHTML =
+    row(t('Aktif (varlık)'), `₺${tl(state.assets())}`, 'good')
+    + row(t('Net işletme sermayesi'), `₺${tl(nwc)}`, nwc >= 0 ? '' : 'bad')
+    + row(t('Kasa'), `₺${tl(state.money)}`)
+
+  // 2) Yakıt satış fiyatları (+/-)
+  const pricesEl = document.getElementById('of-prices')
+  if (pricesEl && card?.priceRows) pricesEl.innerHTML = card.priceRows.map(r =>
+    `<div class="prow"><span class="pl">${r.label}</span><span class="pc">${typeof r.cost === 'number' ? `alış ₺${r.cost}` : r.cost}</span>`
+    + `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>`
+    + `<span class="pv">₺${r.price.toFixed(1)}</span>`
+    + `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
+
+  // 3) Müşteri & itibar
+  const cust = document.getElementById('of-customer')
+  if (cust) {
+    const fx = Math.round((state.priceDemandFactor() - 1) * 100)
+    const evx = Math.round((state.evPriceFactor() - 1) * 100)
+    cust.innerHTML =
+      row(t('Yakıt müşteri etkisi'), `${fx >= 0 ? '+' : ''}${fx}%`, fx >= 0 ? 'good' : 'bad')
+      + (state.evChargers > 0 ? row(t('EV müşteri etkisi'), `${evx >= 0 ? '+' : ''}${evx}%`, evx >= 0 ? 'good' : 'bad') : '')
+      + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`)
+      + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
+      + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
+  }
+
+  // 4) Dönemsel satış & faaliyet kârı (gün / ay=30g / yıl=365g)
+  const sales = document.getElementById('of-sales')
+  if (sales) {
+    let html = `<div class="acc-cols acc-head"><span>${t('Dönem')}</span><span>${t('Satış')}</span><span>${t('Faaliyet kârı')}</span></div>`
+    for (const [label, d] of [[t('Günlük'), 1], [t('Aylık'), 30], [t('Yıllık'), 365]] as [string, number][]) {
+      const rev = state.salesInPeriod(d)
+      const prof = rev - state.fuelCostInPeriod(d) - state.wagesInPeriod(d)
+      html += `<div class="acc-cols"><span class="acc-plabel">${label}</span>`
+        + `<span class="v good">₺${tl(rev)}</span>`
+        + `<span class="v ${prof >= 0 ? 'good' : 'bad'}">₺${tl(prof)}</span></div>`
+    }
+    sales.innerHTML = html
+  }
+
+  // 5) Yakıt alım geçmişi
+  const hist = document.getElementById('of-history')
+  if (hist) hist.innerHTML = accHistory()
+
+  document.getElementById('officewrap')?.classList.add('show')
+}
+document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
+
+// Profil kartı: hero (istasyon+hesap) + istatistik/hesap bölümleri (ofis kartıyla aynı dil)
+function renderProfile() {
+  const tl = (n: number) => Math.round(n).toLocaleString('tr-TR')
+  const row = (k: string, v: string, cls = '') => `<div class="stat"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`
+  const stEl = document.getElementById('pf-station'); if (stEl) stEl.textContent = state.stationName
+  const emEl = document.getElementById('pf-email'); if (emEl) emEl.textContent = auth.currentEmail() ?? t('Misafir')
+  const playH = state.day * 160 / 3600
+  const stats = document.getElementById('pf-stats')
+  if (stats) stats.innerHTML =
+    row(t('Oyun günü'), `${state.day}`)
+    + row(t('Oynama süresi'), playH >= 1 ? `${playH.toFixed(1)} sa` : `${Math.round(playH * 60)} dk`)
+    + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`)
+    + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
+    + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
+    + row(t('Toplam ciro'), `₺${tl(state.stats.revenue)}`, 'good')
+  const acc = document.getElementById('pf-account')
+  if (acc) acc.innerHTML =
+    row(t('Giriş serisi'), `${state.loginStreak} gün 🔥`)
+    + row(t('Başarımlar'), `${state.achievements.size} / 8`)
+    + row(t('Günlük görev'), state.dailyDone ? t('tamamlandı ✓') : `${state.dailyServed}/15`)
+    + `<div class="pf-synced">☁️ ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
+}
+document.getElementById('accbtn')?.addEventListener('click', renderProfile)
+// Ofis fiyat yönetimi butonları officewrap içinde de çalışsın (bina kartıyla aynı handler)
+document.getElementById('of-prices')?.addEventListener('click', e => {
+  const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
+  if (btn) ui.onPriceChange(btn.dataset.pf as FuelType | 'elec', Number(btn.dataset.pd))
+})
+const isMobileView = () => window.matchMedia('(max-width: 680px)').matches
+
+// Mobilde Profil + Ayarlar tek sheet: 2 alt-sekme (segmented control).
+function activateSub(sub: string) {
+  document.querySelectorAll<HTMLElement>('#accwrap .subtab').forEach(b => b.classList.toggle('on', b.dataset.sub === sub))
+  document.querySelectorAll<HTMLElement>('#accwrap .subpane').forEach(p => { p.hidden = p.dataset.pane !== sub })
+}
+document.querySelectorAll<HTMLElement>('#accwrap .subtab').forEach(b => b.addEventListener('click', () => activateSub(b.dataset.sub!)))
+if (isMobileView()) {
+  // Ayarlar içeriğini setwrap'ten Profil sheet'inin "Ayarlar" paneline taşı (ID'ler korunur → wiring çalışır)
+  const setBody = document.querySelector('#setwrap .mbody')
+  const ayarlarPane = document.querySelector('#accwrap .subpane[data-pane="ayarlar"]')
+  if (setBody && ayarlarPane) while (setBody.firstChild) ayarlarPane.appendChild(setBody.firstChild)
+  // dişli (setbtn) → boş setwrap yerine Profil sheet'in Ayarlar sekmesi
+  document.getElementById('setbtn')?.addEventListener('click', e => {
+    e.stopImmediatePropagation(); openSection('profile'); activateSub('ayarlar')
+  }, true)
+  // Profil sekmesine basınca Profil alt-sekmesiyle başla
+  document.getElementById('nav-profile')?.addEventListener('click', () => activateSub('profil'))
+}
+
+// ---- Banka / kredi ekranı ----
+let bankSelected = new Set<string>()
+function collateralLabel(id: string): string {
+  return state.eligibleCollateral().find(e => e.id === id)?.label ?? id
+}
+function renderBank() {
+  const body = document.getElementById('bank-body'); if (!body) return
+  // 1) banka ortaklığı aktif (teminatsız temerrüt sonrası)
+  if (state.partner.active) {
+    body.innerHTML =
+      `<div class="ofsec">${t('Banka Ortaklığı')}</div>`
+      + `<div class="stat"><span class="k">${t('Kalan borç payı')}</span><span class="v bad">₺${state.partner.remaining.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Günlük kâr payı')}</span><span class="v">%${Math.round(state.partner.share * 100)}</span></div>`
+      + `<div class="sd" style="margin:8px 0 12px; color:var(--red)">${t('Teminatsız borcunu ödeyemedin — banka istasyona ortak oldu. Her gün kârının bir kısmı borç bitene dek bankaya gider. Peşin kapatabilirsin:')}</div>`
+      + `<button class="btn good" id="bank-buyout" style="width:100%; justify-content:center">${t('Ortaklığı Kapat — ₺{0}', state.partner.remaining.toLocaleString('tr-TR'))}</button>`
+    return
+  }
+  // 2) aktif kredi
+  const l = state.loan
+  if (l.active) {
+    const unsec = l.collateral.length === 0
+    body.innerHTML =
+      `<div class="stat"><span class="k">${t('Anapara')}</span><span class="v">₺${l.principal.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Aylık taksit')}</span><span class="v">₺${l.monthly.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Kalan taksit')}</span><span class="v">${l.remaining} / 12</span></div>`
+      + `<div class="stat"><span class="k">${t('Gecikme')}</span><span class="v ${l.overdue ? 'bad' : 'good'}">${l.overdue}</span></div>`
+      + `<div class="sd" style="margin:9px 0 4px">${unsec ? t('Teminatsız avans') : t('Teminatların') + ': ' + l.collateral.map(collateralLabel).join(', ')}</div>`
+      + `<div class="sd" style="margin:4px 0 12px; color:var(--red)">${unsec ? t('Ödenmezse banka istasyona ORTAK olur (kâr payından tahsil).') : t('Ödenmezse teminatların haczedilir.')}</div>`
+      + `<button class="btn good" id="bank-payoff" style="width:100%; justify-content:center">${t('Erken Kapat — ₺{0}', state.loanPayoff().toLocaleString('tr-TR'))}</button>`
+    return
+  }
+  // 3) teklif ekranı: teminatsız avans (herkes) + teminatlı kredi (asseti varsa)
+  const advLimit = state.advanceLimit()
+  const advMonthly = state.loanMonthly(advLimit, ADVANCE_RATE)
+  let html =
+    `<div class="ofsec">${t('Teminatsız Avans — asset gerekmez')}</div>`
+    + `<div class="stat"><span class="k">${t('Tutar')}</span><span class="v">₺${advLimit.toLocaleString('tr-TR')}</span></div>`
+    + `<div class="stat"><span class="k">${t('Aylık taksit')}</span><span class="v">₺${advMonthly.toLocaleString('tr-TR')}</span></div>`
+    + `<div class="sd" style="margin:4px 0 10px">${t('aylık %5 · 12 taksit · ödenmezse banka istasyona ortak olur')}</div>`
+    + `<button class="btn primary" id="bank-adv" style="width:100%; justify-content:center">${t('Avans Al — +₺{0}', advLimit.toLocaleString('tr-TR'))}</button>`
+  const elig = state.eligibleCollateral()
+  if (elig.length) {
+    let total = 0
+    const rows = elig.map(e => {
+      const on = bankSelected.has(e.id); if (on) total += e.value
+      return `<div class="prow"><span class="pl">${e.label}</span><span class="pc">${t('teminat')} ₺${e.value.toLocaleString('tr-TR')}</span>`
+        + `<button class="btn pbtn bank-col${on ? ' good' : ''}" data-col="${e.id}">${on ? '✓' : '+'}</button></div>`
+    }).join('')
+    const monthly = total > 0 ? state.loanMonthly(total) : 0
+    html += `<div class="ofsec" style="margin-top:16px">${t('Teminatlı Kredi — değerin %50si')}</div>${rows}`
+      + `<div class="stat" style="margin-top:8px"><span class="k">${t('Kredi tutarı')}</span><span class="v">₺${total.toLocaleString('tr-TR')}</span></div>`
+      + `<div class="stat"><span class="k">${t('Aylık taksit')}</span><span class="v">₺${monthly.toLocaleString('tr-TR')}</span></div>`
+      + `<button class="btn primary" id="bank-take" style="width:100%; justify-content:center; margin-top:6px" ${total <= 0 ? 'disabled' : ''}>${t('Krediyi Al — +₺{0}', total.toLocaleString('tr-TR'))}</button>`
+  }
+  body.innerHTML = html
+}
+function openBank() {
+  document.getElementById('officewrap')?.classList.remove('show') // ofis sheet'i kapat, bankayı normal alt-sheet olarak aç
+  bankSelected = new Set()
+  renderBank()
+  document.getElementById('bankwrap')?.classList.add('show')
+}
+document.getElementById('of-bank')?.addEventListener('click', () => openBank())
+
+// ---- Mağaza (IAP) ----
+function renderStore() {
+  const body = document.getElementById('store-body'); if (!body) return
+  const avail = storeAvailable()
+  let html = ''
+  if (!avail) html += `<div class="sd" style="text-align:center; padding:6px 4px 12px; line-height:1.5">${t('Satın almalar yalnızca iOS uygulamasında aktiftir (web önizleme).')}</div>`
+  html += PRODUCTS.map(p => {
+    const owned = p.kind === 'noads' && state.noAds
+    return `<div class="shoprow"><div class="sicon" style="color:#8a5cf6;background:#8a5cf61c;border-color:#8a5cf644"><svg class="ic"><use href="#${p.kind === 'noads' ? 'i-star' : 'i-coin'}"/></svg></div>`
+      + `<div class="sinfo"><div class="st">${p.title}</div><div class="sd">${p.desc}</div></div>`
+      + `<button class="btn sbuy ${p.kind === 'noads' ? 'primary' : 'good'} store-buy" data-pid="${p.id}" ${(!avail || owned) ? 'disabled' : ''}>${owned ? t('Sahipsin ✓') : p.price}</button></div>`
+  }).join('')
+  html += `<div class="row" style="margin-top:10px"><button class="btn" id="store-restore" style="flex:1; justify-content:center" ${avail ? '' : 'disabled'}>${t('Satın Alımları Geri Yükle')}</button></div>`
+  body.innerHTML = html
+}
+async function openStore() {
+  document.getElementById('officewrap')?.classList.remove('show')
+  await initStore(appConfig?.revenuecatIos, auth.currentEmail())
+  renderStore()
+  document.getElementById('storewrap')?.classList.add('show')
+}
+async function grantProduct(id: string, transactionId?: string) {
+  const p = PRODUCTS.find(x => x.id === id); if (!p) return
+  if (p.kind === 'noads') {
+    try { await auth.iapGrant(id, transactionId) } catch { /* offline: yine de yerelde aç */ }
+    state.noAds = true; setPremium(true)
+    ui.toast(t('✅ Reklamlar kaldırıldı — teşekkürler!'), 'good')
+  } else if (p.kind === 'coins' && p.coins) {
+    try { const r = await auth.iapGrant(id, transactionId); state.money = r.money; lastRemotePush = Date.now() }
+    catch { state.money += p.coins }
+    ui.toast(t('✅ +₺{0} kasana eklendi!', p.coins.toLocaleString('tr-TR')), 'good')
+  }
+  persist(); renderStore()
+}
+document.getElementById('of-store')?.addEventListener('click', () => openStore())
+document.getElementById('storewrap')?.addEventListener('pointerdown', e => { if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show') })
+document.getElementById('store-body')?.addEventListener('click', async e => {
+  const buy = (e.target as HTMLElement).closest('button.store-buy') as HTMLButtonElement | null
+  if (buy) {
+    const pid = buy.dataset.pid!
+    buy.disabled = true; buy.textContent = t('İşleniyor…')
+    const r = await purchase(pid)
+    if (r.ok) await grantProduct(pid, r.transactionId)
+    else { ui.toast(t('Satın alma tamamlanamadı.'), 'bad'); renderStore() }
+    return
+  }
+  if ((e.target as HTMLElement).closest('#store-restore')) {
+    const ids = await restore()
+    if (ids.includes('remove_ads')) await grantProduct('remove_ads')
+    ui.toast(ids.length ? t('Satın alımlar geri yüklendi.') : t('Geri yüklenecek satın alma yok.'), ids.length ? 'good' : '')
+  }
+})
+document.getElementById('bankwrap')?.addEventListener('pointerdown', e => {
+  if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show')
+})
+document.getElementById('bank-body')?.addEventListener('click', e => {
+  const tgt = e.target as HTMLElement
+  const col = tgt.closest('button.bank-col') as HTMLElement | null
+  if (col) { const id = col.dataset.col!; bankSelected.has(id) ? bankSelected.delete(id) : bankSelected.add(id); renderBank(); return }
+  if (tgt.closest('#bank-take')) {
+    let total = 0; for (const id of bankSelected) total += state.collateralValue(id)
+    if (total > 0 && state.takeLoan(total, [...bankSelected])) {
+      ui.toast(t('🏦 Kredi onaylandı — +₺{0} kasana geçti!', total.toLocaleString('tr-TR')), 'good')
+      renderBank(); persist()
+    }
+    return
+  }
+  if (tgt.closest('#bank-adv')) {
+    const amt = state.advanceLimit()
+    if (state.takeAdvance(amt)) { ui.toast(t('🏦 Avans onaylandı — +₺{0} kasana geçti!', amt.toLocaleString('tr-TR')), 'good'); renderBank(); persist() }
+    return
+  }
+  if (tgt.closest('#bank-payoff')) {
+    if (state.repayLoanFull()) { ui.toast(t('🏦 Kredi kapatıldı — teminatların serbest!'), 'good'); renderBank(); persist() }
+    else ui.toast(t('💸 Erken kapatmaya kasan yetmiyor.'), 'bad')
+    return
+  }
+  if (tgt.closest('#bank-buyout')) {
+    if (state.buyoutPartner()) { ui.toast(t('🏦 Ortaklık kapatıldı — istasyon tamamen senin!'), 'good'); renderBank(); persist() }
+    else ui.toast(t('💸 Ortaklığı kapatmaya kasan yetmiyor.'), 'bad')
+  }
+})
+
+/** Ödeme yapılamayınca teminatları haczet: binaları istasyondan kaldır (iade YOK), krediyi kapat. */
+function seizeCollateral() {
+  for (const id of [...state.loan.collateral]) {
+    if (!sellInfo(state, id)) continue // zaten satılmış/kaldırılmış olabilir
+    const refund = applySell(state, id) // state sayaçlarını düşürür + iade ekler
+    if (refund) state.money -= refund   // haciz: iade geri alınır (banka borca karşılık alır)
+    const base = id.split('#')[0]
+    if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
+    world.removeBuildingGroup(id)
+    delete placedPos[id]; delete placedRot[id]
+    const ri = placedRects.findIndex(r => r.id === id); if (ri >= 0) placedRects.splice(ri, 1)
+  }
+  state.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+  Car.solids = hardRects()
+  ui.toast(t('🏦 Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!'), 'bad')
+  if (selectedBuilding) refreshBuildingCard()
+  persist()
+}
+document.getElementById('officewrap')?.addEventListener('pointerdown', e => {
+  if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show')
+})
 ui.batteryKwh = () => state.battery
+ui.attendantAt = car => car.slotIndex >= 0 &&
+  (car.kind === 'ev' ? state.autoChargers.has(car.slotIndex) : state.autoPumps.has(car.slotIndex))
 ui.feedbackContext = () => ({
   day: state.day, money: Math.round(state.money), pumps: state.pumps,
   rep: Number(state.reputation.toFixed(2)), ua: navigator.userAgent.slice(0, 120),
@@ -208,13 +714,16 @@ const cars = new CarManager(world.scene, modelLib, {
   evSlot: i => world.evSlots[i],
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
+  farActive: () => world.farStationOn,
+  farGateInY: () => world.gateIn2.y,
+  farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
   onTruckParked: () => {
     const fee = 40 + Math.round(Math.random() * 40)
     state.addPending('truckpark', fee, t('Tır parkı'))
     ui.toast(t('Tır park etti: ₺{0} kumbarada', fee), 'good', true)
   },
-  onCarReady: car => { if (!ui.activeCar) ui.selectCar(car); tutStart() },
+  onCarReady: car => { if (!ui.activeCar && !isAttendantCar(car)) ui.selectCar(car); tutStart() },
   onEvTurnedAway: () => {
     if (evTurnAwayT > 0) return
     evTurnAwayT = 4
@@ -232,8 +741,14 @@ const cars = new CarManager(world.scene, modelLib, {
   },
 })
 
+/** pompacı çalışan pompaya yanaşan araç: panel açılmaz, popup kalmaz (pompacı halleder) */
+function isAttendantCar(car: Car): boolean {
+  if (car.slotIndex < 0) return false
+  // pompacı VEYA şarjcı devredeyse otomasyon halleder → panel/popup hiç açılmasın
+  return car.kind === 'ev' ? state.autoChargers.has(car.slotIndex) : (car.kind === 'fuel' && state.autoPumps.has(car.slotIndex))
+}
 function nextServableCar(): Car | null {
-  return cars.cars.find(c => c.phase === 'atPump') ?? null
+  return cars.cars.find(c => c.phase === 'atPump' && !isAttendantCar(c)) ?? null
 }
 
 // ---- Pompa hortumları (her pompa bağımsız, her aracın kendi hortumu) ----
@@ -241,11 +756,13 @@ const hoses = new Map<Car, THREE.Group>()
 
 function buildHose(car: Car): THREE.Group {
   const slot = car.slotIndex >= 0 ? world.pumpSlots[car.slotIndex] : car.group.position
-  const bx = slot.x - 1.8
+  // karşı istasyonda araç pompanın batısında → hortum ters yöne (sign) uzanır
+  const sign = car.station === 'far' ? -1 : 1
+  const bx = slot.x - sign * 1.8
   const y = slot.y
-  const start = new THREE.Vector3(bx + 0.3, y + 0.3, 1.3)
-  const mid = new THREE.Vector3(bx + 0.85, y - 0.05, 0.5)
-  const end = new THREE.Vector3(bx + 1.22, y - 0.35, 0.62)
+  const start = new THREE.Vector3(bx + sign * 0.3, y + 0.3, 1.3)
+  const mid = new THREE.Vector3(bx + sign * 0.85, y - 0.05, 0.5)
+  const end = new THREE.Vector3(bx + sign * 1.22, y - 0.35, 0.62)
   const curve = new THREE.QuadraticBezierCurve3(start, mid, end)
   const g = new THREE.Group()
   const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.045, 8),
@@ -330,8 +847,8 @@ function vehicleServices(car: Car): number {
   }
   if (car.wantsOil && state.hasOil) {
     const m = Math.round(150 + Math.random() * 100)
-    state.facEarn('oil', m); d += 0.25
-    ui.toast(t('🔧 Yağ değişimi yapıldı: +₺{0}', m), 'good')
+    state.addPending('oil', m, t('Yağ değişimi')); d += 0.25
+    ui.toast(t('🔧 Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
   if (car.wantsAir && state.hasAirWater) {
     const m = Math.round(10 + Math.random() * 10)
@@ -348,6 +865,10 @@ interface Walker {
   done: () => void
 }
 const walkers: Walker[] = []
+/** tesis adı (kumbara etiketi için) */
+function facName(id: string): string {
+  return ({ market: t('Market'), toilet: t('Tuvalet'), coffee: t('Kahveci'), restaurant: t('Restoran'), oil: t('Yağ değişimi') } as Record<string, string>)[id] ?? id
+}
 const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean }>()
 
 function personMesh(): THREE.Group {
@@ -388,7 +909,7 @@ function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number; squat?
       let score = data.score
       for (const v of data.visits) {
         const m = v.revenue()
-        if (m > 0) { state.money -= m; state.facEarn(v.buildingId, m); ui.toast(v.toastMsg(m), 'good') }
+        if (m > 0) { state.addPending(v.buildingId, m, facName(v.buildingId)); ui.toast(v.toastMsg(m), 'good') }
         score += v.score
       }
       state.addRep((score - 3.3) * 0.08)
@@ -490,7 +1011,7 @@ function concludeService(car: Car, score: number) {
     // otopark doluysa ziyaret gelirleri yine gelsin (hızlı mod)
     for (const v of visits) {
       const m = v.revenue()
-      if (m > 0) { state.money -= m; state.facEarn(v.buildingId, m); ui.toast(v.toastMsg(m), 'good') }
+      if (m > 0) { state.addPending(v.buildingId, m, facName(v.buildingId)); ui.toast(v.toastMsg(m), 'good') }
       score += v.score
     }
     state.addRep((score - 3.3) * 0.08)
@@ -608,6 +1129,7 @@ function tickEvCharging(dt: number) {
     if (c.slotIndex >= 0 && state.brokenChargers.has(c.slotIndex)) {
       c.charging = false
       ui.toast(t('Şarj ünitesi arızalandı — şarj durdu, tamir gerekli.'), 'bad')
+      notifyIfHidden(t('🔧 Şarj ünitesi arızalandı — tamir gerekli!'), 'ariza-sarj')
       cars.releaseCar(c)
       continue
     }
@@ -631,10 +1153,10 @@ function tickEvCharging(dt: number) {
         // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
         c.squatting = true
         c.beingServed = true
-        c.setCounter('MOLADA')
+        c.setCounter('MOLADA · GÖNDER →')
         const visits = facilityVisits(c)
         spawnWalkerFor(c, { visits, score, squat: true })
-        ui.toast('Müşteri şarj bitince tesislere takıldı — araca tıklayıp GÖNDER, yoksa yeni EV müşterileri kaçar!', 'bad')
+        ui.toast(t('⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆'), 'bad')
       } else {
         concludeService(c, score)
       }
@@ -650,6 +1172,35 @@ ui.onOrderFuel = f => {
   if (state.placeOrder(f)) ui.toast(t('{0} tankeri yola çıktı!', FUEL_LABEL[f]), 'good')
   else ui.toast('Sipariş verilemedi (tank dolu ya da para yetmiyor).', 'bad')
 }
+ui.onOrderQty = (f, d) => { state.adjustOrderQty(f, d) } // −/+ sipariş miktarı (fneed sonraki karede güncellenir)
+
+/** Karşı kapının (x≈10.3–12.9 bandı) verilen y'de mevcut bir karşı-yapıyla çakışıp çakışmadığı */
+function farGateBlockedAt(y: number): boolean {
+  return placedRects.some(p => {
+    if (p.id === 'gatein2' || p.id === 'gateout2') return false
+    const px0 = p.cx - p.w / 2, px1 = p.cx + p.w / 2
+    if (px1 < 10.3 || px0 > 12.9) return false // kapı x-bandıyla kesişmiyor
+    return Math.abs(p.cy - y) < 1.9 + p.d / 2
+  })
+}
+/** Tercih edilen y'den başlayıp mevcut karşı-yapıdan KAÇAN boş kapı y'si bul (avoidY'den ≥6 uzak) */
+function clearFarGateY(prefY: number, avoidY: number | null): number {
+  for (let step = 0; step <= 26; step += 2) {
+    for (const y of (step === 0 ? [prefY] : [prefY + step, prefY - step])) {
+      if (y < -22 || y > 22) continue
+      if (avoidY !== null && Math.abs(y - avoidY) < 6) continue
+      if (!farGateBlockedAt(y)) return y
+    }
+  }
+  return prefY // temiz yer yok (çok nadir) — varsayılana düş
+}
+/** Karşı istasyonu, kapıları mevcut karşı-yapılardan kaçıran boş y'lere kurarak aç */
+function enableFarStationClear() {
+  if (world.farStationOn) return
+  const inY = clearFarGateY(8, null)      // giriş üstte (+y), far araç güneye iner
+  const outY = clearFarGateY(-8, inY)     // çıkış altta (-y), girişten ≥6 uzak
+  world.enableFarStation(inY, outY)
+}
 
 /** satın alma sonrası sahnedeki görsel karşılığını kurar */
 function buildVisual(id: string, pos?: THREE.Vector2) {
@@ -662,9 +1213,13 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     world.addEvCharger(parseInt(base.slice(8)), new THREE.Vector2(pos.x - 0.5, pos.y))
     return
   }
+  if (base.startsWith('tankadd-')) {
+    world.upgradeTankVisual(state.tankLevel) // yakıta özel yeni tank belirir
+    return
+  }
   switch (base) {
     case 'pump': world.addPump(state.pumps - 1); break
-    case 'sign': world.setSign(state.signLevel); break
+    case 'sign': world.setSign(state.signLevel, pos); break
     case 'widegate': world.setWideGates(true); break
     case 'tank': world.upgradeTankVisual(state.tankLevel); break
     case 'market': world.buildMarket(state.marketLevel, pos); break
@@ -690,7 +1245,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
 
 interface Footprint { w: number; d: number; grass?: boolean }
 const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
-  market: fm => ((fm ? state.marketLevel >= 2 : state.marketLevel >= 1) ? { w: 6, d: 8 } : { w: 5, d: 6 }),
+  market: () => ({ w: 6, d: 7 }), // 3 seviyede de AYNI footprint (yerinde yükselir, yıkmak gerekmez)
   toilet: () => ({ w: 3, d: 4 }),
   battery: () => ({ w: 3, d: 2 }),
   solar: () => ({ w: 5, d: 7, grass: true }),
@@ -705,6 +1260,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   selfwash: () => ({ w: 5.5, d: 7 }),
   parking: () => ({ w: 4.6, d: 3.2 }),
   office: () => ({ w: 5, d: 5.5 }),
+  sign: () => ({ w: 1.8, d: 1.8, grass: true }), // tabela taşınabilir (çimen üstüne de konabilir)
 }
 
 interface Rect { cx: number; cy: number; w: number; d: number }
@@ -721,6 +1277,42 @@ let cloudBlocked = false
 
 function savePayload() {
   return { s: serializeState(state), placedPos, placedRot, placedRects, at: Date.now() }
+}
+
+// ---- Çoklu cihaz senkronu ----
+let syncing = false
+let syncedConflict = false
+/** Save'i sunucuya yaz; başka cihaz daha yeni yazmışsa (409) en güncele senkronla. */
+async function syncSave() {
+  if (syncing || cloudBlocked || auth.isKicked() || !auth.loggedIn()) return
+  syncing = true
+  try {
+    const r = await auth.pushSave(savePayload())
+    if (r.kicked) { showKickedOverlay(); return }
+    if (r.conflict && !syncedConflict) { syncedConflict = true; onRemoteNewer() }
+  } catch { /* ağ hatası: sessiz geç */ } finally { syncing = false }
+}
+// Tek-cihaz kilidi: başka cihaz oturumu devralınca burası duraklar (ilerleme güvende).
+function showKickedOverlay() {
+  cloudBlocked = true // kayıt + oyun + WS durur
+  if (document.getElementById('kickedblock')) return
+  const o = document.createElement('div')
+  o.id = 'kickedblock'
+  o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#1a0d0df5;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px)'
+  o.innerHTML = `<div style="max-width:420px;text-align:center;color:#eaf1fb;font-family:system-ui,sans-serif">
+    <div style="font-size:44px;margin-bottom:8px">📱🔒</div>
+    <div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('Başka cihazda açıldı')}</div>
+    <div style="font-size:14px;line-height:1.5;color:#e0b8b8;margin-bottom:20px">${t('Bu hesap başka bir cihazda açıldığı için burada duraklatıldı. İlerlemen güvende — hiçbir şey silinmedi. Buradan devam etmek için yenile.')}</div>
+    <button id="kicked-retry" style="padding:12px 22px;font-size:15px;font-weight:700;border:0;border-radius:12px;background:#d64545;color:#fff;cursor:pointer">${t('Buradan devam et (Yenile)')}</button>
+  </div>`
+  document.body.appendChild(o)
+  document.getElementById('kicked-retry')?.addEventListener('click', () => location.reload())
+}
+auth.onKicked(showKickedOverlay)
+/** başka cihaz daha yeni oynadı → clobber etme, en güncel ilerlemeye temiz reload ile senkronla */
+function onRemoteNewer() {
+  ui.toast(t('🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…'), '')
+  setTimeout(() => location.reload(), 1400)
 }
 
 function showCloudBlockOverlay() {
@@ -798,10 +1390,11 @@ function showVerifyGate() {
 
 function persist() {
   if (isFullMode || isPromoMode || cloudBlocked) return
-  // tek gerçek kaynak SQL: yerel kopya tutulmaz, eski veri asla hortlamaz
+  // tek gerçek kaynak SQL: yerel kopya tutulmaz, eski veri asla hortlamaz.
+  // syncSave çoklu cihaz çakışmasını (409) ele alır — başka cihaz ilerlettiyse senkronlar.
   if (auth.loggedIn() && Date.now() - lastRemotePush > 5_000) {
     lastRemotePush = Date.now()
-    auth.pushSave(savePayload()).catch(() => {})
+    syncSave()
   }
 }
 
@@ -810,9 +1403,52 @@ let loadedSaveAt = 0
 function applySaveData(d: Record<string, unknown>) {
   loadedSaveAt = Number(d.at ?? 0)
   hydrateState(state, (d.s ?? {}) as Record<string, unknown>)
+  setPremium(state.noAds) // remove-ads satın alındıysa interstitial kapalı
   Object.assign(placedPos, (d.placedPos ?? {}) as Record<string, [number, number]>)
   Object.assign(placedRot, (d.placedRot ?? {}) as Record<string, number>)
   if (Array.isArray(d.placedRects)) placedRects.push(...(d.placedRects as (Rect & { id: string })[]).filter(r => r.id !== 'gatein' && r.id !== 'gateout'))
+}
+
+/**
+ * Offline (arka plan) gelir: oyuncu yokken geçen süre kadar pasif kazanç.
+ * İstasyonun gelişmişliğine göre ₺/sn hız × süre × verim (aktif oyundan düşük).
+ * En fazla 6 saat + ₺150.000 tavan. İstasyon kapalıysa gelir yok.
+ * Anti-cheat uyumlu: income ≤ 150k, sunucu allowance'ı (50k + elapsed×600) hep kapsar.
+ */
+function applyOfflineEarnings() {
+  if (state.closed || !loadedSaveAt) return
+  const elapsedSec = (Date.now() - loadedSaveAt) / 1000
+  if (elapsedSec < 120) return // <2 dk: anlamsız
+  const capped = Math.min(elapsedSec, 6 * 3600) // en fazla 6 saat
+  const facilities = (state.marketLevel > 0 ? state.marketLevel : 0)
+    + (state.hasCoffee ? 1 : 0) + (state.hasRestaurant ? 1 : 0) + (state.hasWash ? 1 : 0)
+    + (state.hasOil ? 1 : 0) + (state.hasTruckPark ? 1 : 0) + state.selfWashCount + (state.hasSMR ? 2 : 0)
+  const ratePerSec = 1 + state.pumps * 1.2 + state.evChargers * 0.8 + facilities * 0.6
+  const income = Math.min(150_000, Math.round(ratePerSec * capped * 0.4)) // %40 offline verim
+  if (income < 50) return
+  state.money += income
+  showOfflineModal(income, elapsedSec)
+}
+
+/** "Tekrar hoş geldin — yokken istasyonun kazandı" modalı (oyunun krem/kırmızı dili) */
+function showOfflineModal(income: number, elapsedSec: number) {
+  const h = Math.floor(elapsedSec / 3600), m = Math.floor((elapsedSec % 3600) / 60)
+  const dur = h > 0 ? `${h} sa ${m} dk` : `${m} dk`
+  const o = document.createElement('div')
+  o.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#0d1420cc;display:flex;align-items:center;justify-content:center;padding:22px;font-family:var(--font,system-ui)'
+  o.innerHTML =
+    `<div style="background:linear-gradient(180deg,#fdfaf2,#f1ebdb);border:2px solid #e0d4bd;border-bottom-width:7px;border-radius:22px;padding:22px 26px;max-width:340px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(10,14,20,.5)">`
+    + `<div style="font-size:44px;line-height:1">🏭💤</div>`
+    + `<div style="font-size:22px;font-weight:800;color:#1e2a36;margin:8px 0 2px">Tekrar hoş geldin!</div>`
+    + `<div style="font-size:13px;font-weight:700;color:#7a6152">${dur} yoktun — istasyonun senin için çalıştı ⛽</div>`
+    + `<div style="font-size:34px;font-weight:800;color:#2fa05a;margin:14px 0 2px">+₺${income.toLocaleString('tr-TR')}</div>`
+    + `<div style="font-size:11px;font-weight:700;color:#9aa4b0;margin-bottom:16px">kasana eklendi</div>`
+    + `<button id="off-ok" style="width:100%;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">Devam et 🚀</button>`
+    + `</div>`
+  document.body.appendChild(o)
+  const close = () => o.remove()
+  o.querySelector('#off-ok')?.addEventListener('click', close)
+  o.addEventListener('click', e => { if (e.target === o) close() })
 }
 
 /** kayıttan gelen state'e göre sahneyi yeniden kurar */
@@ -835,11 +1471,18 @@ function rebuildFromState() {
   }
   for (let i = 0; i < state.evChargers; i++) {
     const sp = pvv(`charger-${i}`)
-    world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined)
+    // Kayıtlı açıyla kur → araç yanaşma slotu da doğru hesaplanır (rotateBuilding slot güncellemez).
+    world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined, placedRot[`charger-${i}`] ?? 0)
   }
-  world.setSign(state.signLevel)
+  // Karşıda (yol karşısı) pompa/şarj varsa karşı istasyonu aktive et — otomatik giriş-çıkış + karşı şerit trafiği.
+  // (Yalnız karşıya EKİPMAN koymuş oyuncular; sadece arsa/tesis olan mevcut oyuncular ETKİLENMEZ.)
+  if (world.pumpSlots.slice(0, state.pumps).some(s => s.x > ROAD_X)
+      || world.evSlots.slice(0, state.evChargers).some(s => s.x > ROAD_X)) {
+    enableFarStationClear()
+  }
+  world.setSign(state.signLevel, placedPos.sign ? new THREE.Vector2(placedPos.sign[0], placedPos.sign[1]) : undefined)
   if (state.wideGates) world.setWideGates(true)
-  if (state.tankLevel > 0) world.upgradeTankVisual(state.tankLevel)
+  world.upgradeTankVisual(state.tankLevel) // seviye + yakıt-başına adet
   const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
   if (state.marketLevel > 0) world.buildMarket(state.marketLevel, pv('market'))
   if (state.toiletLevel > 0) world.buildToilet(state.toiletLevel, pv('toilet'))
@@ -871,14 +1514,15 @@ function rebuildFromState() {
     world.removeBuildingGroup('office')
     world.buildOffice(pv('office'))
   }
-  if (placedPos.gatein) world.buildGate('in', pv('gatein'))
-  if (placedPos.gateout) world.buildGate('out', pv('gateout'))
+  if (placedPos.gatein) { const g = pv('gatein'); if (g) { world.removeLampNear(g.y); world.buildGate('in', g) } }
+  if (placedPos.gateout) { const g = pv('gateout'); if (g) { world.removeLampNear(g.y); world.buildGate('out', g) } }
   {
     const s0 = placedPos['pump-0']
     if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]))
   }
   if (placedPos.tank) world.moveTank(new THREE.Vector2(placedPos.tank[0], placedPos.tank[1]))
-  for (const [id, rot] of Object.entries(placedRot)) world.rotateBuilding(id, rot)
+  // charger'lar yukarıda açılarıyla (slot dahil) kuruldu; burada atlanır.
+  for (const [id, rot] of Object.entries(placedRot)) if (!id.startsWith('charger-')) world.rotateBuilding(id, rot)
   world.setClosed(state.closed)
 }
 
@@ -893,7 +1537,7 @@ function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
     const s = world.evSlots[i]
     r.push({ cx: s.x - 1.1, cy: s.y, w: 0.9, d: 1.4 })
   }
-  r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.2, d: 2.2 })
+  r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.2, d: 2.2 }) // CANLI/main ile birebir
   const of = world.buildings.find(b => b.id === 'office')
   if (of) r.push({ cx: of.group.position.x, cy: of.group.position.y, w: 4.2, d: 4.6 })
   for (const p of placedRects) {
@@ -909,8 +1553,9 @@ function fixedObstacles(skipId = ''): Rect[] {
     { cx: 4.3, cy: 0, w: 2.0, d: 48 },       // servis şeridi (araç yolu, daraltıldı)
     { cx: 4.0, cy: -11.5, w: 2.4, d: 3.4 },  // tabela
   ]
-  if (skipId !== 'tank')
-    r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.0, d: 2.0 })
+  // karşı istasyon açıksa: otomatik giriş-çıkış + araç koridoru korunur (üstüne pompa/şarj konamaz)
+  if (world.farStationOn) r.push({ cx: 11.5, cy: 0, w: 2.0, d: 48 })
+  if (skipId !== 'tank') r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.0, d: 2.0 }) // CANLI/main ile birebir
   if (skipId !== 'office') {
     const of = world.buildings.find(b => b.id === 'office')
     if (of) r.push({ cx: of.group.position.x, cy: of.group.position.y, w: 4.6, d: 5.0 })
@@ -1100,11 +1745,9 @@ function landOk(x: number, y: number, grassOk: boolean): boolean {
 }
 
 function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
-  // servis ekipmanı (pompa/şarj/tank) yol karşısına kurulamaz — araçlar oraya giremiyor
-  if (/^(pump-|charger-)/.test(skipId) || skipId === 'tank') {
-    const pc = parcelAt(p.cx, p.cy)
-    if (pc && pc[0] >= 3) return false
-  }
+  // Not: pompa/şarj/tank artık yol karşısına da konabilir (sahip olunan+betonlanmış karşı parsele).
+  // İlk karşı pompa/şarj konunca karşı istasyon (otomatik giriş-çıkış + karşı şerit trafiği) aktive olur.
+  // Sahiplik/beton kısıtı aşağıdaki landOk tarafından zaten uygulanır.
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
     if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
   }
@@ -1121,11 +1764,13 @@ function makeGhost(w: number, d: number): THREE.Mesh {
   return ghost
 }
 
+/** Tank kümesinin GERÇEK footprint'i: 3 sütun (benzin/dizel/lpg) × yakıt-başına-adet satır.
+ *  Adet arttıkça küme +y'de büyür → çarpışma kutusu da büyümeli (yoksa tanklar dışarı taşar). */
 function footprintOf(id: string, move = false): { w: number; d: number; grass?: boolean } | null {
   id = id.split('#')[0]
   if (id.startsWith('pump-')) return { w: 4.4, d: 4.0 }
   if (id.startsWith('charger-')) return { w: 4.0, d: 2.6 }
-  if (id === 'tank') return { w: 2.0, d: 2.0 }
+  if (id === 'tank') return { w: 2.0, d: 2.0 } // CANLI/main ile birebir (save uyumu)
   if (id === 'gatein' || id === 'gateout') return { w: 2.6, d: 3.4, grass: true }
   return id in PLACEABLE ? PLACEABLE[id](move) : null
 }
@@ -1167,6 +1812,7 @@ function startZoneMode(kind: 'land' | 'pave') {
 
 function cancelPlacement() {
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'none'
+  const zc = document.getElementById('zonecost'); if (zc) zc.style.display = 'none'
   if (placing) {
     world.scene.remove(placing.root)
     placing = null
@@ -1188,11 +1834,11 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
   else if (id.startsWith('charger-')) {
     const n = parseInt(id.slice(8))
     cars.evictSlot('ev', n)
-    world.moveCharger(n, new THREE.Vector2(cx - 0.5, cy))
+    world.moveCharger(n, new THREE.Vector2(cx - 0.5, cy), placedRot[`charger-${n}`] ?? 0) // taşırken açıyı koru
   }
   else if (id === 'tank') world.moveTank(new THREE.Vector2(cx, cy))
-  else if (id === 'gatein') { world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
-  else if (id === 'gateout') { world.buildGate('out', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
+  else if (id === 'gatein') { world.removeLampNear(cy); world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
+  else if (id === 'gateout') { world.removeLampNear(cy); world.buildGate('out', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
   else {
     world.removeBuildingGroup(id)
     buildVisual(id, new THREE.Vector2(cx, cy))
@@ -1208,6 +1854,14 @@ function repositionPlacing(x: number, y: number) {
     placing.root.position.set(placing.cx, placing.cy, 0)
     const otherY = placing.id === 'gatein' ? world.gateOut.y : world.gateIn.y
     placing.valid = Math.abs(placing.cy - otherY) >= 5
+  } else if (placing.id === 'sign') {
+    // tabela istasyon çevresinde / yol kenarında kalsın (çok uzağa taşınmasın)
+    placing.cx = Math.max(-11, Math.min(6, Math.round(x)))
+    placing.cy = Math.max(-15, Math.min(15, Math.round(y)))
+    placing.root.position.set(placing.cx, placing.cy, 0)
+    const odd = placing.rot % 2 === 1
+    const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
+    placing.valid = isValidPlacement(eff, placing.id, placing.grass)
   } else {
     placing.cx = Math.round(x)
     placing.cy = Math.round(y)
@@ -1242,10 +1896,20 @@ function confirmPlacement() {
     buildVisual(p.id, new THREE.Vector2(p.cx, p.cy))
     buyToast(p.id.split('#')[0].replace(/^pump-\d+$/, 'pump').replace(/^charger-\d+$/, 'evcharger'))
   }
-  if (!p.id.startsWith('pump-') && !p.id.startsWith('charger-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout')
+  if (p.id.startsWith('charger-')) {
+    // Charger döndürülebilir: pozisyon + açı + araç yanaşma slotu birlikte kurulur.
+    const idx = Number(p.id.slice('charger-'.length))
+    world.moveCharger(idx, new THREE.Vector2(p.cx, p.cy), p.rot)
+  } else if (!p.id.startsWith('pump-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout') {
     world.rotateBuilding(p.id, p.rot)
+  }
   placedPos[p.id] = [p.cx, p.cy]
   placedRot[p.id] = p.rot
+  // karşıya (yol karşısı) İLK pompa/şarj konunca karşı istasyon aktive olur: otomatik giriş-çıkış + karşı şerit trafiği
+  if ((p.id.startsWith('pump-') || p.id.startsWith('charger-')) && p.cx > ROAD_X && !world.farStationOn) {
+    enableFarStationClear() // kapıları mevcut karşı-yapılardan kaçırarak kur
+    ui.toast('🚧 Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.', 'good', true)
+  }
   const i = placedRects.findIndex(r => r.id === p.id)
   if (i >= 0) placedRects.splice(i, 1)
   if (p.id !== 'gatein' && p.id !== 'gateout') {
@@ -1265,6 +1929,7 @@ function confirmZone() {
     state.money -= cost
     state.ownedParcels.add(key)
     world.markOwned(z.c, z.r)
+    if (z.c >= 3) ui.toast('🏞️ Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.', 'good', true)
     ui.toast(t('🏞️ Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.', cost.toLocaleString('tr-TR')), 'good')
   } else {
     if (state.money < PAVE_COST) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
@@ -1280,7 +1945,7 @@ function confirmZone() {
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') cancelPlacement()
   if ((e.key === 'r' || e.key === 'R') && placing) {
-    if (placing.id.startsWith('pump-') || placing.id.startsWith('charger-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
+    if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
       ui.toast('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.', '')
       return
     }
@@ -1339,14 +2004,18 @@ ui.onBuy = id => {
     startPlacement(`charger-${state.evChargers}`)
     return
   }
-  const needsPlacement = id in PLACEABLE && !(id === 'battery' && state.batteryLevel > 0)
+  // seviye tabanlı tesisler (batarya/market/tuvalet) İLK kuruluşta yerleştirilir; yükseltme YERİNDE olur (yıkmak gerekmez)
+  const inPlaceUpgrade = (id === 'battery' && state.batteryLevel > 0)
+    || (id === 'market' && state.marketLevel > 0)
+    || (id === 'toilet' && state.toiletLevel > 0)
+  const needsPlacement = id in PLACEABLE && !inPlaceUpgrade
   if (needsPlacement) {
     if (!item0 || item0.status !== 'buy' || state.money < (item0.cost ?? Infinity)) return
     startPlacement(id)
     return
   }
   if (!buyItem(state, id)) return
-  buildVisual(id)
+  buildVisual(id, placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined) // yükseltmede AYNI konumda kur
   buyToast(id)
   persist()
   if (selectedBuilding) refreshBuildingCard()
@@ -1415,6 +2084,7 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
       applySaveData(remote as Record<string, unknown>)
       saveLoaded = true
       ui.toast(t('Bulut kaydı yüklendi — Gün {0} ({1})', state.day, auth.currentEmail() ?? ''), 'good', true)
+      applyOfflineEarnings() // yokken geçen süre kadar pasif gelir
     }
   } catch {
     // Bulut kaydı yüklenemedi: TAZE oturumla oynamaya izin verme — yoksa
@@ -1516,6 +2186,11 @@ connectLive()
     }
     document.getElementById('mv-rot')?.addEventListener('click', () => {
       if (!placing) return
+      // pompa/tank/kapı yönü sabittir (araç yanaşması) — mobilde de döndürülemez (klavye ile aynı)
+      if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
+        ui.toast(t('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.'), '')
+        return
+      }
       placing.rot = (placing.rot + 1) % 4
       placing.root.rotation.z = placing.rot * Math.PI / 2
       repositionPlacing(placing.cx, placing.cy) // döndürünce yeniden doğrula
@@ -1552,6 +2227,13 @@ function tutAdvance(to: number) {
     tutEl.innerHTML = t('🎉 İlk satışın! İpucu: <b>🧼 cam temizle</b> = daha çok bahşiş. Büyümek için <b>🛒 mağazadan</b> pompa/tesis al, <b>🏢 ofisten</b> fiyatı ayarla.')
     setTimeout(() => { if (tutEl) tutEl.style.display = 'none' }, 9000)
   }
+}
+/** onboarding ipucunu kapat — pompacı işi devraldığında (manuel servis olmayacak) takılı kalmasın */
+function tutDismiss() {
+  if (!tutEl || tutStep >= 3) return
+  tutStep = 3
+  localStorage.setItem('beneloil-onboarded', '1')
+  tutEl.style.display = 'none'
 }
 
 // oyun içi canlı t("OYUNDA") sayacı — 60 sn'de bir tazelenir (sosyal kanıt)
@@ -1681,12 +2363,13 @@ if (isFullMode) {
     if (buyItem(state, id)) buildVisual(id)
   }
   state.money = 50_000
-  for (const f of FUELS) state.tanks[f] = state.tankCapacity
+  for (const f of FUELS) state.tanks[f] = state.fuelCapacity(f)
   state.battery = state.batteryCapacity
   ui.toast('🧪 FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!', 'good')
 }
 
 ui.onMaint = id => {
+  if (id === 'open-order') { ui.hideBuildingCard(); openSection('order'); return } // tanka tıkla → yakıt siparişi
   if (id.startsWith('auto-pump-')) {
     const i = parseInt(id.slice(10))
     if (state.autoPumps.has(i)) {
@@ -1708,11 +2391,18 @@ ui.onMaint = id => {
   }
   if (id.startsWith('auto-charger-')) {
     const i = parseInt(id.slice(13))
-    if (state.autoChargers.has(i)) state.autoChargers.delete(i)
-    else state.autoChargers.add(i)
-    ui.toast(state.autoChargers.has(i)
-      ? t('DC Şarj #{0}: otomatik şarj AÇIK — EV sormadan şarj alır.', i + 1)
-      : t('DC Şarj #{0}: otomatik şarj kapalı.', i + 1), 'good')
+    if (state.autoChargers.has(i)) {
+      state.autoChargers.delete(i)
+      ui.toast(t('DC Şarj #{0}: şarjcı işten çıktı — şarjı yine sen yaparsın.', i + 1), '')
+    } else {
+      if (state.money < EV_ATTENDANT_HIRE) {
+        ui.toast(t('💸 Para yetmiyor — şarjcı işe alma ₺{0}.', EV_ATTENDANT_HIRE.toLocaleString('tr-TR')), 'bad')
+        return
+      }
+      state.money -= EV_ATTENDANT_HIRE
+      state.autoChargers.add(i)
+      ui.toast(t('⚡ DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!', i + 1), 'good')
+    }
     refreshBuildingCard()
     persist()
     return
@@ -1794,10 +2484,28 @@ ui.onPriceChange = (f, delta) => {
     syncSignPrices()
   }
   refreshBuildingCard()
+  if (document.getElementById('officewrap')?.classList.contains('show')) openOfficePanel() // ofis fiyat satırlarını canlı güncelle
   persist()
 }
 
 // ---- Bina bilgi kartları ----
+
+/** yakıt + elektrik satış fiyatı stepper satırları (ofis kartı ve tabela paylaşır) */
+function fuelPriceRows(): NonNullable<BuildingCard['priceRows']> {
+  return [
+    ...(['benzin', 'dizel', 'lpg'] as FuelType[]).map(f => {
+      const [lo, hi] = priceBounds(f)
+      return {
+        f: f as FuelType | 'elec', label: FUEL_LABEL[f], price: state.prices[f], cost: FUEL_COST[f] as number | string,
+        canDown: state.prices[f] > lo, canUp: state.prices[f] < hi,
+      }
+    }),
+    {
+      f: 'elec' as FuelType | 'elec', label: 'Elektrik (kWh)', price: state.elecPrice, cost: 'santralden',
+      canDown: state.elecPrice > 4, canUp: state.elecPrice < 18,
+    },
+  ]
+}
 
 function buildingCard(id: string): BuildingCard | null {
   id = id.split('#')[0]
@@ -1811,15 +2519,16 @@ function buildingCard(id: string): BuildingCard | null {
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Dolum hızı'), t('{0} L/sn', FILL_RATE)],
-        [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelirin tamamı senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
-        [t('Benzin'), `₺${FUEL_PRICE.benzin}/L`],
-        [t('Dizel'), `₺${FUEL_PRICE.dizel}/L`],
+        [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelir senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
+        [t('Yovmiye'), t('₺{0}/gün', POMPACI_WAGE), state.autoPumps.has(i) ? 'bad' : undefined],
+        [t('Benzin'), `₺${state.prices.benzin}/L`],
+        [t('Dizel'), `₺${state.prices.dizel}/L`],
       ],
       action: broken
         ? { label: '🔧 Tamir Et — ₺800', maintId: `fix-pump-${i}` }
         : state.autoPumps.has(i)
           ? { label: t('🧑‍🔧 Pompacıyı işten çıkar'), maintId: `auto-pump-${i}` }
-          : { label: t('🧑‍🔧 Pompacı Çalıştır — ₺{0}', POMPACI_HIRE.toLocaleString('tr-TR')), maintId: `auto-pump-${i}` },
+          : { label: t('🧑‍🔧 Pompacı Tut — ₺{0} + ₺{1}/gün', POMPACI_HIRE.toLocaleString('tr-TR'), POMPACI_WAGE), maintId: `auto-pump-${i}` },
     }
   }
   if (id.startsWith('charger-')) {
@@ -1831,11 +2540,15 @@ function buildingCard(id: string): BuildingCard | null {
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
         [t('Şarj süresi'), t('Anında')],
+        [t('Şarjcı'), state.autoChargers.has(i) ? t('ÇALIŞIYOR (gelir senin)') : t('YOK'), state.autoChargers.has(i) ? 'good' : undefined],
+        [t('Yovmiye'), t('₺{0}/gün', EV_ATTENDANT_WAGE), state.autoChargers.has(i) ? 'bad' : undefined],
         [t('Satış'), `₺${state.elecPrice}/kWh`],
       ],
       action: broken
         ? { label: '🔧 Tamir Et — ₺1.000', maintId: `fix-charger-${i}` }
-        : { label: t('Otomatik Şarj: {0} — değiştir', state.autoChargers.has(i) ? t('AÇIK') : t('KAPALI')), maintId: `auto-charger-${i}` },
+        : state.autoChargers.has(i)
+          ? { label: t('🧑‍🔧 Şarjcıyı işten çıkar'), maintId: `auto-charger-${i}` }
+          : { label: t('🧑‍🔧 Şarjcı Tut — ₺{0} + ₺{1}/gün', EV_ATTENDANT_HIRE.toLocaleString('tr-TR'), EV_ATTENDANT_WAGE), maintId: `auto-charger-${i}` },
     }
   }
   switch (id) {
@@ -1855,43 +2568,56 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Elektrik satışı'), `${Math.round(state.stats.kwh)} kWh`],
           ['Toplam ciro', `₺${Math.round(state.stats.revenue).toLocaleString('tr-TR')}`, 'good'],
         ],
-        priceRows: [
-          ...(['benzin', 'dizel', 'lpg'] as FuelType[]).map(f => {
-            const [lo, hi] = priceBounds(f)
-            return {
-              f: f as FuelType | 'elec', label: FUEL_LABEL[f], price: state.prices[f], cost: FUEL_COST[f] as number | string,
-              canDown: state.prices[f] > lo, canUp: state.prices[f] < hi,
-            }
-          }),
-          {
-            f: 'elec' as FuelType | 'elec', label: 'Elektrik (kWh)', price: state.elecPrice, cost: 'santralden',
-            canDown: state.elecPrice > 4, canUp: state.elecPrice < 18,
-          },
-        ],
+        priceRows: fuelPriceRows(),
       }
     }
-    case 'gatein':
+    case 'gatein': {
+      const wg = getShopItems(state).find(r => r.id === 'widegate')
       return {
         icon: 'i-move', name: t('Giriş Kapısı'),
         desc: t('Müşteriler ve tankerler istasyona buradan girer. Taşı butonuyla yol kenarında istediğin yere al — trafik akışı kendini uyarlar.'),
-        stats: [['Konum', `y ${Math.round(world.gateIn.y)}`], ['Kural', t('Çıkışla arası en az 5 birim')]],
+        stats: [
+          [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
+          ['Kural', t('Çıkışla arası en az 5 birim')]],
+        buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
+          ? { label: t('🛣️ Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          : undefined,
       }
-    case 'gateout':
+    }
+    case 'gateout': {
+      const wg = getShopItems(state).find(r => r.id === 'widegate')
       return {
         icon: 'i-move', name: t('Çıkış Kapısı'),
         desc: t('Araçlar istasyondan buradan çıkıp yola karışır. Taşı butonuyla yerini belirle.'),
-        stats: [['Konum', `y ${Math.round(world.gateOut.y)}`], ['Kural', t('Girişle arası en az 5 birim')]],
+        stats: [
+          [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
+          ['Kural', t('Girişle arası en az 5 birim')]],
+        buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
+          ? { label: t('🛣️ Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          : undefined,
+      }
+    }
+    case 'sign':
+      return {
+        icon: 'i-sign', name: t('Tabela'),
+        desc: t('Yoldan geçenlerin uğrama şansını artırır. Fiyatları buradan da ayarlayabilir, Taşı ile yerini değiştirebilirsin.'),
+        stats: [
+          [t('Seviye'), `${state.signLevel + 1}/4`],
+          [t('Trafik etkisi'), `+%${state.signLevel * 10}`, state.signLevel > 0 ? 'good' : ''],
+        ],
+        priceRows: fuelPriceRows(), // tabela = fiyat panosu: yakıt + elektrik fiyatları buradan değişir
       }
     case 'tank':
       return {
         icon: 'i-tank', name: t('Yakıt Tankı'),
         desc: t('Sattığın benzin ve dizel buradan çıkar. Bitirmeden tanker siparişi vermeyi unutma.'),
         stats: [
-          [t('Benzin'), `${Math.round(state.tanks.benzin)} / ${state.tankCapacity}L`, state.tanks.benzin < state.tankCapacity * 0.15 ? 'bad' : ''],
-          [t('Dizel'), `${Math.round(state.tanks.dizel)} / ${state.tankCapacity}L`, state.tanks.dizel < state.tankCapacity * 0.15 ? 'bad' : ''],
-          [t('LPG'), `${Math.round(state.tanks.lpg)} / ${state.tankCapacity}L`, state.tanks.lpg < state.tankCapacity * 0.15 ? 'bad' : ''],
+          [t('Benzin'), `${Math.round(state.tanks.benzin)} / ${state.fuelCapacity('benzin')}L`, state.tanks.benzin < state.fuelCapacity('benzin') * 0.15 ? 'bad' : ''],
+          [t('Dizel'), `${Math.round(state.tanks.dizel)} / ${state.fuelCapacity('dizel')}L`, state.tanks.dizel < state.fuelCapacity('dizel') * 0.15 ? 'bad' : ''],
+          [t('LPG'), `${Math.round(state.tanks.lpg)} / ${state.fuelCapacity('lpg')}L`, state.tanks.lpg < state.fuelCapacity('lpg') * 0.15 ? 'bad' : ''],
           ['Kapasite seviyesi', `${state.tankLevel + 1}/4 (maks ${TANK_CAPACITY[3]}L)`],
         ],
+        action: { label: t('🛢️ Yakıt Siparişi Ver'), maintId: 'open-order' },
       }
     case 'battery':
       return {
@@ -1990,7 +2716,11 @@ function buildingCard(id: string): BuildingCard | null {
       return {
         icon: 'i-parking', name: t('Otopark'),
         desc: t('Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.'),
-        stats: [['Kapasite', t('4 araç')], ['Doluluk', `${cars.cars.filter(c => c.phase === 'parked' || c.phase === 'toPark').length}/4`]],
+        stats: (() => {
+          const cap = world.getParkingSpots().length || 4
+          const occ = Math.min(cars.cars.filter(c => c.phase === 'parked' || c.phase === 'toPark').length, cap)
+          return [['Kapasite', t('{0} araç', cap)], ['Doluluk', `${occ}/${cap}`]]
+        })(),
       }
     case 'oil':
       return {
@@ -2050,35 +2780,60 @@ function refreshBuildingCard() {
 
 // ---- Ödüllü reklam: izle → müşteri patlaması ----
 const adBtn = document.getElementById('adbtn') as HTMLButtonElement
+const adBtnLabel = adBtn.querySelector('span') as HTMLSpanElement
 let adCooldown = 120 // ilk fırsat: 2. dakika (baştan değil, biraz ilerleyince)
+// fırsat-temelli ödüllü reklam teklifi (tycoon tarzı): müşteri patlaması VEYA gün kârını 2x
+let adOffer: { kind: 'rush' | 'double'; profit: number } = { kind: 'rush', profit: 0 }
+let doubleOfferT = 0 // 2x teklifi ekranda kalma süresi
+
+function showAdOffer(kind: 'rush' | 'double', profit = 0) {
+  adOffer = { kind, profit }
+  adBtnLabel.textContent = kind === 'double'
+    ? t('🎬 Reklam İzle: Günü 2x Yap (+₺{0})', profit.toLocaleString('tr-TR'))
+    : t('🎬 Reklam İzle: Müşteri Patlaması')
+  adBtn.style.display = 'flex'
+}
 adBtn.addEventListener('click', () => {
   adBtn.disabled = true
-  rewarded('musteri-patlamasi',
+  const offer = adOffer
+  rewarded(offer.kind === 'double' ? 'gun-2x' : 'musteri-patlamasi',
     () => {
-      state.promo = { type: 'rush', until: Date.now() + 90_000 }
-      ui.toast(t('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!'), 'good')
-      audio.achieve()
+      if (offer.kind === 'double') {
+        state.money += offer.profit
+        ui.toast(t('🎬 Günün kârı 2 katına çıktı: +₺{0}!', offer.profit.toLocaleString('tr-TR')), 'good')
+      } else {
+        state.promo = { type: 'rush', until: Date.now() + 90_000 }
+        ui.toast(t('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!'), 'good')
+      }
+      audio.achieve(); persist()
     },
     watched => {
       adBtn.disabled = false
       adBtn.style.display = 'none'
-      adCooldown = watched ? 420 : 90 // izlediyse 7 dk, vazgeçtiyse 1.5 dk sonra tekrar
+      doubleOfferT = 0
+      if (adOffer.kind === 'rush') adCooldown = watched ? 420 : 90 // izlediyse 7 dk, vazgeçtiyse 1.5 dk sonra tekrar
     })
 })
+/** gün sonu 2x-kâr fırsatı (kârlı gün + reklam varsa) — kısa süre görünür */
+function offerDoubleProfit(profit: number) {
+  if (!adsEnabled() || isFullMode || isPromoMode || profit <= 0) return
+  showAdOffer('double', profit)
+  doubleOfferT = 22 // 22 sn içinde izlemezsen kaçar
+}
 
 function tickAdOffer(dt: number) {
   if (!adsEnabled() || isFullMode || isPromoMode) return
-  if (adCooldown > 0) {
-    adCooldown -= dt
+  // 2x teklifi süreli
+  if (doubleOfferT > 0) {
+    doubleOfferT -= dt
+    if (doubleOfferT <= 0 && adOffer.kind === 'double') { adBtn.style.display = 'none'; adCooldown = 60 }
     return
   }
-  // teklif koşulu: promosyon yokken ve oyun biraz ilerlemişken
-  if (!state.promo && state.day >= 1 && adBtn.style.display === 'none') {
-    adBtn.style.display = 'flex'
-  }
-  if (state.promo && adBtn.style.display !== 'none') {
-    adBtn.style.display = 'none'
-    adCooldown = 300
+  if (adCooldown > 0) { adCooldown -= dt; return }
+  // periyodik müşteri-patlaması teklifi: promosyon yokken
+  if (!state.promo && state.day >= 1 && adBtn.style.display === 'none') showAdOffer('rush')
+  if (state.promo && adOffer.kind === 'rush' && adBtn.style.display !== 'none') {
+    adBtn.style.display = 'none'; adCooldown = 300
   }
 }
 
@@ -2090,7 +2845,7 @@ editBtn.addEventListener('click', () => {
   editBtn.classList.toggle('danger', editMode)
   cancelPlacement()
   ui.toast(editMode
-    ? t('Düzenleme modu AÇIK: taşımak istediğin binaya tıkla (pompa, şarj ve tank sabittir)')
+    ? t('✏️ Düzenleme AÇIK — binaya dokun ve taşı')
     : t('Düzenleme modu kapandı.'), '')
 })
 
@@ -2118,10 +2873,24 @@ function updateZoneAt(x: number, y: number) {
     ? !state.owns(c, r) && state.parcelAdjacentToOwned(c, r) && state.money >= parcelCost(c, r, state)
     : state.owns(c, r) && !state.isPaved(c, r) && state.money >= PAVE_COST
   ;(zoneMode.ghost.material as THREE.MeshBasicMaterial).color.setHex(zoneMode.valid ? 0x37c97e : 0xec5b5b)
+  // canlı fiyat + durum etiketi (karşı/uzak arsalar pahalı — sürpriz olmasın)
+  const zc = document.getElementById('zonecost')
+  if (zc) {
+    const cost = zoneMode.kind === 'land' ? parcelCost(c, r, state) : PAVE_COST
+    const across = c >= 3 ? t(' · yol karşısı') : ''
+    zc.style.display = 'block'
+    zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ' ✗'}`
+    zc.style.color = zoneMode.valid ? 'var(--green-dark)' : 'var(--red)'
+  }
 }
 
+/** ekran (client) koordinatını canvas'a göre NDC'ye çevir — safe-area/offset varken mobilde kayma olmaz */
+function toNDC(clientX: number, clientY: number) {
+  const r = renderer.domElement.getBoundingClientRect()
+  pointer.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
+}
 function groundPointAt(clientX: number, clientY: number): THREE.Vector3 | null {
-  pointer.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1)
+  toNDC(clientX, clientY)
   raycaster.setFromCamera(pointer, camera)
   const pt = new THREE.Vector3()
   return raycaster.ray.intersectPlane(groundPlane, pt) ? pt : null
@@ -2138,7 +2907,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
 window.addEventListener('pointermove', e => {
   // yerleştirme / arsa seçim hayaleti imleci takip eder
   if (placing || zoneMode) {
-    pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1)
+    toNDC(e.clientX, e.clientY)
     raycaster.setFromCamera(pointer, camera)
     const pt = new THREE.Vector3()
     if (raycaster.ray.intersectPlane(groundPlane, pt)) {
@@ -2150,6 +2919,7 @@ window.addEventListener('pointermove', e => {
     }
   }
   if (!isDown) return
+  if (pinching) { isDown = false; isDrag = false; grabPoint = null; return } // pinch sırasında pan yok
   // sol tuş bırakılmış ama pointerup kaçmışsa (ör. sağ tık menüsü araya girdi) sürüklemeyi kes
   if ((e.buttons & 1) === 0) { isDown = false; isDrag = false; grabPoint = null; return }
   lastX = e.clientX; lastY = e.clientY
@@ -2210,7 +2980,7 @@ window.addEventListener('pointerup', e => {
 })
 
 function handleClick(e: PointerEvent) {
-  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1)
+  toNDC(e.clientX, e.clientY)
   raycaster.setFromCamera(pointer, camera)
 
   // 1) pompadaki araçlar
@@ -2219,7 +2989,14 @@ function handleClick(e: PointerEvent) {
   if (carHits.length > 0) {
     let obj: THREE.Object3D | null = carHits[0].object
     while (obj && !obj.userData.car) obj = obj.parent
-    if (obj?.userData.car) ui.selectCar(obj.userData.car as Car)
+    if (obj?.userData.car) {
+      const c = obj.userData.car as Car
+      // molada elektrikli araç: tıklayınca direkt gönder (arıza pill'i gibi, panel/popup açılmadan)
+      if (c.kind === 'ev' && c.squatting) ui.onDismiss(c)
+      // pompacı/şarjcı devredeyse otomasyon hallediyor → dokunulsa bile panel/popup AÇMA
+      else if (isAttendantCar(c)) ui.toast(t('🧑‍🔧 Pompacı bu aracı hallediyor.'), '', true)
+      else ui.selectCar(c)
+    }
     return
   }
 
@@ -2246,6 +3023,8 @@ function handleClick(e: PointerEvent) {
       }
       selectedBuilding = bid
       world.setSelected(selectedBuilding)
+      // Ofis binası → kapsamlı Ofis paneli (özet + fiyat yönetimi + banka). Mobil sheet / masaüstü ortalı modal.
+      if (bid === 'office') { openSection('office'); return }
       refreshBuildingCard()
       return
     }
@@ -2255,6 +3034,10 @@ function handleClick(e: PointerEvent) {
   selectedBuilding = null
   world.setSelected(null)
   ui.hideBuildingCard()
+  // Mobilde: sahne boşluğuna dokunma servis panelini de kapatır (backdrop yok).
+  // selectCar(null) mevcut "paneli kapat" kalıbı; doldurma sürerken activeCar zaten
+  // null olduğundan (START'a basınca) doldurmayı etkilemez, müşteri sahnede kalır.
+  if (isNativePlatform() && ui.activeCar) ui.selectCar(null)
 }
 
 // ---- Oyun döngüsü ----
@@ -2275,6 +3058,9 @@ function nightFactor(t: number): number {
 
 function frame() {
   requestAnimationFrame(frame)
+  // sekme/uygulama arka planda: hesaplama+render durur (pil/CPU tasarrufu, ısınma azalır).
+  // dt zaten 0.05 ile capli → geri dönünce güvenli devam.
+  if (document.hidden) { clock.getDelta(); return }
   const dt = Math.min(clock.getDelta(), 0.05)
   promoTick?.(dt)
   if (exploding) { composer!.render(); return }
@@ -2284,14 +3070,22 @@ function frame() {
 
   state.tick(dt)
   cars.update(dt)
+  world.updateTankFill({
+    benzin: state.tanks.benzin / state.fuelCapacity('benzin'),
+    dizel: state.tanks.dizel / state.fuelCapacity('dizel'),
+    lpg: state.tanks.lpg / state.fuelCapacity('lpg'),
+  })
 
   for (const msg of state.events.splice(0)) {
     if (msg.includes(t('Başarım'))) {
       ui.toast(msg, 'good', true)
       audio.achieve()
+    } else if (msg.includes('FIRSAT')) {
+      ui.toast(msg, 'good', true) // yakıt indirimi / müşteri patlaması = iyi haber
+      notifyIfHidden(msg, 'firsat')
     } else {
       ui.toast(msg, 'bad')
-      if (msg.includes(t('KRİTİK')) || msg.includes('doldu')) notifyIfHidden(msg)
+      if (msg.includes(t('KRİTİK')) || msg.includes('doldu')) notifyIfHidden(msg, 'kritik')
     }
   }
 
@@ -2318,9 +3112,34 @@ function frame() {
     state.day++
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
+    // günlük yovmiye (pompacı + şarjcı) — recurring gider
+    const wages = state.dailyWages()
+    if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
+    // kredi taksiti (aylık = 1 oyun günü)
+    const loanRes = state.processLoanDay()
+    if (loanRes === 'done') ui.toast(t('🏦 Kredi tamamen ödendi — teminatların serbest! 🎉'), 'good')
+    else if (loanRes === 'warn') ui.toast(t('🏦 Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.'), 'bad')
+    else if (loanRes === 'seize') {
+      if (state.loan.collateral.length) seizeCollateral() // teminatlı → haciz
+      else { state.startPartnership(); ui.toast(t('🏦 Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!', Math.round(PARTNER_SHARE * 100)), 'bad') }
+    }
+    // banka ortaklığı aktifse günlük kârdan payını al
+    const pc = state.applyPartnerCut(profit)
+    if (pc?.kind === 'ended') ui.toast(t('🏦 Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin! 🎉'), 'good')
+    else if (pc?.kind === 'cut' && pc.amount > 0) ui.toast(t('🏦 Banka ortağı kâr payı aldı: -₺{0}', pc.amount.toLocaleString('tr-TR')), '')
+    if (document.getElementById('bankwrap')?.classList.contains('show')) renderBank()
+    // dönemsel muhasebe: biten günün satış cirosunu kaydet
+    const dayRev = Math.max(0, Math.round(state.stats.revenue - state.dayStartRevenue))
+    state.salesLog.push({ day: state.day, rev: dayRev })
+    if (state.salesLog.length > 370) state.salesLog.shift()
+    state.dayStartRevenue = state.stats.revenue
     state.dayStartMoney = state.money
     state.facDaily = {}
-    if (state.day >= 3 && !isFullMode && !isPromoMode) interstitial('gun-sonu')
+    // gün sonu: policy interstitial'a izin veriyorsa forced reklam; vermiyorsa opt-in "günü 2x" fırsatı sun
+    if (!isFullMode && !isPromoMode) {
+      if (mayShowInterstitial(state.day, profit >= 0)) interstitial('gun-sonu', { day: state.day, won: profit >= 0 })
+      else offerDoubleProfit(profit)
+    }
     persist()
   }
   prevCycleT = cycleT
@@ -2379,7 +3198,7 @@ function frame() {
       let slot = 0
       while (used.has(slot)) slot++
       // kapılar taşınmış olabilir — tanker güncel giriş/çıkış rampalarını kullansın
-      tankers.push({ t: new Tanker(world.scene, modelLib, f, slot, new THREE.Vector3(world.tankAnchor.x, world.tankAnchor.y, 0), world.gateIn.y, world.gateOut.y), fuel: f, slot })
+      tankers.push({ t: new Tanker(world.scene, modelLib, f, slot, new THREE.Vector3(world.tankAnchor.x, world.tankAnchor.y, 0), () => world.gateIn.y, () => world.gateOut.y), fuel: f, slot })
     }
   }
   const blockedFor = (self: Tanker) => (pos: THREE.Vector3, dir: THREE.Vector3) => {
@@ -2439,6 +3258,7 @@ function frame() {
     if (!(c.filling && c.kind === 'fuel' && c.phase === 'atPump' && c.nozzle && !c.wrongFuelHandled)) continue
     if (c.slotIndex >= 0 && state.brokenPumps.has(c.slotIndex)) {
       ui.toast(t('Pompa arızalandı — dolum yarıda kaldı, tamir gerekli.'), 'bad')
+      notifyIfHidden(t('🔧 Pompa arızalandı — tamir gerekli!'), 'ariza-pompa')
       finishSale(c)
       continue
     }
@@ -2450,11 +3270,14 @@ function frame() {
     const amount = Math.min(FILL_RATE * dt, state.tanks[c.nozzle])
     c.filled += amount
     state.tanks[c.nozzle] -= amount
-    c.setCounter(`${c.filled.toFixed(1)}L · ₺${c.filledValue.toFixed(0)}`)
+    c.bubbleT -= dt // sayaç ~9/sn güncellensin (her frame değil) — okunur, çok hızlı akmaz
+    if (c.bubbleT <= 0) { c.bubbleT = 0.11; c.setCounter(`${c.filled.toFixed(1)}L · ₺${c.filledValue.toFixed(0)}`) }
     if (c.nozzle !== c.demandType && c.filled > 1.5) {
       wrongFuel(c)
     } else if (c.fullMode ? c.filled >= c.hiddenNeedL : c.filledValue >= c.targetAmount) {
-      if (c.fullMode) {
+      // Yalnızca GERÇEKTEN full isteyen müşteride talep = doldurulan (tam depo satışı) olur.
+      // Belirli tutar isteyen müşteriyi FULLE'lemek exploit değil: gelir talep ile capli kalır + fazlası spill (ceza).
+      if (c.fullMode && c.wantsFull) {
         c.demandAmount = Math.round(c.filledValue * 100) / 100
         c.demandLiters = c.filled
       }
@@ -2498,6 +3321,8 @@ function frame() {
       else c.targetAmount = c.demandAmount
       c.filling = true
       c.beingServed = true
+      if (Math.random() < 0.6) c.cleanWindows() // pompacı bazen camları da siler (rastgele) — oyuncunun işi değil
+      tutDismiss() // pompacı devraldı → "hoşgeldin patron" ipucu takılı kalmasın
     }
   }
   tickEvCharging(dt)

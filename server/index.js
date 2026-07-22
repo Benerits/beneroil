@@ -47,6 +47,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT false`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS verify_token text`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_token text`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS session_id text`) // tek-cihaz kilidi
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_expires timestamptz`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open'`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_note text`)
@@ -59,6 +60,16 @@ async function initDb() {
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_email_lower ON benzinlik_player (lower(email))`)
+  // IAP: verilmiş satın alma transaction'ları (replay/çift-verme önleme) — transaction_id PK ile idempotent
+  await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_iap_grant (
+    transaction_id text PRIMARY KEY, email text NOT NULL, product_id text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`)
+  // sosyal giriş (Google/Apple): sağlayıcı kimliği ile hesap eşleştirme
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS google_id text`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS apple_id text`)
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_google ON benzinlik_player (google_id) WHERE google_id IS NOT NULL`)
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_apple ON benzinlik_player (apple_id) WHERE apple_id IS NOT NULL`)
   console.log('DB hazır (benzinlik_player + benzinlik_feedback).')
 }
 
@@ -95,6 +106,68 @@ function verifyToken(token) {
 const BASE_URL = process.env.PUBLIC_URL || 'https://petrol.benerits.com'
 function requireVerify() { return process.env.REQUIRE_EMAIL_VERIFY === 'true' } // key gelene dek kapalı
 function randToken() { return crypto.randomBytes(24).toString('base64url') }
+
+// ---- Sosyal giriş: Google + Apple (hem web hem Capacitor-iOS) ----
+// Kabul edilen audience'lar: web client + iOS client (Capacitor native). Env ile verilir.
+const GOOGLE_CLIENT_IDS = String(process.env.GOOGLE_CLIENT_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+const APPLE_CLIENT_IDS = String(process.env.APPLE_CLIENT_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+
+const _jwksCache = new Map() // url -> { keys, at }
+async function fetchJwks(url) {
+  const c = _jwksCache.get(url)
+  if (c && Date.now() - c.at < 3600_000) return c.keys
+  const r = await fetch(url)
+  if (!r.ok) throw new Error('jwks ' + r.status)
+  const j = await r.json()
+  _jwksCache.set(url, { keys: j.keys || [], at: Date.now() })
+  return j.keys || []
+}
+const b64u = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64')
+
+// OIDC id_token doğrula (RS256, JWKS ile) — jsonwebtoken bağımlılığı yok, saf node:crypto.
+async function verifyIdToken(idToken, { jwksUrl, issuers, audiences }) {
+  const parts = String(idToken || '').split('.')
+  if (parts.length !== 3) throw new Error('malformed')
+  const [h, p, s] = parts
+  const header = JSON.parse(b64u(h).toString())
+  const payload = JSON.parse(b64u(p).toString())
+  if (header.alg !== 'RS256') throw new Error('alg')
+  const keys = await fetchJwks(jwksUrl)
+  const jwk = keys.find(k => k.kid === header.kid)
+  if (!jwk) throw new Error('kid')
+  const pub = crypto.createPublicKey({ key: jwk, format: 'jwk' })
+  const ok = crypto.verify('RSA-SHA256', Buffer.from(`${h}.${p}`), pub, b64u(s))
+  if (!ok) throw new Error('signature')
+  if (!issuers.includes(payload.iss)) throw new Error('iss')
+  const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
+  if (!auds.some(a => audiences.includes(a))) throw new Error('aud')
+  if (Number(payload.exp) * 1000 < Date.now() - 5000) throw new Error('expired')
+  return payload
+}
+
+// Sağlayıcı kimliğinden hesabı bul/oluştur/birleştir. E-posta gizliyse placeholder kullanılır.
+async function oauthUpsertPlayer(provider, sub, email) {
+  const col = provider === 'google' ? 'google_id' : 'apple_id'
+  let r = await pool.query(`SELECT email, banned_at FROM benzinlik_player WHERE ${col}=$1`, [sub])
+  if (r.rowCount) return r.rows[0]
+  if (email) {
+    r = await pool.query('SELECT email, banned_at FROM benzinlik_player WHERE lower(email)=lower($1)', [email])
+    if (r.rowCount) {
+      await pool.query(`UPDATE benzinlik_player SET ${col}=$1, email_verified=true WHERE lower(email)=lower($2)`, [sub, email])
+      return r.rows[0]
+    }
+  }
+  // yeni hesap: e-posta gizliyse benzersiz placeholder; şifre kullanılamaz (rastgele)
+  const em = (email && /^\S+@\S+\.\S+$/.test(email)) ? email.toLowerCase() : `${provider}_${sub}@login.beneloil`
+  const pass = hashPassword(crypto.randomBytes(24).toString('hex'))
+  const ins = await pool.query(
+    `INSERT INTO benzinlik_player(email, pass, ${col}, email_verified) VALUES ($1,$2,$3,true)
+     ON CONFLICT (email) DO UPDATE SET ${col}=EXCLUDED.${col} RETURNING email, banned_at`,
+    [em, pass, sub])
+  bumpStat('signups')
+  pushSignupNotif() // ekibe "+1 oyuncu" (asla girişi etkilemez)
+  return ins.rows[0]
+}
 async function sendEmail(to, subject, html) {
   const key = process.env.RESEND_API_KEY
   const from = process.env.MAIL_FROM || 'BenelOil <noreply@benerits.com>'
@@ -185,6 +258,42 @@ function readBody(req) {
 
 // İstemciden gelen kaydı makul sınırlara kırp — bariz hileleri SQL'e sokma.
 const clamp = (v, lo, hi, dflt = lo) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt)
+
+// ---- Anti-cheat: bina/ilerleme değeri (state.ts maliyet tablolarıyla birebir) ----
+// Bina para maliyeti olduğundan "servet = para + bina değeri" birleşik hız-tavanı,
+// hem para hem bina/seviye enjeksiyonunu tek seferde kapatır (satın alma servet-nötr).
+const COST = {
+  pump: [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000],
+  sign: [1500, 4000, 9000], tank: [3000, 7000, 15000], tankAdd: [0, 6000, 12000, 20000],
+  market: [7000, 12000, 20000], toilet: [2500, 5000], grid: [8000, 15000],
+  battery: [5000, 9000, 16000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000],
+}
+const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000 }
+const sumUpto = (arr, k) => { let t = 0; const n = Math.max(0, Math.min(arr.length, Math.floor(k) || 0)); for (let i = 0; i < n; i++) t += arr[i]; return t }
+function buildingValue(s) {
+  if (!s || typeof s !== 'object') return 0
+  const n = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
+  let v = 0
+  v += sumUpto(COST.pump, n(s.pumps, 1))
+  v += sumUpto(COST.sign, n(s.signLevel)) + sumUpto(COST.tank, n(s.tankLevel)) + sumUpto(COST.market, n(s.marketLevel))
+  v += sumUpto(COST.toilet, n(s.toiletLevel)) + sumUpto(COST.grid, n(s.gridLevel)) + sumUpto(COST.battery, n(s.batteryLevel))
+  v += sumUpto(COST.ev, n(s.evChargers))
+  if (s.tankCounts && typeof s.tankCounts === 'object') for (const k of ['benzin', 'dizel', 'lpg']) v += sumUpto(COST.tankAdd, n(s.tankCounts[k], 1))
+  v += FLAT.solar * n(s.solarCount) + FLAT.airwater * n(s.airWaterCount) + FLAT.selfwash * n(s.selfWashCount) + FLAT.parking * n(s.parkingCount)
+  if (s.hasDiesel) v += FLAT.dieselgen
+  if (s.hasSMR) v += FLAT.smr
+  if (s.hasWash) v += FLAT.wash
+  if (s.hasOil) v += FLAT.oil
+  if (s.hasCoffee) v += FLAT.coffee
+  if (s.hasRestaurant) v += FLAT.restaurant
+  if (s.hasTruckPark) v += FLAT.truckpark
+  if (s.wideGates) v += FLAT.widegate
+  // parseller DÜŞÜK tahmin: gerçek parselCost dinamik (6k-28k); düşük tutmak satın almanın
+  // asla "servet artışı" gibi görünmemesini garanti eder (false-positive önlemi).
+  if (Array.isArray(s.ownedParcels)) v += s.ownedParcels.length * 5000
+  if (Array.isArray(s.pavedParcels)) v += s.pavedParcels.length * 2000
+  return v
+}
 function sanitizeSave(save) {
   if (save === null) return null
   if (typeof save !== 'object' || Array.isArray(save)) return undefined
@@ -200,7 +309,7 @@ function sanitizeSave(save) {
   s.evChargers = clamp(s.evChargers, 0, 8, 0)
   s.signLevel = clamp(s.signLevel, 0, 3, 0)
   s.tankLevel = clamp(s.tankLevel, 0, 3, 0)
-  s.marketLevel = clamp(s.marketLevel, 0, 2, 0)
+  s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
   s.toiletLevel = clamp(s.toiletLevel, 0, 2, 0)
   s.gridLevel = clamp(s.gridLevel, 0, 2, 0)
   s.batteryLevel = clamp(s.batteryLevel, 0, 3, 0)
@@ -208,11 +317,22 @@ function sanitizeSave(save) {
   s.uranium = clamp(s.uranium, 0, 100, 0)
   s.loginStreak = clamp(s.loginStreak, 0, 3650, 0)
   s.dailyServed = clamp(s.dailyServed, 0, 10000, 0)
+  // Tank kapasitesi = seviye hacmi × tank adedi (adet 1-4). Sabit 5000 clamp'i çok-tanklı
+  // oyuncunun dolu deposunu (20.000L'ye kadar) durduk yere 5000'e düşürüyordu.
+  const TANK_CAP = [800, 1500, 3000, 5000]
+  if (s.tankCounts && typeof s.tankCounts === 'object') {
+    for (const k of ['benzin', 'dizel', 'lpg']) s.tankCounts[k] = clamp(s.tankCounts[k], 1, 4, 1)
+  }
   if (s.tanks && typeof s.tanks === 'object') {
-    for (const k of ['benzin', 'dizel', 'lpg']) s.tanks[k] = clamp(s.tanks[k], 0, 5000, 0)
+    for (const k of ['benzin', 'dizel', 'lpg']) {
+      const cnt = (s.tankCounts && typeof s.tankCounts[k] === 'number') ? clamp(s.tankCounts[k], 1, 4, 1) : 1
+      s.tanks[k] = clamp(s.tanks[k], 0, TANK_CAP[s.tankLevel] * cnt, 0)
+    }
   }
   if (s.pendingCash && typeof s.pendingCash === 'object') {
-    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 600, 0)
+    // kumbara cap'i tesis gelişmişliğine göre 1800'e kadar çıkabilir (istemci pendingCap);
+    // sabit 600 clamp'i geliştirilmiş kumbarayı senkronda kırpıyordu → 2500'e (güvenli tavan) çıkarıldı
+    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 2500, 0)
   }
   if (typeof s.stationName === 'string') s.stationName = s.stationName.slice(0, 14)
   if (s.prices && typeof s.prices === 'object') {
@@ -222,6 +342,10 @@ function sanitizeSave(save) {
     s.elecPrice = clamp(s.elecPrice, 4, 18, 8)
   }
   if (Array.isArray(save.placedRects) && save.placedRects.length > 64) save.placedRects = save.placedRects.slice(0, 64)
+  // muhasebe log'ları: şişmeyi/abuse'ı önlemek için son 40 kayda kırp
+  if (Array.isArray(s.fuelLog) && s.fuelLog.length > 40) s.fuelLog = s.fuelLog.slice(-40)
+  if (Array.isArray(s.wageLog) && s.wageLog.length > 40) s.wageLog = s.wageLog.slice(-40)
+  if (Array.isArray(s.salesLog) && s.salesLog.length > 370) s.salesLog = s.salesLog.slice(-370)
   // parsel koordinatlarını doğrula: sınır dışı (0,4 gibi) key'ler client'ı açılışta crash ettiriyordu
   const validParcelKey = k => {
     const p = String(k).split(','); if (p.length !== 2) return false
@@ -307,7 +431,21 @@ async function handleApi(req, res, url) {
       return json(res, 200, { ok: true })
     }
     if (url === '/api/config') {
-      return json(res, 200, { adsClient: process.env.ADSENSE_PUB || null })
+      // AdMob unit'leri env ile gelirse native onları kullanır; yoksa istemci TEST reklamlarını kullanır (public değerler)
+      const admob = {
+        iosInterstitial: process.env.ADMOB_IOS_INTERSTITIAL || null,
+        iosRewarded: process.env.ADMOB_IOS_REWARDED || null,
+        androidInterstitial: process.env.ADMOB_ANDROID_INTERSTITIAL || null,
+        androidRewarded: process.env.ADMOB_ANDROID_REWARDED || null,
+        testMode: process.env.ADMOB_TEST === '1' || undefined,
+      }
+      return json(res, 200, {
+        adsClient: process.env.ADSENSE_PUB || null,
+        admob: (admob.iosInterstitial || admob.androidInterstitial || admob.testMode) ? admob : undefined,
+        googleClientId: process.env.GOOGLE_WEB_CLIENT_ID || null, // web GIS için (public)
+        appleServicesId: process.env.APPLE_SERVICES_ID || null,   // web Apple JS için (public)
+        revenuecatIos: process.env.REVENUECAT_IOS_KEY || null,    // RevenueCat public SDK key (iOS) — IAP
+      })
     }
     if (url === '/api/register' && req.method === 'POST') {
       const regBody = await readBody(req)
@@ -353,6 +491,47 @@ async function handleApi(req, res, url) {
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [e])
       bumpStat('logins')
       return json(res, 200, { token: sign(e), email: e, emailVerified: !!r.rows[0].email_verified, verifyRequired: requireVerify() })
+    }
+    // Google ile giriş (web GIS id_token VEYA Capacitor-iOS native id_token — ikisi de kabul)
+    if (url === '/api/auth/google' && req.method === 'POST') {
+      if (!rateLimit('oauth:' + clientIp(req), 40, 3600_000)) return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
+      if (!GOOGLE_CLIENT_IDS.length) return json(res, 503, { error: 'Google girişi sunucuda yapılandırılmamış.' })
+      const body = await readBody(req)
+      let p
+      try {
+        p = await verifyIdToken(body.idToken || body.credential, {
+          jwksUrl: 'https://www.googleapis.com/oauth2/v3/certs',
+          issuers: ['accounts.google.com', 'https://accounts.google.com'],
+          audiences: GOOGLE_CLIENT_IDS,
+        })
+      } catch (e) { console.log('[google] doğrulama hata:', e.message); return json(res, 401, { error: 'Google doğrulaması başarısız.' }) }
+      if (p.email && p.email_verified === false) return json(res, 401, { error: 'Google e-postası doğrulanmamış.' })
+      const row = await oauthUpsertPlayer('google', String(p.sub), p.email)
+      if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [row.email])
+      bumpStat('logins')
+      return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
+    }
+    // Apple ile giriş (web AppleID JS id_token VEYA Capacitor-iOS native identityToken)
+    if (url === '/api/auth/apple' && req.method === 'POST') {
+      if (!rateLimit('oauth:' + clientIp(req), 40, 3600_000)) return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
+      if (!APPLE_CLIENT_IDS.length) return json(res, 503, { error: 'Apple girişi sunucuda yapılandırılmamış.' })
+      const body = await readBody(req)
+      let p
+      try {
+        p = await verifyIdToken(body.idToken || body.identityToken, {
+          jwksUrl: 'https://appleid.apple.com/auth/keys',
+          issuers: ['https://appleid.apple.com'],
+          audiences: APPLE_CLIENT_IDS,
+        })
+      } catch (e) { console.log('[apple] doğrulama hata:', e.message); return json(res, 401, { error: 'Apple doğrulaması başarısız.' }) }
+      // Apple e-postayı sadece ilk girişte gönderir; sonrakilerde sub yeterli
+      const email = p.email || (body.email && /^\S+@\S+\.\S+$/.test(body.email) ? body.email : null)
+      const row = await oauthUpsertPlayer('apple', String(p.sub), email)
+      if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [row.email])
+      bumpStat('logins')
+      return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
     }
     if (url === '/api/send-verify' && req.method === 'POST') {
       const svBody = await readBody(req)
@@ -423,33 +602,130 @@ async function handleApi(req, res, url) {
       const email = auth(); if (!email) return
       const r = await pool.query('SELECT save, updated_at, banned_at, email_verified FROM benzinlik_player WHERE email=$1', [email])
       if (r.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
-      await pool.query('UPDATE benzinlik_player SET last_seen_at=now() WHERE email=$1', [email])
+      // tek-cihaz kilidi: yükleyen cihaz oturumu DEVRALIR (session_id claim) → eski cihaz kick olur
+      const sess = String(req.headers['x-session'] || '')
+      if (sess) await pool.query('UPDATE benzinlik_player SET last_seen_at=now(), session_id=$2 WHERE email=$1', [email, sess])
+      else await pool.query('UPDATE benzinlik_player SET last_seen_at=now() WHERE email=$1', [email])
       return json(res, 200, { save: r.rows[0]?.save ?? null, updatedAt: r.rows[0]?.updated_at ?? null, emailVerified: !!r.rows[0]?.email_verified, verifyRequired: requireVerify() })
     }
     if (url === '/api/save' && req.method === 'POST') {
       const email = auth(); if (!email) return
       if (!rateLimit('save:' + email, 1, 3_000)) return json(res, 429, { error: 'rate' })
-      const { save } = await readBody(req)
+      const { save, baseUpdatedAt } = await readBody(req)
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
-      // makullük: para, geçen süreye göre imkânsız hızda artamaz (hile freni)
-      if (clean && clean.s && typeof clean.s.money === 'number') {
-        const prev = await pool.query('SELECT save, updated_at, created_at, banned_at FROM benzinlik_player WHERE email=$1', [email])
-        if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
-        const prevSave = prev.rows[0]?.save
-        // taban: önceki kayıt varsa onun parası + o kayıttan beri; yoksa (ilk kayıt)
-        // başlangıç parası + hesap açılışından beri geçen süre. İlk kayıtta fren
-        // uygulanmıyordu → yeni hesap tek POST'ta 2M'ye çıkabiliyordu (bildirilen açık).
+      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at, session_id FROM benzinlik_player WHERE email=$1', [email])
+      if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      // tek-cihaz kilidi: başka cihaz oturumu devraldıysa bu (eski) cihaz YAZMASIN → kicked.
+      // Bağlantı kopması yanlış kick yapmaz: session yalnız BAŞKA cihaz GET/POST yapınca değişir.
+      const sess = String(req.headers['x-session'] || '')
+      const dbSess = prev.rows[0]?.session_id
+      if (sess && dbSess && dbSess !== sess) return json(res, 200, { kicked: true })
+      // çoklu cihaz guard: bu istemci save'i yükledikten SONRA başka cihaz yazdıysa çakışma —
+      // clobber etme, istemciye güncel kaydı dön (ilerleme karışmaz, senkronlanır).
+      if (baseUpdatedAt && prev.rows[0]?.updated_at) {
+        const serverTs = new Date(prev.rows[0].updated_at).getTime()
+        const baseTs = new Date(baseUpdatedAt).getTime()
+        if (Number.isFinite(serverTs) && Number.isFinite(baseTs) && serverTs > baseTs + 1000) {
+          return json(res, 409, { conflict: true, save: prev.rows[0].save, updatedAt: prev.rows[0].updated_at })
+        }
+      }
+      // makullük (hile freni): SERVET = para + bina değeri, geçen süreye göre imkânsız
+      // hızda artamaz. Satın alma servet-nötr (para↓ bina↑) → sadece KAZANÇ serveti
+      // artırır. Böylece PARA ve İLERLEME (bina/seviye/day) enjeksiyonu tek tavanla kapanır.
+      // Offline kazanç da elapsed×600 payı içinde kaldığından bu tavandan sorunsuz geçer.
+      if (clean && clean.s && typeof clean.s === 'object') {
         const START_MONEY = 5000
-        const baseMoney = (prevSave && prevSave.s && typeof prevSave.s.money === 'number') ? prevSave.s.money : START_MONEY
+        const prevSave = prev.rows[0]?.save
         const sinceTs = prev.rows[0]?.updated_at || prev.rows[0]?.created_at
         const elapsed = sinceTs ? Math.max(1, (Date.now() - new Date(sinceTs).getTime()) / 1000) : 1
         const allowance = 50_000 + elapsed * 600
-        if (clean.s.money > baseMoney + allowance) {
-          clean.s.money = Math.round(baseMoney + allowance)
+        const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
+        const bval = buildingValue(clean.s)
+        let money = Number(clean.s.money) || 0
+        if (money + bval > prevWealth + allowance) {
+          // fazlalığı önce paradan düş (para enjeksiyonu / hızlı kazanç freni)
+          const excess = (money + bval) - (prevWealth + allowance)
+          money = Math.max(0, money - excess)
+          clean.s.money = Math.round(money)
+          // bina değeri tek başına tavanı aşıyorsa = bina/seviye ENJEKSİYONU → reddet, öncekini koru.
+          // 60k tampon: maliyet-tablosu yaklaşımından (parsel dinamik fiyatı vb.) doğabilecek
+          // her türlü sapmaya karşı legit oyuncuyu korur; gerçek enjeksiyon (300k+) yine yakalanır.
+          if (money + bval > prevWealth + allowance + 60_000) {
+            return json(res, 409, { conflict: true, save: prevSave || null, updatedAt: prev.rows[0]?.updated_at || null })
+          }
+        }
+        // day (ilerleme) hız freni: gün ~160sn/oyun-günü hızında ilerler (100000'e enjekte edilemez)
+        if (typeof clean.s.day === 'number') {
+          const prevDay = (prevSave && prevSave.s && typeof prevSave.s.day === 'number') ? prevSave.s.day : 1
+          const maxDay = prevDay + Math.ceil(elapsed / 160) + 3
+          if (clean.s.day > maxDay) clean.s.day = maxDay
         }
       }
-      await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1', [email, clean])
+      // save yazarken oturumu da bu cihaza sabitle (session_id null'sa claim et)
+      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now(), session_id=COALESCE($3, session_id) WHERE email=$1 RETURNING updated_at', [email, clean, sess || null])
+      return json(res, 200, { ok: true, updatedAt: upd.rows[0]?.updated_at })
+    }
+    // IAP efektini SUNUCU-otoriter uygula (hile-freni cap'ini bypass eder; sonraki save tutarlı olur).
+    // TODO(prod): App Store receipt doğrulaması ekle (şu an demo: client bildirimini uygular).
+    if (url === '/api/iap' && req.method === 'POST') {
+      const email = auth(); if (!email) return
+      const { productId, transactionId } = await readBody(req)
+      const COINS = { coins_5k: 5000, coins_20k: 20000, coins_75k: 75000 }
+      if (productId !== 'remove_ads' && !COINS[productId]) return json(res, 400, { error: 'Geçersiz ürün.' })
+
+      // ---- Güvenlik: satın almayı RevenueCat ile doğrula + transaction dedup (replay önleme) ----
+      // REVENUECAT_SECRET_KEY set ise PROD modu: doğrulanmadan asla verilmez (fail-closed).
+      // Key yoksa (pre-launch/dev) eski davranış korunur ama uyarı loglanır.
+      const RC_SECRET = process.env.REVENUECAT_SECRET_KEY || ''
+      if (RC_SECRET) {
+        // consumable (coins): transactionId zorunlu + dedup (replay önleme)
+        if (productId !== 'remove_ads') {
+          if (!transactionId) return json(res, 400, { error: 'transactionId gerekli.' })
+          const dup = await pool.query('SELECT 1 FROM benzinlik_iap_grant WHERE transaction_id=$1', [String(transactionId)])
+          if (dup.rowCount > 0) {
+            const cur = await pool.query('SELECT save FROM benzinlik_player WHERE email=$1', [email])
+            const s0 = cur.rows[0]?.save?.s || {}
+            return json(res, 200, { ok: true, already: true, money: Math.round(Number(s0.money) || 0), noAds: !!s0.noAds })
+          }
+        }
+        // RevenueCat'te bu app_user_id (= email) altında satın alma gerçekten var mı?
+        let sub = null
+        try {
+          const rcRes = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(email)}`,
+            { headers: { Authorization: `Bearer ${RC_SECRET}` } })
+          if (rcRes.ok) sub = (await rcRes.json())?.subscriber
+        } catch (e) { console.error('RevenueCat doğrulama hatası:', e) }
+        if (!sub) return json(res, 502, { error: 'Satın alma doğrulanamadı (RevenueCat).' })
+        if (productId === 'remove_ads') {
+          const ent = sub.entitlements || {}
+          const ok = !!(ent.remove_ads || ent.no_ads || ent.premium) || Array.isArray(sub.non_subscriptions?.remove_ads)
+          if (!ok) return json(res, 403, { error: 'Satın alma bulunamadı/doğrulanamadı.' })
+          // non-consumable → tekrar vermek zararsız (idempotent), dedup kaydı gerekmez
+        } else {
+          const arr = sub.non_subscriptions?.[productId]
+          const ok = Array.isArray(arr) && arr.some(x => x && (x.store_transaction_id === transactionId || x.id === transactionId))
+          if (!ok) return json(res, 403, { error: 'Satın alma bulunamadı/doğrulanamadı.' })
+          const ins = await pool.query(
+            'INSERT INTO benzinlik_iap_grant(transaction_id, email, product_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+            [String(transactionId), email, String(productId)])
+          if (ins.rowCount === 0) return json(res, 200, { ok: true, already: true })
+        }
+      } else {
+        console.warn('[IAP] REVENUECAT_SECRET_KEY yok — doğrulamasız grant (yalnız dev/pre-launch olmalı!)')
+      }
+
+      const r = await pool.query('SELECT save FROM benzinlik_player WHERE email=$1', [email])
+      const save = r.rows[0]?.save || { s: {} }; save.s = save.s || {}
+      if (productId === 'remove_ads') save.s.noAds = true
+      else save.s.money = Math.round((Number(save.s.money) || 0) + COINS[productId])
+      await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now() WHERE email=$1', [email, JSON.stringify(save)])
+      return json(res, 200, { ok: true, money: Math.round(Number(save.s.money) || 0), noAds: !!save.s.noAds })
+    }
+    // App Store 5.1.1(v): kullanıcı kendi hesabını uygulama içinden silebilmeli
+    if (url === '/api/account' && req.method === 'DELETE') {
+      const email = auth(); if (!email) return
+      await pool.query('DELETE FROM benzinlik_player WHERE email=$1', [email])
       return json(res, 200, { ok: true })
     }
     json(res, 404, { error: 'not found' })
