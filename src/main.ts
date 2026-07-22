@@ -416,8 +416,10 @@ function openOfficePanel() {
   const cust = document.getElementById('of-customer')
   if (cust) {
     const fx = Math.round((state.priceDemandFactor() - 1) * 100)
+    const evx = Math.round((state.evPriceFactor() - 1) * 100)
     cust.innerHTML =
-      row(t('Müşteri etkisi'), `${fx >= 0 ? '+' : ''}${fx}%`, fx >= 0 ? 'good' : 'bad')
+      row(t('Yakıt müşteri etkisi'), `${fx >= 0 ? '+' : ''}${fx}%`, fx >= 0 ? 'good' : 'bad')
+      + (state.evChargers > 0 ? row(t('EV müşteri etkisi'), `${evx >= 0 ? '+' : ''}${evx}%`, evx >= 0 ? 'good' : 'bad') : '')
       + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`)
       + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
       + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
@@ -2138,6 +2140,11 @@ connectLive()
     }
     document.getElementById('mv-rot')?.addEventListener('click', () => {
       if (!placing) return
+      // pompa/tank/kapı yönü sabittir (araç yanaşması) — mobilde de döndürülemez (klavye ile aynı)
+      if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout') {
+        ui.toast(t('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.'), '')
+        return
+      }
       placing.rot = (placing.rot + 1) % 4
       placing.root.rotation.z = placing.rot * Math.PI / 2
       repositionPlacing(placing.cx, placing.cy) // döndürünce yeniden doğrula
