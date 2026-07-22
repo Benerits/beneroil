@@ -576,9 +576,7 @@ export class UI {
       tpanel.innerHTML = ts.map(t =>
         `<div class="trow">${icon('i-truck')} <span>${t}</span></div>`).join('')
     }
-    this.setText(el<HTMLDivElement>('acc-email'), this.accountEmail ?? '—')
-    this.setText(el<HTMLDivElement>('acc-streak'), t('Giriş serisi: {0} gün · Oyun günü: {1}', state.loginStreak, state.day))
-    this.setText(el<HTMLDivElement>('acc-ach'), t('Başarımlar: {0}/8 · Görev: {1}', state.achievements.size, state.dailyDone ? t('tamamlandı') : state.dailyServed + '/15'))
+    // profil kartı açıldığında renderProfile() ile doldurulur (her frame değil)
 
     // yakıt türü başına tank barları + sipariş modalı satırları
     let anyLow = false

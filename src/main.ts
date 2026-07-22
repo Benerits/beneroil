@@ -444,6 +444,30 @@ function openOfficePanel() {
   document.getElementById('officewrap')?.classList.add('show')
 }
 document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
+
+// Profil kartı: hero (istasyon+hesap) + istatistik/hesap bölümleri (ofis kartıyla aynı dil)
+function renderProfile() {
+  const tl = (n: number) => Math.round(n).toLocaleString('tr-TR')
+  const row = (k: string, v: string, cls = '') => `<div class="stat"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`
+  const stEl = document.getElementById('pf-station'); if (stEl) stEl.textContent = state.stationName
+  const emEl = document.getElementById('pf-email'); if (emEl) emEl.textContent = auth.currentEmail() ?? t('Misafir')
+  const playH = state.day * 160 / 3600
+  const stats = document.getElementById('pf-stats')
+  if (stats) stats.innerHTML =
+    row(t('Oyun günü'), `${state.day}`)
+    + row(t('Oynama süresi'), playH >= 1 ? `${playH.toFixed(1)} sa` : `${Math.round(playH * 60)} dk`)
+    + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`)
+    + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
+    + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
+    + row(t('Toplam ciro'), `₺${tl(state.stats.revenue)}`, 'good')
+  const acc = document.getElementById('pf-account')
+  if (acc) acc.innerHTML =
+    row(t('Giriş serisi'), `${state.loginStreak} gün 🔥`)
+    + row(t('Başarımlar'), `${state.achievements.size} / 8`)
+    + row(t('Günlük görev'), state.dailyDone ? t('tamamlandı ✓') : `${state.dailyServed}/15`)
+    + `<div class="pf-synced">☁️ ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
+}
+document.getElementById('accbtn')?.addEventListener('click', renderProfile)
 // Ofis fiyat yönetimi butonları officewrap içinde de çalışsın (bina kartıyla aynı handler)
 document.getElementById('of-prices')?.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
