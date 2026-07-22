@@ -49,6 +49,8 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_token text`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS session_id text`) // tek-cihaz kilidi
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_expires timestamptz`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS signup_ip text`) // abuse/troll tespiti
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS last_ip text`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open'`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_note text`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_at timestamptz`)
@@ -470,7 +472,7 @@ async function handleApi(req, res, url) {
       bumpStat('signups')
       pushSignupNotif() // fire-and-forget: ekibe "+1 oyuncu" push (asla signup'ı etkilemez)
       const vtok = randToken()
-      await pool.query('UPDATE benzinlik_player SET verify_token=$2 WHERE email=$1', [e, vtok]).catch(() => {})
+      await pool.query('UPDATE benzinlik_player SET verify_token=$2, signup_ip=$3, last_ip=$3 WHERE email=$1', [e, vtok, clientIp(req)]).catch(() => {})
       sendVerifyEmail(e, vtok, reqLang(req, regBody)) // fire-and-forget doğrulama maili
       return json(res, 200, { token: sign(e), email: e, emailVerified: false, verifyRequired: requireVerify() })
     }
@@ -488,7 +490,7 @@ async function handleApi(req, res, url) {
         return json(res, 401, { error: 'E-posta veya şifre hatalı.' })
       }
       if (r.rows[0].banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
-      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [e])
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [e, clientIp(req)])
       bumpStat('logins')
       return json(res, 200, { token: sign(e), email: e, emailVerified: !!r.rows[0].email_verified, verifyRequired: requireVerify() })
     }
@@ -508,7 +510,7 @@ async function handleApi(req, res, url) {
       if (p.email && p.email_verified === false) return json(res, 401, { error: 'Google e-postası doğrulanmamış.' })
       const row = await oauthUpsertPlayer('google', String(p.sub), p.email)
       if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
-      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [row.email])
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [row.email, clientIp(req)])
       bumpStat('logins')
       return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
     }
@@ -529,7 +531,7 @@ async function handleApi(req, res, url) {
       const email = p.email || (body.email && /^\S+@\S+\.\S+$/.test(body.email) ? body.email : null)
       const row = await oauthUpsertPlayer('apple', String(p.sub), email)
       if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
-      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now() WHERE email=$1', [row.email])
+      await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [row.email, clientIp(req)])
       bumpStat('logins')
       return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
     }
@@ -821,7 +823,7 @@ async function handleVs(req, res, url) {
     const m = url.match(/^\/vs\/v1\/users\/(\d+)(?:\/(ban|unban|balance|detail|restore|rawsave|live|verify-email))?$/)
     if (m) {
       const id = Number(m[1])
-      const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at, ban_reason FROM benzinlik_player WHERE id=$1', [id])
+      const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at, ban_reason, signup_ip, last_ip FROM benzinlik_player WHERE id=$1', [id])
       if (found.rowCount === 0) return json(res, 404, { error: { code: 'not_found', message: 'Kullanıcı yok.' } })
       if (m[2] === 'detail' && req.method === 'GET') {
         // record bloğu için {data:{...}} — şemaya uygun kullanıcı detayı
@@ -842,6 +844,8 @@ async function handleVs(req, res, url) {
           sessions: r.sessions ?? 0,
           signedUp: r.created_at,
           lastSeen: r.last_seen_at ?? null,
+          signupIp: r.signup_ip || '—',
+          lastIp: r.last_ip || '—',
           status: r.banned_at ? `BANNED${r.ban_reason ? ' · ' + r.ban_reason : ''}` : 'Active',
         } })
       }
