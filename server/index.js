@@ -937,7 +937,7 @@ async function handleVs(req, res, url) {
       return json(res, 200, userRow(fresh.rows[0]))
     }
     if (url === '/vs/v1/feedback' && req.method === 'GET') {
-      const limit = Math.min(200, Math.max(10, Number(u.searchParams.get('limit')) || 100))
+      const limit = Math.min(5000, Math.max(10, Number(u.searchParams.get('limit')) || 1000))
       const rows = await pool.query('SELECT id, email, message, game, created_at, status, resolved_note FROM benzinlik_feedback ORDER BY (status=\'open\') DESC, id DESC LIMIT $1', [limit])
       return json(res, 200, { data: rows.rows.map(r => ({
         id: String(r.id),

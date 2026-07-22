@@ -1178,7 +1178,8 @@ export class World {
     cyl(0.03, 0.5, 0x23272b, 0.15, 0.3, 0.6, 'z', g)
     box(0.1, 0.08, 0.2, 0x35c7d6, 0.15, 0.3, 0.35, g)
     g.position.set(base.x, base.y, 0)
-    g.rotation.z = ang
+    // karşı istasyonda mesh 180° döner → pad/kablo (yerel +1.1) batıya bakar, batıdaki araç yuvasıyla simetrik
+    g.rotation.z = ang + (base.x > ROAD_X ? Math.PI : 0)
     this.scene.add(g)
     this.register(`charger-${index}`, t('DC ŞARJ #{0}', index + 1), g, 2.3)
   }
