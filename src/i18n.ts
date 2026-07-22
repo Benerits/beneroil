@@ -55,6 +55,7 @@ const EN: Record<string, string> = {
   'BATARYA': 'BATTERY', 'İTİBAR': 'RATING', 'GÜNLÜK GÖREV': 'DAILY QUEST', 'OYUNDA': 'ONLINE',
   'Açık': 'Open', 'KAPALI': 'CLOSED', 'Yakıt Siparişi': 'Order Fuel', 'İnşaat': 'Build',
   'Düzenleme modu': 'Edit mode', 'Hesabım': 'My Account', 'Ayarlar': 'Settings', 'Sorun Bildir': 'Report Issue',
+  'Sorun / Öneri Bildir': 'Report a Problem / Suggestion',
 
   // --- Servis paneli ---
   'MÜŞTERİ İSTEĞİ': 'CUSTOMER REQUEST', 'Benzin': 'Petrol', 'Dizel': 'Diesel',
@@ -241,7 +242,7 @@ const EN: Record<string, string> = {
   'Kullanım': 'Usage',
   'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır.': 'Cars enter bays and wash themselves; foam and water sold automatically.',
   'Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.': 'Served customers park here to visit the market, restroom, cafe and restaurant.',
-  '4 araç': '4 cars',
+  '4 araç': '4 cars', '{0} araç': '{0} cars',
   'Bakım vakti gelen araçlar burada yağ değiştirir — en kârlı yan hizmet.': 'Cars due for service change oil here — the most profitable side service.',
   'YÜKSEK ☠️': 'HIGH ☠️',
   'Düşük': 'Low',
