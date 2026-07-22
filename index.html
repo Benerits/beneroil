@@ -103,7 +103,7 @@
         gap: 5px; width: 178px; pointer-events: none; }
       /* tek satır: isim + renkli ikon + bar + değer (isimli, biraz büyütüldü) */
       #fuelrail .fuelchip { min-width: 0 !important; flex-direction: row !important; align-items: center; gap: 7px;
-        padding: 4px 11px; border-bottom-width: 2px; }
+        padding: 4px 11px; border-bottom-width: 2px; border-radius: 9px; } /* üst tarih/bakiye chip'leriyle görsel uyum */
       #fuelrail .fuelchip .cl { display: block; font-size: 9px; letter-spacing: .04em; min-width: 38px; }
       #fuelrail .fuelchip .cv { font-size: 11.5px; gap: 6px; flex: 1; }
       #fuelrail .fuelchip .ic { width: 14px; height: 14px; }
@@ -342,6 +342,12 @@
     .acc-fuel { flex: 1; display: flex; align-items: center; gap: 5px; color: var(--ink); }
     .acc-fuel i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
     .acc-cost { color: var(--red); font-weight: 800; font-variant-numeric: tabular-nums; }
+    /* ofis: dönemsel satış & faaliyet kârı tablosu (dönem | satış | kâr) */
+    .acc-cols { display: grid; grid-template-columns: 1fr 1.15fr 1.15fr; gap: 8px; align-items: center;
+                font-size: 12.5px; font-weight: 700; padding: 5px 0; border-top: 1px solid var(--line); }
+    .acc-cols > span:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+    .acc-cols.acc-head { border-top: 0; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+    .acc-plabel { font-weight: 800; color: var(--ink); }
     .ofsec { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted);
              text-transform: uppercase; margin: 13px 0 3px; }
     /* alt-sekme (segmented control) — Profil/Ayarlar; yalnızca mobilde görünür */
@@ -715,15 +721,20 @@
         <button class="mclose" data-close="officewrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="mbody">
-        <div class="stat-row"><span data-i18n="Kasa">Kasa</span><b id="of-cash" class="num">0 ₺</b></div>
-        <!-- performans özeti (bina kartıyla aynı) -->
-        <div id="of-stats"></div>
-        <!-- fiyat yönetimi (bina kartından taşındı) -->
-        <div class="ofsec" data-i18n="Yakıt Satış Fiyatı">Yakıt Satış Fiyatı</div>
+        <!-- 1) Finansal durum: aktif / net işletme sermayesi / kasa -->
+        <div class="ofsec" data-i18n="Finansal Durum">Finansal Durum</div>
+        <div id="of-financial"></div>
+        <!-- 2) Yakıt satış fiyatları (+/-) -->
+        <div class="ofsec" data-i18n="Yakıt Satış Fiyatları">Yakıt Satış Fiyatları</div>
         <div id="of-prices"></div>
-        <!-- muhasebe: girdi-çıktı özeti (yovmiye, yakıt alımı, ciro, net) -->
-        <div class="ofsec" data-i18n="Muhasebe · Giderler">Muhasebe · Giderler</div>
-        <div id="of-account"></div>
+        <!-- 3) Müşteri & itibar -->
+        <div class="ofsec" data-i18n="Müşteri & İtibar">Müşteri & İtibar</div>
+        <div id="of-customer"></div>
+        <!-- 4) Dönemsel satış & faaliyet kârı -->
+        <div class="ofsec" data-i18n="Satış & Faaliyet Kârı">Satış & Faaliyet Kârı</div>
+        <div id="of-sales"></div>
+        <!-- 5) Yakıt alım geçmişi -->
+        <div id="of-history"></div>
         <button class="btn" id="of-bank" style="width:100%; justify-content:center; margin-top:12px; background:#1fa8bc; border-color:#178595; color:#fff"><svg class="ic"><use href="#i-coin"/></svg><span data-i18n="Banka / Kredi Çek">Banka / Kredi Çek</span></button>
         <button class="btn" id="of-store" style="width:100%; justify-content:center; margin-top:8px; background:#8a5cf6; border-color:#6c3fd4; color:#fff"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Mağaza">💎 Mağaza</span></button>
         <button class="btn primary" id="of-toggle" style="width:100%; justify-content:center; margin-top:8px"><svg class="ic"><use href="#i-power"/></svg><span data-i18n="İstasyonu Aç/Kapa">İstasyonu Aç/Kapa</span></button>

@@ -390,41 +390,57 @@ function accHistory(): string {
   return `<div class="acc-sec">${t('Yakıt alım geçmişi')}</div>${rows}`
 }
 
-// Ofis: finansal + performans özeti (salt-okunur) + istasyon aç/kapa
+// Ofis: finansal durum → fiyatlar → müşteri&itibar → dönemsel satış/kâr → yakıt geçmişi
 function openOfficePanel() {
-  // Navbar Ofis = bina kartıyla AYNI kapsamlı içerik: kasa + performans özeti + fiyat yönetimi.
   const card = buildingCard('office')
-  const cashEl = document.getElementById('of-cash'); if (cashEl) cashEl.textContent = `${Math.round(state.money)} ₺`
-  const statsEl = document.getElementById('of-stats')
-  if (statsEl && card) statsEl.innerHTML = card.stats.map(([k, v, cls]) =>
-    `<div class="stat"><span class="k">${k}</span><span class="v ${cls ?? ''}">${v}</span></div>`).join('')
+  const tl = (n: number) => Math.round(n).toLocaleString('tr-TR')
+  const row = (k: string, v: string, cls = '') => `<div class="stat"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`
+
+  // 1) Finansal durum
+  const nwc = state.netWorkingCapital()
+  const fin = document.getElementById('of-financial')
+  if (fin) fin.innerHTML =
+    row(t('Aktif (varlık)'), `₺${tl(state.assets())}`, 'good')
+    + row(t('Net işletme sermayesi'), `₺${tl(nwc)}`, nwc >= 0 ? '' : 'bad')
+    + row(t('Kasa'), `₺${tl(state.money)}`)
+
+  // 2) Yakıt satış fiyatları (+/-)
   const pricesEl = document.getElementById('of-prices')
   if (pricesEl && card?.priceRows) pricesEl.innerHTML = card.priceRows.map(r =>
     `<div class="prow"><span class="pl">${r.label}</span><span class="pc">${typeof r.cost === 'number' ? `alış ₺${r.cost}` : r.cost}</span>`
     + `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>`
     + `<span class="pv">₺${r.price.toFixed(1)}</span>`
     + `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
-  // muhasebe: girdi-çıktı özeti
-  const acc = document.getElementById('of-account')
-  if (acc) {
-    const rev = Math.round(state.stats.revenue)
-    const fuel = Math.round(state.fuelSpent), wage = Math.round(state.wagesPaid)
-    const net = rev - fuel - wage
-    // dönem dökümü: son 30 oyun günü ("ay") gider/gelir
-    const since = state.day - 30
-    const perFuel = state.fuelLog.filter(x => x.day > since).reduce((a, x) => a + x.cost, 0)
-    const perWage = state.wageLog.filter(x => x.day > since).reduce((a, x) => a + x.amount, 0)
-    acc.innerHTML =
-      `<div class="stat"><span class="k">${t('Günlük yovmiye')}</span><span class="v ${state.dailyWages() ? 'bad' : ''}">₺${state.dailyWages().toLocaleString('tr-TR')}/gün</span></div>`
-      + `<div class="stat"><span class="k">${t('Toplam yakıt alımı')}</span><span class="v bad">-₺${fuel.toLocaleString('tr-TR')}</span></div>`
-      + `<div class="stat"><span class="k">${t('Toplam yovmiye')}</span><span class="v bad">-₺${wage.toLocaleString('tr-TR')}</span></div>`
-      + `<div class="stat"><span class="k">${t('Toplam ciro')}</span><span class="v good">+₺${rev.toLocaleString('tr-TR')}</span></div>`
-      + `<div class="stat"><span class="k">${t('Net (kaba)')}</span><span class="v ${net >= 0 ? 'good' : 'bad'}">₺${net.toLocaleString('tr-TR')}</span></div>`
-      + `<div class="acc-sec">${t('Son 30 gün (giderler)')}</div>`
-      + `<div class="stat"><span class="k">${t('Yakıt alımı')}</span><span class="v bad">-₺${Math.round(perFuel).toLocaleString('tr-TR')}</span></div>`
-      + `<div class="stat"><span class="k">${t('Yovmiye')}</span><span class="v bad">-₺${Math.round(perWage).toLocaleString('tr-TR')}</span></div>`
-      + accHistory()
+
+  // 3) Müşteri & itibar
+  const cust = document.getElementById('of-customer')
+  if (cust) {
+    const fx = Math.round((state.priceDemandFactor() - 1) * 100)
+    cust.innerHTML =
+      row(t('Müşteri etkisi'), `${fx >= 0 ? '+' : ''}${fx}%`, fx >= 0 ? 'good' : 'bad')
+      + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`)
+      + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
+      + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
   }
+
+  // 4) Dönemsel satış & faaliyet kârı (gün / ay=30g / yıl=365g)
+  const sales = document.getElementById('of-sales')
+  if (sales) {
+    let html = `<div class="acc-cols acc-head"><span>${t('Dönem')}</span><span>${t('Satış')}</span><span>${t('Faaliyet kârı')}</span></div>`
+    for (const [label, d] of [[t('Günlük'), 1], [t('Aylık'), 30], [t('Yıllık'), 365]] as [string, number][]) {
+      const rev = state.salesInPeriod(d)
+      const prof = rev - state.fuelCostInPeriod(d) - state.wagesInPeriod(d)
+      html += `<div class="acc-cols"><span class="acc-plabel">${label}</span>`
+        + `<span class="v good">₺${tl(rev)}</span>`
+        + `<span class="v ${prof >= 0 ? 'good' : 'bad'}">₺${tl(prof)}</span></div>`
+    }
+    sales.innerHTML = html
+  }
+
+  // 5) Yakıt alım geçmişi
+  const hist = document.getElementById('of-history')
+  if (hist) hist.innerHTML = accHistory()
+
   document.getElementById('officewrap')?.classList.add('show')
 }
 document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
@@ -2954,6 +2970,11 @@ function frame() {
     if (pc?.kind === 'ended') ui.toast(t('🏦 Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin! 🎉'), 'good')
     else if (pc?.kind === 'cut' && pc.amount > 0) ui.toast(t('🏦 Banka ortağı kâr payı aldı: -₺{0}', pc.amount.toLocaleString('tr-TR')), '')
     if (document.getElementById('bankwrap')?.classList.contains('show')) renderBank()
+    // dönemsel muhasebe: biten günün satış cirosunu kaydet
+    const dayRev = Math.max(0, Math.round(state.stats.revenue - state.dayStartRevenue))
+    state.salesLog.push({ day: state.day, rev: dayRev })
+    if (state.salesLog.length > 370) state.salesLog.shift()
+    state.dayStartRevenue = state.stats.revenue
     state.dayStartMoney = state.money
     state.facDaily = {}
     // gün sonu: policy interstitial'a izin veriyorsa forced reklam; vermiyorsa opt-in "günü 2x" fırsatı sun

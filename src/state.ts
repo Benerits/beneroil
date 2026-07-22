@@ -114,6 +114,10 @@ export class GameState {
   fuelLog: { day: number; f: FuelType; liters: number; cost: number }[] = []
   /** muhasebe: günlük yovmiye ödeme geçmişi (gün/tutar) — son 40 kayıt */
   wageLog: { day: number; amount: number }[] = []
+  /** muhasebe: günlük satış cirosu (gün/ciro) — dönemsel satış/kâr için, son ~370 kayıt */
+  salesLog: { day: number; rev: number }[] = []
+  /** o günün başındaki toplam ciro (günlük satış = stats.revenue - dayStartRevenue) */
+  dayStartRevenue = 0
   noAds = false // "Reklamları Kaldır" satın alındı mı (IAP) — interstitial gösterilmez
   orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }> = {
     benzin: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
@@ -567,6 +571,19 @@ export class GameState {
     return amt
   }
 
+  // ---- Ofis muhasebe yardımcıları ----
+  private pendingTotal(): number { return Object.values(this.pendingCash).reduce((a, v) => a + (v || 0), 0) }
+  /** Aktif (toplam varlık): kasa + kumbaralar + satılabilir ekipman değeri */
+  assets(): number { return this.money + this.pendingTotal() + this.eligibleCollateral().reduce((a, c) => a + c.value, 0) }
+  /** Net işletme sermayesi = likit varlık (kasa+kumbara) − kısa vadeli borç (kalan kredi) */
+  netWorkingCapital(): number { return this.money + this.pendingTotal() - (this.loan.active ? this.loan.remaining : 0) }
+  /** son N güne ait satış cirosu */
+  salesInPeriod(days: number): number { const s = this.day - days; return this.salesLog.filter(x => x.day > s).reduce((a, x) => a + x.rev, 0) }
+  /** son N güne ait yakıt alım gideri */
+  fuelCostInPeriod(days: number): number { const s = this.day - days; return this.fuelLog.filter(x => x.day > s).reduce((a, x) => a + x.cost, 0) }
+  /** son N güne ait yovmiye gideri */
+  wagesInPeriod(days: number): number { const s = this.day - days; return this.wageLog.filter(x => x.day > s).reduce((a, x) => a + x.amount, 0) }
+
   /** yeni oyuncu koruması: ilk 2 gün cezalar yumuşar (ilerleme HIZLANMAZ, sadece erken ölüm sarmalı kırılır) */
   get graceActive() { return this.day <= 2 }
 
@@ -751,7 +768,7 @@ const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
-  'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'closed',
+  'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds',
 ] as const
@@ -766,6 +783,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.facTotal = { ...s.facTotal }
   out.fuelLog = s.fuelLog.slice(-40)
   out.wageLog = s.wageLog.slice(-40)
+  out.salesLog = s.salesLog.slice(-370)
   out.autoChargers = [...s.autoChargers]
   out.autoPumps = [...s.autoPumps]
   out.prices = { ...s.prices }
@@ -796,6 +814,9 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (data.facDaily && typeof data.facDaily === 'object') Object.assign(s.facDaily, data.facDaily)
   if (Array.isArray(data.fuelLog)) s.fuelLog = (data.fuelLog as any[]).filter(x => x && typeof x.cost === 'number').slice(-40)
   if (Array.isArray(data.wageLog)) s.wageLog = (data.wageLog as any[]).filter(x => x && typeof x.amount === 'number').slice(-40)
+  if (Array.isArray(data.salesLog)) s.salesLog = (data.salesLog as any[]).filter(x => x && typeof x.rev === 'number').slice(-370)
+  // eski kayıt (salesLog yok): ilk gün-sonunun tüm kümülatif ciroyu tek güne yazmasını önle
+  if (!s.salesLog.length && !s.dayStartRevenue && s.stats.revenue > 0) s.dayStartRevenue = s.stats.revenue
   if (data.facTotal && typeof data.facTotal === 'object') Object.assign(s.facTotal, data.facTotal)
   if (Array.isArray(data.autoChargers)) s.autoChargers = new Set((data.autoChargers as number[]).filter(n => Number.isInteger(n)))
   if (Array.isArray(data.autoPumps)) s.autoPumps = new Set((data.autoPumps as number[]).filter(n => Number.isInteger(n)))
