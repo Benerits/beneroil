@@ -10,6 +10,8 @@ import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 export const ROAD_X = 7.9
 export const LANE_NEAR = 6.95
 export const LANE_FAR = 8.85
+/** Karşı (yol karşısı) istasyonun kapı x'i — near kapı 4.2'nin ROAD_X etrafında aynası (15.8-4.2). */
+export const FAR_GATE_X = 11.6
 export const PUMP_SLOTS_POS = [
   new THREE.Vector3(1.8, -2.2, 0), new THREE.Vector3(1.8, 2.2, 0),
   new THREE.Vector3(1.8, -14, 0), new THREE.Vector3(1.8, -18, 0),
@@ -610,9 +612,9 @@ export class World {
     }
   }
 
-  private makeApron(y: number) {
+  private makeApron(y: number, x = 5.5) {
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(1.3, this.wideGates ? 6.2 : 3.4), this.concreteMat)
-    apron.position.set(5.5, y, 0.014)
+    apron.position.set(x, y, 0.014)
     apron.receiveShadow = true
     this.scene.add(apron)
     return apron
@@ -647,6 +649,11 @@ export class World {
     }
     this.roadEdgeMeshes.push(this.makeApron(this.gateIn.y))
     this.roadEdgeMeshes.push(this.makeApron(this.gateOut.y))
+    // karşı istasyon rampaları (yol karşısı, x≈10.3 = 5.5'in ROAD_X aynası)
+    if (this.farStationOn) {
+      this.roadEdgeMeshes.push(this.makeApron(this.gateIn2.y, 10.3))
+      this.roadEdgeMeshes.push(this.makeApron(this.gateOut2.y, 10.3))
+    }
   }
 
   /** Yakıt renginde küre tank; şeffaf gövde + iç dolum küresi (doluluk göstergesi).
@@ -806,6 +813,18 @@ export class World {
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
   gateIn = new THREE.Vector2(4.2, APRON_IN_Y)
   gateOut = new THREE.Vector2(4.2, APRON_OUT_Y)
+  /** karşı istasyon kapıları — far araç GÜNEYE gittiği için giriş yukarıda (+y), çıkış aşağıda (-y):
+   *  near'ın (ROAD_X,0) etrafında 180° dönmüşü. Yalnızca karşı parsel claim'lenince kurulur. */
+  gateIn2 = new THREE.Vector2(FAR_GATE_X, APRON_OUT_Y)
+  gateOut2 = new THREE.Vector2(FAR_GATE_X, APRON_IN_Y)
+  farStationOn = false
+  /** Karşı parsel sahiplenilince otomatik giriş-çıkış kapılarını kurar (bir kez). */
+  enableFarStation() {
+    if (this.farStationOn) return
+    this.farStationOn = true
+    this.buildGate('in', undefined, 'far')
+    this.buildGate('out', undefined, 'far')
+  }
   /** geniş giriş/çıkış: kapı ağzı, rampa ve bordür boşluğu büyür */
   wideGates = false
   setWideGates(on: boolean) {
@@ -953,18 +972,19 @@ export class World {
   }
 
   /** istasyon giriş/çıkış kapısı — oyuncu yerini belirler, trafik buna uyar */
-  buildGate(kind: 'in' | 'out', pos?: THREE.Vector2) {
-    const id = kind === 'in' ? 'gatein' : 'gateout'
-    const v = kind === 'in' ? this.gateIn : this.gateOut
-    if (pos) v.set(4.2, pos.y)
+  buildGate(kind: 'in' | 'out', pos?: THREE.Vector2, side: 'near' | 'far' = 'near') {
+    const far = side === 'far'
+    const id = (kind === 'in' ? 'gatein' : 'gateout') + (far ? '2' : '')
+    const v = far ? (kind === 'in' ? this.gateIn2 : this.gateOut2) : (kind === 'in' ? this.gateIn : this.gateOut)
+    if (pos) v.set(far ? FAR_GATE_X : 4.2, pos.y)
     this.removeBuildingGroup(id)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(2.6, this.wideGates ? 6.2 : 3.4), lam(0x565e66))
     pad.position.z = 0.024
     pad.receiveShadow = true
     g.add(pad)
-    // yön oku: giriş istasyona (-x), çıkış yola (+x) bakar
-    const dir = kind === 'in' ? -1 : 1
+    // yön oku: giriş istasyona, çıkış yola bakar. Near istasyon batıda (in→-x); far istasyon doğuda → ok tersine döner.
+    const dir = (kind === 'in' ? -1 : 1) * (far ? -1 : 1)
     const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.34), lam(0xe8e4d8))
     shaft.position.set(-dir * 0.35, 0, 0.03)
     g.add(shaft)
