@@ -1554,7 +1554,11 @@ function fixedObstacles(skipId = ''): Rect[] {
     { cx: 4.0, cy: -11.5, w: 2.4, d: 3.4 },  // tabela
   ]
   // karşı istasyon açıksa: otomatik giriş-çıkış + araç koridoru korunur (üstüne pompa/şarj konamaz)
-  if (world.farStationOn) r.push({ cx: 11.5, cy: 0, w: 2.0, d: 48 })
+  // Karşı istasyon kapı+araç koridoru: karşı parsel SAHİPLENİLİR SAHİPLENMEZ rezerve edilir
+  // (ilk pompa aktivasyondan önce konduğundan, koruma o zaman da olmalı). Genişlik 3.0 → pompanın
+  // araç yuvası (base−1.8) kapının yeterince DOĞUsuna düşer, araçlar temiz yol bulur.
+  if (world.farStationOn || [...state.ownedParcels].some(k => +k.split(',')[0] >= 3))
+    r.push({ cx: 11.6, cy: 0, w: 3.0, d: 48 })
   if (skipId !== 'tank') r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.0, d: 2.0 }) // CANLI/main ile birebir
   if (skipId !== 'office') {
     const of = world.buildings.find(b => b.id === 'office')
