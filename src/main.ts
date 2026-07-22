@@ -1102,7 +1102,7 @@ function tickEvCharging(dt: number) {
         c.setCounter('MOLADA · GÖNDER →')
         const visits = facilityVisits(c)
         spawnWalkerFor(c, { visits, score, squat: true })
-        ui.toast('Müşteri molada — üniteyi boşaltmak için araca DOKUN (popup yok), yoksa yeni EV müşterileri kaçar!', 'bad')
+        ui.toast(t('⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆'), 'bad')
       } else {
         concludeService(c, score)
       }

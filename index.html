@@ -170,11 +170,15 @@
       .no-sheet-anim #shopwrap .modal, .no-sheet-anim #fuelwrap .modal,
       .no-sheet-anim #officewrap .modal, .no-sheet-anim #accwrap .modal { animation: none !important; }
 
-      /* ---- Sağ/sol-alt yüzen kutular navbar altında kalmasın (tanker durumu, taşıma kontrolü) ---- */
-      /* yolda gelen yakıt (tanker) bildirimleri: sol-üstte yakıt barlarının altında (sağ-alt göz yormasın) */
-      #tankerpanel { top: calc(184px + env(safe-area-inset-top)) !important; left: calc(8px + env(safe-area-inset-left)) !important;
-        right: auto !important; bottom: auto !important; z-index: 12 !important; align-items: flex-start !important; }
-      #tankerpanel .trow { min-width: 0 !important; padding: 5px 9px !important; font-size: 11px !important; border-bottom-width: 2px !important; }
+      /* ---- Tanker (yolda gelen yakıt) bildirimleri: alt-ortada YATAY kompakt pill'ler.
+             Eskiden sol-üstte kapasite chip'lerinin altında dikey stack'leniyor, taşıp
+             üst üste biniyordu. Artık navbar üstünde ortalı, yatay, göz yormaz. ---- */
+      #tankerpanel { top: auto !important; bottom: calc(72px + env(safe-area-inset-bottom)) !important;
+        left: 50% !important; right: auto !important; transform: translateX(-50%) !important;
+        flex-direction: row !important; flex-wrap: wrap !important; justify-content: center !important;
+        gap: 5px !important; z-index: 12 !important; max-width: 94vw !important; }
+      #tankerpanel .trow { min-width: 0 !important; padding: 4px 10px !important; font-size: 10.5px !important;
+        border-bottom-width: 2px !important; white-space: nowrap; box-shadow: 0 4px 12px rgba(15,22,30,.28) !important; }
       #movectl { bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
       /* ---- Toast bildirimleri: sağ-üstte SABİT dar kolon; kısa toast küçük, uzun toast 2 satıra sarar.
              Genişlik kolonla sınırlı → uzun yazı sola taşmaz. Üst aksiyon butonlarının altında başlar. ---- */
