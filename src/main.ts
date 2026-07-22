@@ -714,6 +714,9 @@ const cars = new CarManager(world.scene, modelLib, {
   evSlot: i => world.evSlots[i],
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
+  farActive: () => world.farStationOn,
+  farGateInY: () => world.gateIn2.y,
+  farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
   onTruckParked: () => {
     const fee = 40 + Math.round(Math.random() * 40)
@@ -753,11 +756,13 @@ const hoses = new Map<Car, THREE.Group>()
 
 function buildHose(car: Car): THREE.Group {
   const slot = car.slotIndex >= 0 ? world.pumpSlots[car.slotIndex] : car.group.position
-  const bx = slot.x - 1.8
+  // karşı istasyonda araç pompanın batısında → hortum ters yöne (sign) uzanır
+  const sign = car.station === 'far' ? -1 : 1
+  const bx = slot.x - sign * 1.8
   const y = slot.y
-  const start = new THREE.Vector3(bx + 0.3, y + 0.3, 1.3)
-  const mid = new THREE.Vector3(bx + 0.85, y - 0.05, 0.5)
-  const end = new THREE.Vector3(bx + 1.22, y - 0.35, 0.62)
+  const start = new THREE.Vector3(bx + sign * 0.3, y + 0.3, 1.3)
+  const mid = new THREE.Vector3(bx + sign * 0.85, y - 0.05, 0.5)
+  const end = new THREE.Vector3(bx + sign * 1.22, y - 0.35, 0.62)
   const curve = new THREE.QuadraticBezierCurve3(start, mid, end)
   const g = new THREE.Group()
   const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.045, 8),

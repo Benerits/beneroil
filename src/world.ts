@@ -1138,7 +1138,9 @@ export class World {
 
   addPump(index: number, at?: THREE.Vector2) {
     const base = at ?? new THREE.Vector2(0, PUMP_SLOTS_POS[Math.min(index, 3)].y)
-    this.pumpSlots[index] = new THREE.Vector3(base.x + 1.8, base.y, 0)
+    // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında (-1.8), ünite 180° döner.
+    const far = base.x > ROAD_X
+    this.pumpSlots[index] = new THREE.Vector3(base.x + (far ? -1.8 : 1.8), base.y, 0)
     const g = new THREE.Group()
     box(1.7, 3.4, 0.2, 0xc7ccd1, 0, 0, 0.1, g)
     box(1.75, 3.45, 0.05, 0xe0b13e, 0, 0, 0.02, g)
@@ -1148,6 +1150,7 @@ export class World {
     p.position.z = 0.2
     g.add(p)
     g.position.set(base.x, base.y, 0)
+    if (far) g.rotation.z = Math.PI // nozül batıya (araç tarafına) baksın
     this.scene.add(g)
     this.register(`pump-${index}`, t('POMPA #{0}', index + 1), g, 2.5)
   }
@@ -1162,7 +1165,9 @@ export class World {
     // Araç yanaşma noktası varsayılan sağda (+1.1). Ünite döndükçe bu offset de döner,
     // böylece araç her zaman ünitenin şarj kablosu tarafından yanaşır.
     const ang = rot * Math.PI / 2
-    this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.1, base.y + Math.sin(ang) * 1.1, 0)
+    // karşı istasyonda yanaşma batıdan (araç yuvası batıda) — x ofseti terslenir
+    const evFlip = base.x > ROAD_X ? -1 : 1
+    this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.1 * evFlip, base.y + Math.sin(ang) * 1.1, 0)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({
       color: 0x2f8fd6, transparent: true, opacity: 0.28,
