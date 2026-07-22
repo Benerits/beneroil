@@ -321,6 +321,8 @@ const EN: Record<string, string> = {
   'Pompa #{0}': 'Pump #{0}', '+1 pompa': '+1 pump', 'Aynı anda bir müşteri daha alırsın': 'Serve one more customer at once',
   'Tabela Sv.{0}': 'Sign Lv.{0}', '+%10 trafik': '+10% traffic', 'Yoldan geçenlerin uğrama şansı artar': 'More passers-by stop by',
   'Yakıt Tankı': 'Fuel Tank', 'Depo büyür, daha seyrek sipariş verirsin': 'Bigger storage, fewer orders needed',
+  'Ek {0} Tankı ({1}/{2})': 'Extra {0} Tank ({1}/{2})',
+  'Yalnızca {0} deposunu {1}L büyütür — yer kaplamaz, daha seyrek sipariş.': 'Grows only your {0} storage by {1}L — no extra space, fewer orders.',
   'Hava-Su Ünitesi': 'Air & Water Unit', 'Hava-Su Ünitesi ({0})': 'Air & Water Unit ({0})',
   'Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)':
     'Tire air & water — cheap but draws customers (unlimited)',
