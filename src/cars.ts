@@ -696,8 +696,12 @@ export class CarManager {
   private parkOcc: (Car | null)[] = []
   private waitOcc: (Car | null)[] = [null, null, null, null]
 
+  // İstasyon tarafı: yakın (varsayılan, x=4.2 kapı + LANE_NEAR servis şeridi). Karşı istasyon
+  // için ikinci CarManager farklı gateX/serveLane ile kurulacak — bu parametreleme mevcut
+  // (yakın) istasyonu HİÇ değiştirmez (varsayılanlar = eski sabit değerler).
   constructor(private scene: THREE.Scene, private lib: ModelLib | null,
-              private opts: CarManagerOpts) {}
+              private opts: CarManagerOpts,
+              private gateX = 4.2, private serveLane = LANE_NEAR) {}
 
   update(dt: number) {
     // yoldan geçen trafik
@@ -959,8 +963,8 @@ export class CarManager {
     const apronY = this.opts.gateInY()
     const off = this.gateInOff()
     return [
-      new THREE.Vector3(LANE_NEAR, apronY - 3.5 + off, 0),
-      new THREE.Vector3(4.2, apronY + off, 0),
+      new THREE.Vector3(this.serveLane, apronY - 3.5 + off, 0),
+      new THREE.Vector3(this.gateX, apronY + off, 0),
       new THREE.Vector3(3.2, p.y - 2.5, 0),
       p.clone(),
     ]
@@ -982,8 +986,8 @@ export class CarManager {
     const from = car.group.position
     const path: THREE.Vector3[] = []
     if (from.x > 5) { // yoldan geliyor: kapıdan gir
-      path.push(new THREE.Vector3(LANE_NEAR, this.opts.gateInY() - 3.5, 0))
-      path.push(new THREE.Vector3(4.2, this.opts.gateInY(), 0))
+      path.push(new THREE.Vector3(this.serveLane, this.opts.gateInY() - 3.5, 0))
+      path.push(new THREE.Vector3(this.gateX, this.opts.gateInY(), 0))
     }
     path.push(new THREE.Vector3(4.0, stage.y, 0))
     path.push(stage.clone())
@@ -1016,9 +1020,9 @@ export class CarManager {
     car.phase = 'leaving'
     const out: THREE.Vector3[] = []
     if (car.truckStagePos) out.push(car.truckStagePos.clone()) // önce ileri çık
-    out.push(new THREE.Vector3(4.2, this.opts.gateOutY(), 0))
-    out.push(new THREE.Vector3(LANE_NEAR, this.opts.gateOutY() + 4, 0))
-    out.push(new THREE.Vector3(LANE_NEAR, 44, 0))
+    out.push(new THREE.Vector3(this.gateX, this.opts.gateOutY(), 0))
+    out.push(new THREE.Vector3(this.serveLane, this.opts.gateOutY() + 4, 0))
+    out.push(new THREE.Vector3(this.serveLane, 44, 0))
     car.truckStagePos = null
     car.setPath(out)
   }
@@ -1037,8 +1041,8 @@ export class CarManager {
           c.setPath(this.entryPath(slot), () => this.arriveAtSlot(c))
         } else if (c.waitIndex >= 0) {
           c.setPath([
-            new THREE.Vector3(LANE_NEAR, this.opts.gateInY() - 3.5, 0),
-            new THREE.Vector3(4.2, this.opts.gateInY(), 0),
+            new THREE.Vector3(this.serveLane, this.opts.gateInY() - 3.5, 0),
+            new THREE.Vector3(this.gateX, this.opts.gateInY(), 0),
             WAIT_SPOTS[c.waitIndex],
           ], () => { c.phase = 'waiting' })
         }
@@ -1047,9 +1051,9 @@ export class CarManager {
         // Eşik 3.9 idi; kapı şeridine (x≈4.2) çıkmış araç kaçıyor, eski çıkışa gidiyordu.
         const outY = this.opts.gateOutY()
         c.setPath([
-          new THREE.Vector3(4.2, outY, 0),
-          new THREE.Vector3(LANE_NEAR, outY + 4, 0),
-          new THREE.Vector3(LANE_NEAR, 44, 0),
+          new THREE.Vector3(this.gateX, outY, 0),
+          new THREE.Vector3(this.serveLane, outY + 4, 0),
+          new THREE.Vector3(this.serveLane, 44, 0),
         ])
       }
     }
@@ -1102,8 +1106,8 @@ export class CarManager {
       car.waitIndex = wi
       car.phase = 'driving'
       car.setPath([
-        new THREE.Vector3(LANE_NEAR, this.opts.gateInY() - 3.5, 0),
-        new THREE.Vector3(4.2, this.opts.gateInY(), 0),
+        new THREE.Vector3(this.serveLane, this.opts.gateInY() - 3.5, 0),
+        new THREE.Vector3(this.gateX, this.opts.gateInY(), 0),
         WAIT_SPOTS[wi],
       ], () => {
         car.phase = 'waiting'
@@ -1256,18 +1260,18 @@ export class CarManager {
       car.setPath([
         new THREE.Vector3(car.group.position.x, PARK_LANE_Y, 0),
         new THREE.Vector3(3.0, PARK_LANE_Y, 0),
-        new THREE.Vector3(4.2, outY + off, 0),
-        new THREE.Vector3(LANE_NEAR, outY + 4, 0),
-        new THREE.Vector3(LANE_NEAR, 44, 0),
+        new THREE.Vector3(this.gateX, outY + off, 0),
+        new THREE.Vector3(this.serveLane, outY + 4, 0),
+        new THREE.Vector3(this.serveLane, 44, 0),
       ])
       return
     }
     const y = car.group.position.y
     car.setPath([
       new THREE.Vector3(3.4, Math.min(y + 3, outY - 1.8), 0),
-      new THREE.Vector3(4.2, outY + off, 0),
-      new THREE.Vector3(LANE_NEAR, outY + 4, 0),
-      new THREE.Vector3(LANE_NEAR, 44, 0),
+      new THREE.Vector3(this.gateX, outY + off, 0),
+      new THREE.Vector3(this.serveLane, outY + 4, 0),
+      new THREE.Vector3(this.serveLane, 44, 0),
     ])
   }
 }
