@@ -2455,6 +2455,23 @@ ui.onPriceChange = (f, delta) => {
 
 // ---- Bina bilgi kartları ----
 
+/** yakıt + elektrik satış fiyatı stepper satırları (ofis kartı ve tabela paylaşır) */
+function fuelPriceRows(): NonNullable<BuildingCard['priceRows']> {
+  return [
+    ...(['benzin', 'dizel', 'lpg'] as FuelType[]).map(f => {
+      const [lo, hi] = priceBounds(f)
+      return {
+        f: f as FuelType | 'elec', label: FUEL_LABEL[f], price: state.prices[f], cost: FUEL_COST[f] as number | string,
+        canDown: state.prices[f] > lo, canUp: state.prices[f] < hi,
+      }
+    }),
+    {
+      f: 'elec' as FuelType | 'elec', label: 'Elektrik (kWh)', price: state.elecPrice, cost: 'santralden',
+      canDown: state.elecPrice > 4, canUp: state.elecPrice < 18,
+    },
+  ]
+}
+
 function buildingCard(id: string): BuildingCard | null {
   id = id.split('#')[0]
   const rate = state.genRate()
@@ -2516,19 +2533,7 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Elektrik satışı'), `${Math.round(state.stats.kwh)} kWh`],
           ['Toplam ciro', `₺${Math.round(state.stats.revenue).toLocaleString('tr-TR')}`, 'good'],
         ],
-        priceRows: [
-          ...(['benzin', 'dizel', 'lpg'] as FuelType[]).map(f => {
-            const [lo, hi] = priceBounds(f)
-            return {
-              f: f as FuelType | 'elec', label: FUEL_LABEL[f], price: state.prices[f], cost: FUEL_COST[f] as number | string,
-              canDown: state.prices[f] > lo, canUp: state.prices[f] < hi,
-            }
-          }),
-          {
-            f: 'elec' as FuelType | 'elec', label: 'Elektrik (kWh)', price: state.elecPrice, cost: 'santralden',
-            canDown: state.elecPrice > 4, canUp: state.elecPrice < 18,
-          },
-        ],
+        priceRows: fuelPriceRows(),
       }
     }
     case 'gatein': {
@@ -2560,11 +2565,12 @@ function buildingCard(id: string): BuildingCard | null {
     case 'sign':
       return {
         icon: 'i-sign', name: t('Tabela'),
-        desc: t('Yoldan geçenlerin uğrama şansını artırır. Taşı butonuyla yerini değiştirebilirsin.'),
+        desc: t('Yoldan geçenlerin uğrama şansını artırır. Fiyatları buradan da ayarlayabilir, Taşı ile yerini değiştirebilirsin.'),
         stats: [
           [t('Seviye'), `${state.signLevel + 1}/4`],
           [t('Trafik etkisi'), `+%${state.signLevel * 10}`, state.signLevel > 0 ? 'good' : ''],
         ],
+        priceRows: fuelPriceRows(), // tabela = fiyat panosu: yakıt + elektrik fiyatları buradan değişir
       }
     case 'tank':
       return {
