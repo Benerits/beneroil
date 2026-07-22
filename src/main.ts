@@ -3070,6 +3070,11 @@ function frame() {
 
   state.tick(dt)
   cars.update(dt)
+  world.updateTankFill({
+    benzin: state.tanks.benzin / state.fuelCapacity('benzin'),
+    dizel: state.tanks.dizel / state.fuelCapacity('dizel'),
+    lpg: state.tanks.lpg / state.fuelCapacity('lpg'),
+  })
 
   for (const msg of state.events.splice(0)) {
     if (msg.includes(t('Başarım'))) {

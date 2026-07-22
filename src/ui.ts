@@ -461,7 +461,7 @@ export class UI {
       `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
     if (card.action) {
       this.infoAction.style.display = 'flex'
-      this.infoAction.textContent = stripEmoji(card.action.label)
+      this.infoAction.textContent = stripEmoji(t(card.action.label))
       this.currentAction = card.action.maintId
     } else {
       this.infoAction.style.display = 'none'
@@ -469,7 +469,7 @@ export class UI {
     }
     if (card.move) {
       this.infoMove.style.display = 'flex'
-      this.infoMove.textContent = stripEmoji(card.move.label)
+      this.infoMove.textContent = stripEmoji(t(card.move.label))
       this.currentMove = card.move.id
     } else {
       this.infoMove.style.display = 'none'
@@ -478,7 +478,7 @@ export class UI {
     const buyBtn = el<HTMLButtonElement>('binfo-buy')
     if (card.buy) {
       buyBtn.style.display = 'flex'
-      buyBtn.textContent = stripEmoji(card.buy.label)
+      buyBtn.textContent = stripEmoji(t(card.buy.label))
       this.currentBuy = card.buy.id
     } else {
       buyBtn.style.display = 'none'
@@ -486,7 +486,7 @@ export class UI {
     }
     if (card.sell) {
       this.infoSell.style.display = 'flex'
-      this.infoSell.textContent = stripEmoji(card.sell.label)
+      this.infoSell.textContent = stripEmoji(t(card.sell.label))
       this.currentSell = card.sell.id
     } else {
       this.infoSell.style.display = 'none'
@@ -657,12 +657,13 @@ export class UI {
     }
     const box = el<HTMLDivElement>('toasts')
     while (box.children.length >= 4) box.firstElementChild?.remove()
-    const t = document.createElement('div')
-    t.className = `toast ${kind}`
-    t.textContent = stripEmoji(msg)
-    box.appendChild(t)
-    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .4s' }, 3000)
-    setTimeout(() => t.remove(), 3500)
+    const node = document.createElement('div')
+    node.className = `toast ${kind}`
+    // sarılmamış Türkçe toast'lar da İngilizce moda çevrilsin (t() bilinen key'i çevirir, değilse aynen bırakır)
+    node.textContent = stripEmoji(t(msg))
+    box.appendChild(node)
+    setTimeout(() => { node.style.opacity = '0'; node.style.transition = 'opacity .4s' }, 3000)
+    setTimeout(() => node.remove(), 3500)
   }
 
   showBoom() {
