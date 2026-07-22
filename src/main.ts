@@ -1509,7 +1509,7 @@ function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
     const s = world.evSlots[i]
     r.push({ cx: s.x - 1.1, cy: s.y, w: 0.9, d: 1.4 })
   }
-  r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.2, d: 2.2 })
+  r.push(tankFootprint()) // tank kümesi gerçek boyutu (adet/seviyeyle büyür)
   const of = world.buildings.find(b => b.id === 'office')
   if (of) r.push({ cx: of.group.position.x, cy: of.group.position.y, w: 4.2, d: 4.6 })
   for (const p of placedRects) {
@@ -1527,8 +1527,7 @@ function fixedObstacles(skipId = ''): Rect[] {
   ]
   // karşı istasyon açıksa: otomatik giriş-çıkış + araç koridoru korunur (üstüne pompa/şarj konamaz)
   if (world.farStationOn) r.push({ cx: 11.5, cy: 0, w: 2.0, d: 48 })
-  if (skipId !== 'tank')
-    r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.0, d: 2.0 })
+  if (skipId !== 'tank') r.push(tankFootprint()) // tank kümesi gerçek boyutu (adet/seviyeyle büyür)
   if (skipId !== 'office') {
     const of = world.buildings.find(b => b.id === 'office')
     if (of) r.push({ cx: of.group.position.x, cy: of.group.position.y, w: 4.6, d: 5.0 })
@@ -1737,11 +1736,24 @@ function makeGhost(w: number, d: number): THREE.Mesh {
   return ghost
 }
 
+/** Tank kümesinin GERÇEK footprint'i: 3 sütun (benzin/dizel/lpg) × yakıt-başına-adet satır.
+ *  Adet arttıkça küme +y'de büyür → çarpışma kutusu da büyümeli (yoksa tanklar dışarı taşar). */
+function tankFootprint(): { cx: number; cy: number; w: number; d: number } {
+  const R = 0.4 + state.tankLevel * 0.04
+  const maxRows = Math.max(1, state.tankCounts.benzin, state.tankCounts.dizel, state.tankCounts.lpg)
+  return {
+    cx: world.tankAnchor.x + 0.82,                       // 3 sütunun ortası
+    cy: world.tankAnchor.y + (maxRows - 1) * 0.41,       // en uzun sütunun ortası
+    w: 1.64 + 2 * R + 0.5,                               // 3 sütun genişliği + pay
+    d: (maxRows - 1) * 0.82 + 2 * R + 0.5,               // satır sayısı × gap + pay
+  }
+}
+
 function footprintOf(id: string, move = false): { w: number; d: number; grass?: boolean } | null {
   id = id.split('#')[0]
   if (id.startsWith('pump-')) return { w: 4.4, d: 4.0 }
   if (id.startsWith('charger-')) return { w: 4.0, d: 2.6 }
-  if (id === 'tank') return { w: 2.0, d: 2.0 }
+  if (id === 'tank') { const f = tankFootprint(); return { w: f.w, d: f.d } }
   if (id === 'gatein' || id === 'gateout') return { w: 2.6, d: 3.4, grass: true }
   return id in PLACEABLE ? PLACEABLE[id](move) : null
 }
