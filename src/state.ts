@@ -528,10 +528,29 @@ export class GameState {
   }
 
   /** tesise para biriktir (kumbara dolarsa haber ver) */
+  /** Kumbara hacmi tesisin gelişmişliğine göre büyür (getiriyle AYNI oranda):
+   *  market seviyeyle, self-yıkama/hava-su/otopark adetle; tek-seviyeli tesisler
+   *  gelir düzeylerine göre sabit. Böylece geliştirilen market daha çok biriktirir. */
+  pendingCap(id: string): number {
+    switch (id) {
+      case 'market': return 600 * Math.max(1, this.marketLevel)                          // gelir ×level → cap ×level
+      case 'toilet': return 500 * Math.max(1, this.toiletLevel)                          // seviyeyle büyür
+      case 'selfwash': return 400 * Math.min(5, Math.max(1, this.selfWashCount))
+      case 'airwater': return 250 * Math.min(6, Math.max(1, this.airWaterCount))
+      case 'parking': return 300 * Math.min(6, Math.max(1, this.parkingCount))
+      case 'truckpark': return 1200   // pasif yüksek kazanan
+      case 'restaurant': return 1200  // ₺80-160/ziyaret
+      case 'oil': return 1000         // ₺150-250/servis
+      case 'wash': return 700         // ₺60-120/yıkama
+      case 'coffee': return 500       // düşük getiri
+      default: return 600
+    }
+  }
+
   addPending(id: string, amt: number, name: string) {
     this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
     this.facTotal[id] = (this.facTotal[id] ?? 0) + amt
-    const cap = 600
+    const cap = this.pendingCap(id)
     const cur = this.pendingCash[id] ?? 0
     this.pendingCash[id] = Math.min(cap, cur + amt)
     if (cur < cap && this.pendingCash[id] >= cap) {
