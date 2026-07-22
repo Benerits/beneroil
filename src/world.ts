@@ -819,12 +819,13 @@ export class World {
   gateIn2 = new THREE.Vector2(FAR_GATE_X, APRON_OUT_Y)
   gateOut2 = new THREE.Vector2(FAR_GATE_X, APRON_IN_Y)
   farStationOn = false
-  /** Karşı parsel sahiplenilince otomatik giriş-çıkış kapılarını kurar (bir kez). */
-  enableFarStation() {
+  /** Karşıya ilk pompa/şarj konunca otomatik giriş-çıkış kapılarını kurar (bir kez).
+   *  inY/outY: çağıran (main) mevcut karşı-yapılardan KAÇAN boş y'leri geçirir → kapı build üstüne binmez. */
+  enableFarStation(inY = APRON_OUT_Y, outY = APRON_IN_Y) {
     if (this.farStationOn) return
     this.farStationOn = true
-    this.buildGate('in', undefined, 'far')
-    this.buildGate('out', undefined, 'far')
+    this.buildGate('in', new THREE.Vector2(FAR_GATE_X, inY), 'far')
+    this.buildGate('out', new THREE.Vector2(FAR_GATE_X, outY), 'far')
   }
   /** geniş giriş/çıkış: kapı ağzı, rampa ve bordür boşluğu büyür */
   wideGates = false
