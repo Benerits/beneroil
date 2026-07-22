@@ -257,6 +257,42 @@ function readBody(req) {
 
 // İstemciden gelen kaydı makul sınırlara kırp — bariz hileleri SQL'e sokma.
 const clamp = (v, lo, hi, dflt = lo) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt)
+
+// ---- Anti-cheat: bina/ilerleme değeri (state.ts maliyet tablolarıyla birebir) ----
+// Bina para maliyeti olduğundan "servet = para + bina değeri" birleşik hız-tavanı,
+// hem para hem bina/seviye enjeksiyonunu tek seferde kapatır (satın alma servet-nötr).
+const COST = {
+  pump: [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000],
+  sign: [1500, 4000, 9000], tank: [3000, 7000, 15000], tankAdd: [0, 6000, 12000, 20000],
+  market: [7000, 12000, 20000], toilet: [2500, 5000], grid: [8000, 15000],
+  battery: [5000, 9000, 16000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000],
+}
+const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000 }
+const sumUpto = (arr, k) => { let t = 0; const n = Math.max(0, Math.min(arr.length, Math.floor(k) || 0)); for (let i = 0; i < n; i++) t += arr[i]; return t }
+function buildingValue(s) {
+  if (!s || typeof s !== 'object') return 0
+  const n = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
+  let v = 0
+  v += sumUpto(COST.pump, n(s.pumps, 1))
+  v += sumUpto(COST.sign, n(s.signLevel)) + sumUpto(COST.tank, n(s.tankLevel)) + sumUpto(COST.market, n(s.marketLevel))
+  v += sumUpto(COST.toilet, n(s.toiletLevel)) + sumUpto(COST.grid, n(s.gridLevel)) + sumUpto(COST.battery, n(s.batteryLevel))
+  v += sumUpto(COST.ev, n(s.evChargers))
+  if (s.tankCounts && typeof s.tankCounts === 'object') for (const k of ['benzin', 'dizel', 'lpg']) v += sumUpto(COST.tankAdd, n(s.tankCounts[k], 1))
+  v += FLAT.solar * n(s.solarCount) + FLAT.airwater * n(s.airWaterCount) + FLAT.selfwash * n(s.selfWashCount) + FLAT.parking * n(s.parkingCount)
+  if (s.hasDiesel) v += FLAT.dieselgen
+  if (s.hasSMR) v += FLAT.smr
+  if (s.hasWash) v += FLAT.wash
+  if (s.hasOil) v += FLAT.oil
+  if (s.hasCoffee) v += FLAT.coffee
+  if (s.hasRestaurant) v += FLAT.restaurant
+  if (s.hasTruckPark) v += FLAT.truckpark
+  if (s.wideGates) v += FLAT.widegate
+  // parseller DÜŞÜK tahmin: gerçek parselCost dinamik (6k-28k); düşük tutmak satın almanın
+  // asla "servet artışı" gibi görünmemesini garanti eder (false-positive önlemi).
+  if (Array.isArray(s.ownedParcels)) v += s.ownedParcels.length * 5000
+  if (Array.isArray(s.pavedParcels)) v += s.pavedParcels.length * 2000
+  return v
+}
 function sanitizeSave(save) {
   if (save === null) return null
   if (typeof save !== 'object' || Array.isArray(save)) return undefined
@@ -585,19 +621,36 @@ async function handleApi(req, res, url) {
           return json(res, 409, { conflict: true, save: prev.rows[0].save, updatedAt: prev.rows[0].updated_at })
         }
       }
-      // makullük: para, geçen süreye göre imkânsız hızda artamaz (hile freni)
-      if (clean && clean.s && typeof clean.s.money === 'number') {
-        const prevSave = prev.rows[0]?.save
-        // taban: önceki kayıt varsa onun parası + o kayıttan beri; yoksa (ilk kayıt)
-        // başlangıç parası + hesap açılışından beri geçen süre. İlk kayıtta fren
-        // uygulanmıyordu → yeni hesap tek POST'ta 2M'ye çıkabiliyordu (bildirilen açık).
+      // makullük (hile freni): SERVET = para + bina değeri, geçen süreye göre imkânsız
+      // hızda artamaz. Satın alma servet-nötr (para↓ bina↑) → sadece KAZANÇ serveti
+      // artırır. Böylece PARA ve İLERLEME (bina/seviye/day) enjeksiyonu tek tavanla kapanır.
+      // Offline kazanç da elapsed×600 payı içinde kaldığından bu tavandan sorunsuz geçer.
+      if (clean && clean.s && typeof clean.s === 'object') {
         const START_MONEY = 5000
-        const baseMoney = (prevSave && prevSave.s && typeof prevSave.s.money === 'number') ? prevSave.s.money : START_MONEY
+        const prevSave = prev.rows[0]?.save
         const sinceTs = prev.rows[0]?.updated_at || prev.rows[0]?.created_at
         const elapsed = sinceTs ? Math.max(1, (Date.now() - new Date(sinceTs).getTime()) / 1000) : 1
         const allowance = 50_000 + elapsed * 600
-        if (clean.s.money > baseMoney + allowance) {
-          clean.s.money = Math.round(baseMoney + allowance)
+        const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
+        const bval = buildingValue(clean.s)
+        let money = Number(clean.s.money) || 0
+        if (money + bval > prevWealth + allowance) {
+          // fazlalığı önce paradan düş (para enjeksiyonu / hızlı kazanç freni)
+          const excess = (money + bval) - (prevWealth + allowance)
+          money = Math.max(0, money - excess)
+          clean.s.money = Math.round(money)
+          // bina değeri tek başına tavanı aşıyorsa = bina/seviye ENJEKSİYONU → reddet, öncekini koru.
+          // 60k tampon: maliyet-tablosu yaklaşımından (parsel dinamik fiyatı vb.) doğabilecek
+          // her türlü sapmaya karşı legit oyuncuyu korur; gerçek enjeksiyon (300k+) yine yakalanır.
+          if (money + bval > prevWealth + allowance + 60_000) {
+            return json(res, 409, { conflict: true, save: prevSave || null, updatedAt: prev.rows[0]?.updated_at || null })
+          }
+        }
+        // day (ilerleme) hız freni: gün ~160sn/oyun-günü hızında ilerler (100000'e enjekte edilemez)
+        if (typeof clean.s.day === 'number') {
+          const prevDay = (prevSave && prevSave.s && typeof prevSave.s.day === 'number') ? prevSave.s.day : 1
+          const maxDay = prevDay + Math.ceil(elapsed / 160) + 3
+          if (clean.s.day > maxDay) clean.s.day = maxDay
         }
       }
       const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now() WHERE email=$1 RETURNING updated_at', [email, clean])
