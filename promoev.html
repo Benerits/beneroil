@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BenelOil — Şarja Geldik ⚡</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #bfe6f2; font-family: "Baloo 2", system-ui, sans-serif; }
+    #c { display: block; width: 100vw; height: 100vh; }
+    /* alt marka şeridi */
+    #brand {
+      position: fixed; left: 22px; bottom: 20px; display: flex; align-items: center; gap: 10px;
+      color: #fff; font-weight: 800; font-size: 22px; letter-spacing: .5px;
+      text-shadow: 0 3px 12px rgba(10,20,30,.5); pointer-events: none;
+    }
+    #brand .dot { width: 14px; height: 14px; border-radius: 50%; background: #d64545; box-shadow: 0 0 0 4px #fff3; }
+    /* kahraman metni (sonda fade-in) */
+    #promo-text {
+      position: fixed; left: 0; right: 0; top: 12%; text-align: center;
+      opacity: 0; transform: translateY(-16px); transition: opacity .8s ease, transform .8s ease; pointer-events: none;
+    }
+    #promo-text.show { opacity: 1; transform: none; }
+    #promo-text .big {
+      display: inline-block; background: linear-gradient(180deg, #fdfaf2, #f1ebdb);
+      border: 3px solid #d8cbb3; border-bottom-width: 8px; border-radius: 24px;
+      padding: 18px 34px; box-shadow: 0 24px 60px rgba(10,14,20,.45);
+    }
+    #promo-text .t1 { color: #1e2a36; font-size: 40px; font-weight: 800; line-height: 1.05; }
+    #promo-text .t2 { color: #d64545; font-size: 24px; font-weight: 800; margin-top: 6px; letter-spacing: .5px; }
+    #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+               color: #1e2a36; font-size: 22px; font-weight: 800; background: #bfe6f2; }
+    @media (max-width: 680px) {
+      #promo-text .t1 { font-size: 28px; } #promo-text .t2 { font-size: 18px; } #brand { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="promo-text">
+    <div class="big">
+      <div class="t1">Arabamızı şarj etmeye geldik ⚡</div>
+      <div class="t2">BENELOIL · KENDİ İSTASYONUNU KUR ⛽</div>
+    </div>
+  </div>
+  <div id="brand"><span class="dot"></span>BENELOIL</div>
+  <div id="loading">Yükleniyor…</div>
+  <script type="module" src="/src/promoev.ts"></script>
+</body>
+</html>

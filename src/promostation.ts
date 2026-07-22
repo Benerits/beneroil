@@ -134,3 +134,54 @@ export function buildStation(s: StCfg, lite = false): THREE.Group {
   sign(s.sign, -4.0, -4.6, g)
   return g
 }
+
+/** Aracın estate önünde durduğu nokta (ön-orta EV parseli, yola bakar) */
+export const ESTATE_CAR_STOP = new THREE.Vector3(0, -14.5, 0)
+
+/**
+ * Büyük "6 parsel claimlenmiş" istasyon — TPS promo için. Oyunun gerçek primitifleri:
+ * 3 sütun × 2 satır beton parsel (bordürlü), üzerinde benzin pompaları, EV şarj,
+ * küre tanklar, ofis/market (Kenney), tuvalet, nükleer (SMR kubbe), batarya, solar,
+ * kafe/restoran ve BENELOIL tabelası. Ön (−Y) yola bakar, araç ön-ortadan girer.
+ */
+export function buildEstate(): THREE.Group {
+  const g = new THREE.Group()
+  const XS = [-11, 0, 11], FY = -6.2, BY = 6.2, PW = 10.6, PD = 11.6
+  // 6 beton parsel + bordür çerçevesi
+  for (const cx of XS) for (const cy of [FY, BY]) {
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(PW, PD), lam(0xc4c9cf))
+    pad.position.set(cx, cy, 0.02); pad.receiveShadow = true; g.add(pad)
+    box(PW + 0.2, 0.18, 0.16, 0xd8dbde, cx, cy - PD / 2, 0.08, g)
+    box(PW + 0.2, 0.18, 0.16, 0xd8dbde, cx, cy + PD / 2, 0.08, g)
+    box(0.18, PD + 0.2, 0.16, 0xd8dbde, cx - PW / 2, cy, 0.08, g)
+    box(0.18, PD + 0.2, 0.16, 0xd8dbde, cx + PW / 2, cy, 0.08, g)
+  }
+  // ÖN-SOL: 3 benzin pompası
+  for (let i = 0; i < 3; i++) fullPump(-11, FY - 3.8 + i * 3.8, g)
+  // ÖN-ORTA: 4 EV şarj (kahraman — araç buraya gelir)
+  for (let i = 0; i < 4; i++) evCharger(0, FY - 4.2 + i * 2.7, g)
+  // ÖN-SAĞ: küre tanklar + tuvalet + oto yıkama
+  tanks(3, 8.8, FY - 3.2, g)
+  if (statics?.toilet) { const tt = fitModel(statics.toilet, 2.4); tt.position.set(13, FY + 4, 0); g.add(tt) }
+  else procBuilding(1.8, 1.8, 1.4, 0xdfe3e8, 0xd64545, 13, FY + 4, g)
+  procBuilding(2.4, 2.8, 1.9, 0x59b6d6, 0x2f6fed, 12.8, FY - 2.8, g) // oto yıkama (mavi)
+  // ARKA-SOL: ofis (Kenney)
+  if (statics?.office) { const o = fitModel(statics.office, 4.4); o.position.set(-11, BY, 0); g.add(o) }
+  else procBuilding(3, 3, 3, 0x4a5560, 0xd64545, -11, BY, g)
+  // ARKA-ORTA: market (Kenney) + kafe + restoran
+  if (statics?.market2) { const mk = fitModel(statics.market2, 4.6); mk.position.set(-1.8, BY + 0.5, 0); g.add(mk) }
+  else procBuilding(3, 3, 2.6, 0xe4c07a, 0xd64545, -1.8, BY + 0.5, g)
+  procBuilding(1.6, 1.6, 1.1, 0x9a6b3f, 0xd64545, 2.6, BY - 3.6, g) // kafe
+  procBuilding(2.0, 2.0, 1.5, 0xc0693a, 0xd64545, 2.9, BY + 3.2, g) // restoran
+  // ARKA-SAĞ: nükleer (SMR kubbe) + batarya + solar
+  box(2.4, 2.4, 1.7, 0xcfd4d9, 11, BY + 2, 0.85, g)
+  const dome = new THREE.Mesh(GEO.sph, lam(0xdfe3e8)); dome.scale.set(1.4, 1.4, 0.85); dome.position.set(11, BY + 2, 1.7); dome.castShadow = true; g.add(dome)
+  box(1.4, 1.0, 1.1, 0x2fa8bc, 8, BY - 2.2, 0.55, g)   // batarya paketi
+  box(1.4, 1.0, 1.1, 0x2fa8bc, 9.7, BY - 2.2, 0.55, g)
+  for (let s = 0; s < 6; s++) { const pn = box(1.1, 0.08, 1.2, 0x2a3a66, 8.4 + (s % 3) * 1.3, BY - 4.4 + Math.floor(s / 3) * 1.3, 0.75, g); pn.rotation.x = -0.5 }
+  // BENELOIL tabelası — ön-sol köşe, yola bakar
+  sign(3, -16.8, FY - 4.5, g)
+  // giriş apronu (araç yoldan estate'e girer)
+  const apron = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 9), lam(0xc4c9cf)); apron.position.set(0, FY - 8.5, 0.02); apron.receiveShadow = true; g.add(apron)
+  return g
+}
