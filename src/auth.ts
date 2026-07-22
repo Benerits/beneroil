@@ -10,12 +10,23 @@ export function currentEmail(): string | null {
   return localStorage.getItem(EMAIL_KEY)
 }
 
+// Tek-cihaz kilidi: her açılış (yükleme) benzersiz bir oturum kimliği üretir. Başka cihaz
+// açılınca sunucu oturumu ona devreder; eski cihaz bir sonraki save'de "kicked" alır.
+const SESSION_ID = (globalThis.crypto?.randomUUID?.() ?? (Date.now().toString(36) + Math.random().toString(36).slice(2)))
+export function sessionId(): string { return SESSION_ID }
+let _onKicked: (() => void) | null = null
+export function onKicked(cb: () => void) { _onKicked = cb }
+let _kicked = false
+export function isKicked(): boolean { return _kicked }
+function triggerKicked() { if (!_kicked) { _kicked = true; _onKicked?.() } }
+
 async function api(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(path, {
     method,
     headers: {
       'content-type': 'application/json',
       'x-auth': localStorage.getItem(TOKEN_KEY) ?? '',
+      'x-session': SESSION_ID,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
@@ -93,13 +104,14 @@ export async function requestReset(email: string): Promise<void> {
 
 /** Save'i sunucuya yaz. Çoklu cihaz guard: yüklediğimizden beri başka cihaz yazmışsa
  *  sunucu 409 + yeni save döner → çağıran yeniyi uygular (clobber yok, ilerleme karışmaz). */
-export async function pushSave(save: unknown): Promise<{ conflict: boolean; save?: unknown; updatedAt?: string }> {
+export async function pushSave(save: unknown): Promise<{ conflict: boolean; kicked?: boolean; save?: unknown; updatedAt?: string }> {
   const res = await fetch('/api/save', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-auth': localStorage.getItem(TOKEN_KEY) ?? '' },
+    headers: { 'content-type': 'application/json', 'x-auth': localStorage.getItem(TOKEN_KEY) ?? '', 'x-session': SESSION_ID },
     body: JSON.stringify({ save, baseUpdatedAt: _lastUpdatedAt }),
   })
   const data = await res.json().catch(() => ({}))
+  if ((data as { kicked?: boolean }).kicked) { triggerKicked(); return { conflict: false, kicked: true } }
   if (res.status === 409 && (data as { conflict?: boolean }).conflict) {
     _lastUpdatedAt = (data as { updatedAt?: string }).updatedAt ?? _lastUpdatedAt
     return { conflict: true, save: (data as { save?: unknown }).save, updatedAt: _lastUpdatedAt ?? undefined }
