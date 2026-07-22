@@ -252,21 +252,21 @@ export class GameState {
       && this.battery < this.batteryCapacity - 0.01
   }
 
-  /** anlık üretim gücü kWh/sn (kir, yakıt vs. dahil) */
-  /** şebekeden gelen kWh/sn (faturalı) */
+  /** şebekeden gelen kWh/sn (faturalı taban) */
   gridRate() {
     return this.gridLevel >= 1 ? 2 * (this.gridLevel >= 2 ? 1.3 : 1) : 0
   }
-
-  genRate() {
+  /** BEDAVA üretim kWh/sn: güneş + reaktör + jeneratör (altyapı Sv.2 bonusu dahil) */
+  freeRate() {
     let r = 0
-    if (this.gridLevel >= 1) r += 2 // şebeke: altyapı varsa temel akış
     if (this.solarCount > 0) r += 3 * this.solarCount * (1 - 0.7 * this.solarDirt)
     if (this.dieselRunning()) r += 7
     if (this.hasSMR && this.uranium > 0) r += 15
-    if (this.gridLevel >= 2) r *= 1.3
+    if (this.gridLevel >= 2) r *= 1.3 // altyapı bonusu bedava üretimi de güçlendirir
     return r
   }
+  /** anlık toplam üretim gücü kWh/sn (bedava + şebeke) */
+  genRate() { return this.freeRate() + this.gridRate() }
 
   tick(dt: number) {
     for (const f of FUELS) {
@@ -282,12 +282,14 @@ export class GameState {
     // batarya şarjı
     if (this.batteryLevel > 0 && this.battery < this.batteryCapacity) {
       const before = this.battery
-      const total = this.genRate()
+      const free = this.freeRate(), grid = this.gridRate(), total = free + grid
       this.battery = Math.min(this.batteryCapacity, this.battery + total * dt)
       const added = this.battery - before
-      // şebeke payı faturalanır — santral üretimi bedava, o yüzden daha kârlı
+      // ŞEBEKE yalnız BEDAVA üretimin (solar/reaktör/jeneratör) KARŞILAMADIĞI payı faturalar.
+      // Solar üretimi şebeke tabanını (2 kWh/sn) karşılıyorsa fatura 0 → "solar var santral çekmiyor".
       if (added > 0 && total > 0) {
-        this.money -= added * Math.min(1, this.gridRate() / total) * GRID_COST_PER_KWH
+        const billedRate = Math.max(0, grid - free)
+        if (billedRate > 0) this.money -= added * (billedRate / total) * GRID_COST_PER_KWH
       }
       if (this.dieselRunning()) {
         this.tanks.dizel = Math.max(0, this.tanks.dizel - DIESEL_GEN_FUEL_PER_S * dt)
@@ -618,9 +620,12 @@ export function getShopItems(s: GameState): ShopRow[] {
   }
   const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
 
-  row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size), t('yol karşısı dahil'),
-    t('Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — uzak/karşı arsalar pahalı, istasyon geliştikçe artar. Seçince gerçek fiyat görünür.'),
-    s.ownedParcels.size >= 18 ? null : parcelCost(0, 0, s), null)
+  // arsa fiyatı konuma göre değişir (yakın ucuz, uzak/karşı pahalı) → tek sayı yerine ARALIK göster
+  const pcMin = parcelCost(0, 0, s), pcMax = parcelCost(2, 0, s)
+  row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size),
+    `₺${pcMin.toLocaleString('tr-TR')}–${pcMax.toLocaleString('tr-TR')}`,
+    t('Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — yakın arsalar ucuz, uzak/karşı arsalar pahalı; istasyon geliştikçe artar. Seçince o parselin gerçek fiyatı görünür.'),
+    s.ownedParcels.size >= 18 ? null : pcMin, null)
   row('pave', 'i-pave', t('Zemin Betonu'), t('arsa başı'),
     t('Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)'),
     PAVE_COST, hasUnpaved ? null : t('Betonsuz arsan yok'))
