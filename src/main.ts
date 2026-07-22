@@ -232,7 +232,7 @@ window.addEventListener('resize', resize)
 window.addEventListener('wheel', e => {
   // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
   if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar')) return
-  camera.zoom = Math.min(2.6, Math.max(0.42, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
+  camera.zoom = Math.min(2.6, Math.max(0.55, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
 
@@ -249,7 +249,7 @@ window.addEventListener('touchmove', e => {
     e.preventDefault()
     const d = touchDist(e.touches)
     if (pinchStartDist > 0) {
-      camera.zoom = Math.min(2.6, Math.max(0.42, pinchStartZoom * (d / pinchStartDist)))
+      camera.zoom = Math.min(2.6, Math.max(0.55, pinchStartZoom * (d / pinchStartDist)))
       camera.updateProjectionMatrix()
     }
   }
