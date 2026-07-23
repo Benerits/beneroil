@@ -48,7 +48,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
           const res = await fetch(path, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ email: gEmail.value, password: gPass.value, lang }),
+            body: JSON.stringify({ email: gEmail.value, password: gPass.value, lang, guest: auth.hasGuest() }),
           })
           const d = await res.json().catch(() => ({}))
           if (!res.ok) throw new Error(d.error ?? t('Sunucuya ulaşılamadı.'))
@@ -105,7 +105,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
       try {
         const res = await fetch(`/api/auth/${provider}`, {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ idToken, email }),
+          body: JSON.stringify({ idToken, email, guest: auth.hasGuest() }),
         })
         const d = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(d.error ?? t('Giriş başarısız.'))
