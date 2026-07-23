@@ -10,6 +10,19 @@ export function currentEmail(): string | null {
   return localStorage.getItem(EMAIL_KEY)
 }
 
+// ---- Misafir modu: hesapsız oynanan ilerleme yerelde tutulur; kayıt/giriş olunca sunucuya taşınır ----
+const GUEST_KEY = 'benzinlik-guest'
+/** misafir save'i yerelde sakla (hesap yokken tek kayıt yeri) */
+export function saveGuest(save: unknown) {
+  try { localStorage.setItem(GUEST_KEY, JSON.stringify(save)) } catch { /* kota */ }
+}
+/** misafir save'ini oku (yoksa null) */
+export function loadGuest(): unknown | null {
+  try { const s = localStorage.getItem(GUEST_KEY); return s ? JSON.parse(s) : null } catch { return null }
+}
+export function clearGuest() { localStorage.removeItem(GUEST_KEY) }
+export function hasGuest(): boolean { return !!localStorage.getItem(GUEST_KEY) }
+
 // Tek-cihaz kilidi: her açılış (yükleme) benzersiz bir oturum kimliği üretir. Başka cihaz
 // açılınca sunucu oturumu ona devreder; eski cihaz bir sonraki save'de "kicked" alır.
 const SESSION_ID = (globalThis.crypto?.randomUUID?.() ?? (Date.now().toString(36) + Math.random().toString(36).slice(2)))
