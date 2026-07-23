@@ -1028,7 +1028,8 @@ async function handleVs(req, res, url) {
       const gAll = await pool.query(`SELECT coalesce(sum(guests),0)::int AS n FROM benzinlik_stat_hourly`)
       const a = agg.rows[0]; const v = vis.rows[0]
       const conv = v.v24 > 0 ? Math.round((v.s24 / v.v24) * 100) : 0
-      const guestConv = v.g24 > 0 ? Math.round((v.s24 / v.g24) * 100) : 0 // misafir→kayıt dönüşümü (24s)
+      // misafir→kayıt dönüşümü (24s) — sayaç yeni başladığından kayıt>misafir olabilir; %100'de kırp
+      const guestConv = v.g24 > 0 ? Math.min(100, Math.round((v.s24 / v.g24) * 100)) : 0
       const pct = n => (a.total > 0 ? Math.round((n / a.total) * 100) : 0)
       return json(res, 200, {
         window: '30d',
