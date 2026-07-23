@@ -702,13 +702,17 @@ export class World {
       if (!(ch as THREE.Sprite).isSprite) this.tankGroup.remove(ch)
     }
     this.tankGroup.position.set(this.tankAnchor.x, this.tankAnchor.y, 0)
-    const spots: [number, number][] = [[0, 0], [0, 0.9], [0.9, 0], [0.9, 0.9]]
     const R = 0.4 + level * 0.04
     const colors: Record<FuelType, number> = { benzin: 0x27a05a, dizel: 0xe8862e, lpg: 0x2f6fed }
-    const fuels: FuelType[] = ['benzin', 'dizel', 'lpg']
-    for (let i = 0; i <= level; i++) {
-      const f = fuels[i % 3]
-      const fill = this.addSphereTank(spots[i][0], spots[i][1], R, colors[f])
+    // 3 yakıt HER ZAMAN görünür (benzin/dizel/lpg) — üçgen dizilim, her biri kendi doluluk seviyesini gösterir.
+    // Konumlar [0..0.9] aralığında kaldığı için footprint (4 hücre) + taşıma çapası (moveTank) BİREBİR korunur.
+    const layout: [FuelType, number, number][] = [
+      ['dizel', 0, 0.9],     // arka-sol
+      ['lpg', 0.9, 0.9],     // arka-sağ
+      ['benzin', 0.45, 0],   // ön-orta
+    ]
+    for (const [f, x, y] of layout) {
+      const fill = this.addSphereTank(x, y, R, colors[f])
       this.tankFillMeshes[f].push(fill)
     }
   }

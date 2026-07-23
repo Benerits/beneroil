@@ -23,14 +23,16 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
 
 // ---- Misafir (hesapsız) HEMEN oynar; kayıt/giriş gate'i yalnız gün-eşiğinde veya "Kaydet"le açılır ----
-let showAuthGate: (headline?: string) => void = () => {}
+let showAuthGate: (headline?: string, hideGuestBtn?: boolean) => void = () => {}
+let guestPaused = false // misafir donması: başlangıç login gate'inde + gün-eşiğinde oyun donar
 {
   const gated = !localStorage.getItem('benzinlik-token')
   if (gated) {
     const gate = document.getElementById('authgate') as HTMLDivElement
-    // gate BAŞTA gösterilmez — misafir hemen oynar. showAuthGate() gün-5'te (ya da Kaydet'te) açar.
-    showAuthGate = (headline?: string) => {
+    // YENİ AKIŞ: gate BAŞTA gösterilir (login formu + "Misafir olarak oyna"). Oyun formun ardında DONAR.
+    showAuthGate = (headline?: string, hideGuestBtn?: boolean) => {
       if (headline) { const sub = document.querySelector('#authgate .agsub'); if (sub) (sub as HTMLElement).textContent = headline }
+      const gw = document.getElementById('gguest-wrap'); if (gw) gw.style.display = hideGuestBtn ? 'none' : 'block'
       gate.style.display = 'flex'
       gate.classList.add('solid')
     }
@@ -188,7 +190,16 @@ let showAuthGate: (headline?: string) => void = () => {}
     }
     setupOAuth()
 
-    // MİSAFİR modu: modül BURADA DURMAZ — oyun hesapsız çalışır, gün-5 gate'i guestPaused ile freeze eder
+    // Başta login formunu göster + oyunu ardında dondur; "Misafir olarak oyna" ile devam edilir.
+    guestPaused = true
+    showAuthGate()
+    const gGuestBtn = document.getElementById('gguest') as HTMLButtonElement | null
+    if (gGuestBtn) gGuestBtn.onclick = () => {
+      guestPaused = false
+      gate.style.display = 'none'
+      gate.classList.remove('solid')
+    }
+    // MİSAFİR modu: modül BURADA DURMAZ — oyun ardında hazır, "Misafir olarak oyna"ya basınca oynanır
   }
 }
 
@@ -1403,13 +1414,12 @@ function showVerifyGate() {
 
 // ---- Misafir eşiği: kayıtsız GUEST_MAX_DAY oyun günü serbest; sonra kayıt/giriş gate'i (deneme kapısı) ----
 const GUEST_MAX_DAY = 5
-let guestPaused = false      // gün-eşiğinde oyun donar (misafir save eşikte kalsın, anti-cheat'e takılmasın)
 let guestGateShown = false
 function maybeGuestGate() {
   if (auth.loggedIn() || guestGateShown || state.day < GUEST_MAX_DAY) return
   guestGateShown = true
   guestPaused = true
-  showAuthGate(t('Gün {0}’e ulaştın! Devam etmek ve ilerlemeni KAYDETMEK için kaydol ya da Google/Apple ile giriş yap — kaydolmazsan ilerleme cihazda kalır, kaybolabilir.', GUEST_MAX_DAY))
+  showAuthGate(t('Gün {0}’e ulaştın! Devam etmek ve ilerlemeni KAYDETMEK için kaydol ya da Google/Apple ile giriş yap — kaydolmazsan ilerleme cihazda kalır, kaybolabilir.', GUEST_MAX_DAY), true)
 }
 
 function persist() {
