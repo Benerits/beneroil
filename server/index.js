@@ -430,6 +430,10 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/visit' && req.method === 'POST') {
       if (rateLimit('visit:' + clientIp(req), 1, 30_000)) bumpStat('visits')
+      // yeni MİSAFİR (client ilk kez oynamaya başladı, localStorage'da dedup'lı) → ekibe ayrı push.
+      // IP başına saatte 1 ile spam engellenir (kötü niyetli çağrı da bunu aşamaz).
+      const vb = await readBody(req).catch(() => ({}))
+      if (vb && vb.guest === true && rateLimit('guestnotif:' + clientIp(req), 1, 3600_000)) pushSignupNotif('guest')
       return json(res, 200, { ok: true })
     }
     if (url === '/api/config') {
@@ -639,9 +643,13 @@ async function handleApi(req, res, url) {
       if (clean && clean.s && typeof clean.s === 'object') {
         const START_MONEY = 5000
         const prevSave = prev.rows[0]?.save
+        // yeni hesabın İLK save'i (misafirden taşınmış olabilir): elapsed≈0 olur ama oyuncu misafirken
+        // gerçekte GUEST_MAX_DAY(5)'e kadar oynamış olabilir → tavanı OYUN GÜNÜNE göre ver, wall-clock'a değil.
+        const firstSave = !(prevSave && prevSave.s)
         const sinceTs = prev.rows[0]?.updated_at || prev.rows[0]?.created_at
         const elapsed = sinceTs ? Math.max(1, (Date.now() - new Date(sinceTs).getTime()) / 1000) : 1
-        const allowance = 100_000 + elapsed * 2500 // ileri istasyon (8 pompa+EV+rush) hızlı kazanabilir; legit tavan yükseltildi
+        const gameDays = (typeof clean.s.day === 'number') ? Math.min(Math.max(0, clean.s.day), 8) : 0 // misafir eşiği 5 + tampon
+        const allowance = firstSave ? (100_000 + gameDays * 400_000) : (100_000 + elapsed * 2500) // gün başına ~400k legit servet
         const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
         const bval = buildingValue(clean.s)
         let money = Number(clean.s.money) || 0
@@ -651,16 +659,14 @@ async function handleApi(req, res, url) {
           money = Math.max(0, money - excess)
           clean.s.money = Math.round(money)
           // bina değeri tek başına tavanı aşıyorsa = bina/seviye ENJEKSİYONU → reddet, öncekini koru.
-          // 60k tampon: maliyet-tablosu yaklaşımından (parsel dinamik fiyatı vb.) doğabilecek
-          // her türlü sapmaya karşı legit oyuncuyu korur; gerçek enjeksiyon (300k+) yine yakalanır.
           if (money + bval > prevWealth + allowance + 250_000) {
             return json(res, 409, { conflict: true, save: prevSave || null, updatedAt: prev.rows[0]?.updated_at || null })
           }
         }
-        // day (ilerleme) hız freni: gün ~160sn/oyun-günü hızında ilerler (100000'e enjekte edilemez)
+        // day (ilerleme) hız freni: gün ~160sn/oyun-günü hızında ilerler. İlk save'de misafir eşiğine (5+tampon) izin.
         if (typeof clean.s.day === 'number') {
           const prevDay = (prevSave && prevSave.s && typeof prevSave.s.day === 'number') ? prevSave.s.day : 1
-          const maxDay = prevDay + Math.ceil(elapsed / 160) + 3
+          const maxDay = firstSave ? Math.max(prevDay + 3, 8) : prevDay + Math.ceil(elapsed / 160) + 3
           if (clean.s.day > maxDay) clean.s.day = maxDay
         }
       }
@@ -1118,19 +1124,23 @@ async function handleVs(req, res, url) {
   }
 }
 
-// Yeni kayıtta EKİBE push — Cash Sort (yayında değil, sadece ekip cihazlarında)
-// APNs altyapısı üzerinden. Sortubes/tubes-api KULLANILMAZ: orası artık gerçek
-// oyuncularla dolu bir mağaza uygulaması ve segment:all herkese giderdi.
-async function pushSignupNotif() {
+// Yeni kayıt/misafir EKİBE push — Cash Sort (yayında değil, sadece ekip cihazlarında) APNs altyapısı.
+// Sortubes/tubes-api KULLANILMAZ: orası artık gerçek oyunculu mağaza, segment:all herkese giderdi.
+async function pushSignupNotif(kind = 'registered') {
   const key = process.env.CASHSORT_VS_KEY
   if (!key || !pool) return
   try {
-    const c = await pool.query('SELECT count(*)::int AS n FROM benzinlik_player')
-    const total = c.rows[0]?.n ?? 0
+    const c = await pool.query(`SELECT count(*)::int AS total,
+      count(*) FILTER (WHERE last_seen_at > now() - interval '5 min')::int AS online FROM benzinlik_player`)
+    const total = c.rows[0]?.total ?? 0
+    const online = c.rows[0]?.online ?? 0
+    const body = kind === 'guest'
+      ? `🎮 Yeni misafir oyunu denemeye başladı! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
+      : `🎉 Yeni kayıtlı oyuncu katıldı! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
     await fetch('https://cashsort-api.benerits.com/vs/v1/notifications/send', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' },
-      body: JSON.stringify({ segment: { type: 'all' }, title: 'BenelOil', body: `+1 oyuncu geldi 🎉 (toplam ${total})` }),
+      body: JSON.stringify({ segment: { type: 'all' }, title: 'BenelOil', body }),
     })
   } catch {}
 }

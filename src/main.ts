@@ -22,18 +22,28 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
 
-// ---- ÖNCE GİRİŞ: hesap yoksa oyun motoru hiç başlamaz ----
+// ---- Misafir (hesapsız) HEMEN oynar; kayıt/giriş gate'i yalnız gün-eşiğinde veya "Kaydet"le açılır ----
+let showAuthGate: (headline?: string) => void = () => {}
 {
-  // misafir modu YOK: vitrin (?full) dahil her şey giriş ister
   const gated = !localStorage.getItem('benzinlik-token')
   if (gated) {
     const gate = document.getElementById('authgate') as HTMLDivElement
-    gate.style.display = 'flex'
-    gate.classList.add('solid')
+    // gate BAŞTA gösterilmez — misafir hemen oynar. showAuthGate() gün-5'te (ya da Kaydet'te) açar.
+    showAuthGate = (headline?: string) => {
+      if (headline) { const sub = document.querySelector('#authgate .agsub'); if (sub) (sub as HTMLElement).textContent = headline }
+      gate.style.display = 'flex'
+      gate.classList.add('solid')
+    }
     translateDom() // giriş ekranı metinlerini seçili dile çevir
     const gErr = document.getElementById('agerr') as HTMLDivElement
     const gEmail = document.getElementById('gemail') as HTMLInputElement
     const gPass = document.getElementById('gpass') as HTMLInputElement
+    // kayıt/giriş/sosyal başarılı → varsa misafir ilerlemesini hesaba TAŞI, sonra yenile
+    const afterAuth = async () => {
+      const g = auth.loadGuest()
+      if (g) { try { await auth.pushSave(g) } catch { /* taşıma olmazsa yine devam */ } auth.clearGuest() }
+      location.reload()
+    }
     const wire = (id: string, path: string) => {
       (document.getElementById(id) as HTMLButtonElement).addEventListener('click', async () => {
         gErr.textContent = ''
@@ -47,13 +57,16 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
           if (!res.ok) throw new Error(d.error ?? t('Sunucuya ulaşılamadı.'))
           localStorage.setItem('benzinlik-token', d.token)
           localStorage.setItem('benzinlik-email', d.email)
-          location.reload()
+          await afterAuth()
         } catch (err) {
           gErr.textContent = (err as Error).message
         }
       })
     }
-    fetch('/api/visit', { method: 'POST' }).catch(() => {}) // ziyaret say (istatistik)
+    // ziyaret say + İLK misafir ise ekibe "misafir katıldı" push tetikle (localStorage'da dedup)
+    const firstGuest = !localStorage.getItem('benzinlik-guest-joined')
+    fetch('/api/visit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ guest: firstGuest }) }).catch(() => {})
+    if (firstGuest) localStorage.setItem('benzinlik-guest-joined', '1')
     // canlı oyuncu sayacı — kayıt öncesi sosyal kanıt (FOMO)
     fetch('/api/stats').then(r => r.json()).then(st => {
       const box = document.getElementById('livecount') as HTMLDivElement
@@ -101,7 +114,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
         if (!res.ok) throw new Error(d.error ?? t('Giriş başarısız.'))
         localStorage.setItem('benzinlik-token', d.token)
         localStorage.setItem('benzinlik-email', d.email)
-        location.reload()
+        await afterAuth()
       } catch (err) { gErr.textContent = (err as Error).message }
     }
     const setupOAuth = async () => {
@@ -1388,11 +1401,26 @@ function showVerifyGate() {
   document.getElementById('vg-logout')!.addEventListener('click', () => { auth.logout(); location.reload() })
 }
 
+// ---- Misafir eşiği: kayıtsız GUEST_MAX_DAY oyun günü serbest; sonra kayıt/giriş gate'i (deneme kapısı) ----
+const GUEST_MAX_DAY = 5
+let guestPaused = false      // gün-eşiğinde oyun donar (misafir save eşikte kalsın, anti-cheat'e takılmasın)
+let guestGateShown = false
+function maybeGuestGate() {
+  if (auth.loggedIn() || guestGateShown || state.day < GUEST_MAX_DAY) return
+  guestGateShown = true
+  guestPaused = true
+  showAuthGate(t('Gün {0}’e ulaştın! Devam etmek ve ilerlemeni KAYDETMEK için kaydol ya da Google/Apple ile giriş yap — kaydolmazsan ilerleme cihazda kalır, kaybolabilir.', GUEST_MAX_DAY))
+}
+
 function persist() {
   if (isFullMode || isPromoMode || cloudBlocked) return
-  // tek gerçek kaynak SQL: yerel kopya tutulmaz, eski veri asla hortlamaz.
-  // syncSave çoklu cihaz çakışmasını (409) ele alır — başka cihaz ilerlettiyse senkronlar.
-  if (auth.loggedIn() && Date.now() - lastRemotePush > 5_000) {
+  if (!auth.loggedIn()) { // MİSAFİR: ilerlemeyi YERELDE tut; gün-5'te kayıt gate'i aç
+    auth.saveGuest(savePayload())
+    maybeGuestGate()
+    return
+  }
+  // giriş yapılmış: tek gerçek kaynak SQL. syncSave çoklu cihaz çakışmasını (409) ele alır.
+  if (Date.now() - lastRemotePush > 5_000) {
     lastRemotePush = Date.now()
     syncSave()
   }
@@ -2117,6 +2145,10 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
     cloudBlocked = true
     showCloudBlockOverlay()
   }
+} else if (!isFullMode && !isPromoMode && !auth.loggedIn()) {
+  // MİSAFİR: hesap yok → yerel misafir kaydını yükle (varsa), yoksa sıfırdan başla
+  const g = auth.loadGuest()
+  if (g) { applySaveData(g as Record<string, unknown>); saveLoaded = true }
 }
 if (cloudBlocked) await new Promise(() => {}) // oyun motoru burada durur, hiç kayıt gitmez
 // e-posta doğrulama kapısı: doğrulanmadan oyuna devam edilemez
@@ -3105,6 +3137,7 @@ function frame() {
   dayTime += dt
   world.setNight(nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE))
 
+  if (guestPaused) { composer!.render(); return } // misafir gün-eşiği: oyun donar (ilerleme eşikte kalır), sahne render'a devam
   state.tick(dt)
   cars.update(dt)
   world.updateTankFill({
@@ -3147,6 +3180,7 @@ function frame() {
   const cycleT = (dayTime % DAY_CYCLE) / DAY_CYCLE
   if (cycleT < prevCycleT) {
     state.day++
+    if (!auth.loggedIn()) { auth.saveGuest(savePayload()); maybeGuestGate() } // misafir: gün başı kaydet + gün-5 eşiği (boştayken de)
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
