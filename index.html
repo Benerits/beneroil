@@ -223,6 +223,8 @@
       .subtabs { display: flex !important; }
       /* Sorun Bildir mobilde ayarların içine taşındı — yüzen buton gizli */
       #fbbtn { display: none !important; }
+      /* 'Şimdi Kayıt Ol' CTA: mobilde sol-alt FAB'ın (62px) üstüne kaydır — üst üste binmesin */
+      #guestcta { bottom: calc(92px + env(safe-area-inset-bottom)) !important; }
     }
     /* ---- Yatay (landscape) telefon: alt navbar dikey alanı yiyor — navbar yerine üst HUD tuşları,
            modaller ortalı + içeriden scroll. iPad/masaüstü (yükseklik büyük) zaten üst-buton düzeninde. ---- */
