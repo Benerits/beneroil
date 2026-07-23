@@ -213,7 +213,9 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
       // buton etiketi: yerel misafir kaydı varsa "devam et", yoksa "oyna"
       gGuestLbl.textContent = auth.hasGuest() ? t('Misafir olarak devam et') : t('Misafir olarak oyna')
       const gw = document.getElementById('gguest-wrap'); if (gw) gw.style.display = hideGuestBtn ? 'none' : 'block'
-      if (headline) { const sub = document.querySelector('#authgate .agsub'); if (sub) (sub as HTMLElement).textContent = headline }
+      // SEBEP belirgin banner'da: misafir neden kayıt olmalı — direkt login'e atılmış hissi vermesin
+      const reason = document.getElementById('agreason') as HTMLDivElement | null
+      if (reason) { reason.textContent = headline ?? ''; reason.style.display = headline ? 'block' : 'none' }
       gate.style.display = 'flex'
       gate.classList.add('solid')
       guestPaused = true
