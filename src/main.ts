@@ -29,21 +29,16 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
   const gated = !localStorage.getItem('benzinlik-token')
   if (gated) {
     const gate = document.getElementById('authgate') as HTMLDivElement
-    // YENİ AKIŞ: gate BAŞTA gösterilir (login formu + "Misafir olarak oyna"). Oyun formun ardında DONAR.
-    showAuthGate = (headline?: string, hideGuestBtn?: boolean) => {
-      if (headline) { const sub = document.querySelector('#authgate .agsub'); if (sub) (sub as HTMLElement).textContent = headline }
-      const gw = document.getElementById('gguest-wrap'); if (gw) gw.style.display = hideGuestBtn ? 'none' : 'block'
-      gate.style.display = 'flex'
-      gate.classList.add('solid')
-    }
     translateDom() // giriş ekranı metinlerini seçili dile çevir
     const gErr = document.getElementById('agerr') as HTMLDivElement
     const gEmail = document.getElementById('gemail') as HTMLInputElement
     const gPass = document.getElementById('gpass') as HTMLInputElement
     // kayıt/giriş/sosyal başarılı → varsa misafir ilerlemesini hesaba TAŞI, sonra yenile
     const afterAuth = async () => {
+      // REGISTER: misafir verisi hesaba taşınır (push başarılı/conflict → temizle; ağ hatasında SİLME).
+      // LOGIN (hesapta kayıt varsa): sunucu 409 conflict ile bulut kaydını korur → hesabından devam eder.
       const g = auth.loadGuest()
-      if (g) { try { await auth.pushSave(g) } catch { /* taşıma olmazsa yine devam */ } auth.clearGuest() }
+      if (g) { try { await auth.pushSave(g); auth.clearGuest() } catch { /* ağ hatası: misafir verisi yerelde kalsın */ } }
       location.reload()
     }
     const wire = (id: string, path: string) => {
@@ -190,16 +185,36 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
     }
     setupOAuth()
 
-    // Başta login formunu göster + oyunu ardında dondur; "Misafir olarak oyna" ile devam edilir.
+    // ---- MİSAFİR AKIŞI (TEK YER, başka if/else YOK) ----
+    // 1) Gate HER açılışta gösterilir — localStorage'da misafir verisi olsa bile OTOMATİK başlatmaz.
+    // 2) "Misafir olarak oyna/devam et" butonuna BASINCA oyun başlar (varsa yerel misafir kaydından).
+    // 3) Login → hesap kaydından devam (409 conflict guard'ı bulut kaydını korur).
+    //    Register → misafir verisi hesaba taşınır (afterAuth → pushSave + clearGuest).
     guestPaused = true
-    showAuthGate()
-    const gGuestBtn = document.getElementById('gguest') as HTMLButtonElement | null
-    if (gGuestBtn) gGuestBtn.onclick = () => {
+    const gGuestBtn = document.getElementById('gguest') as HTMLButtonElement
+    const gGuestLbl = gGuestBtn.querySelector('span') ?? gGuestBtn
+    const openGate = (headline?: string, hideGuestBtn?: boolean) => {
+      // buton etiketi: yerel misafir kaydı varsa "devam et", yoksa "oyna"
+      gGuestLbl.textContent = auth.hasGuest() ? t('Misafir olarak devam et') : t('Misafir olarak oyna')
+      const gw = document.getElementById('gguest-wrap'); if (gw) gw.style.display = hideGuestBtn ? 'none' : 'block'
+      if (headline) { const sub = document.querySelector('#authgate .agsub'); if (sub) (sub as HTMLElement).textContent = headline }
+      gate.style.display = 'flex'
+      gate.classList.add('solid')
+      guestPaused = true
+    }
+    showAuthGate = openGate
+    openGate() // başta HEP göster
+    gGuestBtn.addEventListener('click', () => {
       guestPaused = false
       gate.style.display = 'none'
       gate.classList.remove('solid')
-    }
-    // MİSAFİR modu: modül BURADA DURMAZ — oyun ardında hazır, "Misafir olarak oyna"ya basınca oynanır
+      maybeGuestGate() // gün-eşiği zaten dolduysa (yenileyip dönen misafir) gate ANINDA geri açılır (kayıt zorunlu)
+    })
+    // Oyun-içi "Şimdi Kayıt Ol" CTA (yalnız misafirken görünür) → gate'i yeniden açar
+    const cta = document.getElementById('guestcta') as HTMLButtonElement
+    cta.style.display = 'inline-flex'
+    cta.addEventListener('click', () => openGate())
+    // MİSAFİR modu: modül BURADA DURMAZ — oyun ardında hazır, butona basınca oynanır
   }
 }
 
@@ -248,8 +263,10 @@ function resize() {
   camera.right = VIEW * aspect / 2
   camera.top = VIEW / 2
   camera.bottom = -VIEW / 2
-  camera.near = 0.1
-  camera.far = 400 // zoom-out artınca (min 0.42) + uzun yol/geniş zemin kırpılmasın
+  // Ortho'da near NEGATİF olabilir: zoom-out'ta ekran-altına düşen zemin kamera düzleminin
+  // "arkasında" kalır (t<0) — near=0.1 onu kırpıp gök rengini gösteriyordu (alt-mavi bug'ı).
+  camera.near = -200
+  camera.far = 400 // zoom-out artınca + uzun yol/geniş zemin kırpılmasın
   camera.updateProjectionMatrix()
 }
 window.addEventListener('resize', resize)
@@ -2156,15 +2173,10 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
     showCloudBlockOverlay()
   }
 } else if (!isFullMode && !isPromoMode && !auth.loggedIn()) {
-  // MİSAFİR: hesap yok → yerel misafir kaydını yükle (varsa), yoksa sıfırdan başla
+  // MİSAFİR: hesap yok → yerel misafir kaydını yükle (varsa). Oyun yine de gate ardında
+  // DONUK bekler (guestPaused) — "Misafir olarak devam et"e basınca buradan sürer.
   const g = auth.loadGuest()
   if (g) { applySaveData(g as Record<string, unknown>); saveLoaded = true }
-  // Oyun-içi "Şimdi Kayıt Ol" CTA: her an login/register gate'ini açabilir (kaydolmaya teşvik).
-  const cta = document.getElementById('guestcta') as HTMLButtonElement | null
-  if (cta) {
-    cta.style.display = 'inline-flex'
-    cta.onclick = () => { guestPaused = true; showAuthGate() }
-  }
 }
 if (cloudBlocked) await new Promise(() => {}) // oyun motoru burada durur, hiç kayıt gitmez
 // e-posta doğrulama kapısı: doğrulanmadan oyuna devam edilemez
