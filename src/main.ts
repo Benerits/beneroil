@@ -2353,6 +2353,18 @@ function refreshOnline() {
 refreshOnline()
 setInterval(refreshOnline, 60_000)
 
+// MİSAFİR canlı nabız: hesapsız oyuncu 60 sn'de bir varlık pingi atar → admin panelde
+// "şu an kaç misafir oynuyor" görünür (WS token istediğinden misafir orada sayılamıyor)
+function guestPing() {
+  if (isPromoMode || auth.loggedIn()) return
+  fetch('/api/guest-ping', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sid: auth.sessionId() }),
+  }).catch(() => {})
+}
+guestPing()
+setInterval(guestPing, 60_000)
+
 // ---- Zorunlu giriş kapısı: hesap yoksa oyun oynanmaz ----
 async function doLogin(email: string, pass: string) {
   await auth.login(email, pass)

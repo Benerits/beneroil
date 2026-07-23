@@ -419,6 +419,15 @@ async function handleApi(req, res, url) {
   }
   try {
     if (url === '/api/healthz') return json(res, 200, { ok: true })
+    // MİSAFİR canlı varlık: hesapsız oyuncu 60 sn'de bir ping atar (sid = oturum uuid).
+    // WS token istediğinden misafirler orada görünmez — bu hafif nabız anlık misafir sayısını verir.
+    if (url === '/api/guest-ping' && req.method === 'POST') {
+      if (!rateLimit('gping:' + clientIp(req), 5, 60_000)) return json(res, 200, { ok: true })
+      const gb = await readBody(req).catch(() => ({}))
+      const sid = String(gb.sid || '').slice(0, 64)
+      if (sid) guestSeen.set(sid, Date.now())
+      return json(res, 200, { ok: true })
+    }
     if (url === '/api/stats' && req.method === 'GET') {
       const now = Date.now()
       if (!statsCache.data || now - statsCache.at > 30_000) {
@@ -1045,6 +1054,7 @@ async function handleVs(req, res, url) {
           { event: 'AKTIF · son 1 saat', count: Number(a.active1h) },
           { event: 'AKTIF · son 24 saat', count: Number(a.active1d) },
           { event: 'ZIYARET · son 24 saat', count: Number(v.v24) },
+          { event: 'MISAFIR · su an oynuyor', count: guestOnlineCount() },
           { event: 'MISAFIR · yeni son 24 saat', count: Number(v.g24) },
           { event: 'MISAFIR · toplam', count: Number(ga.g) },
           { event: 'MISAFIR→KAYIT · son 24 saat', count: Number(v.gs24) },
@@ -1128,7 +1138,7 @@ async function handleVs(req, res, url) {
       })) })
     }
     if (url === '/vs/v1/live-status' && req.method === 'GET') {
-      return json(res, 200, { data: { onlineSockets: liveOnlineCount() } })
+      return json(res, 200, { data: { onlineSockets: liveOnlineCount(), guestsOnline: guestOnlineCount() } })
     }
     if (url === '/vs/v1/health' && req.method === 'GET') {
       return json(res, 200, {
@@ -1220,6 +1230,14 @@ function broadcastAll(msg) {
   return n
 }
 function liveOnlineCount() { return liveSockets.size }
+// misafir nabız haritası: sid → son görülme; 2.5 dk sessiz kalan düşer
+const guestSeen = new Map()
+function guestOnlineCount() {
+  const cut = Date.now() - 150_000
+  let n = 0
+  for (const [k, ts] of guestSeen) { if (ts < cut) guestSeen.delete(k); else n++ }
+  return n
+}
 
 server.on('upgrade', async (req, socket, head) => {
   try {
