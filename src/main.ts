@@ -2159,6 +2159,12 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   // MİSAFİR: hesap yok → yerel misafir kaydını yükle (varsa), yoksa sıfırdan başla
   const g = auth.loadGuest()
   if (g) { applySaveData(g as Record<string, unknown>); saveLoaded = true }
+  // Oyun-içi "Şimdi Kayıt Ol" CTA: her an login/register gate'ini açabilir (kaydolmaya teşvik).
+  const cta = document.getElementById('guestcta') as HTMLButtonElement | null
+  if (cta) {
+    cta.style.display = 'inline-flex'
+    cta.onclick = () => { guestPaused = true; showAuthGate() }
+  }
 }
 if (cloudBlocked) await new Promise(() => {}) // oyun motoru burada durur, hiç kayıt gitmez
 // e-posta doğrulama kapısı: doğrulanmadan oyuna devam edilemez

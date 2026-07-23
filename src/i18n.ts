@@ -39,6 +39,7 @@ const EN: Record<string, string> = {
   'Google ile devam et': 'Continue with Google',
   'Giriş başarısız.': 'Sign-in failed.',
   'Misafir olarak oyna': 'Play as guest',
+  'Şimdi Kayıt Ol': 'Sign Up Now',
   'Hemen dene — kaydını tutmak için sonra kaydolabilirsin.': 'Jump right in — sign up later to keep your progress.',
   // --- Alt navbar + Ofis paneli ---
   'Ofis': 'Office',
