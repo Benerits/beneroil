@@ -58,6 +58,7 @@ async function initDb() {
     hour timestamptz PRIMARY KEY, visits int NOT NULL DEFAULT 0,
     signups int NOT NULL DEFAULT 0, logins int NOT NULL DEFAULT 0
   )`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS guests int NOT NULL DEFAULT 0`)
   await pool.query(`CREATE TABLE IF NOT EXISTS beneloil_notification (
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
@@ -433,7 +434,10 @@ async function handleApi(req, res, url) {
       // yeni MİSAFİR (client ilk kez oynamaya başladı, localStorage'da dedup'lı) → ekibe ayrı push.
       // IP başına saatte 1 ile spam engellenir (kötü niyetli çağrı da bunu aşamaz).
       const vb = await readBody(req).catch(() => ({}))
-      if (vb && vb.guest === true && rateLimit('guestnotif:' + clientIp(req), 1, 3600_000)) pushSignupNotif('guest')
+      if (vb && vb.guest === true && rateLimit('guestnotif:' + clientIp(req), 1, 3600_000)) {
+        bumpStat('guests') // misafir istatistiği: saatlik sayaç (admin engagement'ta görünür)
+        pushSignupNotif('guest')
+      }
       return json(res, 200, { ok: true })
     }
     if (url === '/api/config') {
@@ -980,7 +984,7 @@ async function handleVs(req, res, url) {
       return json(res, 200, { data: { id: String(x.id), durum: x.status === 'resolved' ? 'Çözüldü' : x.status === 'wontfix' ? 'Kapatıldı' : 'Açık', cozumNotu: x.resolved_note || '' } })
     }
     if (url === '/vs/v1/hourly-chart' && req.method === 'GET') {
-      const metric = ['visits', 'signups', 'logins'].includes(u.searchParams.get('y')) ? u.searchParams.get('y') : 'visits'
+      const metric = ['visits', 'signups', 'logins', 'guests'].includes(u.searchParams.get('y')) ? u.searchParams.get('y') : 'visits'
       const rows = await pool.query(`
         SELECT to_char(hour, 'HH24:00') AS x, ${metric}::int AS y
         FROM benzinlik_stat_hourly WHERE hour > now() - interval '24 hours' ORDER BY hour`)
@@ -988,7 +992,7 @@ async function handleVs(req, res, url) {
     }
     if (url === '/vs/v1/stats-hourly' && req.method === 'GET') {
       const rows = await pool.query(`
-        SELECT to_char(hour, 'HH24:00') AS label, visits, signups, logins
+        SELECT to_char(hour, 'HH24:00') AS label, visits, signups, logins, guests
         FROM benzinlik_stat_hourly WHERE hour > now() - interval '24 hours' ORDER BY hour`)
       return json(res, 200, { data: rows.rows })
     }
@@ -1018,10 +1022,13 @@ async function handleVs(req, res, url) {
         FROM benzinlik_player`)
       const fb = await pool.query("SELECT count(*)::int AS n, count(*) FILTER (WHERE status='open')::int AS acik FROM benzinlik_feedback")
       const vis = await pool.query(`SELECT
-        coalesce(sum(visits),0)::int AS v24, coalesce(sum(signups),0)::int AS s24, coalesce(sum(logins),0)::int AS l24
+        coalesce(sum(visits),0)::int AS v24, coalesce(sum(signups),0)::int AS s24, coalesce(sum(logins),0)::int AS l24,
+        coalesce(sum(guests),0)::int AS g24
         FROM benzinlik_stat_hourly WHERE hour > now() - interval '24 hours'`)
+      const gAll = await pool.query(`SELECT coalesce(sum(guests),0)::int AS n FROM benzinlik_stat_hourly`)
       const a = agg.rows[0]; const v = vis.rows[0]
       const conv = v.v24 > 0 ? Math.round((v.s24 / v.v24) * 100) : 0
+      const guestConv = v.g24 > 0 ? Math.round((v.s24 / v.g24) * 100) : 0 // misafir→kayıt dönüşümü (24s)
       const pct = n => (a.total > 0 ? Math.round((n / a.total) * 100) : 0)
       return json(res, 200, {
         window: '30d',
@@ -1032,9 +1039,12 @@ async function handleVs(req, res, url) {
           { event: 'AKTIF · son 1 saat', count: Number(a.active1h) },
           { event: 'AKTIF · son 24 saat', count: Number(a.active1d) },
           { event: 'ZIYARET · son 24 saat', count: Number(v.v24) },
+          { event: 'MISAFIR · yeni son 24 saat', count: Number(v.g24) },
+          { event: 'MISAFIR · toplam', count: Number(gAll.rows[0].n) },
           { event: 'KAYIT · son 24 saat', count: Number(v.s24) },
           { event: 'GIRIS · son 24 saat', count: Number(v.l24) },
           { event: 'DONUSUM · ziyaret→kayit %', count: conv },
+          { event: 'DONUSUM · misafir→kayit %', count: guestConv },
           { event: 'YENI OYUNCU · son 24 saat', count: Number(a.new1d) },
           { event: 'ACIK sorun bildirimi', count: fb.rows[0].acik },
           { event: 'toplam_musteri_servisi', count: Number(a.served) },
