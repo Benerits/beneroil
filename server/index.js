@@ -59,6 +59,7 @@ async function initDb() {
     signups int NOT NULL DEFAULT 0, logins int NOT NULL DEFAULT 0
   )`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS guests int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS guest_signups int NOT NULL DEFAULT 0`)
   await pool.query(`CREATE TABLE IF NOT EXISTS beneloil_notification (
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
@@ -478,6 +479,7 @@ async function handleApi(req, res, url) {
       })
       if (!ins.rowCount) { rateRefund(regKey); return json(res, 409, { error: 'Bu e-posta zaten kayıtlı — giriş yap.' }) }
       bumpStat('signups')
+      if (regBody.guest === true) bumpStat('guest_signups') // misafir→kayıt DÖNÜŞÜMÜ (client: yerel misafir verisi vardı)
       pushSignupNotif() // fire-and-forget: ekibe "+1 oyuncu" push (asla signup'ı etkilemez)
       const vtok = randToken()
       await pool.query('UPDATE benzinlik_player SET verify_token=$2, signup_ip=$3, last_ip=$3 WHERE email=$1', [e, vtok, clientIp(req)]).catch(() => {})
@@ -518,6 +520,7 @@ async function handleApi(req, res, url) {
       if (p.email && p.email_verified === false) return json(res, 401, { error: 'Google e-postası doğrulanmamış.' })
       const row = await oauthUpsertPlayer('google', String(p.sub), p.email)
       if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      if (body.guest === true) bumpStat('guest_signups') // misafir Google'la hesaba geçti → dönüşüm
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [row.email, clientIp(req)])
       bumpStat('logins')
       return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
@@ -539,6 +542,7 @@ async function handleApi(req, res, url) {
       const email = p.email || (body.email && /^\S+@\S+\.\S+$/.test(body.email) ? body.email : null)
       const row = await oauthUpsertPlayer('apple', String(p.sub), email)
       if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      if (body.guest === true) bumpStat('guest_signups') // misafir Apple'la hesaba geçti → dönüşüm
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [row.email, clientIp(req)])
       bumpStat('logins')
       return json(res, 200, { token: sign(row.email), email: row.email, emailVerified: true, verifyRequired: false })
@@ -1023,13 +1027,14 @@ async function handleVs(req, res, url) {
       const fb = await pool.query("SELECT count(*)::int AS n, count(*) FILTER (WHERE status='open')::int AS acik FROM benzinlik_feedback")
       const vis = await pool.query(`SELECT
         coalesce(sum(visits),0)::int AS v24, coalesce(sum(signups),0)::int AS s24, coalesce(sum(logins),0)::int AS l24,
-        coalesce(sum(guests),0)::int AS g24
+        coalesce(sum(guests),0)::int AS g24, coalesce(sum(guest_signups),0)::int AS gs24
         FROM benzinlik_stat_hourly WHERE hour > now() - interval '24 hours'`)
-      const gAll = await pool.query(`SELECT coalesce(sum(guests),0)::int AS n FROM benzinlik_stat_hourly`)
-      const a = agg.rows[0]; const v = vis.rows[0]
+      const gAll = await pool.query(`SELECT coalesce(sum(guests),0)::int AS g, coalesce(sum(guest_signups),0)::int AS gs FROM benzinlik_stat_hourly`)
+      const a = agg.rows[0]; const v = vis.rows[0]; const ga = gAll.rows[0]
       const conv = v.v24 > 0 ? Math.round((v.s24 / v.v24) * 100) : 0
-      // misafir→kayıt dönüşümü (24s) — sayaç yeni başladığından kayıt>misafir olabilir; %100'de kırp
-      const guestConv = v.g24 > 0 ? Math.min(100, Math.round((v.s24 / v.g24) * 100)) : 0
+      // misafir→kayıt dönüşümü: GERÇEK dönüşüm olayı sayılır (kayıt anında client'ta misafir verisi
+      // vardıysa guest_signups artar). Oran = dönüşen misafir / toplam misafir (tüm zamanlar, hizalı).
+      const guestConv = ga.g > 0 ? Math.min(100, Math.round((ga.gs / ga.g) * 100)) : 0
       const pct = n => (a.total > 0 ? Math.round((n / a.total) * 100) : 0)
       return json(res, 200, {
         window: '30d',
@@ -1041,7 +1046,9 @@ async function handleVs(req, res, url) {
           { event: 'AKTIF · son 24 saat', count: Number(a.active1d) },
           { event: 'ZIYARET · son 24 saat', count: Number(v.v24) },
           { event: 'MISAFIR · yeni son 24 saat', count: Number(v.g24) },
-          { event: 'MISAFIR · toplam', count: Number(gAll.rows[0].n) },
+          { event: 'MISAFIR · toplam', count: Number(ga.g) },
+          { event: 'MISAFIR→KAYIT · son 24 saat', count: Number(v.gs24) },
+          { event: 'MISAFIR→KAYIT · toplam', count: Number(ga.gs) },
           { event: 'KAYIT · son 24 saat', count: Number(v.s24) },
           { event: 'GIRIS · son 24 saat', count: Number(v.l24) },
           { event: 'DONUSUM · ziyaret→kayit %', count: conv },
