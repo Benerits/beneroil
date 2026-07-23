@@ -44,6 +44,8 @@ const EN: Record<string, string> = {
     'You reached Day {0}! Sign up (or continue with Google/Apple) to keep playing and SAVE your progress — without an account it stays on this device and can be lost.',
   'Şimdi Kayıt Ol': 'Sign Up Now',
   'Hemen dene — kaydını tutmak için sonra kaydolabilirsin.': 'Jump right in — sign up later to keep your progress.',
+  'Varsayılan sipariş tankı FULL doldurur — −/+ ile azaltıp artırabilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.':
+    'Default order fills the tank FULL — adjust with −/+. Each fuel gets its own tanker.',
   // --- Alt navbar + Ofis paneli ---
   'Ofis': 'Office',
   'Yol Har.': 'Roadmap',
