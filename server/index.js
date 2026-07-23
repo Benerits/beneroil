@@ -757,6 +757,8 @@ function vsAuth(req, res) {
 
 function userRow(r) {
   const st = r.save?.s ?? {}
+  // kayıt kaynağı: google_id/apple_id doluysa sosyal giriş, yoksa e-posta+şifre
+  const provider = r.google_id ? 'google' : r.apple_id ? 'apple' : 'password'
   return {
     id: String(r.id),
     email: r.email,
@@ -764,8 +766,8 @@ function userRow(r) {
     avatarUrl: null,
     country: null,
     plan: 'free',
-    source: null,
-    authProvider: 'password',
+    source: r.google_id ? 'gmail' : r.apple_id ? 'apple' : 'email',
+    authProvider: provider,
     github: null,
     signedUpAt: r.created_at,
     lastSeenAt: r.last_seen_at ?? null,
@@ -818,7 +820,7 @@ async function handleVs(req, res, url) {
       const sort = u.searchParams.get('sort') || 'signed_up_desc'
       const order = sort === 'last_seen_desc' ? 'last_seen_at DESC NULLS LAST' : 'created_at DESC'
       const rows = await pool.query(`
-        SELECT id, email, save, created_at, last_seen_at, sessions, banned_at
+        SELECT id, email, save, created_at, last_seen_at, sessions, banned_at, google_id, apple_id
         FROM benzinlik_player
         WHERE ($1 = '' OR lower(email) LIKE '%' || $1 || '%' OR lower(coalesce(save->'s'->>'stationName','')) LIKE '%' || $1 || '%')
         ORDER BY ${order} OFFSET $2 LIMIT $3`, [search, cursor, limit + 1])
@@ -829,13 +831,14 @@ async function handleVs(req, res, url) {
     const m = url.match(/^\/vs\/v1\/users\/(\d+)(?:\/(ban|unban|balance|detail|restore|rawsave|live|verify-email))?$/)
     if (m) {
       const id = Number(m[1])
-      const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at, ban_reason, signup_ip, last_ip FROM benzinlik_player WHERE id=$1', [id])
+      const found = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at, ban_reason, signup_ip, last_ip, google_id, apple_id FROM benzinlik_player WHERE id=$1', [id])
       if (found.rowCount === 0) return json(res, 404, { error: { code: 'not_found', message: 'Kullanıcı yok.' } })
       if (m[2] === 'detail' && req.method === 'GET') {
         // record bloğu için {data:{...}} — şemaya uygun kullanıcı detayı
         const r = found.rows[0]; const st = r.save?.s ?? {}
         return json(res, 200, { data: {
           email: r.email,
+          source: r.google_id ? 'Gmail (Google ile giriş)' : r.apple_id ? 'Apple ile giriş' : 'E-posta + şifre',
           station: st.stationName || '—',
           balance: Math.round(Number(st.money) || 0),
           day: st.day ?? 1,
