@@ -171,7 +171,7 @@ let showAuthGate: (headline?: string) => void = () => {}
           } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
         }
         any = true
-      } else if (cfg.appleServicesId) {
+      } else if (false && cfg.appleServicesId) { // web'de Apple gizli — sadece iOS native
         try {
           await loadScript('https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js')
           const AppleID = (window as unknown as { AppleID: any }).AppleID
@@ -188,7 +188,7 @@ let showAuthGate: (headline?: string) => void = () => {}
     }
     setupOAuth()
 
-    await new Promise(() => {}) // giriş yapılana dek modül burada durur
+    // MİSAFİR modu: modül BURADA DURMAZ — oyun hesapsız çalışır, gün-5 gate'i guestPaused ile freeze eder
   }
 }
 
@@ -245,7 +245,7 @@ window.addEventListener('resize', resize)
 window.addEventListener('wheel', e => {
   // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
   if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar')) return
-  camera.zoom = Math.min(2.6, Math.max(0.55, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
+  camera.zoom = Math.min(2.6, Math.max(0.62, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
 
@@ -262,7 +262,7 @@ window.addEventListener('touchmove', e => {
     e.preventDefault()
     const d = touchDist(e.touches)
     if (pinchStartDist > 0) {
-      camera.zoom = Math.min(2.6, Math.max(0.55, pinchStartZoom * (d / pinchStartDist)))
+      camera.zoom = Math.min(2.6, Math.max(0.62, pinchStartZoom * (d / pinchStartDist)))
       camera.updateProjectionMatrix()
     }
   }
