@@ -151,7 +151,23 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
           await loadScript('https://accounts.google.com/gsi/client')
           const g = (window as unknown as { google: any }).google
           g.accounts.id.initialize({ client_id: cfg.googleClientId, callback: (resp: { credential: string }) => oauthSubmit('google', resp.credential) })
-          g.accounts.id.renderButton(document.getElementById('gbtn-google'), { theme: 'outline', size: 'large', width: 300, text: 'continue_with', shape: 'pill' })
+          // Oyunun tasarım dilinde özel buton; GERÇEK GIS butonu üstünde görünmez katman
+          // (tıklama ona düşer — GIS'in kendi stilleri kısıtlı olduğundan standart overlay tekniği)
+          const gc = document.getElementById('gbtn-google') as HTMLDivElement
+          gc.style.cssText = 'position:relative; overflow:hidden; border-radius:var(--r-md)'
+          gc.innerHTML = `
+            <button type="button" style="width:100%; padding:10px 14px; border-radius:var(--r-md);
+              border:1.5px solid var(--edge); border-bottom:3px solid var(--edge); background:#fff; color:var(--ink);
+              font-family:'Baloo 2',sans-serif; font-weight:800; font-size:14px; cursor:pointer;
+              display:flex; align-items:center; justify-content:center; gap:8px">
+              <svg width="17" height="17" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C41 35.4 44 30.2 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+              <span>${t('Google ile devam et')}</span>
+            </button>
+            <div id="gis-real" style="position:absolute; inset:-4px; opacity:0.001; display:flex; justify-content:center; align-items:stretch"></div>`
+          g.accounts.id.renderButton(document.getElementById('gis-real'), {
+            theme: 'outline', size: 'large', text: 'continue_with', shape: 'rect',
+            width: Math.min(400, Math.max(220, gc.clientWidth || 320)),
+          })
           any = true
         } catch { /* GIS yüklenemedi */ }
       }
