@@ -40,6 +40,8 @@ const EN: Record<string, string> = {
   'Giriş başarısız.': 'Sign-in failed.',
   'Misafir olarak oyna': 'Play as guest',
   'Misafir olarak devam et': 'Continue as guest',
+  'Gün {0}’e ulaştın! Devam etmek ve ilerlemeni KAYDETMEK için kaydol ya da Google/Apple ile giriş yap — kaydolmazsan ilerleme cihazda kalır, kaybolabilir.':
+    'You reached Day {0}! Sign up (or continue with Google/Apple) to keep playing and SAVE your progress — without an account it stays on this device and can be lost.',
   'Şimdi Kayıt Ol': 'Sign Up Now',
   'Hemen dene — kaydını tutmak için sonra kaydolabilirsin.': 'Jump right in — sign up later to keep your progress.',
   // --- Alt navbar + Ofis paneli ---
