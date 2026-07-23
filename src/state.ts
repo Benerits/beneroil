@@ -410,9 +410,15 @@ export class GameState {
   }
 
   /** Sipariş miktar çarpanı (× 800L parti). 1 = minimum (en düşük tank hacmi); + ile full'e kadar step. */
-  orderQty: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
+  // Varsayılan 999 = "FULL doldur" (orderNeed zaten boşlukla min'ler). Yüksek kapasiteli
+  // tanklar (5000L×4=20.000L) tek siparişte dolar — eski 1 varsayılanı siparişi 800L'ye
+  // kilitliyordu (−/+ butonları da HTML'de yoktu), büyük tank sahipleri dolduramıyordu.
+  orderQty: Record<FuelType, number> = { benzin: 999, dizel: 999, lpg: 999 }
   orderMaxQty(f: FuelType) { return Math.max(1, Math.ceil((this.fuelCapacity(f) - this.tanks[f]) / TANK_CAPACITY[0])) }
-  adjustOrderQty(f: FuelType, d: number) { this.orderQty[f] = Math.min(this.orderMaxQty(f), Math.max(1, this.orderQty[f] + d)) }
+  adjustOrderQty(f: FuelType, d: number) {
+    const cur = Math.min(this.orderQty[f], this.orderMaxQty(f)) // 999 sentinelini önce gerçek maks'a indir (ilk − tıklaması ölü olmasın)
+    this.orderQty[f] = Math.min(this.orderMaxQty(f), Math.max(1, cur + d))
+  }
   /** Sipariş miktarı = çarpan × 800L, kalan boşlukla capli. Min 800L (level-1 hacmi), full'e kadar step'lenebilir. */
   orderNeed(f: FuelType) { return Math.floor(Math.min(this.orderQty[f] * TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f])) }
   orderCost(f: FuelType) {
