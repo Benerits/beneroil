@@ -2345,7 +2345,9 @@ async function doRegister(email: string, pass: string) {
   location.reload()
 }
 
-document.getElementById('authgate')?.remove()
+// authgate yalnız HESAPLIYKEN kaldırılır — misafirde DOM'da KALIR (başta görünür + 'Şimdi Kayıt Ol' yeniden açar).
+// (Eski halt akışından kalma koşulsuz remove(), misafirin gate'ini siliyordu → otomatik-giriş bug'ı.)
+if (auth.loggedIn()) document.getElementById('authgate')?.remove()
 {
 
   // ---- Günlük giriş bonusu + seri + görev sıfırlama ----
