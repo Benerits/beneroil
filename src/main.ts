@@ -191,10 +191,21 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
         aBtn.onclick = async () => {
           try {
             const P = cap.Plugins!
-            if (P.SocialLogin) { await initSocial(P); const r = await P.SocialLogin.login({ provider: 'apple', options: { scopes: ['email', 'name'] } }); await oauthSubmit('apple', r?.result?.idToken ?? r?.identityToken) }
+            if (P.SocialLogin) {
+              await initSocial(P)
+              const r: any = await P.SocialLogin.login({ provider: 'apple', options: { scopes: ['email', 'name'] } })
+              const tok = r?.result?.idToken ?? r?.result?.identityToken ?? r?.idToken ?? r?.identityToken
+              if (!tok) throw new Error('no-token')
+              await oauthSubmit('apple', tok)
+            }
             else if (P.SignInWithApple) { const r = await P.SignInWithApple.authorize({ scopes: 'email name' }); await oauthSubmit('apple', r?.response?.identityToken) }
             else gErr.textContent = 'Apple plugin bulunamadı.'
-          } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
+          } catch (e) {
+            // İPTAL sessizdir (kullanıcı sheet'i kapattı — iOS'un ham 1001 metni ekrana BASILMAZ);
+            // gerçek hatalarda TR mesaj.
+            const m = String((e as Error)?.message || '')
+            if (!/cancel|canceled|cancelled|1001|iptal/i.test(m)) gErr.textContent = t('Giriş başarısız.')
+          }
         }
         any = true
       } else if (false && cfg.appleServicesId) { // web'de Apple gizli — sadece iOS native
