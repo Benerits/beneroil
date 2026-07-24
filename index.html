@@ -507,7 +507,7 @@
     .trow .ic { color: var(--orange); }
 
     /* ---------- Toast ---------- */
-    #toasts { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 40;
+    #toasts { position: fixed; top: calc(84px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 40;
               display: flex; flex-direction: column; gap: 7px; align-items: center; pointer-events: none; }
     /* toast = oyunun kart dili: krem + border-bottom "basılı kart" derinliği (jenerik değil) */
     .toast { background: var(--paper); color: var(--ink);

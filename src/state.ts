@@ -443,14 +443,18 @@ export class GameState {
 
   placeOrder(f: FuelType) {
     if (!this.canOrder(f)) return false
+    // KRİTİK: need/cost parayı düşmeden ÖNCE ve BİR KEZ hesaplanır. (Bug: para düştükten
+    // sonra orderNeed yeniden çağrılıyordu → bütçe-fit cap yüzünden amount ~0'a iniyordu;
+    // 'param gitti ama yakıt gelmedi' şikayetinin kökü.)
+    const need = this.orderNeed(f)
     const cost = this.orderCost(f)
     this.money -= cost
     this.fuelSpent += cost // muhasebe
-    this.fuelLog.push({ day: this.day, f, liters: this.orderNeed(f), cost })
+    this.fuelLog.push({ day: this.day, f, liters: need, cost })
     if (this.fuelLog.length > 40) this.fuelLog.shift()
     this.orders[f].pending = true
     this.orders[f].eta = ORDER_ETA
-    this.orders[f].amount = this.orderNeed(f) // teslimatta bu kadar eklenecek (parti miktarı)
+    this.orders[f].amount = need // teslimatta bu kadar eklenecek (parti miktarı)
     return true
   }
 
