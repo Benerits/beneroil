@@ -266,11 +266,14 @@ const clamp = (v, lo, hi, dflt = lo) => (typeof v === 'number' && isFinite(v) ? 
 // ---- Anti-cheat: bina/ilerleme değeri (state.ts maliyet tablolarıyla birebir) ----
 // Bina para maliyeti olduğundan "servet = para + bina değeri" birleşik hız-tavanı,
 // hem para hem bina/seviye enjeksiyonunu tek seferde kapatır (satın alma servet-nötr).
+// UYARI: bu tablolar state.ts (PUMP_COSTS / EV_COSTS ...) ile BİREBİR kalmalı. Endgame
+// güncellemesinde istemci pompa 8→14, EV 8→12 oldu ama sunucu 8'de kalınca oyuncunun
+// 9+ pompası/şarjı her save'de geri kırpılıyordu (parası gidiyor, ünite kayboluyordu).
 const COST = {
-  pump: [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000],
+  pump: [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000, 40000, 50000, 62000, 76000, 92000, 110000],
   sign: [1500, 4000, 9000], tank: [3000, 7000, 15000], tankAdd: [0, 6000, 12000, 20000],
   market: [7000, 12000, 20000], toilet: [2500, 5000], grid: [8000, 15000],
-  battery: [5000, 9000, 16000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000],
+  battery: [5000, 9000, 16000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000],
 }
 const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000 }
 const sumUpto = (arr, k) => { let t = 0; const n = Math.max(0, Math.min(arr.length, Math.floor(k) || 0)); for (let i = 0; i < n; i++) t += arr[i]; return t }
@@ -306,11 +309,11 @@ function sanitizeSave(save) {
   s.money = clamp(s.money, 0, 10_000_000_000, 5000) // ileri oyuncular 2M'yi aşabilir — sağlık tavanı yükseltildi
   s.reputation = clamp(s.reputation, 0, 5, 3)
   s.day = clamp(s.day, 1, 100000, 1)
-  s.pumps = clamp(s.pumps, 1, 8, 1)
+  s.pumps = clamp(s.pumps, 1, 14, 1) // state.ts MAX_PUMPS = 14
   for (const k of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount']) {
     if (k in s) s[k] = clamp(s[k], 0, 30, 0)
   }
-  s.evChargers = clamp(s.evChargers, 0, 8, 0)
+  s.evChargers = clamp(s.evChargers, 0, 12, 0) // state.ts EV_COSTS = 12 kademe
   s.signLevel = clamp(s.signLevel, 0, 3, 0)
   s.tankLevel = clamp(s.tankLevel, 0, 3, 0)
   s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
@@ -633,7 +636,10 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/save' && req.method === 'POST') {
       const email = auth(); if (!email) return
-      if (!rateLimit('save:' + email, 1, 3_000)) return json(res, 429, { error: 'rate' })
+      // 1/3sn çok sıkıydı: otomatik kayıttan hemen sonra gelen ÇIKIŞ kaydı (pagehide) 429 yiyip
+      // sessizce düşüyordu → oyuncu "kaydedip çıkamıyorum" diyor. 2/3sn hem abuse'a kapalı hem
+      // son durumu garantiler.
+      if (!rateLimit('save:' + email, 2, 3_000)) return json(res, 429, { error: 'rate' })
       const { save, baseUpdatedAt } = await readBody(req)
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
@@ -679,7 +685,19 @@ async function handleApi(req, res, url) {
         if (!firstSave) {
           const prevDay = Number(prevSave.s.day) || 1
           const newDay = Number(clean.s.day) || 1
-          if (prevDay >= 5 && newDay <= 2 && prevWealth > 50_000 && (money + bval) < prevWealth * 0.2) {
+          const newWealth = money + bval
+          const prevBval = buildingValue(prevSave.s)
+          // (1) TAZE BAŞLANGIÇ hiçbir ilerlemenin üstüne yazılamaz — eski eşik (gün>=5 VE
+          //     servet>50k) yeni/erken hesapları korumuyordu: gün-3 / 25k oyuncu gün-1'e
+          //     düşüyordu ("baştan başladım" şikâyetinin kökü).
+          const freshStart = newDay <= 2 && bval <= 0 && newWealth <= START_MONEY * 1.5
+          const hasProgress = prevDay > 1 || prevBval > 0 || prevWealth > START_MONEY
+          if (freshStart && hasProgress) {
+            return json(res, 409, { conflict: true, save: prevSave, updatedAt: prev.rows[0]?.updated_at || null })
+          }
+          // (2) GERİ GİDİŞ: gün geriye gidiyor ve servet yarıdan aza düşüyorsa bu eski/donuk
+          //     bir sekmenin state'idir (oyunda gün asla azalmaz) → clobber etme.
+          if (newDay < prevDay - 1 && newWealth < prevWealth * 0.5) {
             return json(res, 409, { conflict: true, save: prevSave, updatedAt: prev.rows[0]?.updated_at || null })
           }
         }

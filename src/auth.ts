@@ -129,7 +129,10 @@ export async function pushSave(save: unknown): Promise<{ conflict: boolean; kick
     _lastUpdatedAt = (data as { updatedAt?: string }).updatedAt ?? _lastUpdatedAt
     return { conflict: true, save: (data as { save?: unknown }).save, updatedAt: _lastUpdatedAt ?? undefined }
   }
-  if (res.ok) _lastUpdatedAt = (data as { updatedAt?: string }).updatedAt ?? _lastUpdatedAt
+  // 400/401/403/429/500 SESSİZCE yutulmamalı: çağıran "kaydedildi" sanıp misafir verisini
+  // silebiliyor / oyuncuya hiçbir uyarı gitmiyordu. Hata → istisna.
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Kayıt gönderilemedi (${res.status})`)
+  _lastUpdatedAt = (data as { updatedAt?: string }).updatedAt ?? _lastUpdatedAt
   return { conflict: false }
 }
 

@@ -1370,6 +1370,10 @@ let lastRemotePush = 0
 // Buluttan kayıt YÜKLENEMEDİYSE (ağ/sunucu hatası) hiçbir kayıt gönderilmez —
 // taze bir oturumun ilerlemiş bulut kaydını EZMESİNİ önler (override koruması).
 let cloudBlocked = false
+// Buluttan kayıt bu SAYFA oturumunda okundu mu? Okunmadıysa elimizdeki state hesabın
+// gerçek ilerlemesi DEĞİLDİR (ör. gate'te login olup reload bekleyen taze sayfa) →
+// hiçbir yazma yapılmaz. Bu bayrak olmadan pagehide/autosave hesabı gün-1'e düşürüyordu.
+let cloudSynced = false
 
 function savePayload() {
   return { s: serializeState(state), placedPos, placedRot, placedRects, at: Date.now() }
@@ -1379,14 +1383,20 @@ function savePayload() {
 let syncing = false
 let syncedConflict = false
 /** Save'i sunucuya yaz; başka cihaz daha yeni yazmışsa (409) en güncele senkronla. */
+let saveFails = 0
 async function syncSave() {
-  if (syncing || cloudBlocked || auth.isKicked() || !auth.loggedIn()) return
+  if (syncing || cloudBlocked || auth.isKicked() || !auth.loggedIn() || !cloudSynced) return
   syncing = true
   try {
     const r = await auth.pushSave(savePayload())
     if (r.kicked) { showKickedOverlay(); return }
     if (r.conflict && !syncedConflict) { syncedConflict = true; onRemoteNewer() }
-  } catch { /* ağ hatası: sessiz geç */ } finally { syncing = false }
+    saveFails = 0
+  } catch {
+    // Kayıt SESSİZCE düşmesin: üst üste başarısızlıkta oyuncuyu uyar (yoksa oyuncu
+    // kaydettiğini sanıp çıkıyor ve ilerlemesini kaybediyor).
+    if (++saveFails === 3) ui.toast(t('⚠️ Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!'), 'bad', true)
+  } finally { syncing = false }
 }
 // Tek-cihaz kilidi: başka cihaz oturumu devralınca burası duraklar (ilerleme güvende).
 function showKickedOverlay() {
@@ -2224,6 +2234,7 @@ let saveLoaded = false
 if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   try {
     const remote = await auth.pullSave()
+    cloudSynced = true // bulut durumu bu sayfada BİLİNİYOR → artık yazmak güvenli
     if (remote) {
       applySaveData(remote as Record<string, unknown>)
       saveLoaded = true
@@ -2254,14 +2265,23 @@ else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hay
 for (const key of Object.keys(localStorage)) {
   if (key.startsWith('benzinlik-save-v1')) localStorage.removeItem(key)
 }
-// sekme kapanırken son durumu buluta yaz
+// sekme kapanırken son durumu buluta yaz.
+// KRİTİK: bu istek de normal save ile AYNI korumaları taşımalı —
+//  • cloudSynced: bu sayfa bulut kaydını gerçekten yükledi mi? (gate'te login olup reload eden
+//    sayfa TAZE gün-1 state taşır; korumasız gönderirse hesabın kaydını siler)
+//  • x-session: tek-cihaz kilidi (kicked sekme yazamasın)
+//  • baseUpdatedAt: çoklu-cihaz 409 guard'ı (eski sekme yeniyi ezemesin)
 window.addEventListener('pagehide', () => {
-  if (isFullMode || !auth.loggedIn()) return
+  if (isFullMode || isPromoMode || cloudBlocked || auth.isKicked() || !auth.loggedIn() || !cloudSynced) return
   fetch('/api/save', {
     method: 'POST',
     keepalive: true,
-    headers: { 'content-type': 'application/json', 'x-auth': localStorage.getItem('benzinlik-token') ?? '' },
-    body: JSON.stringify({ save: savePayload() }),
+    headers: {
+      'content-type': 'application/json',
+      'x-auth': localStorage.getItem('benzinlik-token') ?? '',
+      'x-session': auth.sessionId(),
+    },
+    body: JSON.stringify({ save: savePayload(), baseUpdatedAt: auth.lastUpdatedAt() }),
   }).catch(() => {})
 })
 translateDom() // HUD + statik metinleri çevir
