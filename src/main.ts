@@ -1540,7 +1540,8 @@ function rebuildFromState() {
   const pvv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
   for (let i = 1; i < state.pumps; i++) {
     const sp = pvv(`pump-${i}`)
-    world.addPump(i, sp ? new THREE.Vector2(sp.x - 0.9, sp.y) : undefined)
+    // Kayıtlı açıyla kur (charger gibi) → far-flip + oyuncu açısı birlikte, reload'da yön korunur.
+    world.addPump(i, sp ? new THREE.Vector2(sp.x - 0.9, sp.y) : undefined, placedRot[`pump-${i}`] ?? 0)
   }
   for (let i = 0; i < state.evChargers; i++) {
     const sp = pvv(`charger-${i}`)
@@ -1594,11 +1595,13 @@ function rebuildFromState() {
   if (placedPos.gateout) { const g = pv('gateout'); if (g) { world.removeLampNear(g.y); world.buildGate('out', g) } }
   {
     const s0 = placedPos['pump-0']
-    if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]))
+    if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]), placedRot['pump-0'] ?? 0)
   }
   if (placedPos.tank) world.moveTank(new THREE.Vector2(placedPos.tank[0], placedPos.tank[1]))
-  // charger'lar yukarıda açılarıyla (slot dahil) kuruldu; burada atlanır.
-  for (const [id, rot] of Object.entries(placedRot)) if (!id.startsWith('charger-')) world.rotateBuilding(id, rot)
+  // charger + pump'lar yukarıda açılarıyla (far-flip dahil) kuruldu; burada ATLANIR
+  // (aksi halde generic rotateBuilding far-flip'i ezerdi → karşı üniteler ters bakardı).
+  for (const [id, rot] of Object.entries(placedRot))
+    if (!id.startsWith('charger-') && !id.startsWith('pump-')) world.rotateBuilding(id, rot)
   world.setClosed(state.closed)
 }
 
@@ -1915,7 +1918,7 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
   if (id.startsWith('pump-')) {
     const n = parseInt(id.slice(5))
     cars.evictSlot('fuel', n) // slottaki araç eski koordinatta asılı kalmasın
-    world.movePump(n, new THREE.Vector2(cx - 0.9, cy))
+    world.movePump(n, new THREE.Vector2(cx - 0.9, cy), placedRot[`pump-${n}`] ?? 0) // taşırken açıyı/far-flip'i koru
   }
   else if (id.startsWith('charger-')) {
     const n = parseInt(id.slice(8))
