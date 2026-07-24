@@ -24,14 +24,14 @@ export const SPILL_PENALTY_PER_L = 3
 export const WRONG_FUEL_PENALTY = 300
 
 export const TANK_CAPACITY = [800, 1500, 3000, 5000]
-export const MAX_PUMPS = 8
-export const MAX_EV = 8
+export const MAX_PUMPS = 14
+export const MAX_EV = 12
 export const BATTERY_CAP = [0, 100, 250, 600] // kWh
 export const EV_PRICE_PER_KWH = 8
 export const GRID_COST_PER_KWH = 3.5 // şebekeden çekilen her kWh faturalanır
 export const DIESEL_GEN_FUEL_PER_S = 0.25 // jeneratör çalışırken tanktaki mazot tüketimi (L/sn)
 
-const PUMP_COSTS = [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000]
+const PUMP_COSTS = [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000, 40000, 50000, 62000, 76000, 92000, 110000]
 const SIGN_COSTS = [1500, 4000, 9000]
 export const WIDEGATE_COST = 6000
 /** pompacı: pompa başına bir kerelik işe alma ücreti. Satışın TAMAMI kasaya girer;
@@ -49,7 +49,7 @@ const TOILET_COSTS = [2500, 5000]
 const LAND_COST = 6000
 const GRID_COSTS = [8000, 15000]
 const BATTERY_COSTS = [5000, 9000, 16000]
-const EV_COSTS = [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000]
+const EV_COSTS = [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000]
 const SOLAR_COST = 9000
 const DIESELGEN_COST = 4000
 const SMR_COST = 40000
@@ -394,7 +394,11 @@ export class GameState {
       sum += (this.prices[f] - FUEL_COST[f]) / baseMargin
     }
     const factor = sum / FUELS.length // 1 = varsayılan marj
-    return Math.min(1.3, Math.max(0.5, 1.3 - 0.3 * factor))
+    // ESNEKLİK (feedback: 'fiyatı tavana çektim müşteri aynı'): eski eğri tavanda talebi
+    // yalnız %6 düşürüyordu — hissedilmiyordu. Yeni: varsayılanda 1.0 (denge değişmez),
+    // tavan fiyatta ~%32 daha az müşteri, taban fiyatta %35 daha çok (ucuzcu istasyon stratejisi).
+    const demand = factor <= 1 ? 1 + 0.35 * (1 - factor) : 1 - 1.6 * (factor - 1)
+    return Math.min(1.35, Math.max(0.35, demand))
   }
 
   entryChance() {

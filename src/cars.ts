@@ -722,8 +722,8 @@ export class CarManager {
   cars: Car[] = []
   private nearTimer = 1
   private farTimer = 2.5
-  private pumpOcc: (Car | null)[] = Array(8).fill(null)
-  private evOcc: (Car | null)[] = Array(8).fill(null)
+  private pumpOcc: (Car | null)[] = Array(16).fill(null)
+  private evOcc: (Car | null)[] = Array(16).fill(null)
   private parkOcc: (Car | null)[] = []
   private waitOcc: (Car | null)[] = [null, null, null, null]
   private waitOccFar: (Car | null)[] = [null, null, null, null]
