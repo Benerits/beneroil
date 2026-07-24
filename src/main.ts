@@ -399,6 +399,11 @@ if (!isPromoMode) {
     appConfig = cfg
     // native → AdMob (config'te gerçek unit yoksa TEST reklamları); web → AdSense (adsClient varsa)
     initAds({ adsensePub: cfg.adsClient, admob: cfg.admob, test })
+    // iOS v1: RevenueCat kurulu değilse Mağaza TAMAMEN gizli — reviewer boş/bozuk IAP ekranı
+    // görmesin (2.1 riski). RC key env'e girince buton kendiliğinden geri gelir.
+    if (isNativePlatform() && !cfg.revenuecatIos) {
+      const b = document.getElementById('of-store'); if (b) (b as HTMLElement).style.display = 'none'
+    }
   }).catch(() => { initAds({ test }) })
 }
 let promoTick: ((dt: number) => void) | null = null
