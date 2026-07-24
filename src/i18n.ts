@@ -60,7 +60,7 @@ const EN: Record<string, string> = {
 
   // --- HUD ---
   'GÜN': 'DAY', 'KASA': 'CASH', 'BENZİN': 'PETROL', 'DİZEL': 'DIESEL', 'LPG': 'LPG',
-  'BATARYA': 'BATTERY', 'İTİBAR': 'RATING', 'GÜNLÜK GÖREV': 'DAILY QUEST', 'OYUNDA': 'ONLINE', 'SAAT': 'TIME', 'MÜŞTERİ PATLAMASI': 'CUSTOMER RUSH',
+  'BATARYA': 'BATTERY', 'İTİBAR': 'RATING', 'GÜNLÜK GÖREV': 'DAILY QUEST', 'OYUNDA': 'ONLINE', 'SAAT': 'TIME', 'MÜŞTERİ PATLAMASI': 'CUSTOMER RUSH', 'YAKIT İNDİRİMİ %50': '50% FUEL SALE',
   'Açık': 'Open', 'KAPALI': 'CLOSED', 'Yakıt Siparişi': 'Order Fuel', 'İnşaat': 'Build',
   'Düzenleme modu': 'Edit mode', 'Hesabım': 'My Account', 'Ayarlar': 'Settings', 'Sorun Bildir': 'Report Issue',
   'Sorun / Öneri Bildir': 'Report a Problem / Suggestion',

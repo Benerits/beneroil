@@ -3233,15 +3233,19 @@ function frame() {
     const str = `${String(Math.floor(hTot)).padStart(2, '0')}:${String(Math.floor((hTot % 1) * 60)).padStart(2, '0')}`
     if (str !== lastClockStr) { lastClockStr = str; const el = document.getElementById('hud-clock'); if (el) el.textContent = str }
   }
-  // ⚡ müşteri patlaması geri sayımı: rush promosu aktifken sağ üstte kalan saniye
+  // ⚡ promo geri sayımı (14 feedback'in isteği): müşteri patlaması VE yakıt indirimi —
+  // aktifken sağ üstte kalan saniye, kaybolmayan sabit rozet (oyuncu kampanyayı kaçırmaz).
   {
     const rt = document.getElementById('rushtimer') as HTMLDivElement | null
     if (rt) {
-      const rushLeft = state.promo?.type === 'rush' ? Math.max(0, Math.ceil((state.promo.until - Date.now()) / 1000)) : 0
-      if (rushLeft > 0) {
+      const left = state.promo ? Math.max(0, Math.ceil((state.promo.until - Date.now()) / 1000)) : 0
+      if (left > 0 && state.promo) {
         if (rt.style.display !== 'flex') rt.style.display = 'flex'
+        const lbl = document.getElementById('rushlabel')
+        const want = state.promo.type === 'rush' ? t('MÜŞTERİ PATLAMASI') : t('YAKIT İNDİRİMİ %50')
+        if (lbl && lbl.textContent !== want) lbl.textContent = want
         const sec = document.getElementById('rushsec')
-        if (sec && sec.textContent !== String(rushLeft)) sec.textContent = String(rushLeft)
+        if (sec && sec.textContent !== String(left)) sec.textContent = String(left)
       } else if (rt.style.display !== 'none') rt.style.display = 'none'
     }
   }
