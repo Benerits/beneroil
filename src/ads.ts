@@ -45,6 +45,10 @@ export function setPremium(v: boolean) { premium = v }
 export async function initAds(cfg: { adsensePub?: string; admob?: AdMobCfg; test?: boolean } = {}) {
   native = isNativePlatform()
   if (native) {
+    // 🔴 v1 App Store sürümü REKLAMSIZ (A6): AdMob başlatılmaz → GADApplicationIdentifier/ATT/
+    // SKAdNetwork plist'ten temizlenebilir, App Privacy beyanı sade kalır. Reklamlar v1.1'de
+    // gerçek AdMob ID'leriyle açılacak — açmak için bu satırı kaldırıp env'leri doldurmak yeter.
+    return
     const AdMob = capPlugin('AdMob')
     if (!AdMob) return // plugin kurulu değil (iOS repo'da @capacitor-community/admob gerekir) → sessiz no-op
     admob = AdMob

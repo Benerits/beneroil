@@ -1210,6 +1210,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (url === '/terms') url = '/terms.html'
   if (url === '/privacy') url = '/privacy.html'
+  if (url === '/support') url = '/support.html' // ASC Support URL (App Store şartı)
   // statik dosyalar + SPA fallback
   let file = path.join(DIST, path.normalize(url).replace(/^([.][.][/\\])+/, ''))
   if (!file.startsWith(DIST)) file = path.join(DIST, 'index.html')
