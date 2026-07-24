@@ -45,10 +45,6 @@ export function setPremium(v: boolean) { premium = v }
 export async function initAds(cfg: { adsensePub?: string; admob?: AdMobCfg; test?: boolean } = {}) {
   native = isNativePlatform()
   if (native) {
-    // 🔴 v1 App Store sürümü REKLAMSIZ (A6): AdMob başlatılmaz → GADApplicationIdentifier/ATT/
-    // SKAdNetwork plist'ten temizlenebilir, App Privacy beyanı sade kalır. Reklamlar v1.1'de
-    // gerçek AdMob ID'leriyle açılacak — açmak için bu satırı kaldırıp env'leri doldurmak yeter.
-    return
     const AdMob = capPlugin('AdMob')
     if (!AdMob) return // plugin kurulu değil (iOS repo'da @capacitor-community/admob gerekir) → sessiz no-op
     admob = AdMob
@@ -60,7 +56,9 @@ export async function initAds(cfg: { adsensePub?: string; admob?: AdMobCfg; test
       test: useTest,
     }
     try {
-      await admob.initialize({ initializeForTesting: useTest })
+      // ATT YOK (App Store sade yol): izin istemiyoruz, izlemiyoruz → reklamlar npa=1
+      // (non-personalized). App Privacy'de 'Tracking: No' kalır; NSUserTrackingUsageDescription gerekmez.
+      await admob.initialize({ initializeForTesting: useTest, requestTrackingAuthorization: false })
       await prepareInterstitial()
       await prepareRewarded()
     } catch { admob = null }
@@ -84,11 +82,11 @@ export async function initAds(cfg: { adsensePub?: string; admob?: AdMobCfg; test
 
 async function prepareInterstitial() {
   if (!admob || !admobCfg) return
-  try { await admob.prepareInterstitial({ adId: admobCfg.interstitial, isTesting: admobCfg.test }) } catch { /* yok say */ }
+  try { await admob.prepareInterstitial({ adId: admobCfg.interstitial, isTesting: admobCfg.test, npa: true }) } catch { /* yok say */ }
 }
 async function prepareRewarded() {
   if (!admob || !admobCfg) return
-  try { await admob.prepareRewardVideoAd({ adId: admobCfg.rewarded, isTesting: admobCfg.test }) } catch { /* yok say */ }
+  try { await admob.prepareRewardVideoAd({ adId: admobCfg.rewarded, isTesting: admobCfg.test, npa: true }) } catch { /* yok say */ }
 }
 
 // ---- Interstitial pacing policy (pure-ish; game-ads-pacing skill) ----
