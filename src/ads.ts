@@ -112,6 +112,10 @@ export function mayShowInterstitial(day: number, won: boolean): boolean {
 
 /** doğal mola (gün sonu) interstitial — policy'yi uygula, uygunsa göster */
 export function interstitial(name: string, opts: { day: number; won: boolean }, done?: () => void) {
+  // 📱 MOBİL POLİTİKA: native'de OTOMATİK interstitial ASLA gösterilmez — oyuncunun önüne
+  // aniden reklam çıkmaz. Mobilde tüm reklamlar OPT-IN'dir (rewarded fırsat teklifleri:
+  // 'reklam izle → müşteri patlaması / 2x kâr'). Web'de pacing'li interstitial sürer.
+  if (native) { done?.(); return }
   if (!mayShowInterstitial(opts.day, opts.won)) { done?.(); return }
   lastInterstitialAt = Date.now(); shownThisSession++
   if (native && admob) {
