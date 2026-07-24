@@ -35,10 +35,19 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
     const gPass = document.getElementById('gpass') as HTMLInputElement
     // kayıt/giriş/sosyal başarılı → varsa misafir ilerlemesini hesaba TAŞI, sonra yenile
     const afterAuth = async () => {
-      // REGISTER: misafir verisi hesaba taşınır (push başarılı/conflict → temizle; ağ hatasında SİLME).
-      // LOGIN (hesapta kayıt varsa): sunucu 409 conflict ile bulut kaydını korur → hesabından devam eder.
+      // Misafir verisini hesaba taşı — AMA hesabın KENDİ ilerlemesi varsa ASLA ezme.
+      // (Bug: giriş öncesi _lastUpdatedAt=null olduğundan push conflict'e takılmıyordu →
+      //  misafir Gün-1 save'i, hesabın Gün-186 bulut kaydını siliyordu.)
       const g = auth.loadGuest()
-      if (g) { try { await auth.pushSave(g); auth.clearGuest() } catch { /* ağ hatası: misafir verisi yerelde kalsın */ } }
+      if (g) {
+        try {
+          const acc = await auth.pullSave() as { s?: { day?: number }; placedRects?: unknown[] } | null
+          const accHasProgress = !!acc && ((acc.s?.day ?? 1) > 1 || (Array.isArray(acc.placedRects) && acc.placedRects.length > 0))
+          if (!accHasProgress) await auth.pushSave(g) // hesap boş/taze → misafir ilerlemesini taşı
+          // hesap doluysa: misafir verisi ATILIR, hesabın bulut kaydından devam
+          auth.clearGuest()
+        } catch { /* ağ hatası: misafir verisi yerelde kalsın, sonraki girişte tekrar denenir */ }
+      }
       location.reload()
     }
     const wire = (id: string, path: string) => {
