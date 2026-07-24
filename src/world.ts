@@ -579,11 +579,16 @@ export class World {
   /** kumbara rozetleri: id → tutar; tıklanınca toplanır */
   syncCash(list: Map<string, number>) {
     for (const b of this.buildings) {
-      const amt = list.get(b.id)
+      // Kumbara TÜR bazlı tek kasadır ('selfwash') ama kopya binalar 'selfwash#1' id'li —
+      // BASE id ile eşle: rozet TÜM ünitelerde görünür, HERHANGİ birine tıklamak ortak kasayı
+      // toplar. ('3 self yıkamadan 1'i para veriyor' şikayetinin fixi — para hep birikiyordu,
+      // sadece ilk ünitede gösteriliyordu.)
+      const base = b.id.split('#')[0]
+      const amt = list.get(base)
       const text = amt ? `₺${Math.round(amt)}` : null
       if (text && b.cashText !== text) {
         if (b.cash) b.group.remove(b.cash)
-        b.cash = cashSprite(text, b.id)
+        b.cash = cashSprite(text, base)
         b.cash.position.z = b.labelZ + 0.85
         b.group.add(b.cash)
         b.cashText = text

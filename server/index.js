@@ -666,7 +666,9 @@ async function handleApi(req, res, url) {
         const sinceTs = prev.rows[0]?.updated_at || prev.rows[0]?.created_at
         const elapsed = sinceTs ? Math.max(1, (Date.now() - new Date(sinceTs).getTime()) / 1000) : 1
         const gameDays = (typeof clean.s.day === 'number') ? Math.min(Math.max(0, clean.s.day), 8) : 0 // misafir eşiği 5 + tampon
-        const allowance = firstSave ? (100_000 + gameDays * 400_000) : (100_000 + elapsed * 2500) // gün başına ~400k legit servet
+        // İlk-save (misafirden taşınan) tavanı SIKI: legit gün-5 misafiri ~50-100k yapar.
+        // Eski gün×400k tavanı localStorage'ı elle şişiren hilecinin 1.86M'sini geçirdi (furkan123 vakası).
+        const allowance = firstSave ? (60_000 + gameDays * 40_000) : (100_000 + elapsed * 2500)
         const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
         const bval = buildingValue(clean.s)
         let money = Number(clean.s.money) || 0

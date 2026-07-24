@@ -672,6 +672,12 @@ async function grantProduct(id: string, transactionId?: string) {
   persist(); renderStore()
 }
 document.getElementById('of-store')?.addEventListener('click', () => openStore())
+// Ofisi Taşı (10 feedback'in isteği): ofise tıklama Ofis panelini açtığından Taşı'lı bina
+// kartına hiç ulaşılamıyordu — panelden doğrudan taşıma moduna geçilir.
+document.getElementById('of-move')?.addEventListener('click', () => {
+  document.getElementById('officewrap')?.classList.remove('show')
+  startPlacement('office', true)
+})
 document.getElementById('storewrap')?.addEventListener('pointerdown', e => { if (e.target === e.currentTarget) (e.currentTarget as HTMLElement).classList.remove('show') })
 document.getElementById('store-body')?.addEventListener('click', async e => {
   const buy = (e.target as HTMLElement).closest('button.store-buy') as HTMLButtonElement | null
