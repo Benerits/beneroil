@@ -1135,7 +1135,7 @@ export class World {
     if (id === 'battery') this.batteryGroup = null
   }
 
-  addPump(index: number, at?: THREE.Vector2) {
+  addPump(index: number, at?: THREE.Vector2, rot = 0) {
     const base = at ?? new THREE.Vector2(0, PUMP_SLOTS_POS[Math.min(index, 3)].y)
     // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında (-1.8), ünite 180° döner.
     const far = base.x > ROAD_X
@@ -1149,14 +1149,17 @@ export class World {
     p.position.z = 0.2
     g.add(p)
     g.position.set(base.x, base.y, 0)
-    if (far) g.rotation.z = Math.PI // nozül batıya (araç tarafına) baksın
+    // EV şarj ile aynı kalıp: oyuncu açısı + karşı-istasyon 180° flip BİRLEŞİR.
+    // (Önceden yalnız far→PI vardı, sonra rebuild'deki generic rotateBuilding bunu EZİYOR,
+    //  reload sonrası karşı pompalar yanlış yöne bakıyordu. Artık rot burada otoriter.)
+    g.rotation.z = rot * Math.PI / 2 + (far ? Math.PI : 0) // nozül araç tarafına baksın
     this.scene.add(g)
     this.register(`pump-${index}`, t('POMPA #{0}', index + 1), g, 2.5)
   }
 
-  movePump(index: number, at: THREE.Vector2) {
+  movePump(index: number, at: THREE.Vector2, rot = 0) {
     this.removeBuildingGroup(`pump-${index}`)
-    this.addPump(index, at)
+    this.addPump(index, at, rot)
   }
 
   addEvCharger(index: number, at?: THREE.Vector2, rot = 0) {
