@@ -1137,9 +1137,12 @@ export class World {
 
   addPump(index: number, at?: THREE.Vector2, rot = 0) {
     const base = at ?? new THREE.Vector2(0, PUMP_SLOTS_POS[Math.min(index, 3)].y)
-    // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında (-1.8), ünite 180° döner.
+    // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında, ünite 180° döner.
+    // Charger kalıbı: araç yanaşma slotu AÇIYLA birlikte döner — araç hep nozül tarafına yanaşır.
     const far = base.x > ROAD_X
-    this.pumpSlots[index] = new THREE.Vector3(base.x + (far ? -1.8 : 1.8), base.y, 0)
+    const ang = rot * Math.PI / 2
+    const flip = far ? -1 : 1
+    this.pumpSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.8 * flip, base.y + Math.sin(ang) * 1.8, 0)
     const g = new THREE.Group()
     box(1.7, 3.4, 0.2, 0xc7ccd1, 0, 0, 0.1, g)
     box(1.75, 3.45, 0.05, 0xe0b13e, 0, 0, 0.02, g)

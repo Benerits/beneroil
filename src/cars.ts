@@ -253,6 +253,26 @@ export class Car {
   holdTime = 0
   /** öndeki araca yaklaşırken orantılı yavaşlama (1=tam hız) — dur-kalk şok dalgalarını yumuşatır */
   speedScale = 1
+  /** sağdan-geçiş kaçışı sonrası bekleme (üst üste kaçış eklemesin) */
+  dodgeT = 0
+
+  /** KAFA KAFAYA çözümü: kendi SAĞINA kısa bir kaçış noktası ekler (sağdan geçiş kuralı).
+   *  Katı cisme denk gelirse daha geniş dener; ikisi de doluysa false (eski yol-verme kalır). */
+  dodgeRight(): boolean {
+    const d = this.headingDir()
+    if (!d) return false
+    const rx = d.y, ry = -d.x // sağ vektör (z-yukarı düzlemde)
+    const p = this.group.position
+    for (const k of [1.6, 2.3]) {
+      const px = p.x + d.x * 1.5 + rx * k
+      const py = p.y + d.y * 1.5 + ry * k
+      if (Car.insideSolid(px, py)) continue
+      this.path.unshift(new THREE.Vector3(px, py, 0))
+      this.dodgeT = 3
+      return true
+    }
+    return false
+  }
   watchT = 0
   watchPos = new THREE.Vector3()
   hardStuckT = 0
@@ -445,6 +465,7 @@ export class Car {
   }
 
   update(dt: number) {
+    if (this.dodgeT > 0) this.dodgeT -= dt
     if (this.path.length > 0 && !this.hold) {
       const pos = this.group.position
       const target = this.path[0]
@@ -817,9 +838,19 @@ export class CarManager {
       if (laneBusy) c.hold = true
     }
 
-    // karşılıklı kilitlenme: ikisi de birbirini bekliyorsa biri yol alır
+    // karşılıklı kilitlenme çözümü — BİLİMSEL AYRIM:
+    // 1) KAFA KAFAYA (yönler zıt): "yol ver" işe yaramaz — salınıp tekrar kilitlenirler.
+    //    Gerçek trafik kuralı uygulanır: biri SAĞA kısa kaçış noktası ekler (sağdan geçiş),
+    //    diğeri yavaşça yoluna devam eder → akış çözülür, iç içe girme olmaz.
+    // 2) DİK/YAN karşılaşma: eski davranış — biri yol verir (o.hold=false).
     for (const [c, o] of blockers) {
-      if (blockers.get(o) === c && c.hold && o.hold) o.hold = false
+      if (blockers.get(o) !== c || !c.hold || !o.hold) continue
+      const dc = c.headingDir(); const dd = o.headingDir()
+      if (dc && dd && dc.dot(dd) < -0.5) {
+        if (c.dodgeT <= 0 && c.dodgeRight()) { c.hold = false; continue }
+        if (o.dodgeT <= 0 && o.dodgeRight()) { o.hold = false; continue }
+      }
+      o.hold = false
     }
     // zincir döngüleri (A→B→C→A): döngüdeki EN UZUN bekleyen tek araç serbest kalır.
     // İkisi birden değil — çift taraflı kaçış çarpışması bug'ının panzehiri.
@@ -1026,6 +1057,8 @@ export class CarManager {
 
   /** tıra boş tır parkı yeri bul ve gönder; başarılıysa true */
   sendTruckToPark(car: Car): boolean {
+    // istasyon izolasyonu: tır parkı yakın istasyonda — karşı şerit tırı yolu kesip giremez
+    if (car.station !== 'near') return false
     const spots = this.opts.truckSpots()
     if (!spots.length) return false
     while (this.truckOcc.length < spots.length) this.truckOcc.push(null)
@@ -1223,6 +1256,9 @@ export class CarManager {
 
   /** servis bitti, tesis kullanacak → otoparka çek. Otopark yok/dolu ise false. */
   sendToParking(car: Car): boolean {
+    // İSTASYON İZOLASYONU: otopark/tesisler YAKIN istasyona ait — karşı istasyonun müşterisi
+    // yolu dik kesip buraya GELEMEZ (kullanıcı şikayeti). Far müşteri servis alır ve gider.
+    if (car.station !== 'near') return false
     const spots = this.opts.parkSpots()
     if (spots.length === 0) return false
     while (this.parkOcc.length < spots.length) this.parkOcc.push(null)

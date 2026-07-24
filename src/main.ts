@@ -2014,7 +2014,11 @@ function confirmPlacement() {
     // Charger döndürülebilir: pozisyon + açı + araç yanaşma slotu birlikte kurulur.
     const idx = Number(p.id.slice('charger-'.length))
     world.moveCharger(idx, new THREE.Vector2(p.cx, p.cy), p.rot)
-  } else if (!p.id.startsWith('pump-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout' && p.id !== 'gatein2' && p.id !== 'gateout2') {
+  } else if (p.id.startsWith('pump-')) {
+    // Pompa da döndürülebilir: seçilen açıyla (far-flip dahil) yeniden kur — slot açıyla döner.
+    const idx = Number(p.id.slice('pump-'.length))
+    world.movePump(idx, new THREE.Vector2(p.cx - 0.9, p.cy), p.rot)
+  } else if (p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout' && p.id !== 'gatein2' && p.id !== 'gateout2') {
     world.rotateBuilding(p.id, p.rot)
   }
   placedPos[p.id] = [p.cx, p.cy]
@@ -2059,7 +2063,9 @@ function confirmZone() {
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') cancelPlacement()
   if ((e.key === 'r' || e.key === 'R') && placing) {
-    if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
+    // pompa artık DÖNDÜRÜLEBİLİR (charger gibi: açı + araç yanaşma slotu birlikte döner) —
+    // 'karşı istasyonda döndüremiyoruz' şikayetinin fixi. Tank/kapı yönü sabit kalır.
+    if (placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
       ui.toast('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.', '')
       return
     }
@@ -2305,8 +2311,8 @@ connectLive()
     }
     document.getElementById('mv-rot')?.addEventListener('click', () => {
       if (!placing) return
-      // pompa/tank/kapı yönü sabittir (araç yanaşması) — mobilde de döndürülemez (klavye ile aynı)
-      if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
+      // tank/kapı yönü sabittir — pompa artık döndürülebilir (klavye ile aynı)
+      if (placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
         ui.toast(t('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.'), '')
         return
       }
