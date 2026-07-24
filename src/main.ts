@@ -34,23 +34,27 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
     const gEmail = document.getElementById('gemail') as HTMLInputElement
     const gPass = document.getElementById('gpass') as HTMLInputElement
     // kayıt/giriş/sosyal başarılı → varsa misafir ilerlemesini hesaba TAŞI, sonra yenile
-    const afterAuth = async () => {
-      // Misafir verisini hesaba taşı — AMA hesabın KENDİ ilerlemesi varsa ASLA ezme.
-      // (Bug: giriş öncesi _lastUpdatedAt=null olduğundan push conflict'e takılmıyordu →
-      //  misafir Gün-1 save'i, hesabın Gün-186 bulut kaydını siliyordu.)
+    // KURAL: misafir kaydı YALNIZCA REGISTER'da hesaba taşınır. LOGIN'de ASLA dokunulmaz
+    // (hesabın bulut kaydı otoriter → giriş yapınca kendi ilerlemeni bulursun, misafir Gün-1 ezmez).
+    // OAuth yeni hesap AÇMIŞ olabilir → yalnız hesap TAZE ise taşı, doluysa dokunma.
+    const afterAuth = async (mode: 'register' | 'login' | 'oauth') => {
       const g = auth.loadGuest()
       if (g) {
         try {
-          const acc = await auth.pullSave() as { s?: { day?: number }; placedRects?: unknown[] } | null
-          const accHasProgress = !!acc && ((acc.s?.day ?? 1) > 1 || (Array.isArray(acc.placedRects) && acc.placedRects.length > 0))
-          if (!accHasProgress) await auth.pushSave(g) // hesap boş/taze → misafir ilerlemesini taşı
-          // hesap doluysa: misafir verisi ATILIR, hesabın bulut kaydından devam
+          if (mode === 'register') {
+            await auth.pushSave(g) // yeni kayıt → misafir ilerlemesi hesaba taşınır
+          } else if (mode === 'oauth') {
+            const acc = await auth.pullSave() as { s?: { day?: number }; placedRects?: unknown[] } | null
+            const accEmpty = !acc || ((acc.s?.day ?? 1) <= 1 && !(Array.isArray(acc.placedRects) && acc.placedRects.length > 0))
+            if (accEmpty) await auth.pushSave(g) // OAuth ile yeni açılan boş hesap → taşı
+          }
+          // mode === 'login': ASLA push yok — misafir verisi atılır, hesaptan devam
           auth.clearGuest()
         } catch { /* ağ hatası: misafir verisi yerelde kalsın, sonraki girişte tekrar denenir */ }
       }
       location.reload()
     }
-    const wire = (id: string, path: string) => {
+    const wire = (id: string, path: string, mode: 'register' | 'login') => {
       (document.getElementById(id) as HTMLButtonElement).addEventListener('click', async () => {
         gErr.textContent = ''
         try {
@@ -63,7 +67,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
           if (!res.ok) throw new Error(d.error ?? t('Sunucuya ulaşılamadı.'))
           localStorage.setItem('benzinlik-token', d.token)
           localStorage.setItem('benzinlik-email', d.email)
-          await afterAuth()
+          await afterAuth(mode)
         } catch (err) {
           gErr.textContent = (err as Error).message
         }
@@ -86,8 +90,8 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
         }
       }
     }).catch(() => {})
-    wire('glogin', '/api/login')
-    wire('gregister', '/api/register')
+    wire('glogin', '/api/login', 'login')
+    wire('gregister', '/api/register', 'register')
     ;(document.getElementById('gforgot') as HTMLButtonElement).addEventListener('click', async () => {
       gErr.textContent = ''
       const em = gEmail.value.trim().toLowerCase()
@@ -120,7 +124,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
         if (!res.ok) throw new Error(d.error ?? t('Giriş başarısız.'))
         localStorage.setItem('benzinlik-token', d.token)
         localStorage.setItem('benzinlik-email', d.email)
-        await afterAuth()
+        await afterAuth('oauth')
       } catch (err) { gErr.textContent = (err as Error).message }
     }
     const setupOAuth = async () => {
