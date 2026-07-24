@@ -34,14 +34,27 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
     const gEmail = document.getElementById('gemail') as HTMLInputElement
     const gPass = document.getElementById('gpass') as HTMLInputElement
     // kayıt/giriş/sosyal başarılı → varsa misafir ilerlemesini hesaba TAŞI, sonra yenile
-    const afterAuth = async () => {
-      // REGISTER: misafir verisi hesaba taşınır (push başarılı/conflict → temizle; ağ hatasında SİLME).
-      // LOGIN (hesapta kayıt varsa): sunucu 409 conflict ile bulut kaydını korur → hesabından devam eder.
+    // KURAL: misafir kaydı YALNIZCA REGISTER'da hesaba taşınır. LOGIN'de ASLA dokunulmaz
+    // (hesabın bulut kaydı otoriter → giriş yapınca kendi ilerlemeni bulursun, misafir Gün-1 ezmez).
+    // OAuth yeni hesap AÇMIŞ olabilir → yalnız hesap TAZE ise taşı, doluysa dokunma.
+    const afterAuth = async (mode: 'register' | 'login' | 'oauth') => {
       const g = auth.loadGuest()
-      if (g) { try { await auth.pushSave(g); auth.clearGuest() } catch { /* ağ hatası: misafir verisi yerelde kalsın */ } }
+      if (g) {
+        try {
+          if (mode === 'register') {
+            await auth.pushSave(g) // yeni kayıt → misafir ilerlemesi hesaba taşınır
+          } else if (mode === 'oauth') {
+            const acc = await auth.pullSave() as { s?: { day?: number }; placedRects?: unknown[] } | null
+            const accEmpty = !acc || ((acc.s?.day ?? 1) <= 1 && !(Array.isArray(acc.placedRects) && acc.placedRects.length > 0))
+            if (accEmpty) await auth.pushSave(g) // OAuth ile yeni açılan boş hesap → taşı
+          }
+          // mode === 'login': ASLA push yok — misafir verisi atılır, hesaptan devam
+          auth.clearGuest()
+        } catch { /* ağ hatası: misafir verisi yerelde kalsın, sonraki girişte tekrar denenir */ }
+      }
       location.reload()
     }
-    const wire = (id: string, path: string) => {
+    const wire = (id: string, path: string, mode: 'register' | 'login') => {
       (document.getElementById(id) as HTMLButtonElement).addEventListener('click', async () => {
         gErr.textContent = ''
         try {
@@ -54,7 +67,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
           if (!res.ok) throw new Error(d.error ?? t('Sunucuya ulaşılamadı.'))
           localStorage.setItem('benzinlik-token', d.token)
           localStorage.setItem('benzinlik-email', d.email)
-          await afterAuth()
+          await afterAuth(mode)
         } catch (err) {
           gErr.textContent = (err as Error).message
         }
@@ -77,8 +90,8 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
         }
       }
     }).catch(() => {})
-    wire('glogin', '/api/login')
-    wire('gregister', '/api/register')
+    wire('glogin', '/api/login', 'login')
+    wire('gregister', '/api/register', 'register')
     ;(document.getElementById('gforgot') as HTMLButtonElement).addEventListener('click', async () => {
       gErr.textContent = ''
       const em = gEmail.value.trim().toLowerCase()
@@ -111,7 +124,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
         if (!res.ok) throw new Error(d.error ?? t('Giriş başarısız.'))
         localStorage.setItem('benzinlik-token', d.token)
         localStorage.setItem('benzinlik-email', d.email)
-        await afterAuth()
+        await afterAuth('oauth')
       } catch (err) { gErr.textContent = (err as Error).message }
     }
     const setupOAuth = async () => {
@@ -1540,7 +1553,8 @@ function rebuildFromState() {
   const pvv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
   for (let i = 1; i < state.pumps; i++) {
     const sp = pvv(`pump-${i}`)
-    world.addPump(i, sp ? new THREE.Vector2(sp.x - 0.9, sp.y) : undefined)
+    // Kayıtlı açıyla kur (charger gibi) → far-flip + oyuncu açısı birlikte, reload'da yön korunur.
+    world.addPump(i, sp ? new THREE.Vector2(sp.x - 0.9, sp.y) : undefined, placedRot[`pump-${i}`] ?? 0)
   }
   for (let i = 0; i < state.evChargers; i++) {
     const sp = pvv(`charger-${i}`)
@@ -1594,11 +1608,13 @@ function rebuildFromState() {
   if (placedPos.gateout) { const g = pv('gateout'); if (g) { world.removeLampNear(g.y); world.buildGate('out', g) } }
   {
     const s0 = placedPos['pump-0']
-    if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]))
+    if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]), placedRot['pump-0'] ?? 0)
   }
   if (placedPos.tank) world.moveTank(new THREE.Vector2(placedPos.tank[0], placedPos.tank[1]))
-  // charger'lar yukarıda açılarıyla (slot dahil) kuruldu; burada atlanır.
-  for (const [id, rot] of Object.entries(placedRot)) if (!id.startsWith('charger-')) world.rotateBuilding(id, rot)
+  // charger + pump'lar yukarıda açılarıyla (far-flip dahil) kuruldu; burada ATLANIR
+  // (aksi halde generic rotateBuilding far-flip'i ezerdi → karşı üniteler ters bakardı).
+  for (const [id, rot] of Object.entries(placedRot))
+    if (!id.startsWith('charger-') && !id.startsWith('pump-')) world.rotateBuilding(id, rot)
   world.setClosed(state.closed)
 }
 
@@ -1915,7 +1931,7 @@ function applyDynamicMove(id: string, cx: number, cy: number) {
   if (id.startsWith('pump-')) {
     const n = parseInt(id.slice(5))
     cars.evictSlot('fuel', n) // slottaki araç eski koordinatta asılı kalmasın
-    world.movePump(n, new THREE.Vector2(cx - 0.9, cy))
+    world.movePump(n, new THREE.Vector2(cx - 0.9, cy), placedRot[`pump-${n}`] ?? 0) // taşırken açıyı/far-flip'i koru
   }
   else if (id.startsWith('charger-')) {
     const n = parseInt(id.slice(8))
@@ -1998,7 +2014,11 @@ function confirmPlacement() {
     // Charger döndürülebilir: pozisyon + açı + araç yanaşma slotu birlikte kurulur.
     const idx = Number(p.id.slice('charger-'.length))
     world.moveCharger(idx, new THREE.Vector2(p.cx, p.cy), p.rot)
-  } else if (!p.id.startsWith('pump-') && p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout' && p.id !== 'gatein2' && p.id !== 'gateout2') {
+  } else if (p.id.startsWith('pump-')) {
+    // Pompa da döndürülebilir: seçilen açıyla (far-flip dahil) yeniden kur — slot açıyla döner.
+    const idx = Number(p.id.slice('pump-'.length))
+    world.movePump(idx, new THREE.Vector2(p.cx - 0.9, p.cy), p.rot)
+  } else if (p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout' && p.id !== 'gatein2' && p.id !== 'gateout2') {
     world.rotateBuilding(p.id, p.rot)
   }
   placedPos[p.id] = [p.cx, p.cy]
@@ -2043,7 +2063,9 @@ function confirmZone() {
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') cancelPlacement()
   if ((e.key === 'r' || e.key === 'R') && placing) {
-    if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
+    // pompa artık DÖNDÜRÜLEBİLİR (charger gibi: açı + araç yanaşma slotu birlikte döner) —
+    // 'karşı istasyonda döndüremiyoruz' şikayetinin fixi. Tank/kapı yönü sabit kalır.
+    if (placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
       ui.toast('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.', '')
       return
     }
@@ -2289,8 +2311,8 @@ connectLive()
     }
     document.getElementById('mv-rot')?.addEventListener('click', () => {
       if (!placing) return
-      // pompa/tank/kapı yönü sabittir (araç yanaşması) — mobilde de döndürülemez (klavye ile aynı)
-      if (placing.id.startsWith('pump-') || placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
+      // tank/kapı yönü sabittir — pompa artık döndürülebilir (klavye ile aynı)
+      if (placing.id === 'tank' || placing.id === 'gatein' || placing.id === 'gateout' || placing.id === 'gatein2' || placing.id === 'gateout2') {
         ui.toast(t('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.'), '')
         return
       }

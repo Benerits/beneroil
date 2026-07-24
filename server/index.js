@@ -670,6 +670,17 @@ async function handleApi(req, res, url) {
         const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
         const bval = buildingValue(clean.s)
         let money = Number(clean.s.money) || 0
+        // REGRESYON GUARD'ı: İLERLEMİŞ kaydın üstüne "taze başlangıç" save'i YAZILAMAZ.
+        // (Misafir Gün-1 state'i taşıyan istemci login sonrası bulut kaydını eziyordu —
+        //  baseUpdatedAt=null olduğundan çoklu-cihaz 409 guard'ı bypass oluyordu.)
+        // Meşru sıfırlama pushSave(null) kullanır (save=NULL) → sonraki push firstSave sayılır, serbest.
+        if (!firstSave) {
+          const prevDay = Number(prevSave.s.day) || 1
+          const newDay = Number(clean.s.day) || 1
+          if (prevDay >= 5 && newDay <= 2 && prevWealth > 50_000 && (money + bval) < prevWealth * 0.2) {
+            return json(res, 409, { conflict: true, save: prevSave, updatedAt: prev.rows[0]?.updated_at || null })
+          }
+        }
         if (money + bval > prevWealth + allowance) {
           // fazlalığı önce paradan düş (para enjeksiyonu / hızlı kazanç freni)
           const excess = (money + bval) - (prevWealth + allowance)

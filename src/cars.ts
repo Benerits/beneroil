@@ -251,6 +251,28 @@ export class Car {
   /** öndeki araca çok yaklaştıysa bu karede bekle (üst üste binme yok) */
   hold = false
   holdTime = 0
+  /** öndeki araca yaklaşırken orantılı yavaşlama (1=tam hız) — dur-kalk şok dalgalarını yumuşatır */
+  speedScale = 1
+  /** sağdan-geçiş kaçışı sonrası bekleme (üst üste kaçış eklemesin) */
+  dodgeT = 0
+
+  /** KAFA KAFAYA çözümü: kendi SAĞINA kısa bir kaçış noktası ekler (sağdan geçiş kuralı).
+   *  Katı cisme denk gelirse daha geniş dener; ikisi de doluysa false (eski yol-verme kalır). */
+  dodgeRight(): boolean {
+    const d = this.headingDir()
+    if (!d) return false
+    const rx = d.y, ry = -d.x // sağ vektör (z-yukarı düzlemde)
+    const p = this.group.position
+    for (const k of [1.6, 2.3]) {
+      const px = p.x + d.x * 1.5 + rx * k
+      const py = p.y + d.y * 1.5 + ry * k
+      if (Car.insideSolid(px, py)) continue
+      this.path.unshift(new THREE.Vector3(px, py, 0))
+      this.dodgeT = 3
+      return true
+    }
+    return false
+  }
   watchT = 0
   watchPos = new THREE.Vector3()
   hardStuckT = 0
@@ -443,13 +465,14 @@ export class Car {
   }
 
   update(dt: number) {
+    if (this.dodgeT > 0) this.dodgeT -= dt
     if (this.path.length > 0 && !this.hold) {
       const pos = this.group.position
       const target = this.path[0]
       const d = new THREE.Vector3().subVectors(target, pos)
       d.z = 0
       const dist = d.length()
-      const step = CAR_SPEED * dt * (this.reversing ? 0.45 : 1)
+      const step = CAR_SPEED * dt * this.speedScale * (this.reversing ? 0.45 : 1)
       if (dist <= step) {
         pos.copy(target)
         this.path.shift()
@@ -765,7 +788,7 @@ export class CarManager {
     // çarpışma önleme: HİÇBİR araç bir diğerinin içinden geçmez.
     // Önümdeki koridorda (2.8 birim ileri, 1.25 yana) araç varsa dururum.
     const blockers = new Map<Car, Car>()
-    for (const c of this.cars) c.hold = false
+    for (const c of this.cars) { c.hold = false; c.speedScale = 1 }
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked' || c.phase === 'waiting') continue
       const dir = c.headingDir()
@@ -779,7 +802,12 @@ export class CarManager {
         const forward = rel.dot(dir)
         if (forward < 0.4 || forward > 3.6) continue
         const lateral = rel.addScaledVector(dir, -forward).length()
-        if (lateral < 1.25) { c.hold = true; blockers.set(c, o); break }
+        if (lateral < 1.25) {
+          // iki kademe: 1.5 birime kadar orantılı YAVAŞLA, altında DUR.
+          // (eski binary dur/kalk şok dalgaları yaratıyordu — kuyruk artık akordeon gibi esner)
+          if (forward < 1.5) { c.hold = true; blockers.set(c, o); break }
+          c.speedScale = Math.min(c.speedScale, 0.3 + 0.7 * ((forward - 1.5) / 2.1))
+        }
       }
       if (!c.hold) {
         for (const ob of this.opts.extraObstacles()) {
@@ -810,9 +838,19 @@ export class CarManager {
       if (laneBusy) c.hold = true
     }
 
-    // karşılıklı kilitlenme: ikisi de birbirini bekliyorsa biri yol alır
+    // karşılıklı kilitlenme çözümü — BİLİMSEL AYRIM:
+    // 1) KAFA KAFAYA (yönler zıt): "yol ver" işe yaramaz — salınıp tekrar kilitlenirler.
+    //    Gerçek trafik kuralı uygulanır: biri SAĞA kısa kaçış noktası ekler (sağdan geçiş),
+    //    diğeri yavaşça yoluna devam eder → akış çözülür, iç içe girme olmaz.
+    // 2) DİK/YAN karşılaşma: eski davranış — biri yol verir (o.hold=false).
     for (const [c, o] of blockers) {
-      if (blockers.get(o) === c && c.hold && o.hold) o.hold = false
+      if (blockers.get(o) !== c || !c.hold || !o.hold) continue
+      const dc = c.headingDir(); const dd = o.headingDir()
+      if (dc && dd && dc.dot(dd) < -0.5) {
+        if (c.dodgeT <= 0 && c.dodgeRight()) { c.hold = false; continue }
+        if (o.dodgeT <= 0 && o.dodgeRight()) { o.hold = false; continue }
+      }
+      o.hold = false
     }
     // zincir döngüleri (A→B→C→A): döngüdeki EN UZUN bekleyen tek araç serbest kalır.
     // İkisi birden değil — çift taraflı kaçış çarpışması bug'ının panzehiri.
@@ -994,17 +1032,14 @@ export class CarManager {
   }
 
   /** geniş kapıda araçlar iki koldan geçer: her çağrıda ±1.2 dönüşümlü ofset */
-  private gateInFlip = false
-  private gateOutFlip = false
+  // Kapı offset'i artık DETERMİNİST (eskiden araç başına ±1.2 FLIP ediyordu → ardışık
+  // araçlar kapının iki yarısını çapraz kullanıp kafa kafaya kilitleniyordu).
+  // Giriş/çıkış ayrı kapılar + ayrık iç koridorlar (1.75 / 0.45) → tek sıra düzgün akış.
   private gateInOff(): number {
-    if (!this.opts.wideGates()) return 0
-    this.gateInFlip = !this.gateInFlip
-    return this.gateInFlip ? 1.2 : -1.2
+    return this.opts.wideGates() ? -1.2 : 0 // giriş HEP güney yarı (sabit şerit)
   }
   private gateOutOff(): number {
-    if (!this.opts.wideGates()) return 0
-    this.gateOutFlip = !this.gateOutFlip
-    return this.gateOutFlip ? 1.2 : -1.2
+    return this.opts.wideGates() ? 1.2 : 0 // çıkış HEP kuzey yarı (sabit şerit)
   }
 
   /** rampadan girip hedef noktaya giden yol */
@@ -1015,13 +1050,15 @@ export class CarManager {
     return [
       new THREE.Vector3(G.lane, apronY - G.dirY * 3.5 + off, 0),
       new THREE.Vector3(G.gateX, apronY + off, 0),
-      new THREE.Vector3(G.gateX + G.sideSign * 1.0, p.y - G.dirY * 2.5, 0),
+      new THREE.Vector3(G.gateX + G.sideSign * 1.75, p.y - G.dirY * 2.5, 0),
       p.clone(),
     ]
   }
 
   /** tıra boş tır parkı yeri bul ve gönder; başarılıysa true */
   sendTruckToPark(car: Car): boolean {
+    // istasyon izolasyonu: tır parkı yakın istasyonda — karşı şerit tırı yolu kesip giremez
+    if (car.station !== 'near') return false
     const spots = this.opts.truckSpots()
     if (!spots.length) return false
     while (this.truckOcc.length < spots.length) this.truckOcc.push(null)
@@ -1097,6 +1134,20 @@ export class CarManager {
             this.waitSpotAt(c.waitIndex, 'near'),
           ], () => { c.phase = 'waiting' })
         }
+      } else if (c.phase === 'driving' && p.x <= 5.5) {
+        // APRON İÇİNDEKİLER (eski davranış: yerinde bırakılıyordu → ESKİ kapı noktasına
+        // sürüp duvara/binaya çakılıyorlardı). Kalan rotayı mevcut konumdan yeniden kur:
+        // eski kapı waypoint'leri atılır, iç koridor üzerinden hedefe temiz rota.
+        const G = this.geom('near')
+        if (c.slotIndex >= 0) {
+          const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
+          c.setPath([
+            new THREE.Vector3(G.gateX + G.sideSign * 1.75, slot.y - G.dirY * 2.5, 0),
+            slot.clone(),
+          ], () => this.arriveAtSlot(c))
+        } else if (c.waitIndex >= 0) {
+          c.setPath([this.waitSpotAt(c.waitIndex, 'near')], () => { c.phase = 'waiting' })
+        }
       } else if (c.phase === 'leaving' && p.x < 5.5) {
         // henüz yola çıkmamış (apron/kapı şeridindeki) çıkan araç: yeni çıkışa yönlendir.
         // Eşik 3.9 idi; kapı şeridine (x≈4.2) çıkmış araç kaçıyor, eski çıkışa gidiyordu.
@@ -1118,17 +1169,20 @@ export class CarManager {
     const G = this.geom(car.station)
     const gy = G.gateInY
     // aynı istasyonun giriş rampasında (kapı↔pompa arası) manevra yapan araç varsa BEKLE (apron yığılması olmasın)
-    const rA = G.gateX + G.sideSign * 1.6, rB = G.gateX - G.sideSign * 1.0
+    const rA = G.gateX + G.sideSign * 2.1, rB = G.gateX - G.sideSign * 1.0
     const rampLo = Math.min(rA, rB), rampHi = Math.max(rA, rB)
     const rampBusy = this.cars.some(o => o !== car && o.station === car.station && o.phase === 'driving'
       && o.group.position.x > rampLo && o.group.position.x < rampHi
       && Math.abs(o.group.position.y - gy) < 6)
-    if (rampBusy) return // bu araç yola devam eder, sonraki karar noktasında tekrar dener
+    if (rampBusy) { car.converted = false; return } // rampa boşalınca sonraki karelerde TEKRAR dener (müşteri kaçmaz)
     if (car.kind === 'ev') {
-      let slot = -1
+      // giriş kapısına EN YAKIN boş şarj: herkes 0. slota hunilenmesin, koridor yolculuğu kısalsın
+      let slot = -1; let bestD = Infinity
       for (let i = 0; i < this.opts.evCount(); i++) {
         if (this.evStation(i) !== car.station) continue // yalnız bu istasyonun şarjları
-        if (!this.evOcc[i] && !this.opts.isChargerBroken(i)) { slot = i; break }
+        if (this.evOcc[i] || this.opts.isChargerBroken(i)) continue
+        const d = Math.abs(this.opts.evSlot(i).y - gy)
+        if (d < bestD) { bestD = d; slot = i }
       }
       if (slot < 0) {
         if (this.evOcc.some((x, i) => x?.squatting && this.evStation(i) === car.station)) this.opts.onEvTurnedAway?.()
@@ -1141,11 +1195,13 @@ export class CarManager {
       car.showBars()
       return
     }
-    // yakıt müşterisi
-    let slot = -1
+    // yakıt müşterisi — giriş kapısına EN YAKIN boş pompa (tek koridora hunilenme dağılır)
+    let slot = -1; let bestD = Infinity
     for (let i = 0; i < this.opts.pumpCount(); i++) {
       if (this.pumpStation(i) !== car.station) continue // yalnız bu istasyonun pompaları
-      if (!this.pumpOcc[i] && !this.opts.isPumpBroken(i)) { slot = i; break }
+      if (this.pumpOcc[i] || this.opts.isPumpBroken(i)) continue
+      const d = Math.abs(this.opts.pumpSlot(i).y - gy)
+      if (d < bestD) { bestD = d; slot = i }
     }
     if (slot >= 0) {
       this.pumpOcc[slot] = car
@@ -1193,13 +1249,16 @@ export class CarManager {
     const p = this.opts.pumpSlot(slot)
     const G = this.geom(car.station)
     car.setPath([
-      new THREE.Vector3(G.gateX + G.sideSign * 1.0, p.y - G.dirY * 2.5, 0),
+      new THREE.Vector3(G.gateX + G.sideSign * 1.75, p.y - G.dirY * 2.5, 0),
       p,
     ], () => this.arriveAtSlot(car))
   }
 
   /** servis bitti, tesis kullanacak → otoparka çek. Otopark yok/dolu ise false. */
   sendToParking(car: Car): boolean {
+    // İSTASYON İZOLASYONU: otopark/tesisler YAKIN istasyona ait — karşı istasyonun müşterisi
+    // yolu dik kesip buraya GELEMEZ (kullanıcı şikayeti). Far müşteri servis alır ve gider.
+    if (car.station !== 'near') return false
     const spots = this.opts.parkSpots()
     if (spots.length === 0) return false
     while (this.parkOcc.length < spots.length) this.parkOcc.push(null)
@@ -1286,11 +1345,11 @@ export class CarManager {
     if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind !== 'ev') {
       const slot = this.opts.pumpSlot(car.slotIndex)
       const G = this.geom(car.station)
-      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * 1.0, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
+      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * 1.75, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
     } else if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind === 'ev') {
       const slot = this.opts.evSlot(car.slotIndex)
       const G = this.geom(car.station)
-      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * 1.0, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
+      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * 1.75, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
     } else if (car.phase === 'toPark' && car.truckSlot >= 0) {
       this.leaveTruckPark(car)
     } else if (car.phase !== 'atPump' && car.phase !== 'parked' && car.phase !== 'waiting') {
@@ -1329,9 +1388,14 @@ export class CarManager {
       return
     }
     const y = car.group.position.y
-    const preY = G.dirY > 0 ? Math.min(y + 3, outY - 1.8) : Math.max(y - 3, outY + 1.8)
+    // Çıkış koridoruna KAPI YAKININDA katıl (maks 7 birim önce) — kendi hizasından DEĞİL.
+    // Eski hali (y±3): uzak pompadan çıkan araç önce kapı kolonuna (giriş hizasına) sürüyor,
+    // sonra çit dibinden tüm istasyonu boydan geçiyordu — giriş ağzıyla çakışma + saçma manevra.
+    const preY = G.dirY > 0
+      ? Math.max(Math.min(y + 3, outY - 1.8), outY - 7)
+      : Math.min(Math.max(y - 3, outY + 1.8), outY + 7)
     car.setPath([
-      new THREE.Vector3(G.gateX + G.sideSign * 0.8, preY, 0),
+      new THREE.Vector3(G.gateX + G.sideSign * 0.45, preY, 0),
       new THREE.Vector3(G.gateX, outY + off, 0),
       new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
       new THREE.Vector3(G.lane, G.dirY * 44, 0),
