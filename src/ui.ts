@@ -656,11 +656,22 @@ export class UI {
       else if (kind === 'bad') audio.bad()
     }
     const box = el<HTMLDivElement>('toasts')
-    while (box.children.length >= 4) box.firstElementChild?.remove()
+    const text = stripEmoji(t(msg))
+    // SPAM KIRICI (18 feedback): aynı mesaj arka arkaya gelirse yenisini dizmek yerine
+    // sondakini '×N' ile güncelle — 'alt alta 3-5 bildirim ekranı kaplıyor' şikayeti biter.
+    const last = box.lastElementChild as HTMLDivElement | null
+    if (last && (last.dataset.base === text)) {
+      const n = (Number(last.dataset.n) || 1) + 1
+      last.dataset.n = String(n)
+      last.textContent = `${text} ×${n}`
+      return
+    }
+    while (box.children.length >= 3) box.firstElementChild?.remove()
     const node = document.createElement('div')
     node.className = `toast ${kind}`
     // sarılmamış Türkçe toast'lar da İngilizce moda çevrilsin (t() bilinen key'i çevirir, değilse aynen bırakır)
-    node.textContent = stripEmoji(t(msg))
+    node.textContent = text
+    node.dataset.base = text
     box.appendChild(node)
     setTimeout(() => { node.style.opacity = '0'; node.style.transition = 'opacity .4s' }, 3000)
     setTimeout(() => node.remove(), 3500)

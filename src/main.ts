@@ -390,6 +390,8 @@ const [modelLib, staticLib] = await Promise.all([loadModels(), loadStatics()])
 const world = new World(staticLib)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
+let parkInfoShown = 0
+let autoChargeShown = 0
 let appConfig: any = null // /api/config yanıtı (RevenueCat key vb. lazy kullanım için)
 const isPromoMode = new URLSearchParams(location.search).has('promo')
 if (!isPromoMode) {
@@ -1089,7 +1091,7 @@ function concludeService(car: Car, score: number) {
   const visits = facilityVisits(car)
   if (visits.length > 0 && cars.sendToParking(car)) {
     pendingVisits.set(car, { visits, score, started: false })
-    ui.toast(t('🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.'), '')
+    if (parkInfoShown < 2) { parkInfoShown++; ui.toast(t('🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.'), '') } // eğitici: oturumda 2 kez yeter (bildirim spam fixi)
   } else {
     // otopark doluysa ziyaret gelirleri yine gelsin (hızlı mod)
     for (const v of visits) {
@@ -1197,7 +1199,7 @@ function startCharging(car: Car, auto = false) {
   }
   car.charging = true
   car.beingServed = true
-  if (auto) ui.toast('Otomatik şarj başladı.', '', true)
+  if (auto && autoChargeShown < 2) { autoChargeShown++; ui.toast('Otomatik şarj başladı.', '', true) } // eğitici: oturumda 2 kez
   else if (state.battery < 1) ui.toast('Depo şu an boş — üretim geldikçe şarj yavaş akacak.', '')
 }
 
