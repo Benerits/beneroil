@@ -419,8 +419,14 @@ export class GameState {
     const cur = Math.min(this.orderQty[f], this.orderMaxQty(f)) // 999 sentinelini önce gerçek maks'a indir (ilk − tıklaması ölü olmasın)
     this.orderQty[f] = Math.min(this.orderMaxQty(f), Math.max(1, cur + d))
   }
-  /** Sipariş miktarı = çarpan × 800L, kalan boşlukla capli. Min 800L (level-1 hacmi), full'e kadar step'lenebilir. */
-  orderNeed(f: FuelType) { return Math.floor(Math.min(this.orderQty[f] * TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f])) }
+  /** Sipariş miktarı = çarpan × 800L; kalan boşluk VE cüzdanla capli.
+   *  Bütçe-fit: FULL doldurma parası yetmiyorsa miktar otomatik paranın yettiğine iner —
+   *  büyük tanklı oyuncu 'tanker çağıramıyor' kalmaz (buton asla salt fiyat yüzünden kilitlenmez). */
+  orderNeed(f: FuelType) {
+    const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
+    const affordable = Math.max(0, Math.floor(this.money / (FUEL_COST[f] * disc)) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
+    return Math.floor(Math.max(0, Math.min(this.orderQty[f] * TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f], affordable)))
+  }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     return Math.ceil(this.orderNeed(f) * FUEL_COST[f] * disc)
