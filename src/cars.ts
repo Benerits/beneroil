@@ -1388,7 +1388,12 @@ export class CarManager {
       return
     }
     const y = car.group.position.y
-    const preY = G.dirY > 0 ? Math.min(y + 3, outY - 1.8) : Math.max(y - 3, outY + 1.8)
+    // Çıkış koridoruna KAPI YAKININDA katıl (maks 7 birim önce) — kendi hizasından DEĞİL.
+    // Eski hali (y±3): uzak pompadan çıkan araç önce kapı kolonuna (giriş hizasına) sürüyor,
+    // sonra çit dibinden tüm istasyonu boydan geçiyordu — giriş ağzıyla çakışma + saçma manevra.
+    const preY = G.dirY > 0
+      ? Math.max(Math.min(y + 3, outY - 1.8), outY - 7)
+      : Math.min(Math.max(y - 3, outY + 1.8), outY + 7)
     car.setPath([
       new THREE.Vector3(G.gateX + G.sideSign * 0.45, preY, 0),
       new THREE.Vector3(G.gateX, outY + off, 0),
