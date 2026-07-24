@@ -1610,16 +1610,22 @@ export class World {
     this.register(regId, t('OTOPARK'), g, 2.2)
   }
 
-  /** yerleştirilen otoparkın dünya koordinatındaki park noktaları */
-  getParkingSpots(): THREE.Vector3[] {
-    const spots: THREE.Vector3[] = []
+  /** yerleştirilen otoparkın dünya park noktaları: pozisyon + yanaşma (stage) + park AÇISI.
+   *  Açı otoparkın rotasyonundan türetilir — döndürülen otoparkta araç artık YAN park etmez;
+   *  stage noktası girişin önünde (yerel +Y) — araç nereye konursa konsun kendi önünden yanaşır. */
+  getParkingSpots(): { pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] {
+    const spots: { pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] = []
     for (const b of this.buildings) {
       if (!(b.id === 'parking' || b.id.startsWith('parking#'))) continue
       const g = b.group as THREE.Group
       g.updateMatrixWorld(true)
       for (let i = 0; i < 4; i++) {
-        const local = new THREE.Vector3(-1.53 + i * 1.02, -0.1, 0)
-        spots.push(local.applyMatrix4(g.matrixWorld))
+        const lx = -1.53 + i * 1.02
+        spots.push({
+          pos: new THREE.Vector3(lx, -0.1, 0).applyMatrix4(g.matrixWorld),
+          stage: new THREE.Vector3(lx, 2.4, 0).applyMatrix4(g.matrixWorld),
+          rot: g.rotation.z - Math.PI / 2, // stoper yerel -Y'de → burun stopere bakar
+        })
       }
     }
     return spots

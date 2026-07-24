@@ -241,6 +241,8 @@ export class Car {
   reversing = false
   private solidStuckT = 0
   truckStagePos: THREE.Vector3 | null = null
+  /** otopark yanaşma noktası — çıkışta önce buradan çıkılır (stage) */
+  parkStage: THREE.Vector3 | null = null
   /** aracın gizli yakıt ihtiyacı (litre) — tipine göre: binek/SUV/kamyon */
   hiddenNeedL = 30
   /** araç-üstü dijital sayaç güncelleme throttle'ı (çok hızlı akmasın) */
@@ -679,7 +681,6 @@ const WAIT_SPOTS = [
   new THREE.Vector3(3.4, -4.6, 0), new THREE.Vector3(3.4, -7.4, 0),
   new THREE.Vector3(3.4, -16.8, 0), new THREE.Vector3(3.4, -19.6, 0),
 ]
-const PARK_LANE_Y = 4.8
 
 export interface CarManagerOpts {
   pumpCount: () => number
@@ -689,7 +690,7 @@ export interface CarManagerOpts {
   isPumpBroken: (i: number) => boolean
   isChargerBroken: (i: number) => boolean
   /** yerleştirilmiş otoparkın park noktaları (yoksa boş) */
-  parkSpots: () => THREE.Vector3[]
+  parkSpots: () => { pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[]
   /** araçların kaçınacağı ek engeller (ör. tanker) */
   extraObstacles: () => THREE.Vector3[]
   /** geniş giriş/çıkış satın alındı mı — kapılardan ikili sıra geçilir */
@@ -1277,16 +1278,19 @@ export class CarManager {
     car.filling = false
     car.hideBubble()
     car.hideBars()
-    const p = spots[spot].clone()
-    p.z = 0
+    // spot+stage+açı: araç otoparkın KENDİ girişinden (stage) yanaşır — sabit park şeridi
+    // detourı (ofis önü yığılması) yok; park açısı otoparkın rotasyonuna uyar (yan park bitti).
+    const sp = spots[spot]
+    const p = sp.pos.clone(); p.z = 0
+    const stage = sp.stage.clone(); stage.z = 0
+    car.parkStage = stage.clone()
     car.setPath([
       new THREE.Vector3(3.0, car.group.position.y, 0),
-      new THREE.Vector3(3.0, PARK_LANE_Y, 0),
-      new THREE.Vector3(p.x, PARK_LANE_Y, 0),
+      stage,
       p,
     ], () => {
       car.phase = 'parked'
-      car.group.rotation.z = -Math.PI / 2
+      car.group.rotation.z = sp.rot
     })
     return true
   }
@@ -1377,14 +1381,15 @@ export class CarManager {
     const G = this.geom(car.station)
     const outY = G.gateOutY
     const off = this.gateOutOff()
-    if (fromPark) { // otopark yalnız yakın istasyonda var
-      car.setPath([
-        new THREE.Vector3(car.group.position.x, PARK_LANE_Y, 0),
-        new THREE.Vector3(3.0, PARK_LANE_Y, 0),
+    if (fromPark) { // otopark yalnız yakın istasyonda var — kendi stage'inden çıkar (sabit şerit yok)
+      const out: THREE.Vector3[] = []
+      if (car.parkStage) { out.push(car.parkStage.clone()); car.parkStage = null }
+      out.push(
         new THREE.Vector3(G.gateX, outY + off, 0),
         new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
         new THREE.Vector3(G.lane, G.dirY * 44, 0),
-      ])
+      )
+      car.setPath(out)
       return
     }
     const y = car.group.position.y
