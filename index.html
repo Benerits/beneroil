@@ -574,6 +574,7 @@
 
   <div class="hud">
     <div class="chip" style="min-width:62px"><span class="cl" data-i18n="GÜN">GÜN</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="day">1</span></span></div>
+    <div class="chip" style="min-width:66px"><span class="cl" data-i18n="SAAT">SAAT</span><span class="cv">🕒 <span id="hud-clock">06:00</span></span></div>
     <div class="chip" style="min-width:152px"><span class="cl" data-i18n="KASA">KASA</span><span class="cv"><svg class="ic"><use href="#i-coin"/></svg> <span id="money">0</span> ₺</span></div>
     <div id="fuelrail">
     <div class="chip fuelchip"><span class="cl" data-i18n="BENZİN">BENZİN</span><span class="cv"><svg class="ic" style="color:var(--green)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-benzin" style="background:var(--green)"></div></div> <span id="lvl-benzin">0</span></span></div>
@@ -963,6 +964,15 @@ Sorun / Öneri Bildir
     border-radius:var(--r-md); box-shadow:var(--shadow); cursor:pointer">
     <svg class="ic" style="width:16px;height:16px"><use href="#i-user"/></svg><span data-i18n="Şimdi Kayıt Ol">Şimdi Kayıt Ol</span>
   </button>
+
+  <!-- müşteri patlaması geri sayımı: rush aktifken görünür (sağ üst, HUD altı) -->
+  <div id="rushtimer" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(64px + env(safe-area-inset-top)); z-index:34;
+    align-items:center; gap:8px; padding:8px 14px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:14px;
+    color:#fff; background:linear-gradient(135deg,#e0903d,#d64545); border:0; border-bottom:3px solid #a93636;
+    border-radius:var(--r-md); box-shadow:var(--shadow); animation:rushpulse 1s ease-in-out infinite">
+    ⚡ <span data-i18n="MÜŞTERİ PATLAMASI">MÜŞTERİ PATLAMASI</span> · <span id="rushsec">90</span>s
+  </div>
+  <style>@keyframes rushpulse { 0%,100% { transform:scale(1) } 50% { transform:scale(1.045) } }</style>
 
   <div id="tankerpanel" style="display:none"></div>
 

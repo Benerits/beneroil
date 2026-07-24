@@ -3199,6 +3199,7 @@ function handleClick(e: PointerEvent) {
 // ---- Oyun döngüsü ----
 const clock = new THREE.Clock()
 // vitrin: ?night=1 gece ortasından başlatır (tanıtım çekimi / ekran görüntüsü)
+let lastClockStr = ''
 let dayTime = new URLSearchParams(location.search).has('night') ? 100 : 0
 let prevCycleT = 0
 let achieveT = 2
@@ -3223,6 +3224,27 @@ function frame() {
 
   dayTime += dt
   world.setNight(nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE))
+
+  // 🕒 GÜN İÇİ SAAT (HUD): döngü kesri → 24 saat; gün 06:00'da başlar (kredi taksidi
+  // gün başında kesildiğinden oyuncular saati görmek istiyor). Metin değişince yazılır.
+  {
+    const frac = (dayTime % DAY_CYCLE) / DAY_CYCLE
+    const hTot = (6 + frac * 24) % 24
+    const str = `${String(Math.floor(hTot)).padStart(2, '0')}:${String(Math.floor((hTot % 1) * 60)).padStart(2, '0')}`
+    if (str !== lastClockStr) { lastClockStr = str; const el = document.getElementById('hud-clock'); if (el) el.textContent = str }
+  }
+  // ⚡ müşteri patlaması geri sayımı: rush promosu aktifken sağ üstte kalan saniye
+  {
+    const rt = document.getElementById('rushtimer') as HTMLDivElement | null
+    if (rt) {
+      const rushLeft = state.promo?.type === 'rush' ? Math.max(0, Math.ceil((state.promo.until - Date.now()) / 1000)) : 0
+      if (rushLeft > 0) {
+        if (rt.style.display !== 'flex') rt.style.display = 'flex'
+        const sec = document.getElementById('rushsec')
+        if (sec && sec.textContent !== String(rushLeft)) sec.textContent = String(rushLeft)
+      } else if (rt.style.display !== 'none') rt.style.display = 'none'
+    }
+  }
 
   if (guestPaused) { composer!.render(); return } // misafir gün-eşiği: oyun donar (ilerleme eşikte kalır), sahne render'a devam
   state.tick(dt)
