@@ -310,8 +310,11 @@ function sanitizeSave(save) {
   s.reputation = clamp(s.reputation, 0, 5, 3)
   s.day = clamp(s.day, 1, 100000, 1)
   s.pumps = clamp(s.pumps, 1, 14, 1) // state.ts MAX_PUMPS = 14
+  // Bu ünitelerin istemcide sınırı YOK ("sınırsız kurulur"). 30 clamp'i 31. üniteyi
+  // save'de siliyordu (para gitti, ünite yok — gir-çık şikâyetinin bir kolu). 200 = abuse
+  // tavanı; meşru oyuncunun asla ulaşamayacağı kadar yüksek.
   for (const k of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount']) {
-    if (k in s) s[k] = clamp(s[k], 0, 30, 0)
+    if (k in s) s[k] = clamp(s[k], 0, 200, 0)
   }
   s.evChargers = clamp(s.evChargers, 0, 12, 0) // state.ts EV_COSTS = 12 kademe
   s.signLevel = clamp(s.signLevel, 0, 3, 0)
@@ -348,7 +351,9 @@ function sanitizeSave(save) {
   if ('elecPrice' in s) {
     s.elecPrice = clamp(s.elecPrice, 4, 18, 8)
   }
-  if (Array.isArray(save.placedRects) && save.placedRects.length > 64) save.placedRects = save.placedRects.slice(0, 64)
+  // 64 azdı: 14 pompa + 12 şarj + sınırsız otopark/panel/self-yıkama rahat aşıyor; taşan
+  // yapıların çakışma dikdörtgenleri sessizce düşüyordu. 512 ≈ 30KB, body limitine uzak.
+  if (Array.isArray(save.placedRects) && save.placedRects.length > 512) save.placedRects = save.placedRects.slice(0, 512)
   // muhasebe log'ları: şişmeyi/abuse'ı önlemek için son 40 kayda kırp
   if (Array.isArray(s.fuelLog) && s.fuelLog.length > 40) s.fuelLog = s.fuelLog.slice(-40)
   if (Array.isArray(s.wageLog) && s.wageLog.length > 40) s.wageLog = s.wageLog.slice(-40)

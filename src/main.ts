@@ -1367,6 +1367,7 @@ const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
 // ---- Kayıt sistemi ----
 
 let lastRemotePush = 0
+let pendingPush: number | null = null // throttle penceresinde bekleyen garanti push (persist)
 // Buluttan kayıt YÜKLENEMEDİYSE (ağ/sunucu hatası) hiçbir kayıt gönderilmez —
 // taze bir oturumun ilerlemiş bulut kaydını EZMESİNİ önler (override koruması).
 let cloudBlocked = false
@@ -1515,6 +1516,16 @@ function persist() {
   if (Date.now() - lastRemotePush > 5_000) {
     lastRemotePush = Date.now()
     syncSave()
+  } else if (pendingPush === null) {
+    // Throttle penceresine denk gelen değişiklik (ör. SATIN ALMA) askıda KALMASIN:
+    // pencere kapanınca kesin bir push planla. Yoksa bir sonraki persist tetiğine kadar
+    // hiç gönderilmiyordu — iOS'ta uygulama o arada kill edilirse son alışveriş kayboluyordu
+    // ("ürün yok para gitmiş" şikâyetinin istemci ayağı; pagehide app-kill'de güvenilmez).
+    pendingPush = window.setTimeout(() => {
+      pendingPush = null
+      lastRemotePush = Date.now()
+      syncSave()
+    }, 5_200 - (Date.now() - lastRemotePush))
   }
 }
 
