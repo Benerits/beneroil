@@ -77,10 +77,9 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
         }
       })
     }
-    // ziyaret say + İLK misafir ise ekibe "misafir katıldı" push tetikle (localStorage'da dedup)
-    const firstGuest = !localStorage.getItem('benzinlik-guest-joined')
-    fetch('/api/visit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ guest: firstGuest }) }).catch(() => {})
-    if (firstGuest) localStorage.setItem('benzinlik-guest-joined', '1')
+    // ziyaret sayacı — "misafir katıldı" push'u BURADA DEĞİL: sayfayı açan herkes için
+    // bildirim gidiyordu; push artık oyuncu GERÇEKTEN misafir başlayınca (proceedGuest) gider.
+    fetch('/api/visit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) }).catch(() => {})
     // canlı oyuncu sayacı — kayıt öncesi sosyal kanıt (FOMO)
     fetch('/api/stats').then(r => r.json()).then(st => {
       const box = document.getElementById('livecount') as HTMLDivElement
@@ -251,6 +250,11 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
     showAuthGate = openGate
     openGate() // başta HEP göster
     const proceedGuest = () => {
+      // ekibe "misafir katıldı" push'u: oyuncu GERÇEKTEN misafir başlayınca, cihaz başına 1 kez
+      if (!localStorage.getItem('benzinlik-guest-joined')) {
+        localStorage.setItem('benzinlik-guest-joined', '1')
+        fetch('/api/visit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ guest: true }) }).catch(() => {})
+      }
       guestPaused = false
       gate.style.display = 'none'
       gate.classList.remove('solid')
@@ -264,14 +268,14 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
       const o = document.createElement('div')
       o.id = 'guestpitch'
       o.style.cssText = 'position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(20,28,38,.5);backdrop-filter:blur(3px)'
-      const li = (s: string) => `<div style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.45">${s}</div>`
+      const li = (s: string) => `<div style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.45"><span style="color:var(--green);flex-shrink:0">✓</span><span>${s}</span></div>`
       o.innerHTML = `<div style="max-width:360px;width:100%;background:var(--paper);border:1.5px solid var(--edge);border-bottom:3px solid var(--edge);border-radius:var(--r-lg);padding:20px 18px;box-shadow:var(--shadow);font-family:var(--font)">
         <div style="font-size:17px;font-weight:800;margin-bottom:10px">${t('Misafir oynayabilirsin — ama kaydolursan:')}</div>
         <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:16px">
-          ${li(t('🎁 +₺2.500 başlangıç bonusu'))}
-          ${li(t('🔥 Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)'))}
-          ${li(t('☁️ İlerlemen bulutta — cihaz değişse de kaybolmaz'))}
-          ${li(t('🧪 Sıradaki Benerits oyununun kapalı BETA’sına erken erişim'))}
+          ${li(t('+₺2.500 başlangıç bonusu'))}
+          ${li(t('Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)'))}
+          ${li(t('İlerlemen bulutta — cihaz değişse de kaybolmaz'))}
+          ${li(t('Sıradaki Benerits oyununun kapalı BETA’sına erken erişim'))}
         </div>
         <button id="gp-reg" class="btn primary" style="width:100%;justify-content:center;font-weight:800;margin-bottom:8px">${t('Kayıt Ol (10 saniye)')}</button>
         <button id="gp-guest" class="btn" style="width:100%;justify-content:center">${t('Yine de misafir devam et')}</button>
