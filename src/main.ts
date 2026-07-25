@@ -1984,6 +1984,28 @@ function footprintOf(id: string, move = false): { w: number; d: number; grass?: 
   return id in PLACEABLE ? PLACEABLE[id](move) : null
 }
 
+// ---- Rezerv görselleştirme: "yer boş ama kırmızı" şikâyetinin fixi ----
+// Pompanın araç yuvası, servis şeridi, ofis çevresi gibi GÖRÜNMEZ rezervler yerleştirmeyi
+// engelliyor ama oyuncu alanı boş görüyordu (#242, #341, #223). Yerleştirme modunda bu
+// rezervler turuncu yarı saydam gösterilir — nereye kurulamayacağı artık belli.
+let reserveOverlay: THREE.Group | null = null
+function showReserves(skipId: string) {
+  hideReserves()
+  const g = new THREE.Group()
+  for (const o of fixedObstacles(skipId)) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.d),
+      new THREE.MeshBasicMaterial({ color: 0xe8862e, transparent: true, opacity: 0.13, depthWrite: false }))
+    m.position.set(o.cx, o.cy, 0.045)
+    g.add(m)
+  }
+  world.scene.add(g)
+  reserveOverlay = g
+}
+function hideReserves() {
+  if (reserveOverlay) { world.scene.remove(reserveOverlay); reserveOverlay = null }
+}
+let reserveHintShown = false
+
 function startPlacement(id: string, move = false) {
   cancelPlacement()
   const f = footprintOf(id, move)
@@ -2006,6 +2028,7 @@ function startPlacement(id: string, move = false) {
   placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, valid: false, cx: 0, cy: 0, rot: placedRot[id] ?? 0 }
   root.rotation.z = placing.rot * Math.PI / 2
   world.showGrid(true)
+  showReserves(id) // görünmez rezervler (araç yolu/yuva) turuncu görünür — "boş ama kırmızı" bitti
   ui.closeShop()
   ui.hideBuildingCard()
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'block'
@@ -2013,6 +2036,10 @@ function startPlacement(id: string, move = false) {
   ui.toast(move
     ? t('Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir')
     : t('Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir'), '')
+  if (!reserveHintShown) {
+    reserveHintShown = true
+    ui.toast(t('🟠 Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.'), '', true)
+  }
 }
 
 function startZoneMode(kind: 'land' | 'pave') {
@@ -2029,6 +2056,7 @@ function startZoneMode(kind: 'land' | 'pave') {
 }
 
 function cancelPlacement() {
+  hideReserves()
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'none'
   const zc = document.getElementById('zonecostwrap'); if (zc) zc.style.display = 'none'
   if (placing) {
