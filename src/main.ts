@@ -853,6 +853,26 @@ function autoSelect(car: Car | null) {
   ui.selectCar(car)
 }
 
+// ---- Karşı-yaka rehber banner'ı: arsa alınmış ama karşı istasyon aktif değil ----
+// ~15 feedback "karşıya giriş-çıkış ekleyemiyorum" — kapıların İLK pompa/şarjla OTOMATİK
+// geldiğini kimse bilmiyordu. Koşul sürdükçe görünür, ✕ ile oturumluk kapanır.
+let farHintDismissed = false
+function updateFarHint() {
+  const box = document.getElementById('farhint'); if (!box) return
+  const farParcels = [...state.ownedParcels].filter(k => Number(String(k).split(',')[0]) >= 3)
+  if (farHintDismissed || farParcels.length === 0 || world.farStationOn) { box.style.display = 'none'; return }
+  const anyPaved = farParcels.some(k => state.pavedParcels.has(k))
+  const txt = document.getElementById('farhint-text')
+  if (txt) txt.textContent = anyPaved
+    ? t('🚧 Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.')
+    : t('🚧 Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.')
+  box.style.display = 'block'
+}
+document.getElementById('farhint-x')?.addEventListener('click', () => {
+  farHintDismissed = true
+  const box = document.getElementById('farhint'); if (box) box.style.display = 'none'
+})
+
 /** pompacı çalışan pompaya yanaşan araç: panel açılmaz, popup kalmaz (pompacı halleder) */
 function isAttendantCar(car: Car): boolean {
   if (car.slotIndex < 0) return false
@@ -916,10 +936,16 @@ interface Visit {
 /** araç park edip yayanın yürüyerek ziyaret edeceği tesisler */
 function facilityVisits(car: Car): Visit[] {
   const v: Visit[] = []
-  if (car.wantsMarket && state.marketLevel > 0) {
+  // Yaya YOL KARŞISINA geçmez: otopark yakın istasyonda, tesis karşı yakadaysa ziyaret yok.
+  // (Eskiden yürüyerek otoyoldan geçiyor, araçlar yayaya çarpıp tıkanıyordu — 2 feedback.)
+  const sameSide = (id: string) => {
+    const b = world.buildings.find(x => x.id === id)
+    return !b || b.group.position.x < ROAD_X
+  }
+  if (car.wantsMarket && state.marketLevel > 0 && sameSide('market')) {
     v.push({ buildingId: 'market', revenue: () => Math.round((25 + Math.random() * 35) * state.marketLevel), toastMsg: m => t('🛒 Market alışverişi: +₺{0}', m), score: 0.2 })
   }
-  if (car.wantsToilet && state.toiletLevel > 0) {
+  if (car.wantsToilet && state.toiletLevel > 0 && sameSide('toilet')) {
     const fee = state.toiletFee
     v.push({
       buildingId: 'toilet',
@@ -928,10 +954,10 @@ function facilityVisits(car: Car): Visit[] {
       score: 0.15 * state.toiletLevel - (fee > 0 ? 0.03 + fee * 0.012 : 0),
     })
   }
-  if (car.wantsCoffee && state.hasCoffee) {
+  if (car.wantsCoffee && state.hasCoffee && sameSide('coffee')) {
     v.push({ buildingId: 'coffee', revenue: () => Math.round(20 + Math.random() * 25), toastMsg: m => t('☕ Kahve satışı: +₺{0}', m), score: 0.15 })
   }
-  if (car.wantsFood && state.hasRestaurant) {
+  if (car.wantsFood && state.hasRestaurant && sameSide('restaurant')) {
     v.push({ buildingId: 'restaurant', revenue: () => Math.round(80 + Math.random() * 80), toastMsg: m => t('🍽️ Restoran hesabı: +₺{0}', m), score: 0.25 })
   }
   return v
@@ -3448,6 +3474,7 @@ function frame() {
   if (achieveT <= 0) {
     achieveT = 2
     checkAchievements(state)
+    updateFarHint()
     // Dönüşüm anı: misafir İLK ₺10.000 başarımını açtı — gurur zirvesinde kayıt kapısı.
     // (Kapatılabilir: "Misafir olarak devam et" görünür kalır; oturumda 1 kez.)
     if (!auth.loggedIn() && !firstTenGateShown && state.achievements.has('first-10k')) {

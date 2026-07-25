@@ -51,6 +51,10 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  '🚧 Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.':
+    '🚧 Your land across the road is ready! Place a pump or charger — entry/exit gates appear AUTOMATICALLY.',
+  '🚧 Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.':
+    '🚧 First pave your land across the road, then place a pump/charger — gates appear AUTOMATICALLY.',
   'Parsele dokun…': 'Tap a parcel…',
   'Arsana dokun…': 'Tap your land…',
   '+₺{0} toplandı! ({1} ünitenin ortak kumbarası — gelir ×{1})': '+₺{0} collected! (shared piggy bank of {1} units — income ×{1})',

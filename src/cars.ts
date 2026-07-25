@@ -764,6 +764,16 @@ export class CarManager {
     for (let i = 0; i < this.opts.evCount(); i++) if (this.evStation(i) === st) return true
     return false
   }
+  /** ARAÇ TİPİNE göre ekipman var mı — benzinli araç şarj-only istasyona girip
+   *  sonsuza dek bekliyordu ("normal arabalar giriyor, hareket etmeden bekliyor" şikâyeti) */
+  private stationHasEquipmentFor(kind: 'fuel' | 'ev', st: 'near' | 'far'): boolean {
+    if (kind === 'ev') {
+      for (let i = 0; i < this.opts.evCount(); i++) if (this.evStation(i) === st) return true
+      return false
+    }
+    for (let i = 0; i < this.opts.pumpCount(); i++) if (this.pumpStation(i) === st) return true
+    return false
+  }
 
   update(dt: number) {
     // yoldan geçen trafik
@@ -1024,8 +1034,10 @@ export class CarManager {
       car.group.position.set(LANE_FAR, 40, 0)
       car.group.rotation.z = -Math.PI / 2
       car.setPath([new THREE.Vector3(LANE_FAR, -44, 0)])
-      // karşı istasyon açık VE en az bir karşı pompa/şarj varsa karşı şeritten servise girilir (tır parkı karşıda yok)
-      if (this.opts.farActive?.() && this.stationHasEquipment('far')) {
+      // karşı istasyon açık VE bu ARAÇ TİPİNE uygun karşı ekipman varsa girilir (tır parkı karşıda yok).
+      // (Eski hali tipe bakmıyordu: yalnız şarj olan karşı istasyona benzinli araçlar girip
+      //  bekleme noktasında sonsuza dek kalıyor, sabır bitince itibar yakıyordu.)
+      if (this.opts.farActive?.() && this.stationHasEquipmentFor(isEv ? 'ev' : 'fuel', 'far')) {
         car.wantsEnter = Math.random() < this.opts.entryChance() * this.stationCrowdFactor(isEv, 'far')
       }
     }
@@ -1212,6 +1224,9 @@ export class CarManager {
       car.showBars()
       return
     }
+    // emniyet: bu istasyonda HİÇ pompa yoksa (hepsi karşıda/başka tip) bekleme noktası alma —
+    // asla gelmeyecek pompayı bekleyip sabır tüketme, yoluna devam et
+    if (!this.stationHasEquipmentFor('fuel', car.station)) return
     // boş bekleme noktası REZERVE edilir; hiç yer yoksa araç girmez, yoluna gider
     const waitOcc = this.waitOccFor(car.station)
     let wi = -1
