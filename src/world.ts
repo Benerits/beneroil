@@ -813,6 +813,9 @@ export class World {
   private ownedMarks = new Map<string, THREE.Group>()
   /** dinamik servis noktaları: pompa/şarj taşınınca araçlar yeni yere gelir */
   pumpSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => (PUMP_SLOTS_POS[i] ?? PUMP_SLOTS_POS[3]).clone())
+  /** pompa/şarj oyuncu açıları (rad) — araç slotta bu açıyla hizalanır (döndürülmüş ünitede yan durma fixi) */
+  pumpAngles: number[] = []
+  evAngles: number[] = []
   evSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => (EV_SLOTS_POS[i] ?? EV_SLOTS_POS[3]).clone())
   tankAnchor = new THREE.Vector2(TANK_POS.x, TANK_POS.y)
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
@@ -1150,6 +1153,7 @@ export class World {
     const ang = rot * Math.PI / 2
     const flip = far ? -1 : 1
     this.pumpSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.8 * flip, base.y + Math.sin(ang) * 1.8, 0)
+    this.pumpAngles[index] = ang // araç pompanın uzun eksenine paralel dursun (yan durma fixi)
     const g = new THREE.Group()
     box(1.7, 3.4, 0.2, 0xc7ccd1, 0, 0, 0.1, g)
     box(1.75, 3.45, 0.05, 0xe0b13e, 0, 0, 0.02, g)
@@ -1180,6 +1184,7 @@ export class World {
     // karşı istasyonda yanaşma batıdan (araç yuvası batıda) — x ofseti terslenir
     const evFlip = base.x > ROAD_X ? -1 : 1
     this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.1 * evFlip, base.y + Math.sin(ang) * 1.1, 0)
+    this.evAngles[index] = ang // araç ünitenin açısına paralel dursun
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({
       color: 0x2f8fd6, transparent: true, opacity: 0.28,

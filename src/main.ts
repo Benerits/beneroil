@@ -250,11 +250,38 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
     }
     showAuthGate = openGate
     openGate() // başta HEP göster
-    gGuestBtn.addEventListener('click', () => {
+    const proceedGuest = () => {
       guestPaused = false
       gate.style.display = 'none'
       gate.classList.remove('solid')
       maybeGuestGate() // gün-eşiği zaten dolduysa (yenileyip dönen misafir) gate ANINDA geri açılır (kayıt zorunlu)
+    }
+    // Misafir'e basınca BİR KEZ kayıt-avantaj modalı (dönüşüm teşviki) — ikinci basışta direkt geçer
+    let guestPitchShown = false
+    gGuestBtn.addEventListener('click', () => {
+      if (guestPitchShown) { proceedGuest(); return }
+      guestPitchShown = true
+      const o = document.createElement('div')
+      o.id = 'guestpitch'
+      o.style.cssText = 'position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(20,28,38,.5);backdrop-filter:blur(3px)'
+      const li = (s: string) => `<div style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.45">${s}</div>`
+      o.innerHTML = `<div style="max-width:360px;width:100%;background:var(--paper);border:1.5px solid var(--edge);border-bottom:3px solid var(--edge);border-radius:var(--r-lg);padding:20px 18px;box-shadow:var(--shadow);font-family:var(--font)">
+        <div style="font-size:17px;font-weight:800;margin-bottom:10px">${t('Misafir oynayabilirsin — ama kaydolursan:')}</div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:16px">
+          ${li(t('🎁 +₺2.500 başlangıç bonusu'))}
+          ${li(t('🔥 Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)'))}
+          ${li(t('☁️ İlerlemen bulutta — cihaz değişse de kaybolmaz'))}
+          ${li(t('🧪 Sıradaki Benerits oyununun kapalı BETA’sına erken erişim'))}
+        </div>
+        <button id="gp-reg" class="btn primary" style="width:100%;justify-content:center;font-weight:800;margin-bottom:8px">${t('Kayıt Ol (10 saniye)')}</button>
+        <button id="gp-guest" class="btn" style="width:100%;justify-content:center">${t('Yine de misafir devam et')}</button>
+      </div>`
+      document.body.appendChild(o)
+      document.getElementById('gp-guest')?.addEventListener('click', () => { o.remove(); proceedGuest() })
+      document.getElementById('gp-reg')?.addEventListener('click', () => {
+        o.remove()
+        ;(document.getElementById('gemail') as HTMLInputElement | null)?.focus()
+      })
     })
     // Oyun-içi "Şimdi Kayıt Ol" CTA (yalnız misafirken görünür) → gate'i yeniden açar
     const cta = document.getElementById('guestcta') as HTMLButtonElement
@@ -500,11 +527,17 @@ function openOfficePanel() {
 
   // 2) Yakıt satış fiyatları (+/-)
   const pricesEl = document.getElementById('of-prices')
-  if (pricesEl && card?.priceRows) pricesEl.innerHTML = card.priceRows.map(r =>
-    `<div class="prow"><span class="pl">${r.label}</span><span class="pc">${typeof r.cost === 'number' ? `alış ₺${r.cost}` : r.cost}</span>`
-    + `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>`
-    + `<span class="pv">₺${r.price.toFixed(1)}</span>`
-    + `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
+  if (pricesEl && card?.priceRows) {
+    const flow = Math.round(state.priceDemandFactor() * 100)
+    pricesEl.innerHTML = card.priceRows.map(r =>
+      `<div class="prow"><span class="pl">${r.label}</span><span class="pc">${typeof r.cost === 'number' ? `alış ₺${r.cost}` : r.cost}</span>`
+      + `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>`
+      + `<span class="pv">₺${r.price.toFixed(1)}</span>`
+      + `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
+      // fiyat-akış bağı GÖRÜNÜR: +/- bastıkça bu satır canlı değişir ("fiyat bir şey değiştirmiyor" hissinin ilacı)
+      + `<div class="sd" style="text-align:center; padding:7px 4px 3px; font-weight:800; color:${flow >= 100 ? 'var(--green-dark)' : flow >= 70 ? 'var(--orange-dark)' : 'var(--red)'}">`
+      + `🚗 ${t('Bu fiyatlarla müşteri akışı')}: %${flow}</div>`
+  }
 
   // 3) Müşteri & itibar
   const cust = document.getElementById('of-customer')
@@ -812,6 +845,8 @@ const cars = new CarManager(world.scene, modelLib, {
   prices: () => state.prices,
   pumpSlot: i => world.pumpSlots[i],
   evSlot: i => world.evSlots[i],
+  pumpAngle: i => world.pumpAngles[i] ?? 0,
+  evAngle: i => world.evAngles[i] ?? 0,
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
   farActive: () => world.farStationOn,

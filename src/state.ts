@@ -407,13 +407,17 @@ export class GameState {
   entryChance() {
     if (this.closed) return 0
     const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor()
-    const c = boost * (0.32 + 0.1 * this.signLevel + 0.05 * (this.reputation - 3))
+    const c = 0.32 + 0.1 * this.signLevel + 0.05 * (this.reputation - 3)
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
       + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
       + (this.hasCoffee ? 0.02 : 0) + (this.hasRestaurant ? 0.03 : 0)
       + (this.hasTruckPark ? 0.02 : 0) + 0.02 * Math.min(this.airWaterCount, 3)
       + 0.02 * Math.min(this.selfWashCount, 3)
-    return Math.min(0.95, Math.max(0.08, c))
+    // Fiyat esnekliği TÜM akışı çarpar. Eskiden yalnız taban terimi çarpıyordu —
+    // gelişmiş istasyonda tesis terimleri fiyattan bağımsız kalınca tavan fiyat
+    // trafiği neredeyse hiç düşürmüyordu ("fiyat bir şey değiştirmiyor", #374 #414 #124).
+    // Varsayılan fiyatta çarpan 1.0 → mevcut denge değişmez; tavanda ~%65 az müşteri.
+    return Math.min(0.95, Math.max(0.05, c * boost))
   }
 
   /** Sipariş miktar çarpanı (× ORDER_STEP litre parti). 1 = minimum; + ile full'e kadar step. */

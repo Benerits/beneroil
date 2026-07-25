@@ -705,6 +705,9 @@ export interface CarManagerOpts {
   gateOutY: () => number
   /** karşı (yol karşısı) istasyon aktif mi — açıksa karşı şeritten servis trafiği başlar */
   farActive?: () => boolean
+  /** ünitenin oyuncu açısı (rad) — araç slotta bu açıyla hizalanır */
+  pumpAngle?: (i: number) => number
+  evAngle?: (i: number) => number
   /** karşı istasyon kapı y'leri (far araç güneye gittiği için giriş +y / çıkış -y) */
   farGateInY?: () => number
   farGateOutY?: () => number
@@ -1257,7 +1260,12 @@ export class CarManager {
 
   private arriveAtSlot(car: Car) {
     car.phase = 'atPump'
-    car.group.rotation.z = car.station === 'far' ? -Math.PI / 2 : Math.PI / 2
+    // araç, ünitenin OYUNCU AÇISINA paralel durur — eski sabit ±90° döndürülmüş
+    // pompada/şarjda aracı hep yan gösteriyordu ("yönünü düzelttim, yan duruyor")
+    const ang = car.kind === 'ev'
+      ? (this.opts.evAngle?.(car.slotIndex) ?? 0)
+      : (this.opts.pumpAngle?.(car.slotIndex) ?? 0)
+    car.group.rotation.z = (car.station === 'far' ? -Math.PI / 2 : Math.PI / 2) + ang
     car.showBubble()
     this.opts.onCarReady(car)
   }
