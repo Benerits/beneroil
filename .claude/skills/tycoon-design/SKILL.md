@@ -7,6 +7,8 @@ description: Tycoon / işletme simülasyonu tasarım rehberi — Benzinlik oyunu
 
 Bu oyunun türü: **tycoon (işletme simülasyonu)** + **time-management** (oyuncu servisi bizzat yapar, Diner Dash usulü) karışımı. Referanslar: Gas Station Simulator, Game Dev Tycoon, Township, Diner Dash.
 
+**Skill seti** (konuya göre ilgili olanı da yükle): `tycoon-economy` (denge/exploit/anti-cheat senkronu), `tycoon-retention` (misafir→kayıt hunisi, dönüş kancaları), `tycoon-feedback-ops` (şikâyet kümeleme + canlı doğrulama). Büyük yol haritası: `docs/MAJOR-PLAN.md`. Neden-tuttu analizi: `docs/WHY-IT-WORKS.md`.
+
 ## Çekirdek döngü (asla bozma)
 1. Müşteri gelir → 2. Oyuncu servis yapar (beceri/dikkat) → 3. Para kazanılır → 4. Paranın harcanacağı anlamlı yükseltme olmalı → 5. Yükseltme daha çok/zengin müşteri getirir → 1'e dön.
 Döngünün her halkasında oyuncunun "bir sonraki hedefi" görünür olmalı (kilitli mağaza satırları bunu sağlar — kilidin NEDENİ her zaman yazsın).
