@@ -1070,13 +1070,18 @@ export class CarManager {
 
   /** tıra boş tır parkı yeri bul ve gönder; başarılıysa true */
   sendTruckToPark(car: Car): boolean {
-    // istasyon izolasyonu: tır parkı yakın istasyonda — karşı şerit tırı yolu kesip giremez
+    // istasyon izolasyonu: tır giriş/manevra yolları near koordinatlı — karşı şerit tırı giremez.
+    // Ayrıca near tırı KARŞI yakaya taşınmış tır parkına da gidemez (yolu kesip tıkanıyordu, #269).
     if (car.station !== 'near') return false
     const spots = this.opts.truckSpots()
     if (!spots.length) return false
     while (this.truckOcc.length < spots.length) this.truckOcc.push(null)
     let si = -1
-    for (let i = 0; i < spots.length; i++) if (!this.truckOcc[i]) { si = i; break }
+    for (let i = 0; i < spots.length; i++) {
+      if (this.truckOcc[i]) continue
+      if (spots[i].spot.x > ROAD_X) continue // karşı yakadaki tır parkı near tıra kapalı
+      si = i; break
+    }
     if (si < 0) return false
     this.truckOcc[si] = car
     car.truckSlot = si
@@ -1272,14 +1277,18 @@ export class CarManager {
 
   /** servis bitti, tesis kullanacak → otoparka çek. Otopark yok/dolu ise false. */
   sendToParking(car: Car): boolean {
-    // İSTASYON İZOLASYONU: otopark/tesisler YAKIN istasyona ait — karşı istasyonun müşterisi
-    // yolu dik kesip buraya GELEMEZ (kullanıcı şikayeti). Far müşteri servis alır ve gider.
-    if (car.station !== 'near') return false
+    // YAKA EŞLEŞMESİ: araç yalnız KENDİ istasyonunun yakasındaki otoparka park eder.
+    // Eski near-only kilit yerine yaka filtresi: near araç karşıya park etmeye gidemez
+    // (yolu dik kesip çıkışı tıkıyordu), karşı müşteri de KARŞI yakadaki otoparkı
+    // kullanabilir — karşı istasyon otopark+tesisle gerçek istasyon olur.
     const spots = this.opts.parkSpots()
     if (spots.length === 0) return false
     while (this.parkOcc.length < spots.length) this.parkOcc.push(null)
     let spot = -1
-    for (let i = 0; i < spots.length; i++) if (!this.parkOcc[i]) { spot = i; break }
+    for (let i = 0; i < spots.length; i++) {
+      if (this.parkOcc[i]) continue
+      if ((spots[i].pos.x > ROAD_X) === (car.station === 'far')) { spot = i; break }
+    }
     if (spot < 0) return false
     // pompayı/şarjı hemen boşalt ki sıradaki müşteri girsin
     if (car.slotIndex >= 0) {
@@ -1299,8 +1308,10 @@ export class CarManager {
     const p = sp.pos.clone(); p.z = 0
     const stage = sp.stage.clone(); stage.z = 0
     car.parkStage = stage.clone()
+    // ön-sahneleme x'i yakaya göre aynalanır (3.0 near apron'uydu; far'da karşılığı)
+    const preStageX = car.station === 'far' ? 2 * ROAD_X - 3.0 : 3.0
     car.setPath([
-      new THREE.Vector3(3.0, car.group.position.y, 0),
+      new THREE.Vector3(preStageX, car.group.position.y, 0),
       stage,
       p,
     ], () => {

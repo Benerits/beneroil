@@ -936,11 +936,12 @@ interface Visit {
 /** araç park edip yayanın yürüyerek ziyaret edeceği tesisler */
 function facilityVisits(car: Car): Visit[] {
   const v: Visit[] = []
-  // Yaya YOL KARŞISINA geçmez: otopark yakın istasyonda, tesis karşı yakadaysa ziyaret yok.
-  // (Eskiden yürüyerek otoyoldan geçiyor, araçlar yayaya çarpıp tıkanıyordu — 2 feedback.)
+  // Yaya YOL KARŞISINA geçmez: ziyaret yalnız aracın KENDİ yakasındaki tesise.
+  // (Eskiden yürüyerek otoyoldan geçiyor, araçlar yayaya çarpıp tıkanıyordu — 2 feedback.
+  //  Yaka-duyarlı iki yönlü: karşı müşteri karşıya taşınmış tesisi kullanabilir.)
   const sameSide = (id: string) => {
     const b = world.buildings.find(x => x.id === id)
-    return !b || b.group.position.x < ROAD_X
+    return !b || (b.group.position.x > ROAD_X) === (car.station === 'far')
   }
   if (car.wantsMarket && state.marketLevel > 0 && sameSide('market')) {
     v.push({ buildingId: 'market', revenue: () => Math.round((25 + Math.random() * 35) * state.marketLevel), toastMsg: m => t('🛒 Market alışverişi: +₺{0}', m), score: 0.2 })
@@ -978,17 +979,23 @@ function missingPenalty(car: Car): number {
 /** araç servisleri (yıkama, yağ, hava-su) — park gerektirmez */
 function vehicleServices(car: Car): number {
   let d = 0
-  if (car.wantsWash && state.hasWash) {
+  // yaka eşleşmesi: karşıya taşınmış tesis near müşteriden kazanamaz (görünmez gelir, #269),
+  // karşı müşteri kendi yakasındaki üniteyi kullanır. Çok-üniteli tesiste herhangi bir
+  // örnek aracın yakasındaysa hizmet verilir.
+  const anyOnSide = (base: string) => world.buildings.some(x =>
+    (x.id === base || x.id.startsWith(base + '#'))
+    && (x.group.position.x > ROAD_X) === (car.station === 'far'))
+  if (car.wantsWash && state.hasWash && anyOnSide('wash')) {
     const m = Math.round(60 + Math.random() * 60)
     state.addPending('wash', m, t('Oto yıkama')); d += 0.2
     ui.toast(t('Araç yıkandı: ₺{0} kumbarada', m), 'good')
   }
-  if (car.wantsOil && state.hasOil) {
+  if (car.wantsOil && state.hasOil && anyOnSide('oil')) {
     const m = Math.round(150 + Math.random() * 100)
     state.addPending('oil', m, t('Yağ değişimi')); d += 0.25
     ui.toast(t('🔧 Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
-  if (car.wantsAir && state.hasAirWater) {
+  if (car.wantsAir && state.hasAirWater && anyOnSide('airwater')) {
     // adet çarpanı: çok üniteli istasyonda aynı anda birden çok araç kullanır (pendingCap'in
     // min(6) ölçeğiyle aynı tavan) — "2. üniteyi almanın anlamı yok" şikâyetinin fixi
     const m = Math.round(10 + Math.random() * 10) * Math.min(6, state.airWaterCount)
@@ -1035,7 +1042,8 @@ function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number; squat?
     .filter(b => !!b)
     .map(b => {
       const p = b!.group.position.clone()
-      p.x += 1.9; p.z = 0
+      p.x += b!.group.position.x > ROAD_X ? -1.9 : 1.9 // yaklaşma yönü yakaya göre aynalanır
+      p.z = 0
       return p
     })
   const g = personMesh()
