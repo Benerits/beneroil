@@ -839,7 +839,8 @@ composer.setSize(window.innerWidth, window.innerHeight)
 const cars = new CarManager(world.scene, modelLib, {
   pumpCount: () => state.pumps,
   evCount: () => state.evChargers,
-  entryChance: () => state.entryChance() * (isPromoMode ? 2.5 : 1),
+  // misafir gate'i açıkken kimse İSTASYONA girmez (ilerleme donuk) ama yol trafiği akar
+  entryChance: () => (guestPaused ? 0 : state.entryChance() * (isPromoMode ? 2.5 : 1)),
   evShare: () => (state.evChargers > 0 ? Math.min(0.5, 0.15 + 0.09 * state.evChargers) * state.evPriceFactor() : 0),
   isPumpBroken: i => state.brokenPumps.has(i),
   isChargerBroken: i => state.brokenChargers.has(i),
@@ -3488,7 +3489,14 @@ function frame() {
     }
   }
 
-  if (guestPaused) { composer!.render(); return } // misafir gün-eşiği: oyun donar (ilerleme eşikte kalır), sahne render'a devam
+  if (guestPaused) {
+    // Oyun DONUK ama YOL CANLI: transit trafiği akar (entryChance=0 → kimse istasyona
+    // girmez, ilerleme/ekonomi işlemez). Eskiden cars.update hiç çağrılmıyordu — gate
+    // arkasında ve gate'i yeni geçen misafirde yol BOMBOŞTU ("araçları göremiyorum").
+    cars.update(dt)
+    composer!.render()
+    return
+  }
   state.tick(dt)
   cars.update(dt)
   world.updateTankFill({
