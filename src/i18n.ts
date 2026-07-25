@@ -40,8 +40,19 @@ const EN: Record<string, string> = {
   'Giriş başarısız.': 'Sign-in failed.',
   'Misafir olarak oyna': 'Play as guest',
   'Misafir olarak devam et': 'Continue as guest',
-  'Gün {0}’e ulaştın! Devam etmek ve ilerlemeni KAYDETMEK için kaydol ya da Google/Apple ile giriş yap — kaydolmazsan ilerleme cihazda kalır, kaybolabilir.':
-    'You reached Day {0}! Sign up (or continue with Google/Apple) to keep playing and SAVE your progress — without an account it stays on this device and can be lost.',
+  'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
+    'You reached Day {0}! Sign up (or continue with Google/Apple) to keep playing — your progress moves to the cloud, plus a ₺2,500 bonus and daily streak rewards.',
+  '🎁 Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
+    '🎁 Sign-up bonus: +₺2,500 added to your cash — welcome, boss!',
+  '🔒 Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!':
+    '🔒 Daily login bonus (+₺500, up to ₺2,000 with a streak) is for registered players — sign up and start your streak!',
+  '💾 {0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.':
+    '💾 {0} days of progress live only on this device! Sign up: cloud save + ₺2,500 bonus + daily streak rewards.',
+  '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
+    '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
+  '🎁 Kayıt olana +₺2.500 başlangıç bonusu': '🎁 +₺2,500 starter bonus when you sign up',
+  '🔥 Günlük giriş serisi: her gün artan bonus (₺500 → ₺2.000)': '🔥 Daily login streak: growing bonus every day (₺500 → ₺2,000)',
+  '☁️ İlerlemen bulutta güvende — cihaz değişse de kaybolmaz': '☁️ Progress safe in the cloud — survives device changes',
   'Şimdi Kayıt Ol': 'Sign Up Now',
   'Hemen dene — kaydını tutmak için sonra kaydolabilirsin.': 'Jump right in — sign up later to keep your progress.',
   'Varsayılan sipariş tankı FULL doldurur — −/+ ile azaltıp artırabilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.':

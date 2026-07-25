@@ -48,10 +48,14 @@ async function api(path: string, method: string, body?: unknown): Promise<Record
   return data as Record<string, unknown>
 }
 
+/** Kayıt teşviki: yeni hesaba bir kerelik +₺2.500 (açılışta uygulanır, misafir→kayıt dönüşüm kancası) */
+export const REG_BONUS_KEY = 'benzinlik-regbonus'
+
 export async function register(email: string, password: string) {
   const d = await api('/api/register', 'POST', { email, password, lang })
   localStorage.setItem(TOKEN_KEY, String(d.token))
   localStorage.setItem(EMAIL_KEY, String(d.email))
+  localStorage.setItem(REG_BONUS_KEY, '1') // yeni hesap → açılışta kayıt bonusu
 }
 
 export async function login(email: string, password: string) {

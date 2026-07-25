@@ -38,6 +38,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
     // (hesabın bulut kaydı otoriter → giriş yapınca kendi ilerlemeni bulursun, misafir Gün-1 ezmez).
     // OAuth yeni hesap AÇMIŞ olabilir → yalnız hesap TAZE ise taşı, doluysa dokunma.
     const afterAuth = async (mode: 'register' | 'login' | 'oauth') => {
+      if (mode === 'register') localStorage.setItem(auth.REG_BONUS_KEY, '1') // gate register yolu (raw fetch) → bonus
       const g = auth.loadGuest()
       if (g) {
         try {
@@ -46,7 +47,10 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
           } else if (mode === 'oauth') {
             const acc = await auth.pullSave() as { s?: { day?: number }; placedRects?: unknown[] } | null
             const accEmpty = !acc || ((acc.s?.day ?? 1) <= 1 && !(Array.isArray(acc.placedRects) && acc.placedRects.length > 0))
-            if (accEmpty) await auth.pushSave(g) // OAuth ile yeni açılan boş hesap → taşı
+            if (accEmpty) {
+              await auth.pushSave(g) // OAuth ile yeni açılan boş hesap → taşı
+              localStorage.setItem(auth.REG_BONUS_KEY, '1') // OAuth ile YENİ hesap = kayıt → bonus
+            }
           }
           // mode === 'login': ASLA push yok — misafir verisi atılır, hesaptan devam
           auth.clearGuest()
@@ -1498,11 +1502,12 @@ function showVerifyGate() {
 // ---- Misafir eşiği: kayıtsız GUEST_MAX_DAY oyun günü serbest; sonra kayıt/giriş gate'i (deneme kapısı) ----
 const GUEST_MAX_DAY = 5
 let guestGateShown = false
+let firstTenGateShown = false // ilk-10k dönüşüm kapısı oturumda 1 kez
 function maybeGuestGate() {
   if (auth.loggedIn() || guestGateShown || state.day < GUEST_MAX_DAY) return
   guestGateShown = true
   guestPaused = true
-  showAuthGate(t('Gün {0}’e ulaştın! Devam etmek ve ilerlemeni KAYDETMEK için kaydol ya da Google/Apple ile giriş yap — kaydolmazsan ilerleme cihazda kalır, kaybolabilir.', GUEST_MAX_DAY), true)
+  showAuthGate(t('Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.', GUEST_MAX_DAY), true)
 }
 
 function persist() {
@@ -2456,28 +2461,43 @@ async function doRegister(email: string, pass: string) {
 // (Eski halt akışından kalma koşulsuz remove(), misafirin gate'ini siliyordu → otomatik-giriş bug'ı.)
 if (auth.loggedIn()) document.getElementById('authgate')?.remove()
 {
+  // ---- 🎁 Kayıt bonusu: register / OAuth-yeni-hesap sonrası İLK açılışta bir kez ----
+  if (!isFullMode && !isPromoMode && auth.loggedIn() && localStorage.getItem(auth.REG_BONUS_KEY)) {
+    localStorage.removeItem(auth.REG_BONUS_KEY)
+    state.money += 2500
+    ui.toast(t('🎁 Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!'), 'good', true)
+    audio.achieve()
+    persist()
+  }
 
   // ---- Günlük giriş bonusu + seri + görev sıfırlama ----
+  // Seri bonusu KAYITLI oyunculara özel: misafir→kayıt dönüşüm teşviki. Misafir her gün
+  // ne kaçırdığını görür (somut ₺ + kilit) — kayıt olunca seri sıfırdan başlar.
   const today = new Date().toISOString().slice(0, 10)
   if (!isFullMode && state.lastLoginDate !== today) {
-    const yest = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
-    const continued = state.lastLoginDate === yest
-    const lapsed = !!state.lastLoginDate && !continued // önceden oynamış ama araya boşluk girmiş
-    state.loginStreak = continued ? state.loginStreak + 1 : 1
-    state.lastLoginDate = today
-    const bonus = 250 + 250 * Math.min(state.loginStreak, 7)
-    state.money += bonus
-    ui.toast(t('Günlük giriş bonusu: +₺{0} (seri: {1} gün)', bonus, state.loginStreak), 'good', true)
-    audio.achieve()
-    // geri dönüş kancası: lapsed oyuncuya "seni özledik" bonusu (seriyi cezalandırmadan geri çeker)
-    if (lapsed) {
-      state.money += 1000
-      ui.toast(t('Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000 🎁'), 'good', true)
+    if (auth.loggedIn()) {
+      const yest = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+      const continued = state.lastLoginDate === yest
+      const lapsed = !!state.lastLoginDate && !continued // önceden oynamış ama araya boşluk girmiş
+      state.loginStreak = continued ? state.loginStreak + 1 : 1
+      state.lastLoginDate = today
+      const bonus = 250 + 250 * Math.min(state.loginStreak, 7)
+      state.money += bonus
+      ui.toast(t('Günlük giriş bonusu: +₺{0} (seri: {1} gün)', bonus, state.loginStreak), 'good', true)
+      audio.achieve()
+      // geri dönüş kancası: lapsed oyuncuya "seni özledik" bonusu (seriyi cezalandırmadan geri çeker)
+      if (lapsed) {
+        state.money += 1000
+        ui.toast(t('Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000 🎁'), 'good', true)
+      }
+      state.dailyDate = today
+      state.dailyServed = 0
+      state.dailyDone = false
+      persist()
+    } else {
+      state.lastLoginDate = today // teaser günde 1 kez görünsün
+      ui.toast(t('🔒 Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!'), '', true)
     }
-    state.dailyDate = today
-    state.dailyServed = 0
-    state.dailyDone = false
-    persist()
   }
   if (state.dailyDate !== today) {
     state.dailyDate = today
@@ -3343,7 +3363,13 @@ function frame() {
   const cycleT = (dayTime % DAY_CYCLE) / DAY_CYCLE
   if (cycleT < prevCycleT) {
     state.day++
-    if (!auth.loggedIn()) { auth.saveGuest(savePayload()); maybeGuestGate() } // misafir: gün başı kaydet + gün-5 eşiği (boştayken de)
+    if (!auth.loggedIn()) {
+      auth.saveGuest(savePayload()); maybeGuestGate() // misafir: gün başı kaydet + gün-5 eşiği (boştayken de)
+      // dönüşüm teşviki: gün 3-4 sonunda somut kayıp uyarısı (gün 5 zaten zorunlu gate)
+      if (state.day >= 3 && state.day < GUEST_MAX_DAY) {
+        ui.toast(t('💾 {0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.', state.day - 1), 'bad', true)
+      }
+    }
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
@@ -3383,6 +3409,12 @@ function frame() {
   if (achieveT <= 0) {
     achieveT = 2
     checkAchievements(state)
+    // Dönüşüm anı: misafir İLK ₺10.000 başarımını açtı — gurur zirvesinde kayıt kapısı.
+    // (Kapatılabilir: "Misafir olarak devam et" görünür kalır; oturumda 1 kez.)
+    if (!auth.loggedIn() && !firstTenGateShown && state.achievements.has('first-10k')) {
+      firstTenGateShown = true
+      showAuthGate(t('🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.'))
+    }
   }
   saveT -= dt
   if (saveT <= 0) {
