@@ -51,6 +51,16 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  'Karşı Market': 'Across-Road Market',
+  'Karşı Market Sv.{0}': 'Across-Road Market Lv.{0}',
+  'Yol karşısındaki istasyonun müşterileri için ikinci market — karşı yakaya kurulur, yerinde yükselir.':
+    'A second market for your across-road station’s customers — built on the far side, upgrades in place.',
+  'Yol karşısı istasyonun müşterileri buradan alışveriş yapar — karşı yakaya ekstra gelir.':
+    'Across-road customers shop here — extra income for the far side.',
+  'Önce ana marketi kur': 'Build the main market first',
+  'Karşıda betonlu arsa gerekli': 'Needs paved land across the road',
+  '🛒 Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!':
+    '🛒 Across-road market is open — far-side customers will start shopping!',
   '🚧 Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.':
     '🚧 Your land across the road is ready! Place a pump or charger — entry/exit gates appear AUTOMATICALLY.',
   '🚧 Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.':

@@ -242,6 +242,7 @@ export class World {
   private signLevel = 0
   private signGroup: THREE.Group | null = null
   private marketGroup: THREE.Group | null = null
+  private market2Group: THREE.Group | null = null // karşı yaka marketi
   private toiletGroup: THREE.Group | null = null
   private batteryGroup: THREE.Group | null = null
   private tankGroup: THREE.Group
@@ -1136,6 +1137,7 @@ export class World {
     this.unregister(id)
     if (id === 'smr') this.steam = []
     if (id === 'market') this.marketGroup = null
+    if (id === 'market2') this.market2Group = null
     if (id === 'toilet') this.toiletGroup = null
     if (id === 'battery') this.batteryGroup = null
   }
@@ -1287,9 +1289,11 @@ export class World {
     this.register('sign', t('TABELA'), g, H + ph + 0.6) // tıklanabilir + etiketli (taşınabilir)
   }
 
-  buildMarket(level: number, pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(-3.8, 15.5)
-    if (this.marketGroup) { this.scene.remove(this.marketGroup); this.unregister('market') }
+  buildMarket(level: number, pos?: THREE.Vector2, regId: 'market' | 'market2' = 'market') {
+    // market2 = karşı yaka marketi (varsayılan konum near'ın ROAD_X etrafında aynası)
+    const at = pos ?? (regId === 'market2' ? new THREE.Vector2(2 * ROAD_X + 3.8, -15.5) : new THREE.Vector2(-3.8, 15.5))
+    const cur = regId === 'market2' ? this.market2Group : this.marketGroup
+    if (cur) { this.scene.remove(cur); this.unregister(regId) }
     const g = new THREE.Group()
     const proto = level >= 2 ? (this.statics?.market2 ?? this.statics?.market1) : this.statics?.market1
     let H = level >= 2 ? 3.0 : 2.5
@@ -1318,8 +1322,9 @@ export class World {
     this.facadeLights(g, [[fx, -1.1, 1.0], [fx, 1.1, 1.0]], 1.2, 0.8)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.marketGroup = g
-    this.register('market', t('MARKET'), g, H + 1.0)
+    if (regId === 'market2') this.market2Group = g
+    else this.marketGroup = g
+    this.register(regId, t('MARKET'), g, H + 1.0)
   }
 
   buildToilet(level: number, pos?: THREE.Vector2) {

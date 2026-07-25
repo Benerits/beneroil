@@ -133,6 +133,7 @@ export class GameState {
   /** yakıt başına fiziksel tank adedi (kapasite çarpanı) — additive, eski kayıtta default 1 */
   tankCounts: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
   marketLevel = 0
+  market2Level = 0 // karşı yaka marketi (yol karşısı istasyon için — save'e ADDITIVE alan)
   toiletLevel = 0
 
   // elektrik
@@ -563,6 +564,7 @@ export class GameState {
   pendingCap(id: string): number {
     switch (id) {
       case 'market': return 600 * Math.max(1, this.marketLevel)                          // gelir ×level → cap ×level
+      case 'market2': return 600 * Math.max(1, this.market2Level)                        // karşı market — aynı ölçek
       case 'toilet': return 500 * Math.max(1, this.toiletLevel)                          // seviyeyle büyür
       case 'selfwash': return 400 * Math.min(5, Math.max(1, this.selfWashCount))
       case 'airwater': return 250 * Math.min(6, Math.max(1, this.airWaterCount))
@@ -678,6 +680,16 @@ export function getShopItems(s: GameState): ShopRow[] {
   row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1), `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
     t('Müşteriler ekstra alışveriş yapar. Yerinde yükselir (aynı yer), gelir seviyeyle artar.'),
     s.marketLevel >= 3 ? null : MARKET_COSTS[s.marketLevel], null)
+  // Karşı yaka marketi: yol karşısı istasyonun müşterileri yakadan çıkmadan alışveriş yapsın
+  // ("karşıya market kuramıyoruz" — 5 feedback). Ana market + karşıda betonlu arsa şart.
+  {
+    const hasFarPaved = [...s.pavedParcels].some(k => Number(String(k).split(',')[0]) >= 3)
+    row('market2', 'i-market', s.market2Level === 0 ? t('Karşı Market') : t('Karşı Market Sv.{0}', s.market2Level + 1),
+      `+₺${25 * (s.market2Level + 1)}-${60 * (s.market2Level + 1)}`,
+      t('Yol karşısındaki istasyonun müşterileri için ikinci market — karşı yakaya kurulur, yerinde yükselir.'),
+      s.market2Level >= 3 ? null : MARKET_COSTS[s.market2Level],
+      s.marketLevel < 1 ? t('Önce ana marketi kur') : hasFarPaved ? null : t('Karşıda betonlu arsa gerekli'))
+  }
   row('toilet', 'i-toilet', s.toiletLevel === 0 ? t('Tuvalet') : t('Tuvalet Sv.2'), t('+moral'),
     t('Müşteri memnuniyetini ve itibarı artırır'),
     s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel], null)
@@ -794,7 +806,7 @@ export function checkAchievements(s: GameState) {
 // ---- Kayıt ----
 
 const SAVE_FIELDS = [
-  'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'toiletLevel',
+  'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
@@ -920,6 +932,7 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'widegate': s.wideGates = true; break
     case 'tank': s.tankLevel++; break
     case 'market': s.marketLevel++; break
+    case 'market2': s.market2Level++; break
     case 'toilet': s.toiletLevel++; break
     case 'grid': s.gridLevel++; break
     case 'battery': s.batteryLevel++; break
@@ -961,6 +974,7 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
   }
   switch (base) {
     case 'market': return s.marketLevel > 0 ? { refund: half(MARKET_COSTS.slice(0, s.marketLevel).reduce((a, b) => a + b, 0)) } : null
+    case 'market2': return s.market2Level > 0 ? { refund: half(MARKET_COSTS.slice(0, s.market2Level).reduce((a, b) => a + b, 0)) } : null
     case 'toilet': return s.toiletLevel > 0 ? { refund: half(TOILET_COSTS.slice(0, s.toiletLevel).reduce((a, b) => a + b, 0)) } : null
     case 'battery': return s.batteryLevel > 0 ? { refund: half(BATTERY_COSTS.slice(0, s.batteryLevel).reduce((a, b) => a + b, 0)) } : null
     case 'wash': return s.hasWash ? { refund: half(WASH_COST) } : null
@@ -988,6 +1002,7 @@ export function applySell(s: GameState, id: string): number | null {
   else if (base === 'charger') { const i = s.evChargers - 1; s.evChargers--; s.brokenChargers.delete(i); s.autoChargers.delete(i) }
   else switch (base) {
     case 'market': s.marketLevel = 0; break
+    case 'market2': s.market2Level = 0; break
     case 'toilet': s.toiletLevel = 0; break
     case 'battery': s.batteryLevel = 0; s.battery = 0; break
     case 'wash': s.hasWash = false; break

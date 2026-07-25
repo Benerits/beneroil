@@ -283,6 +283,7 @@ function buildingValue(s) {
   let v = 0
   v += sumUpto(COST.pump, n(s.pumps, 1))
   v += sumUpto(COST.sign, n(s.signLevel)) + sumUpto(COST.tank, n(s.tankLevel)) + sumUpto(COST.market, n(s.marketLevel))
+  v += sumUpto(COST.market, n(s.market2Level)) // karşı yaka marketi (aynı maliyet tablosu)
   v += sumUpto(COST.toilet, n(s.toiletLevel)) + sumUpto(COST.grid, n(s.gridLevel)) + sumUpto(COST.battery, n(s.batteryLevel))
   v += sumUpto(COST.ev, n(s.evChargers))
   if (s.tankCounts && typeof s.tankCounts === 'object') for (const k of ['benzin', 'dizel', 'lpg']) v += sumUpto(COST.tankAdd, n(s.tankCounts[k], 1))
@@ -320,6 +321,7 @@ function sanitizeSave(save) {
   s.signLevel = clamp(s.signLevel, 0, 3, 0)
   s.tankLevel = clamp(s.tankLevel, 0, 3, 0)
   s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
+  if ('market2Level' in s) s.market2Level = clamp(s.market2Level, 0, 3, 0) // karşı market (additive alan — eski save'lerde yok)
   s.toiletLevel = clamp(s.toiletLevel, 0, 2, 0)
   s.gridLevel = clamp(s.gridLevel, 0, 2, 0)
   s.batteryLevel = clamp(s.batteryLevel, 0, 3, 0)
