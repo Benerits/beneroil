@@ -79,9 +79,6 @@ const EN: Record<string, string> = {
   'Otomatik açıl: Kapalı': 'Auto-open: Off',
   'Müşteri paneli araç gelince otomatik açılacak.': 'Customer panel will auto-open when a car arrives.',
   'Panel artık yalnız araca tıklayınca açılır.': 'Panel now opens only when you tap a car.',
-  '🎁 Kayıt olana +₺2.500 başlangıç bonusu': '🎁 +₺2,500 starter bonus when you sign up',
-  '🔥 Günlük giriş serisi: her gün artan bonus (₺500 → ₺2.000)': '🔥 Daily login streak: growing bonus every day (₺500 → ₺2,000)',
-  '☁️ İlerlemen bulutta güvende — cihaz değişse de kaybolmaz': '☁️ Progress safe in the cloud — survives device changes',
   'Şimdi Kayıt Ol': 'Sign Up Now',
   'Hemen dene — kaydını tutmak için sonra kaydolabilirsin.': 'Jump right in — sign up later to keep your progress.',
   'Varsayılan sipariş tankı FULL doldurur — −/+ ile azaltıp artırabilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.':
