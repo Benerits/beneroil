@@ -51,6 +51,9 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  '⛽ Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!':
+    '⛽ Your attendants sold ~{0}L of fuel while you were away (+₺{1}) — check your tank levels!',
+  '⛽ Tankların bitmek üzere — sipariş verme vakti!': '⛽ Your tanks are almost empty — time to order fuel!',
   'Misafir oynayabilirsin — ama kaydolursan:': 'You can play as a guest — but if you sign up:',
   '+₺2.500 başlangıç bonusu': '+₺2,500 starter bonus',
   'Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)': 'Daily login streak — growing bonus every day (₺500 → ₺2,000)',

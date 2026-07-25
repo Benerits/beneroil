@@ -416,6 +416,27 @@ function scheduleBackgroundReminders() {
     if (eta > 3) notifs.push({ id: 1_700_000_000 + tk.slot, title: world?.stationName ?? 'BenelOil',
       body: t('🚚 {0} tankeri istasyona ulaştı!', FUEL_LABEL[tk.fuel]), schedule: { at: new Date(Date.now() + eta * 1000) } })
   }
+  // Tank bitmeye yakın bildirimi: pompacılar arka planda satmaya devam eder (offline satış) —
+  // toplam stok %15'in altına ineceği anı hesapla, o dakikaya bildirim kur (2 saat cap).
+  const attended = [...state.autoPumps].filter(i => !state.brokenPumps.has(i)).length // bozuk pompadaki pompacı satamaz
+  if (attended > 0) {
+    const totalStock = OFFLINE_FUELS.reduce((a, f) => a + Math.max(0, state.tanks[f]), 0)
+    const totalCap = OFFLINE_FUELS.reduce((a, f) => a + state.fuelCapacity(f), 0)
+    const rate = OFFLINE_LPS * attended // L/sn
+    const lowAt = totalCap * 0.15
+    if (totalStock > 0 && totalStock > lowAt) {
+      const secs = (totalStock - lowAt) / rate
+      if (secs < 7200) notifs.push({
+        id: 1_800_000_001, title: world?.stationName ?? 'BenelOil',
+        body: t('⛽ Tankların bitmek üzere — sipariş verme vakti!'),
+        schedule: { at: new Date(Date.now() + Math.max(60, secs) * 1000) },
+      })
+    } else if (totalStock <= lowAt) {
+      // zaten kritik: 1 dk sonra hatırlat (uygulamayı kapatırken görsün)
+      notifs.push({ id: 1_800_000_001, title: world?.stationName ?? 'BenelOil',
+        body: t('⛽ Tankların bitmek üzere — sipariş verme vakti!'), schedule: { at: new Date(Date.now() + 60_000) } })
+    }
+  }
   if (notifs.length) { try { P.LocalNotifications.schedule({ notifications: notifs }) } catch { /* yok say */ } }
 }
 document.addEventListener('visibilitychange', () => {
@@ -1468,6 +1489,9 @@ const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
 
 let lastRemotePush = 0
 let pendingPush: number | null = null // throttle penceresinde bekleyen garanti push (persist)
+// Offline pompacı satışı sabitleri (applyOfflineEarnings + tank-düşük bildirimi aynı oranı kullanır)
+const OFFLINE_FUELS = ['benzin', 'dizel', 'lpg'] as const
+const OFFLINE_LPS = 0.3 // pompacı başına L/sn (~aktif temponun yarısı)
 // Buluttan kayıt YÜKLENEMEDİYSE (ağ/sunucu hatası) hiçbir kayıt gönderilmez —
 // taze bir oturumun ilerlemiş bulut kaydını EZMESİNİ önler (override koruması).
 let cloudBlocked = false
@@ -2680,6 +2704,29 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
       if (state.hasOil) idleCash += 0.9 * offSec
       idleCash = Math.min(Math.round(idleCash), 4000) // idle tavanı
       if (idleCash > 0) { state.money += idleCash; total += idleCash }
+      // POMPACILI pompalar offline YAKIT SATAR: tank gerçekten azalır, satış kasaya girer.
+      // ("para birikiyor ama petrol azalmıyor" tutarsızlığının fixi — #512 + Oğuz.)
+      // Oran aktif temponun ~yarısı (0.3 L/sn/pompacı); tank stoğu ve 2 saat cap'iyle sınırlı.
+      const attended = [...state.autoPumps].filter(i => !state.brokenPumps.has(i)).length // bozuk pompadaki pompacı satamaz
+      if (attended > 0) {
+        const totalStock = OFFLINE_FUELS.reduce((a, f) => a + Math.max(0, state.tanks[f]), 0)
+        let toSell = Math.min(OFFLINE_LPS * attended * offSec, totalStock, 6000)
+        if (toSell > 1 && totalStock > 0) {
+          let fuelCash = 0
+          const soldTotal = toSell
+          for (const f of OFFLINE_FUELS) {
+            const share = Math.max(0, state.tanks[f]) / totalStock
+            const sell = Math.min(Math.max(0, state.tanks[f]), toSell * share)
+            state.tanks[f] -= sell
+            fuelCash += sell * state.prices[f]
+          }
+          fuelCash = Math.round(fuelCash)
+          state.money += fuelCash
+          total += fuelCash
+          ui.toast(t('⛽ Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!',
+            Math.round(soldTotal).toLocaleString('tr-TR'), fuelCash.toLocaleString('tr-TR')), 'good', true)
+        }
+      }
       if (total > 0) {
         ui.toast(t('Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!', total.toLocaleString('tr-TR')), 'good', true)
         audio.cash()
