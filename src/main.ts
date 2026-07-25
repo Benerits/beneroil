@@ -1742,6 +1742,9 @@ function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
   for (const p of placedRects) {
     if (p.id.startsWith('parking') || p.id === 'gatein' || p.id === 'gateout') continue
     if (p.id.startsWith('pump-') || p.id.startsWith('charger-') || p.id === 'tank' || p.id === 'truckpark') continue
+    // tabela DEKORATİF: araç engeli değil (yerleştirme kuralıyla tutarlı) — yol kenarına/kenara
+    // konunca araçların takılıp trafiği kilitlemesi bitti (#352, #338)
+    if (p.id === 'sign') continue
     r.push({ cx: p.cx, cy: p.cy, w: p.w, d: p.d })
   }
   return r
@@ -2110,6 +2113,8 @@ function confirmPlacement() {
   const p = placing!
   if (p.move) {
     applyDynamicMove(p.id, p.cx, p.cy)
+    // otopark taşındı/döndü: park etmiş araçları uğurla — eski açı/konumda asılı kalmasınlar
+    if (p.id.split('#')[0] === 'parking') cars.evictParked()
     ui.toast(t('Taşındı!'), 'good')
   } else {
     const purchaseId = p.id.startsWith('pump-') ? 'pump'

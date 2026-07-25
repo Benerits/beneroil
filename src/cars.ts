@@ -1061,7 +1061,10 @@ export class CarManager {
     const apronY = G.gateInY
     const off = this.gateInOff()
     return [
-      new THREE.Vector3(G.lane, apronY - G.dirY * 3.5 + off, 0),
+      // kapı kuyruğu BANKETTE bekler (şerit ile kapı arası) — şerit ortasında duran
+      // giriş adayı arkasındaki tüm transit trafiği kilitliyordu ("yolda araçlar
+      // sıkışıyor, istasyon boş görünüyor" şikâyeti). Şerit trafiği yanından akar.
+      new THREE.Vector3((G.lane + G.gateX) / 2, apronY - G.dirY * 3.5 + off, 0),
       new THREE.Vector3(G.gateX, apronY + off, 0),
       new THREE.Vector3(G.gateX + G.sideSign * 1.75, p.y - G.dirY * 2.5, 0),
       p.clone(),
@@ -1319,6 +1322,15 @@ export class CarManager {
       car.group.rotation.z = sp.rot
     })
     return true
+  }
+
+  /** otopark taşınınca/döndürülünce park etmiş araçları uğurla — eski açı/konumda
+   *  asılı kalıp "döndürdüm ama araçlar hâlâ yan duruyor" görüntüsü yaratıyorlardı */
+  evictParked() {
+    for (const car of [...this.cars]) {
+      if (car.truckSlot >= 0) continue
+      if (car.phase === 'parked' || car.phase === 'toPark') this.releaseCar(car)
+    }
   }
 
   /** slotta duran ya da slota sürmekte olan araçları uğurla (ünite taşınırken) */
