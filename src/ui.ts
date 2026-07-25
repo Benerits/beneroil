@@ -166,7 +166,7 @@ export class UI {
     for (const f of FUELS) {
       el<HTMLButtonElement>(`fbtn-${f}`).addEventListener('click', () => this.onOrderFuel(f))
     }
-    // sipariş miktarı −/+ (min 800L → full)
+    // sipariş miktarı −/+ (ORDER_STEP=200L kademe → full)
     fuelWrap.addEventListener('click', e => {
       const b = (e.target as HTMLElement).closest('button.forder') as HTMLButtonElement | null
       if (b) this.onOrderQty(b.dataset.f as FuelType, Number(b.dataset.d))

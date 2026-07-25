@@ -823,7 +823,7 @@ const cars = new CarManager(world.scene, modelLib, {
     state.addPending('truckpark', fee, t('Tır parkı'))
     ui.toast(t('Tır park etti: ₺{0} kumbarada', fee), 'good', true)
   },
-  onCarReady: car => { if (!ui.activeCar && !isAttendantCar(car)) ui.selectCar(car); tutStart() },
+  onCarReady: car => { if (!ui.activeCar && !isAttendantCar(car)) autoSelect(car); tutStart() },
   onEvTurnedAway: () => {
     if (evTurnAwayT > 0) return
     evTurnAwayT = 4
@@ -837,9 +837,21 @@ const cars = new CarManager(world.scene, modelLib, {
     ui.toast(t('Müşteri beklemekten sıkıldı ve gitti!'), 'bad', true)
     audio.miss()
     state.addRep(-0.2)
-    if (ui.activeCar === car) ui.selectCar(nextServableCar())
+    if (ui.activeCar === car) autoSelect(nextServableCar())
   },
 })
+
+// ---- Müşteri paneli otomatik açılma tercihi (35 feedback: "sürekli önüme çıkıyor") ----
+// localStorage'da tutulur (save formatına DOKUNMAZ). Kapalıyken panel yalnız araca
+// TIKLAYINCA açılır; yerleştirme/arsa modundayken tercih ne olursa olsun otomatik açılmaz.
+const AUTOPANEL_KEY = 'beneloil-autopanel'
+let autoPanelPref = localStorage.getItem(AUTOPANEL_KEY) !== '0'
+export function setAutoPanel(on: boolean) { autoPanelPref = on; localStorage.setItem(AUTOPANEL_KEY, on ? '1' : '0') }
+/** paneli OTOMATİK aç/geçir — tercih kapalıysa veya oyuncu inşaat/taşıma/arsa modundaysa açmaz */
+function autoSelect(car: Car | null) {
+  if (!autoPanelPref || placing || zoneMode) { if (ui.activeCar) ui.selectCar(null); return }
+  ui.selectCar(car)
+}
 
 /** pompacı çalışan pompaya yanaşan araç: panel açılmaz, popup kalmaz (pompacı halleder) */
 function isAttendantCar(car: Car): boolean {
@@ -951,7 +963,9 @@ function vehicleServices(car: Car): number {
     ui.toast(t('🔧 Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
   if (car.wantsAir && state.hasAirWater) {
-    const m = Math.round(10 + Math.random() * 10)
+    // adet çarpanı: çok üniteli istasyonda aynı anda birden çok araç kullanır (pendingCap'in
+    // min(6) ölçeğiyle aynı tavan) — "2. üniteyi almanın anlamı yok" şikâyetinin fixi
+    const m = Math.round(10 + Math.random() * 10) * Math.min(6, state.airWaterCount)
     state.addPending('airwater', m, 'Hava-su'); d += 0.1
   }
   return d
@@ -1096,7 +1110,7 @@ function concludeService(car: Car, score: number) {
     car.hideBubble()
     car.filling = false
     car.beingServed = false
-    if (ui.activeCar === car) ui.selectCar(nextServableCar())
+    if (ui.activeCar === car) autoSelect(nextServableCar())
     if (cars.sendTruckToParkFromPump(car)) return
     cars.releaseCar(car)
     return
@@ -1118,7 +1132,7 @@ function concludeService(car: Car, score: number) {
     car.showFeedback(emojiFor(score))
     cars.releaseCar(car)
   }
-  if (ui.activeCar === car) ui.selectCar(nextServableCar())
+  if (ui.activeCar === car) autoSelect(nextServableCar())
 }
 
 function finishSale(car: Car) {
@@ -1176,7 +1190,7 @@ function wrongFuel(car: Car) {
   ui.toast(t('🚨 {0} isteyen araca {1} bastın! -{2} ₺', FUEL_LABEL[car.demandType], FUEL_LABEL[car.nozzle!], wfPenalty), 'bad')
   car.showFeedback('😡')
   cars.releaseCar(car)
-  if (ui.activeCar === car) ui.selectCar(nextServableCar())
+  if (ui.activeCar === car) autoSelect(nextServableCar())
 }
 
 // ---- EV şarj ----
@@ -1186,7 +1200,7 @@ ui.onDismiss = car => {
     car.squatting = false
     cars.releaseCar(car)
     ui.toast('Molacı uğurlandı — şarj yeri boşaldı.', 'good')
-    if (ui.activeCar === car) ui.selectCar(nextServableCar())
+    if (ui.activeCar === car) autoSelect(nextServableCar())
     return
   }
   if (car.phase !== 'atPump' || car.filling || car.filled > 0) return
@@ -1194,7 +1208,7 @@ ui.onDismiss = car => {
   car.showFeedback('😐')
   ui.toast('Müşteri kibarca gönderildi.', '')
   cars.releaseCar(car)
-  if (ui.activeCar === car) ui.selectCar(nextServableCar())
+  if (ui.activeCar === car) autoSelect(nextServableCar())
 }
 
 ui.onCleanWindows = car => {
@@ -1957,6 +1971,9 @@ function startZoneMode(kind: 'land' | 'pave') {
   zoneMode = { kind, ghost: makeGhost(1, 1), c: -1, r: -1, valid: false }
   world.showGrid(true)
   ui.closeShop()
+  // İPTAL butonu daha ilk dokunuştan ÖNCE görünsün (mobilde başka çıkış yolu yok)
+  const zw = document.getElementById('zonecostwrap'); const zc = document.getElementById('zonecost')
+  if (zw && zc) { zw.style.display = 'flex'; zc.style.color = 'var(--ink)'; zc.textContent = kind === 'land' ? t('Parsele dokun…') : t('Arsana dokun…') }
   ui.toast(kind === 'land'
     ? t('🏞️ Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal')
     : t('🧱 Zemin seçimi: betonlanacak arsana tıkla · ESC iptal'), '')
@@ -1964,7 +1981,7 @@ function startZoneMode(kind: 'land' | 'pave') {
 
 function cancelPlacement() {
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'none'
-  const zc = document.getElementById('zonecost'); if (zc) zc.style.display = 'none'
+  const zc = document.getElementById('zonecostwrap'); if (zc) zc.style.display = 'none'
   if (placing) {
     world.scene.remove(placing.root)
     placing = null
@@ -2124,6 +2141,8 @@ window.addEventListener('keydown', e => {
   }
 })
 renderer.domElement.addEventListener('contextmenu', e => { e.preventDefault(); cancelPlacement() })
+// mobil: arsa/beton seçiminde tek iptal yolu (ESC ve sağ-tık yok) — #322 "iptal edilemiyor" fixi
+document.getElementById('zonecancel')?.addEventListener('click', () => cancelPlacement())
 
 const COUNTABLE: Record<string, () => number> = {
   parking: () => state.parkingCount,
@@ -2305,6 +2324,17 @@ translateDom() // HUD + statik metinleri çevir
 ;(document.getElementById('lang-en') as HTMLButtonElement).classList.toggle('good', lang === 'en')
 ;(document.getElementById('lang-tr') as HTMLButtonElement).addEventListener('click', () => setLang('tr'))
 ;(document.getElementById('lang-en') as HTMLButtonElement).addEventListener('click', () => setLang('en'))
+// müşteri paneli otomatik açılma tercihi (ayarlar)
+{
+  const apBtn = document.getElementById('autopanelbtn') as HTMLButtonElement
+  const syncAp = () => { apBtn.textContent = autoPanelPref ? t('Otomatik açıl: Açık') : t('Otomatik açıl: Kapalı') }
+  syncAp()
+  apBtn.addEventListener('click', () => {
+    setAutoPanel(!autoPanelPref)
+    syncAp()
+    ui.toast(autoPanelPref ? t('Müşteri paneli araç gelince otomatik açılacak.') : t('Panel artık yalnız araca tıklayınca açılır.'), '', true)
+  })
+}
 ui.syncAccount(auth.currentEmail())
 
 // ---- Canlı kanal (WebSocket): anlık bakiye / bildirim / hot-fix / reload ----
@@ -2926,18 +2956,22 @@ function buildingCard(id: string): BuildingCard | null {
         desc: t('Tırcılar konaklar; sen hiçbir şey yapmadan düzenli gelir akar.'),
         stats: [['Pasif gelir', '₺90-160 / ~45sn'], ['Trafik etkisi', '+%2']],
       }
-    case 'airwater':
+    case 'airwater': {
+      const n = Math.min(6, Math.max(1, state.airWaterCount))
       return {
-        icon: 'i-air', name: t('Hava-Su Ünitesi'),
-        desc: t('Lastik havası ve su. Küçük gelir ama müşteri çeker.'),
-        stats: [['Hizmet', '₺10-20'], [t('Kullanım'), '~%20']],
+        icon: 'i-air', name: state.airWaterCount > 1 ? t('Hava-Su Ünitesi (×{0} — ortak kumbara)', state.airWaterCount) : t('Hava-Su Ünitesi'),
+        desc: t('Lastik havası ve su. Küçük gelir ama müşteri çeker. Üniteler ortak kumbarada biriktirir, gelir adetle artar.'),
+        stats: [['Hizmet', `₺${10 * n}-${20 * n}`], [t('Kullanım'), '~%20']],
       }
-    case 'selfwash':
+    }
+    case 'selfwash': {
+      const n = Math.max(1, state.selfWashCount)
       return {
-        icon: 'i-selfwash', name: t('Self Yıkama'),
-        desc: t('Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır.'),
-        stats: [['Pasif gelir', '₺30-60 / ~35sn'], ['Trafik etkisi', '+%2']],
+        icon: 'i-selfwash', name: n > 1 ? t('Self Yıkama (×{0} — ortak kumbara)', n) : t('Self Yıkama'),
+        desc: t('Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır. Üniteler ortak kumbarada biriktirir, gelir adetle artar.'),
+        stats: [['Pasif gelir', `₺${30 * n}-${60 * n} / ~35sn`], ['Trafik etkisi', '+%2']],
       }
+    }
     case 'parking':
       return {
         icon: 'i-parking', name: t('Otopark'),
@@ -3099,12 +3133,13 @@ function updateZoneAt(x: number, y: number) {
     ? !state.owns(c, r) && state.parcelAdjacentToOwned(c, r) && state.money >= parcelCost(c, r, state)
     : state.owns(c, r) && !state.isPaved(c, r) && state.money >= PAVE_COST
   ;(zoneMode.ghost.material as THREE.MeshBasicMaterial).color.setHex(zoneMode.valid ? 0x37c97e : 0xec5b5b)
-  // canlı fiyat + durum etiketi (karşı/uzak arsalar pahalı — sürpriz olmasın)
+  // canlı fiyat + durum etiketi (karşı/uzak arsalar pahalı — sürpriz olmasın) + mobil İPTAL
+  const zw = document.getElementById('zonecostwrap')
   const zc = document.getElementById('zonecost')
-  if (zc) {
+  if (zw && zc) {
     const cost = zoneMode.kind === 'land' ? parcelCost(c, r, state) : PAVE_COST
     const across = c >= 3 ? t(' · yol karşısı') : ''
-    zc.style.display = 'block'
+    zw.style.display = 'flex'
     zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ' ✗'}`
     zc.style.color = zoneMode.valid ? 'var(--green-dark)' : 'var(--red)'
   }
@@ -3234,7 +3269,11 @@ function handleClick(e: PointerEvent) {
       const amt = state.collectPending(cashFor)
       if (amt > 0) {
         audio.cash()
-        ui.toast(t('+₺{0} toplandı!', amt), 'good', true)
+        // çok üniteli tesiste kumbara ORTAKTIR (gelir zaten adetle çarpılır) — bunu söyle,
+        // yoksa oyuncu "3 üniteden sadece 1'i kazanıyor" sanıyor (13 feedback)
+        const cnt = COUNTABLE[cashFor]?.() ?? 0
+        ui.toast(cnt > 1 ? t('+₺{0} toplandı! ({1} ünitenin ortak kumbarası — gelir ×{1})', amt, cnt)
+          : t('+₺{0} toplandı!', amt), 'good', true)
         persist()
       }
       return

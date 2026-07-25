@@ -24,6 +24,8 @@ export const SPILL_PENALTY_PER_L = 3
 export const WRONG_FUEL_PENALTY = 300
 
 export const TANK_CAPACITY = [800, 1500, 3000, 5000]
+/** yakıt siparişi −/+ adımı (L) — min tankta bile birden çok kademe olmalı */
+export const ORDER_STEP = 200
 export const MAX_PUMPS = 14
 export const MAX_EV = 12
 export const BATTERY_CAP = [0, 100, 250, 600] // kWh
@@ -413,12 +415,13 @@ export class GameState {
     return Math.min(0.95, Math.max(0.08, c))
   }
 
-  /** Sipariş miktar çarpanı (× 800L parti). 1 = minimum (en düşük tank hacmi); + ile full'e kadar step. */
-  // Varsayılan 999 = "FULL doldur" (orderNeed zaten boşlukla min'ler). Yüksek kapasiteli
-  // tanklar (5000L×4=20.000L) tek siparişte dolar — eski 1 varsayılanı siparişi 800L'ye
-  // kilitliyordu (−/+ butonları da HTML'de yoktu), büyük tank sahipleri dolduramıyordu.
+  /** Sipariş miktar çarpanı (× ORDER_STEP litre parti). 1 = minimum; + ile full'e kadar step. */
+  // Varsayılan 999 = "FULL doldur" (orderNeed zaten boşlukla min'ler).
+  // Adım 800L'ydi — başlangıç tankı (800L) için maks çarpan 1 çıkıyor, −/+ HİÇBİR ŞEY
+  // yapmıyordu ("butonlar çalışmıyor" şikâyeti, 7 feedback). 200L adım: min tankta 4 kademe,
+  // erken oyuncu parası kadar yakıt alabilir (kısmi siparişin asıl amacı).
   orderQty: Record<FuelType, number> = { benzin: 999, dizel: 999, lpg: 999 }
-  orderMaxQty(f: FuelType) { return Math.max(1, Math.ceil((this.fuelCapacity(f) - this.tanks[f]) / TANK_CAPACITY[0])) }
+  orderMaxQty(f: FuelType) { return Math.max(1, Math.ceil((this.fuelCapacity(f) - this.tanks[f]) / ORDER_STEP)) }
   adjustOrderQty(f: FuelType, d: number) {
     const cur = Math.min(this.orderQty[f], this.orderMaxQty(f)) // 999 sentinelini önce gerçek maks'a indir (ilk − tıklaması ölü olmasın)
     this.orderQty[f] = Math.min(this.orderMaxQty(f), Math.max(1, cur + d))
@@ -429,7 +432,7 @@ export class GameState {
   orderNeed(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     const affordable = Math.max(0, Math.floor(this.money / (FUEL_COST[f] * disc)) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
-    return Math.floor(Math.max(0, Math.min(this.orderQty[f] * TANK_CAPACITY[0], this.fuelCapacity(f) - this.tanks[f], affordable)))
+    return Math.floor(Math.max(0, Math.min(this.orderQty[f] * ORDER_STEP, this.fuelCapacity(f) - this.tanks[f], affordable)))
   }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1

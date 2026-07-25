@@ -846,6 +846,10 @@
         <div class="row" style="margin-top:8px">
           <button id="sfxbtn" class="btn" style="flex:1; justify-content:center">Efektler: Açık</button>
         </div>
+        <label style="margin-top:12px" data-i18n="Müşteri paneli (kapalıyken yalnız araca tıklayınca açılır)">Müşteri paneli (kapalıyken yalnız araca tıklayınca açılır)</label>
+        <div class="row">
+          <button id="autopanelbtn" class="btn" style="flex:1; justify-content:center">Otomatik açıl: Açık</button>
+        </div>
         <label style="margin-top:12px" data-i18n="Bildirimler (sekme kapalıyken tanker/kumbara haberi)">Bildirimler (sekme kapalıyken tanker/kumbara haberi)</label>
         <div class="row">
           <button id="notifbtn" class="btn" style="flex:1; justify-content:center">Bildirimlere İzin Ver</button>
@@ -1000,8 +1004,12 @@ Sorun / Öneri Bildir
        border:1px solid #2f6fed;"></div>
 
   <!-- Mobil taşıma: yön butonlarıyla ince ayar (sürükleme zor) -->
-  <div id="zonecost" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:calc(120px + env(safe-area-inset-top)); z-index:41;
-       background:var(--paper); border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:12px; padding:8px 16px; font-weight:800; font-size:14px; box-shadow:var(--shadow); pointer-events:none; white-space:nowrap"></div>
+  <!-- pointer-events:auto — içindeki İPTAL butonu mobilde tek çıkış yolu (ESC/sağ-tık yok) -->
+  <div id="zonecostwrap" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:calc(120px + env(safe-area-inset-top)); z-index:41;
+       background:var(--paper); border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:12px; padding:6px 8px 6px 16px; font-weight:800; font-size:14px; box-shadow:var(--shadow); white-space:nowrap; display:none; align-items:center; gap:10px">
+    <span id="zonecost"></span>
+    <button id="zonecancel" class="btn" style="padding:6px 12px; font-size:12.5px; font-weight:800" data-i18n="İPTAL">İPTAL</button>
+  </div>
   <div id="movectl" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); bottom:calc(16px + env(safe-area-inset-bottom)); z-index:40; user-select:none;
        -webkit-user-select:none; touch-action:manipulation; text-align:center;">
     <div style="display:grid; grid-template-columns:repeat(3,44px); grid-template-rows:repeat(3,44px); gap:5px; margin-bottom:8px;">

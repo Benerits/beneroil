@@ -50,6 +50,21 @@ const EN: Record<string, string> = {
     '💾 {0} days of progress live only on this device! Sign up: cloud save + ₺2,500 bonus + daily streak rewards.',
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
+  'İPTAL': 'CANCEL',
+  'Parsele dokun…': 'Tap a parcel…',
+  'Arsana dokun…': 'Tap your land…',
+  '+₺{0} toplandı! ({1} ünitenin ortak kumbarası — gelir ×{1})': '+₺{0} collected! (shared piggy bank of {1} units — income ×{1})',
+  'Hava-Su Ünitesi (×{0} — ortak kumbara)': 'Air & Water (×{0} — shared piggy bank)',
+  'Self Yıkama (×{0} — ortak kumbara)': 'Self Wash (×{0} — shared piggy bank)',
+  'Lastik havası ve su. Küçük gelir ama müşteri çeker. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
+    'Tire air and water. Small income but attracts customers. Units share one piggy bank; income scales with count.',
+  'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
+    'Cars wash themselves in the bays; foam and water sell automatically. Units share one piggy bank; income scales with count.',
+  'Müşteri paneli (kapalıyken yalnız araca tıklayınca açılır)': 'Customer panel (when off, opens only when you tap a car)',
+  'Otomatik açıl: Açık': 'Auto-open: On',
+  'Otomatik açıl: Kapalı': 'Auto-open: Off',
+  'Müşteri paneli araç gelince otomatik açılacak.': 'Customer panel will auto-open when a car arrives.',
+  'Panel artık yalnız araca tıklayınca açılır.': 'Panel now opens only when you tap a car.',
   '🎁 Kayıt olana +₺2.500 başlangıç bonusu': '🎁 +₺2,500 starter bonus when you sign up',
   '🔥 Günlük giriş serisi: her gün artan bonus (₺500 → ₺2.000)': '🔥 Daily login streak: growing bonus every day (₺500 → ₺2,000)',
   '☁️ İlerlemen bulutta güvende — cihaz değişse de kaybolmaz': '☁️ Progress safe in the cloud — survives device changes',
