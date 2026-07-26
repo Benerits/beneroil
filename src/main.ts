@@ -4,6 +4,7 @@ import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
+import { shareLabel } from './rival'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
@@ -641,6 +642,14 @@ function openOfficePanel() {
       // §6.2 kasaba imzası: müdavim payı yalnız mekaniğin açık olduğu şubede görünür
       + (state.regularsShare() > 0
           ? row(t('Müdavim müşteri'), `%${Math.round(state.regularsShare() * 100)}`, 'good')
+          : '')
+      // Katman 4d: rakip varsa pazar payı ve rakip fiyatı görünür — fiyat kararının aynası
+      + (state.rival
+          ? row(t('Pazar payın'), shareLabel(state.marketShare()),
+              state.marketShare() >= 0.55 ? 'good' : state.marketShare() < 0.45 ? 'bad' : '')
+            + row(state.rivalName(), `₺${state.rival.price.toFixed(2)}/L`
+                + (state.rival.promoDays > 0 ? t(' · kampanyada') : ''),
+                state.rival.price < state.prices.benzin ? 'bad' : 'good')
           : '')
       + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
       + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
@@ -4039,6 +4048,9 @@ function frame() {
       if (spend < state.marketingBudget) ui.toast(t('📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.'), 'bad')
       else ui.toast(t('📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})', spend.toLocaleString('tr-TR'), state.trafficPull().toFixed(2)), '')
     }
+    // ---- AI RAKİP (Katman 4d): günlük tepki ----
+    const rivalMsg = state.rivalDayTurn()
+    if (rivalMsg) ui.toast(rivalMsg, state.marketShare() < 0.45 ? 'bad' : '')
     // ---- MARİNA GÜN DÖNÜŞÜ (rapor §6.5): bağlama/kışlama geliri + risk olayı ----
     if (state.isMarina) {
       const mi = state.marinaDailyIncome()

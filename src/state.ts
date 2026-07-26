@@ -3,6 +3,10 @@ import {
   BOAT_SEGMENTS, BERTH_KINDS, MARINA_FACILITIES, berthIncome, winterStorageIncome,
   blueFlagStatus, pickMarinaEvent, type BerthKind, type MarinaFacId, type BoatSegment,
 } from './marina'
+import {
+  freshRival, marketShare, rivalDecide, rivalKindFor, updateStrength, effectiveShare, rivalRamp, RIVAL_NAME,
+  type RivalState,
+} from './rival'
 import { THEMES, LocationTheme } from './themes'
 export type FuelType = 'benzin' | 'dizel' | 'lpg'
 
@@ -16,7 +20,7 @@ export const LOC_FIELDS = [
   'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level',
   'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'managerLevel', 'staffLevel',
   'insurance', 'decorLevel', 'wear', 'gridLevel', 'lampCount',
-  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations',
+  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'rival',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
@@ -304,6 +308,8 @@ export class GameState {
   winterSlots = 0
   /** çevre/uyum sicili — 3 ihlalde Mavi Bayrak askıya alınır (GEÇİCİ, kalıcı silme yok) */
   marinaViolations = 0
+  /** AI RAKİP (Katman 4d) — yalnız ikinci şubeden sonra, kasaba HARİÇ. null = rakip yok */
+  rival: RivalState | null = null
   /** doğru/yanlış defter kararı sayacı (öğretici geri bildirim için) */
   logbookOk = 0
   logbookBad = 0
@@ -658,9 +664,15 @@ export class GameState {
     // yükseldiğinde görülür: sadık taban kaçmaz. Kasabada "itibar biriktir, fiyatı
     // sonra rahat kullan" stratejisi böyle anlam kazanır.
     const sh = this.regularsShare()
-    if (sh <= 0) return Math.max(0.05, ent)
-    const noPrice = priceF > 0.0001 ? ent / priceF : ent  // fiyat cezası uygulanmamış hâli
-    return Math.max(0.05, ent * (1 - sh) + Math.min(0.98, noPrice) * sh)
+    const withReg = sh <= 0 ? ent
+      : ent * (1 - sh) + Math.min(0.98, priceF > 0.0001 ? ent / priceF : ent) * sh
+
+    // AI RAKİP (Katman 4d): yoldan geçen trafiğin bir kısmını rakip alır. Fiyat kaldıracı
+    // burada GERÇEK anlam kazanır — rakipten pahalıysan akış ona kayar, ucuzsan sana gelir.
+    // Rakip yokken çarpan 1 → kasabada ve tek şubeli oyuncuda hiçbir şey değişmez.
+    // Rampa: rakibin etkisi 10 günde kademeli devreye girer (açılış şoku yok).
+    const share = this.rival ? effectiveShare(this.marketShare(), this.rival, this.day) : 1
+    return Math.max(0.05, withReg * share)
   }
 
   /** Müşterilerin ne kadarı müdavim (0..share). Yalnız teması izin veren şubede (kasaba). */
@@ -1075,6 +1087,61 @@ export class GameState {
   licenseFee(): number { return Math.round(8_000 + (this.equipmentValue() + this.landValue()) * 0.004) }
   /** dekorasyonun itibar katkısı */
   decorRep(): number { return 0.15 * this.decorLevel + Math.min(0.30, 0.04 * this.lampCount) }
+
+  // ---- AI RAKİP İSTASYON (Katman 4d) ----
+  /** Rakip bu şubede olabilir mi? Kasabada ASLA (müdavim/itibar kimliği bozulmasın),
+   *  ve yalnız oyuncu ikinci şubeyi açtıktan sonra (rapor: Katman 1-3 bitmeden başlama). */
+  rivalAllowed(): boolean {
+    return this.activeLoc !== 'kasaba' && this.unlockedLocs.length >= 2
+  }
+  rivalKind() { return rivalKindFor(this.activeLoc) }
+  /** rakibin etkisi ne kadar devrede (0..1) — arayüzde "yerleşiyor" göstergesi */
+  rivalRamp() { return this.rival ? rivalRamp(this.rival, this.day) : 0 }
+  rivalName() { return RIVAL_NAME[this.rivalKind()] }
+
+  /** Oyuncunun SADIK TABANI: müdavim payı + itibar. Rakip bunun altına indiremez. */
+  private loyaltyFloor(): number {
+    return Math.min(0.45, this.regularsShare() + 0.04 * Math.max(0, this.reputation - 3))
+  }
+  /** Oyuncunun çekiciliği 0..1 — tesis/tabela/itibar bileşkesi (rakibin strength'iyle kıyaslanır) */
+  private myAppeal(): number {
+    const c = 0.08 * this.signLevel + 0.06 * this.marketLevel + 0.04 * this.evChargers / 3
+      + 0.06 * Math.max(0, this.reputation - 3) + (this.hasWash ? 0.04 : 0) + (this.hasRestaurant ? 0.05 : 0)
+      + 0.10 * this.marketingFactor()
+    return Math.max(0.1, Math.min(0.95, 0.35 + c))
+  }
+  /** ortalama satış fiyatım (rakiple kıyas için) */
+  private avgPrice(): number {
+    const f = FUELS
+    return f.reduce((a, x) => a + this.prices[x], 0) / f.length
+  }
+
+  /** Pazar payım (0..1). Rakip yoksa 1. */
+  marketShare(): number {
+    if (!this.rival) return 1
+    return marketShare(this.avgPrice(), this.rival, this.loyaltyFloor(), this.myAppeal())
+  }
+
+  /** Gün dönüşü: rakip tepki verir. Dönen mesaj varsa oyuncuya gösterilir. */
+  rivalDayTurn(): string {
+    if (!this.rival) {
+      // koşullar oluştuysa rakip SAHNEYE ÇIKAR (bir kez)
+      if (this.rivalAllowed()) {
+        this.rival = freshRival(this.avgPrice(), this.day)
+        return t('🏁 Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.', this.rivalName())
+      }
+      return ''
+    }
+    if (this.rival.promoDays > 0) this.rival.promoDays--
+    const share = this.marketShare()
+    const floor = FUELS.reduce((a, x) => a + this.buyPrice(x), 0) / FUELS.length
+    const mv = rivalDecide(this.rival, this.rivalKind(), this.day, this.avgPrice(), share, floor)
+    this.rival.price = mv.price
+    this.rival.promoDays = mv.promoDays
+    this.rival.strength = updateStrength(this.rival, share)
+    this.rival.lastDay = this.day
+    return mv.msg
+  }
 
   // ---- MARİNA (rapor §6.5) ----
   /** bu şube marina mı (tema su ise) */
@@ -1650,7 +1717,7 @@ const SAVE_FIELDS = [
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount',
-  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad',
+  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {

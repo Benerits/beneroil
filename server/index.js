@@ -288,6 +288,22 @@ const BERTH_COST = { buoy: 12000, finger8: 40000, finger12: 75000, finger18: 140
 const WINTER_SLOT_COST = 8000
 /** Marina alanlarını temizle. Bilinmeyen tesis/bağlama anahtarları ATILIR — uydurma
  *  anahtarla servet şişirme yolu kapalı. Sayılar abuse tavanıyla sınırlanır. */
+/** AI rakip durumu — istemci kaynaklı, doğrulanabilir sınırlar içinde tutulur.
+ *  Rakip SERVET hesabına girmez (oyuncunun malı değil), yalnız trafik payını etkiler;
+ *  yine de uydurma değerle payı şişirmesin diye kırpılır. */
+function clampRival(s) {
+  if (!('rival' in s)) return
+  const r = s.rival
+  if (!r || typeof r !== 'object' || Array.isArray(r)) { s.rival = null; return }
+  s.rival = {
+    price: clamp(r.price, 0.5, 80, 10),
+    strength: clamp(r.strength, 0.15, 0.95, 0.3),
+    promoDays: clamp(r.promoDays, 0, 30, 0),
+    lastDay: clamp(r.lastDay, 0, 100000, 0),
+    since: clamp(r.since, 0, 100000, 0),
+  }
+}
+
 function clampMarina(s) {
   if ('marinaFacs' in s) {
     s.marinaFacs = Array.isArray(s.marinaFacs)
@@ -394,6 +410,7 @@ function sanitizeSave(save) {
   if ('decorLevel' in s) s.decorLevel = clamp(s.decorLevel, 0, 3, 0)         // dekorasyon sink'i
   if ('wear' in s) s.wear = clamp(s.wear, 0, 1, 0)                           // ekipman yaşlanması
   clampMarina(s)                                                            // marina alanları (additive)
+  clampRival(s)                                                             // AI rakip durumu
   if ('licenseDueDay' in s) s.licenseDueDay = clamp(s.licenseDueDay, 0, 100000, 30)
   if ('insurance' in s) s.insurance = !!s.insurance
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
@@ -504,6 +521,7 @@ function sanitizeSave(save) {
         if (key in f) f[key] = clamp(f[key], 0, 200, 0)
       }
       clampMarina(f) // marina şubesi anlık görüntüsü de temizlenir
+      clampRival(f)
       if (sn.tankCounts && typeof sn.tankCounts === 'object') {
         for (const fu of ['benzin', 'dizel', 'lpg']) sn.tankCounts[fu] = clamp(sn.tankCounts[fu], 1, 4, 1)
       }
