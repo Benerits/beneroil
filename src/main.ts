@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
+import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
@@ -485,6 +486,16 @@ if (!isPromoMode) {
 }
 let promoTick: ((dt: number) => void) | null = null
 const ui = new UI()
+// BİLDİRİM GEÇMİŞİ (#465 kardeşi): toast 3 sn'de kayboluyor, kaçıran bir daha göremiyordu.
+// toast'ı sarmalayıp her mesajı oyun günü damgasıyla loglarız — davranış değişmez.
+{
+  const origToast = ui.toast.bind(ui)
+  ui.toast = (msg: string, kind: 'good' | 'bad' | '' = '', silent = false) => {
+    try { pushLog(state?.day ?? 1, t(msg), kind) } catch { /* state henüz yoksa geç */ }
+    origToast(msg, kind, silent)
+  }
+}
+injectNewsStyle()
 
 // Alt navbar + uygulama-sheet (mobil): tüm bölümler tek 'openSection' üzerinden açılır.
 // Sekme değişince diğer bölüm sheet'i kapanır → mobil-uygulama gibi sekmeli tek yüzey.
@@ -4273,6 +4284,8 @@ function frame() {
   ui.update(state, dt)
   composer!.render()
 }
+mountNewsButtons()  // Ayarlar'a "Yenilikler" + "Bildirim Geçmişi" düğmeleri
+maybeShowNews()     // sürüm değiştiyse notları bir kez göster (#465)
 frame()
 
 

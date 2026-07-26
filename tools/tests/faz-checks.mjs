@@ -326,12 +326,39 @@ console.log('== 14) Rezervasyon grafiği (trafik raporu §5) ==')
   // Kapı ağzı TEK SIRA (geniş kapıda da): iki aracı birlikte almak aynı şeride sokup
   // kilitliyordu — yük testi kanıtı (buharlaşma 61 → 0).
   check('kapı ağzı tek sıra (geniş kapıda da kapasite 1)', g2.tryAcquire('gate-in-near', A) && !g2.tryAcquire('gate-in-near', B))
-  // sweep: bölgeden çıkan aracın token'ı serbest kalır
-  const g3 = new TrafficGraph(); g3.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
-  const D = { n: 'D' }
-  g3.tryAcquire('gate-in-near', D)
-  g3.sweep([D], () => ({ x: 40, y: 40 })) // araç bölgeden uzakta
-  check('sweep: bölgeyi geçen araç token’ı bırakır', g3.tryAcquire('gate-in-near', { n: 'E' }) === true)
+  // REZERVASYON ÖMRÜ — buradaki ayrım kritik. Eski sweep, token alıp bölgeye HENÜZ
+  // VARMAMIŞ aracın rezervasyonunu her karede siliyordu; araç yeniden istemek zorunda
+  // kalıp FIFO'nun sonuna düşüyordu. Yoğunlukta bu açlık demekti (yük testinde grafik
+  // AÇIKKEN buharlaşma kapalıdan kötü çıkıyordu: 151 vs 100).
+  const zc = { x: 4.2 - 0.6, y: -14 }  // gate-in-near bölge merkezi (mkGeom sideSign=-1)
+  const far = { x: 40, y: 40 }
+  {
+    // a) token aldı, henüz YOLDA (bölge dışında) → rezervasyon KORUNUR
+    const g3 = new TrafficGraph(); g3.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
+    const D = { n: 'D' }
+    check('yaklaşan araç token alır', g3.tryAcquire('gate-in-near', D) === true)
+    g3.sweep([D], () => far, 0.1)
+    check('YOLDAKİ araç rezervasyonunu KORUR (açlık fixi)', g3.tryAcquire('gate-in-near', { n: 'E' }) === false)
+    // b) TTL dolunca YERİ bırakır (tıkanan araç bölgeyi sonsuza kilitlemesin)
+    for (let i = 0; i < 30; i++) g3.sweep([D], () => far, 0.1) // 3 sn > RESERVE_TTL
+    const z0 = g3.snapshot().find(z => z.id === 'gate-in-near')
+    check('TTL dolunca bölge boşalır (deadlock sigortası)', z0.used === 0)
+    // c) ...ama kuyruğun BAŞINA konur: sırasını beklemişti, sona atılmaz. Bu yüzden
+    //    ARKADAN GELEN onu geçemez — açlığı önleyen asıl kural bu.
+    check('TTL kurbanı kuyrukta sırasını korur', z0.queued === 1)
+    check('arkadan gelen TTL kurbanını GEÇEMEZ', g3.tryAcquire('gate-in-near', { n: 'E2' }) === false)
+    check('TTL kurbanı sıradaki yeri ALIR', g3.tryAcquire('gate-in-near', D) === true)
+  }
+  {
+    // d) bölgeye GİRİP ÇIKAN araç token'ı bırakır (asıl amaç)
+    const g3b = new TrafficGraph(); g3b.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
+    const D2 = { n: 'D2' }
+    g3b.tryAcquire('gate-in-near', D2)
+    g3b.sweep([D2], () => zc, 0.1)   // bölgeye girdi
+    check('içerideyken token DURUR', g3b.tryAcquire('gate-in-near', { n: 'X' }) === false)
+    g3b.sweep([D2], () => far, 0.1)  // bölgeden çıktı
+    check('sweep: bölgeyi GEÇEN araç token’ı bırakır', g3b.tryAcquire('gate-in-near', { n: 'E3' }) === true)
+  }
   // sweep: sahneden silinen araç bölgeyi kilitlemez
   const g4 = new TrafficGraph(); g4.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
   const F = { n: 'F' }; g4.tryAcquire('gate-in-near', F)
@@ -860,25 +887,27 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
   // SEZON: 4 mevsim, tekrarlanabilir, trafik çarpanı
   const se = new GameState()
   se.day = 1
-  check('gün 1 = Yaz (kara şubesinde HAFİF etki ~1.13)', se.season().id === 'yaz' && se.season().traffic > 1.1 && se.season().traffic < 1.2)
-  se.day = 95
-  check('gün 95 = Sonbahar', se.season().id === 'sonbahar')
+  // KRİTİK: gün 1 çarpanı ~1.0 olmalı — canlı oyuncuların dengesi sezonla sarsılmasın
+  check(`gün 1 = İlkbahar, çarpan ~1.0 (canlı denge korunur: ${se.season().traffic.toFixed(3)})`,
+    se.season().id === 'ilkbahar' && se.season().traffic > 0.99 && se.season().traffic < 1.06)
+  se.day = 60
+  check('gün 60 = Yaz (zirve)', se.season().id === 'yaz' && se.season().traffic > 1.1)
   se.day = 150
-  check('gün 150 = Kış (kara: ~0.87, canlı dengeyi sarsmaz)', se.season().id === 'kis' && se.season().traffic > 0.85 && se.season().traffic < 0.9)
-  se.day = 240
-  check('gün 240 = İlkbahar', se.season().id === 'ilkbahar')
+  check('gün 150 = Sonbahar (nötr 1.0)', se.season().id === 'sonbahar' && Math.abs(se.season().traffic - 1) < 0.001)
+  se.day = 200
+  check('gün 200 = Kış (dip ~0.87)', se.season().id === 'kis' && se.season().traffic > 0.85 && se.season().traffic < 0.9)
   se.day = 271
-  check('döngü TEKRARLANIR (gün 271 = Yaz)', se.season().id === 'yaz')
-  check('sezon ilerlemesi gösterilir', se.season().dayInSeason === 1 && se.season().length === 90)
+  check('döngü TEKRARLANIR (gün 271 = İlkbahar)', se.season().id === 'ilkbahar')
+  check('sezon ilerlemesi gösterilir', se.season().dayInSeason === 1 && se.season().length === 45)
   // sezon trafiği entryChance'e yansır
-  const a = new GameState(); a.day = 1   // yaz
-  const b2 = new GameState(); b2.day = 150 // kış
+  const a = new GameState(); a.day = 60   // yaz
+  const b2 = new GameState(); b2.day = 200 // kış
   check('yaz akışı kıştan yüksek', a.entryChance() > b2.entryChance() * 1.15)
   // MARİNA'da sezon SERT (rapor §6.5.5: kışın tekne trafiği çöker)
   const mar = new GameState(); mar.unlockedLocs.push('marina')
   mar.switchLoc('marina', { placedPos: {}, placedRot: {}, placedRects: [] })
-  mar.day = 1; const mYaz = mar.season().traffic
-  mar.day = 150; const mKis = mar.season().traffic
+  mar.day = 60; const mYaz = mar.season().traffic
+  mar.day = 200; const mKis = mar.season().traffic
   check(`marinada sezon SERT (yaz ${mYaz.toFixed(2)} / kış ${mKis.toFixed(2)})`, mYaz > 1.4 && mKis < 0.6)
 }
 

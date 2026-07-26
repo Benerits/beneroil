@@ -210,6 +210,19 @@ const EN: Record<string, string> = {
   'Yol haritası yakında!': 'Roadmap coming soon!',
   'Kamera açısı': 'Camera angle',
   'Sunucu hatası.': 'Server error.',
+  'Mağaza': '💎 Store',
+  'Hesap': 'Account',
+  '🏗️ Ofisi Taşı': '🏗️ Move Office',
+  'Teklif güncellendi — yeni listeye bak.': 'That offer changed — check the new list.',
+  // 7 günlük kâr grafiği + yaka dağılımı (ofis raporu)
+  'Grafik için en az 2 günlük veri gerekli.': 'The chart needs at least 2 days of data.',
+  'Gün {0}: veri yok': 'Day {0}: no data',
+  'Gün {0}: ₺{1}': 'Day {0}: ₺{1}',
+  'Son 7 günün kârı': 'Profit — last 7 days',
+  'En iyi ₺{0} · en kötü ₺{1}': 'Best ₺{0} · worst ₺{1}',
+  'Bugünkü ciro — yaka dağılımı': 'Today’s revenue — by side of the road',
+  'Ana yaka': 'Main side',
+  'Karşı yaka': 'Far side',
 
   // --- HUD ---
   'GÜN': 'DAY', 'KASA': 'CASH', 'BENZİN': 'PETROL', 'DİZEL': 'DIESEL', 'LPG': 'LPG',
@@ -469,12 +482,16 @@ const EN: Record<string, string> = {
   'GÜNEŞ SANTRALİ': 'SOLAR PLANT', 'JENERATÖR': 'GENERATOR', 'OTO YIKAMA': 'CAR WASH',
   'KAHVECİ': 'CAFE', 'RESTORAN': 'RESTAURANT', 'TIR PARKI': 'TRUCK STOP', 'SELF YIKAMA': 'SELF WASH',
   'OTOPARK': 'PARKING', 'HAVA-SU ÜNİTESİ': 'AIR & WATER', 'REAKTÖR': 'REACTOR',
+  'TABELA': 'SIGN', 'SOKAK LAMBASI': 'STREET LAMP',
   'POMPA #{0}': 'PUMP #{0}', 'DC ŞARJ #{0}': 'DC CHARGER #{0}',
 
   // --- İnşaat menüsü (shop) ---
   'Arsa Satın Al ({0}/18)': 'Buy Land ({0}/18)', '2 blok 3×3': '2 blocks 3×3',
   'Bitişik arsalardan birini seç — istasyon geliştikçe emlak fiyatları artar':
     'Pick an adjacent plot — prices rise as your station grows',
+  'Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — yakın arsalar ucuz, uzak/karşı arsalar pahalı; istasyon geliştikçe artar. Seçince o parselin gerçek fiyatı görünür.':
+    'Tap an adjacent plot (you can cross the road too). Price depends on location — nearby plots are cheap, far or across-road ones cost more, and everything rises as your station grows. Tap a plot to see its exact price.',
+  ' · yol karşısı': ' · across the road',
   'Zemin Betonu': 'Paving', 'arsa başı': 'per plot',
   'Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)':
     'Pave a grass plot (required to build, except solar)',
@@ -490,7 +507,13 @@ const EN: Record<string, string> = {
   'Otopark': 'Parking Lot', 'Otopark ({0})': 'Parking Lot ({0})', '+4 araç': '+4 cars',
   'Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)':
     'Striped lot — customers park and use facilities (unlimited)',
-  'Market': 'Market', 'Market Sv.2': 'Market Lv.2', 'Müşteriler ekstra alışveriş yapar': 'Customers shop extra',
+  'Sokak Lambası': 'Street Lamp', 'Sokak Lambası ({0})': 'Street Lamp ({0})', '+itibar': '+reputation',
+  'Gece aydınlatması — istasyon güvenli görünür (sınırsız kurulur, taşınır, satılır)':
+    'Night lighting — the station looks safe after dark (unlimited, movable, sellable)',
+  'Market': 'Market', 'Market Sv.2': 'Market Lv.2', 'Market Sv.{0}': 'Market Lv.{0}',
+  'Müşteriler ekstra alışveriş yapar': 'Customers shop extra',
+  'Müşteriler ekstra alışveriş yapar. Yerinde yükselir (aynı yer), gelir seviyeyle artar.':
+    'Customers shop extra. Upgrades in place (same spot); income grows with each level.',
   'Tuvalet': 'Restroom', 'Tuvalet Sv.2': 'Restroom Lv.2', '+moral': '+morale',
   'Müşteri memnuniyetini ve itibarı artırır': 'Boosts satisfaction and rating',
   'Oto Yıkama': 'Car Wash', 'Yağ Değişimi': 'Oil Change', 'Self Yıkama': 'Self Wash', 'Self Yıkama ({0})': 'Self Wash ({0})',
@@ -524,6 +547,12 @@ const EN: Record<string, string> = {
   'Anında': 'Instant', 'Şarj süresi': 'Charge time', 'Satış': 'Price',
   'Araca akış': 'Flow to car', 'Şebeke maliyeti': 'Grid cost', 'Kirlilik': 'Dirt', 'Bugünkü ciro': "Today's revenue",
   'İtibar': 'Rating', 'Müşteri etkisi': 'Customer impact', 'Kullanım ücreti': 'Usage fee',
+  'Ücret': 'Fee', 'ücretsiz': 'free',
+  'Karşı Giriş Kapısı': 'Across-Road Entrance Gate', 'Karşı Çıkış Kapısı': 'Across-Road Exit Gate',
+  'Karşı (yol karşısı) istasyona müşteriler buradan girer. Taşı ile yol kenarında yerini ayarla.':
+    'Customers enter the across-road station here. Use Move to position it along the roadside.',
+  'Karşı istasyondan araçlar buradan çıkıp yola karışır. Taşı ile yerini belirle.':
+    'Cars leave the across-road station here and merge onto the road. Use Move to position it.',
 
   // --- Sık toast / bildirim ---
   '{0} tankeri yola çıktı!': '{0} tanker is on the way!',
@@ -565,6 +594,29 @@ const EN: Record<string, string> = {
   'Tuvalet artık ücretsiz.': 'Restroom is now free.', 'Tuvalet ücreti: ₺{0}': 'Restroom fee: ₺{0}',
   'Ücretsiz': 'Free', 'GÜNLÜK GÖREV TAMAM: 15 müşteri — ödül +₺1.000!': 'DAILY QUEST DONE: 15 customers — reward +₺1,000!',
   'İstasyon bakıma alındı — itibar düşmez.': 'Station under maintenance — rating protected.',
+  '🛣️ Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.':
+    '🛣️ The slip lane is full — a customer pulled back onto the motorway! Expand your capacity.',
+  'EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!':
+    'An EV customer saw a charger blocked by a car that wasn’t charging and DROVE OFF — rating dropped!',
+  '🚻 Müşteri tuvalet arıyordu, bulamadı!': '🚻 A customer went looking for a restroom and found none!',
+  '🔧 Yağ değişimi: +₺{0} kumbarada': '🔧 Oil change: +₺{0} in the piggy bank',
+  '🔊 Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
+    '🔊 Put off by the generator noise — they’ll only charge half as much!',
+  'Depo şu an boş — üretim geldikçe şarj yavaş akacak.': 'The depot is empty right now — charging will trickle in as power is generated.',
+  '🔧 Şarj ünitesi arızalandı — tamir gerekli!': '🔧 Charger broke down — repair needed!',
+  '🔧 Pompa arızalandı — tamir gerekli!': '🔧 Pump broke down — repair needed!',
+  '⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆': '⚡ An idler is hogging the charger — tap the car to send them off 👆',
+  '⚠️ Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!':
+    '⚠️ Cloud save is failing — check your connection, your progress is NOT being saved!',
+  '🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…':
+    '🔄 Played on another device — syncing to your latest progress…',
+  '⭐ İtibar yükseldi: {0} (bekleyen müşteri kaybın az)': '⭐ Rating up: {0} (you barely lost anyone to waiting)',
+  '⭐ İtibar düştü: {0} — müşteriler beklemekten gidiyor!': '⭐ Rating down: {0} — customers are leaving from the wait!',
+  '✏️ Düzenleme AÇIK — binaya dokun ve taşı': '✏️ Edit mode ON — tap a building to move it',
+  '{0} kumbarası doldu — tıklayıp topla, yoksa ciro erimeye başlar!':
+    '{0} piggy bank is full — tap to collect or your takings start melting away!',
+  '⚠️ {0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!': '⚠️ {0} piggy bank is PACKED — incoming revenue is being lost!',
+  '🧪 FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!': '🧪 FULL MODE: everything built — drag to pan, scroll to zoom!',
   // --- Batch: eksik EN çevirileri (v2 güncelleme) ---
   'Finansal Durum': 'Financial Status', 'Yakıt Satış Fiyatları': 'Fuel Selling Prices',
   'Müşteri & İtibar': 'Customers & Reputation', 'Satış & Faaliyet Kârı': 'Sales & Operating Profit',
@@ -644,6 +696,8 @@ const EN: Record<string, string> = {
   '🏞️ Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.': '🏞️ Across-road plot bought — pave it, then build a pump/charger; the first pump adds automatic entry/exit.',
   '🧱 Zemin betonlandı — artık yapı kurabilirsin!': '🧱 Plot paved — you can build now!',
   '🪧 Tabela büyüdü — daha çok müşteri gelecek!': '🪧 Sign upgraded — more customers coming!', '🛒 Market açıldı!': '🛒 Market opened!',
+  '🚻 Tuvalet hizmete girdi!': '🚻 Restroom is open for business!',
+  '💡 Sokak lambası kuruldu — gece istasyon aydınlık!': '💡 Street lamp installed — the station stays bright at night!',
   '🔋 Batarya deposu kuruldu — üretim biriktikçe dolacak.': '🔋 Battery depot built — it fills as power is generated.', '🔌 DC şarj ünitesi kuruldu!': '🔌 DC charger built!',
   '☀️ Güneş santrali kuruldu. ⚠️ Paneller zamanla kirlenir!': '☀️ Solar plant built. ⚠️ Panels get dirty over time!',
   '🛠️ Jeneratör kuruldu. ⚠️ Gürültüsü EV müşterilerini kaçırabilir!': '🛠️ Generator built. ⚠️ Its noise may scare EV customers away!',
@@ -668,6 +722,32 @@ const EN: Record<string, string> = {
   '75.000 ₺ Nakit': '₺75,000 Cash', 'Kasana anında +75.000 ₺ — en avantajlı paket.': 'Instantly +₺75,000 — best value pack.',
   'Hesabın ve TÜM verilerin kalıcı olarak silinecek. Bu işlem geri alınamaz. Emin misin?': 'Your account and ALL data will be permanently deleted. This cannot be undone. Are you sure?',
   'Silinemedi, tekrar dene.': 'Could not delete, try again.', 'doluyor… hedef FULL': 'filling… target FULL', 'doluyor… hedef ₺{0}': 'filling… target ₺{0}',
+
+  // --- Yenilikler & bildirim geçmişi (news.ts) ---
+  'Neler Yeni?': 'What’s New?', 'Yenilikler': 'What’s New', 'Yenilikler & geçmiş': 'What’s new & history',
+  'Sürüm {0}': 'Version {0}', 'yeni': 'new',
+  'Bildirim Geçmişi': 'Notification History', 'Gün {0}': 'Day {0}', 'Henüz bildirim yok.': 'No notifications yet.',
+  // sürüm notu maddeleri (news.ts NEWS[].items — t() üzerinden geçer)
+  'Tesis kumbarası dolduğunda ciro artık kaybolmuyor — dolu kumbara üstüne gelen kazanç kısılarak da olsa birikiyor ve ne kadarının eridiği rapor ediliyor.':
+    'Revenue no longer vanishes when a facility piggy bank fills up — earnings on top of a full jar still pile up (at a reduced rate) and the report shows how much melted away.',
+  'İtibar 5,0\'da donmuyor: her gün sonunda o günün hizmet kalitesine göre yükseliyor ya da düşüyor.':
+    'Rating no longer freezes at 5.0: it rises or falls at the end of each day based on that day’s service quality.',
+  'Pompacı artık her araçta camı siliyor; şarj görevlisi de siliyor.':
+    'Attendants now clean the windscreen on every car — charge attendants do too.',
+  'Sokak lambası satın alınabilir oldu — istediğin yere kur, taşı, sat. Yok ettiğin lambaları geri koyabilirsin.':
+    'Street lamps are now for sale — place them anywhere, move them, sell them. Lamps you demolished can be put back.',
+  'Ofiste son 7 günün kâr grafiği ve cironun yaka dağılımı var.':
+    'The Office now has a 7-day profit chart and a revenue split by side of the road.',
+  'Haczedilen bina artık sahnede işlevsiz kalmıyor.': 'Seized buildings no longer sit dead on the lot.',
+  'Yakıt alış fiyatı günlük dalgalanıyor — ucuzken stoklamak kâr getiriyor.':
+    'Fuel buy prices now swing day to day — stocking up while it’s cheap pays off.',
+  'Sıralama tablosu ve mevsimler eklendi.': 'Leaderboard and seasons added.',
+  'Kayıp save sorunu kapatıldı — oyundan çıkarken ilerleme garanti kaydediliyor.':
+    'Lost-save bug closed — your progress is guaranteed to be written when you leave the game.',
+  'Satın alınan ürünün kaybolması sorunu giderildi.': 'Fixed purchased items going missing.',
+  'Şube sistemi: çevre yolu ve otoyol istasyonları açıldı.': 'Branch system: ring-road and motorway stations unlocked.',
+  'Kurumsal sözleşmeler, marka devri ve müdür otomasyonu eklendi.':
+    'Corporate contracts, brand handover and manager automation added.',
 }
 
 export function t(tr: string, ...args: (string | number)[]): string {

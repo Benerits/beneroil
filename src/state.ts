@@ -243,18 +243,23 @@ export class GameState {
   season(): { id: 'yaz' | 'sonbahar' | 'kis' | 'ilkbahar'; name: string; traffic: number; dayInSeason: number; length: number } {
     const cycle = 270
     let d = ((this.day - 1) % cycle + cycle) % cycle
-    // Şiddet temadan: kara şubelerinde hafif (±%12 — mevcut denge bozulmaz), marinada sert.
+    // Şiddet temadan: kara şubelerinde hafif (mevcut denge bozulmaz), marinada sert
+    // (rapor §6.5.5: kışın tekne trafiği çöker, kışlama geliri zirve yapar).
     const amp = this.theme().lane.kind === 'water' ? 1 : 0.28
     const mix = (v: number) => 1 + (v - 1) * amp
+    // DÖNGÜ İLKBAHARDA BAŞLAR — bilerek: gün 1 çarpanı ~1.04, yani CANLI OYUNCULARIN
+    // bugünkü dengesi neredeyse aynı kalır. (Yazla başlatınca gün 1'de +%13 trafik oluyordu;
+    // hem mevcut kayıtları sarsıyor hem trafik sistemini kapasite sınırına itiyordu.)
+    // Doğal mevsim sırası korunur: ilkbahar → yaz → sonbahar → kış.
     const defs: [typeof this.seasonIdCache, string, number, number][] = [
-      ['yaz', t('Yaz'), mix(1.45), 90], ['sonbahar', t('Sonbahar'), mix(1.0), 45],
-      ['kis', t('Kış'), mix(0.55), 90], ['ilkbahar', t('İlkbahar'), mix(1.15), 45],
+      ['ilkbahar', t('İlkbahar'), mix(1.15), 45], ['yaz', t('Yaz'), mix(1.45), 90],
+      ['sonbahar', t('Sonbahar'), mix(1.0), 45], ['kis', t('Kış'), mix(0.55), 90],
     ]
     for (const [id, name, traffic, length] of defs) {
       if (d < length) return { id: id as 'yaz', name, traffic, dayInSeason: d + 1, length }
       d -= length
     }
-    return { id: 'yaz', name: t('Yaz'), traffic: 1, dayInSeason: 1, length: 90 }
+    return { id: 'ilkbahar', name: t('İlkbahar'), traffic: 1, dayInSeason: 1, length: 45 }
   }
   private seasonIdCache: 'yaz' | 'sonbahar' | 'kis' | 'ilkbahar' = 'yaz'
 

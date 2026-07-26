@@ -871,7 +871,7 @@ export class CarManager {
       this.graphKey = key; this.graphOnLast = useGraph
       this.graph.rebuild(useGraph ? stationsNow : [])
     }
-    this.graph.sweep(this.cars, c => (c as Car).group.position)
+    this.graph.sweep(this.cars, c => (c as Car).group.position, dt)
 
     // yoldan geçen trafik
     this.nearTimer -= dt
