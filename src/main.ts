@@ -470,6 +470,7 @@ const [modelLib, staticLib, branchKit] = await Promise.all([
   loadModels(), loadStatics(), loadKit(locHint),
 ])
 const world = new World(staticLib, locHint, branchKit)
+Car.boatKit = branchKit   // MARİNA: tekne modelleri kitten gelir (yoksa prosedürel gövde)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
 let parkInfoShown = 0

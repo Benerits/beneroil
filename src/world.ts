@@ -54,6 +54,47 @@ function cyl(r: number, len: number, color: number, x: number, y: number, z: num
   return m
 }
 
+
+/** DENİZ DOKUSU — prosedürel, tileable (kenarları dikişsiz).
+ *  Üç katman: derinlik gradyanı + iki farklı periyotta dalga bandı + parıltı benekleri.
+ *  Sin/cos dalgaları TAM PERİYOT sayısıyla çizilir, böylece doku tekrarında dikiş olmaz.
+ *  Dosya indirmez: oyuncuya ek bayt maliyeti yok. */
+function waterTexture(px = 512, deep = '#12566e', shallow = '#2b8fa8'): THREE.CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = c.height = px
+  const ctx = c.getContext('2d')!
+  // 1) taban: derinden sığa dikey geçiş
+  const g = ctx.createLinearGradient(0, 0, 0, px)
+  g.addColorStop(0, deep); g.addColorStop(0.5, shallow); g.addColorStop(1, deep)
+  ctx.fillStyle = g; ctx.fillRect(0, 0, px, px)
+  // 2) dalga bantları — iki farklı frekans, tam periyot (dikişsiz tekrar)
+  for (const [freq, amp, alpha, w] of [[3, 9, 0.16, 2.5], [7, 5, 0.10, 1.4]] as [number, number, number, number][]) {
+    ctx.globalAlpha = alpha; ctx.strokeStyle = '#bfeaf5'; ctx.lineWidth = w
+    for (let row = 0; row < 14; row++) {
+      const y0 = (row / 14) * px
+      ctx.beginPath()
+      for (let x = 0; x <= px; x += 4) {
+        const y = y0 + Math.sin((x / px) * Math.PI * 2 * freq + row * 1.7) * amp
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+    }
+  }
+  // 3) parıltı benekleri — determinist (her açılışta aynı deniz)
+  ctx.globalAlpha = 1
+  for (let i = 0; i < 220; i++) {
+    const r = (Math.sin(i * 12.9898) * 43758.5453) % 1
+    const r2 = (Math.sin(i * 78.233) * 43758.5453) % 1
+    const x = Math.abs(r) * px, y = Math.abs(r2) * px
+    ctx.fillStyle = `rgba(255,255,255,${0.05 + Math.abs(r) * 0.09})`
+    ctx.beginPath(); ctx.arc(x, y, 0.8 + Math.abs(r2) * 1.6, 0, Math.PI * 2); ctx.fill()
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
 /** dir yönüne bakan (varsayılan +x), canvas'a çizilmiş pano */
 function canvasPanel(w: number, h: number, px: number, py: number,
                      draw: (ctx: CanvasRenderingContext2D, W: number, H: number) => void,
@@ -372,57 +413,11 @@ export class World {
       }
     }
 
-    // ---- MARİNA: DENİZ SAHNESİ (rapor §6.5.2 — kara trafiğinin birebir izomorfu) ----
-    // Şerit → seyir kanalı (fairway, şamandıralı) · kapı → liman ağzı (dalgakıranlar arası)
-    // · apron → iç havuz · pompa slotu → yakıt iskelesi mevkisi · otopark → parmak iskele.
-    // Geometri AYNI kaldığı için trafik grafiği (§5) hiç değiştirilmeden çalışır.
-    if (th.lane.kind === 'water') {
-      // Deniz: yolun olduğu bandın iki yanı da su. Hafif dalga için iki katman.
-      const sea = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), lam(0x1f6f8c))
-      sea.position.set(ROAD_X, 0, 0.005); s.add(sea)
-      const shimmer = new THREE.Mesh(new THREE.PlaneGeometry(260, 260),
-        new THREE.MeshBasicMaterial({ color: 0x63c6d8, transparent: true, opacity: 0.16, depthWrite: false }))
-      shimmer.position.set(ROAD_X, 0, 0.008); s.add(shimmer)
-      this.seaShimmer = shimmer
-
-      // DALGAKIRAN: liman ağzını daraltan iki mendirek. Kapı bölgesini FİZİKSEL olarak
-      // tek sıraya indirir — rezervasyon grafiğinin en temiz çalıştığı topoloji.
-      const gi2 = APRON_IN_Y // liman ağzı = giriş kapısıyla aynı y (kara ile izomorf)
-      for (const side of [-1, 1]) {
-        const mole = new THREE.Mesh(new THREE.BoxGeometry(1.6, 26, 1.5), lam(0x8d8577))
-        mole.position.set(ROAD_X + side * 5.6, gi2 + side * 15, 0.75); s.add(mole)
-        // mendirek başı feneri
-        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 2.2, 8),
-          lam(side < 0 ? 0xd44b4b : 0x3fae5f))
-        lamp.rotation.x = Math.PI / 2
-        lamp.position.set(ROAD_X + side * 5.6, gi2 + side * 2.2, 1.9); s.add(lamp)
-      }
-      // SEYİR KANALI ŞAMANDIRALARI: kara şeridinin çizgilerinin muadili (instanced)
-      const buoyN = 22
-      const buoys = new THREE.InstancedMesh(new THREE.ConeGeometry(0.32, 1.1, 7), lam(0xe04b3a), buoyN)
-      const bm = new THREE.Matrix4()
-      for (let i = 0; i < buoyN; i++) {
-        bm.makeRotationX(-Math.PI / 2)
-        bm.setPosition(ROAD_X + (i % 2 === 0 ? -2.5 : 2.5), -100 + Math.floor(i / 2) * 18, 0.5)
-        buoys.setMatrixAt(i, bm)
-      }
-      buoys.instanceMatrix.needsUpdate = true; s.add(buoys)
-      // PARMAK İSKELELER: otoparkın deniz muadili — ahşap platformlar
-      const dockN = 5
-      const docks = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 13, 0.35), lam(0xa8875c), dockN)
-      const dm = new THREE.Matrix4()
-      for (let i = 0; i < dockN; i++) {
-        dm.makeTranslation(-3.5 - i * 4.6, 4 + (i % 2) * 3, 0.18)
-        docks.setMatrixAt(i, dm)
-      }
-      docks.instanceMatrix.needsUpdate = true; s.add(docks)
-      // uzak kıyı silueti (marinanın manzarası — dekorasyon itibarının görsel karşılığı)
-      for (let i = 0; i < 6; i++) {
-        const hill = new THREE.Mesh(new THREE.ConeGeometry(18 + i * 4, 7 + i * 1.5, 6), lam(0x5f8f6a))
-        hill.rotation.x = Math.PI / 2
-        hill.position.set(ROAD_X - 60 - i * 9, -80 + i * 32, 3.5); s.add(hill)
-      }
-    }
+    // ---- MARİNA: DENİZ SAHNESİ ----
+    // Kara trafiğinin birebir izomorfu (rapor §6.5.2): şerit → seyir kanalı, kapı →
+    // liman ağzı, apron → iç havuz, pompa slotu → yakıt iskelesi, otopark → parmak iskele.
+    // Geometri aynı kaldığı için rezervasyon grafiği tek satır değişmeden çalışır.
+    if (th.lane.kind === 'water') this.buildMarinaScene(s)
 
     if (th.features?.urban) {
       // ---- TRAFİK IŞIĞI (mekanik: kırmızıda giriş şansı ×boost) ----
@@ -775,13 +770,10 @@ export class World {
 
   /** her kare çağrılır: buhar animasyonu vb. */
   update(dt: number) {
-    // marina: su parıltısı yavaşça kayar (canlı deniz hissi, tek mesh — bedava)
-    if (this.seaShimmer) {
-      const m2 = this.seaShimmer.material as THREE.MeshBasicMaterial
-      this.seaT = (this.seaT + dt * 0.35) % (Math.PI * 2)
-      m2.opacity = 0.12 + 0.06 * Math.sin(this.seaT)
-      this.seaShimmer.position.x = ROAD_X + Math.sin(this.seaT * 0.7) * 0.6
-      this.seaShimmer.position.y = Math.cos(this.seaT * 0.5) * 0.6
+    // MARİNA: deniz katmanları kayar — dokular RepeatWrapping olduğu için sonsuz akar
+    for (const l of this.seaLayers) {
+      l.tex.offset.x = (l.tex.offset.x + l.sx * dt) % 1
+      l.tex.offset.y = (l.tex.offset.y + l.sy * dt) % 1
     }
     this.steamT += dt
     for (const p of this.steam) {
@@ -1033,6 +1025,130 @@ export class World {
    *  Kit yoksa (indirilemedi/eski istemci) blok sessizce atlanır: sahne prosedürel
    *  hâliyle kurulur, oyun durmaz.
    */
+
+  /** MARİNA SAHNESİ — ada üstünde istasyon, çevresi açık deniz.
+   *
+   *  Su iki katmanlı: taban doku yavaş, üst katman ters yönde ve daha hızlı kayar.
+   *  İkisinin girişimi tek dokuyla elde edilemeyen "canlı deniz" hissini verir; ikisi de
+   *  aynı prosedürel dokuyu kullandığı için ek indirme yok.
+   */
+  private buildMarinaScene(s: THREE.Scene) {
+    const th = this.theme
+    const K = this.kit
+    const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
+
+    // ---- 1) DENİZ: iki kayan katman ----
+    const texA = waterTexture(512, '#0f4a60', '#2b8fa8')
+    const texB = waterTexture(512, '#12566e', '#3aa3bd')
+    texA.repeat.set(9, 9); texB.repeat.set(5, 5)
+    const seaA = new THREE.Mesh(new THREE.PlaneGeometry(300, 300),
+      new THREE.MeshLambertMaterial({ map: texA }))
+    seaA.position.set(ROAD_X, 0, 0.002); s.add(seaA)
+    const seaB = new THREE.Mesh(new THREE.PlaneGeometry(300, 300),
+      new THREE.MeshBasicMaterial({ map: texB, transparent: true, opacity: 0.34, depthWrite: false }))
+    seaB.position.set(ROAD_X, 0, 0.004); s.add(seaB)
+    this.seaLayers = [{ tex: texA, sx: 0.010, sy: 0.006 }, { tex: texB, sx: -0.017, sy: 0.011 }]
+
+    // ---- 2) ADA: istasyonun oturduğu kara parçası ----
+    // Dikdörtgen parsel yerine yumuşak kenarlı ada: kum bandı + kaya kenarı + çim.
+    const isle = (r: number, z: number, color: number, seg = 48) => {
+      const shape = new THREE.Shape()
+      for (let i = 0; i <= seg; i++) {
+        const a = (i / seg) * Math.PI * 2
+        // düzensiz kıyı çizgisi — determinist (her açılışta aynı ada)
+        const wob = 1 + 0.10 * Math.sin(a * 3) + 0.06 * Math.sin(a * 7 + 1.3)
+        const px = Math.cos(a) * r * 1.45 * wob, py = Math.sin(a) * r * wob
+        i === 0 ? shape.moveTo(px, py) : shape.lineTo(px, py)
+      }
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), lam2(color))
+      m.position.set(-1.5, 0, z)
+      m.receiveShadow = true
+      s.add(m)
+      return m
+    }
+    isle(19.5, 0.006, 0xd8c9a0)   // kum/sığ kıyı halkası
+    isle(18.2, 0.008, 0x9aa1a9)   // taş dolgu
+    isle(17.2, 0.010, 0x86b06a)   // çim platform (istasyon burada)
+
+    // ---- 3) LİMAN AĞZI: dalgakıranlar (kapı bölgesini fiziksel olarak daraltır) ----
+    const gi = APRON_IN_Y
+    for (const side of [-1, 1]) {
+      const mole = new THREE.Mesh(new THREE.BoxGeometry(1.8, 24, 1.6), lam2(0x8d8577))
+      mole.position.set(ROAD_X + side * 5.8, gi + side * 15, 0.8)
+      mole.castShadow = true; s.add(mole)
+      const lampCol = side < 0 ? 0xd44b4b : 0x3fae5f
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 2.4, 8), lam2(lampCol))
+      lamp.rotation.x = Math.PI / 2
+      lamp.position.set(ROAD_X + side * 5.8, gi + side * 2.4, 2.0); s.add(lamp)
+    }
+
+    // ---- 4) İSKELELER: ahşap platformlar + babalar ----
+    const dockMat = lam2(0xa8875c)
+    for (let i = 0; i < 5; i++) {
+      const d = new THREE.Mesh(new THREE.BoxGeometry(1.3, 14, 0.4), dockMat)
+      d.position.set(-3.5 - i * 4.4, 3 + (i % 2) * 3.5, 0.2)
+      d.castShadow = true; s.add(d)
+    }
+    const pierN = 24
+    const piles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.16, 1.4, 6), lam2(0x6b4a2f), pierN)
+    const pm = new THREE.Matrix4()
+    for (let i = 0; i < pierN; i++) {
+      pm.makeRotationX(Math.PI / 2)
+      pm.setPosition(-3.5 - Math.floor(i / 5) * 4.4, -3.5 + (i % 5) * 3.4, 0.5)
+      piles.setMatrixAt(i, pm)
+    }
+    piles.instanceMatrix.needsUpdate = true; s.add(piles)
+
+    // ---- 5) SEYİR KANALI: şamandıralar (kit varsa gerçek model, yoksa koni) ----
+    const buoyProto = K?.['buoy'] ?? null
+    const flagProto = K?.['buoy-flag'] ?? null
+    for (let i = 0; i < 16; i++) {
+      const side = i % 2 === 0 ? -1 : 1
+      const y = -96 + Math.floor(i / 2) * 24
+      const proto = (i % 6 === 0 && flagProto) ? flagProto : buoyProto
+      if (proto) {
+        const g = fitModel(proto, 1.5, 'z')
+        g.position.set(ROAD_X + side * 3.2, y, 0)
+        s.add(g)
+      } else {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.2, 7), lam2(0xe04b3a))
+        cone.rotation.x = -Math.PI / 2
+        cone.position.set(ROAD_X + side * 3.2, y, 0.6); s.add(cone)
+      }
+    }
+
+    // ---- 6) ARKA PLANDA KARGO GEMİLERİ + RÖMORKÖR (derinlik ve ölçek hissi) ----
+    const bg: [string, number, number, number][] = [
+      ['ship-cargo-b', ROAD_X + 46, -38, 13],
+      ['ship-cargo-b', ROAD_X + 62, 26, 15],
+      ['boat-tug-a', ROAD_X + 30, 52, 4.5],
+    ]
+    for (const [name, x, y, size] of bg) {
+      const proto = K?.[name]
+      if (!proto) continue
+      const g = fitModel(proto, size, 'y')
+      g.position.set(x, y, 0)
+      g.rotation.z = y > 0 ? Math.PI : 0
+      s.add(g)
+    }
+    // iskelede kargo konteynerleri (liman dokusu)
+    for (const [name, x, y] of [['cargo-container-a', -14, -12], ['cargo-container-b', -14, -14.6],
+                                ['cargo-pile-a', -17.5, -13.2]] as [string, number, number][]) {
+      const proto = K?.[name]
+      if (!proto) continue
+      const g = fitModel(proto, 2.6, 'y')
+      g.position.set(x, y, 0); s.add(g)
+    }
+
+    // ---- 7) UZAK KIYI: karşı sahil silueti ----
+    for (let i = 0; i < 7; i++) {
+      const hill = new THREE.Mesh(new THREE.ConeGeometry(20 + i * 5, 8 + i * 2, 6), lam2(0x5f8f6a))
+      hill.rotation.x = Math.PI / 2
+      hill.position.set(ROAD_X - 78 - i * 8, -90 + i * 30, 4); s.add(hill)
+    }
+    void th
+  }
+
   private buildIndustrialDistrict(s: THREE.Scene) {
     const K = this.kit
     if (!K) return
@@ -1179,9 +1295,9 @@ export class World {
   evSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => (EV_SLOTS_POS[i] ?? EV_SLOTS_POS[3]).clone())
   tankAnchor = new THREE.Vector2(TANK_POS.x, TANK_POS.y)
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
-  /** marina deniz parıltısı — her karede hafifçe kaydırılır (canlı su hissi) */
-  private seaShimmer: THREE.Mesh | null = null
-  private seaT = 0
+  /** MARİNA DENİZİ: iki doku katmanı ters yönde ve farklı hızda kayar.
+   *  Girişimleri tek dokuyla elde edilemeyen canlı dalga hissini verir. */
+  private seaLayers: { tex: THREE.Texture; sx: number; sy: number }[] = []
   gateIn = new THREE.Vector2(4.2, APRON_IN_Y)
   gateOut = new THREE.Vector2(4.2, APRON_OUT_Y)
   /** karşı istasyon kapıları — far araç GÜNEYE gittiği için giriş yukarıda (+y), çıkış aşağıda (-y):

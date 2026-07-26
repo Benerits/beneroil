@@ -82,6 +82,16 @@ const BOAT_SPEC: Record<BoatKind, { len: number; beam: number; hull: number; dec
   superyat: { len: 8.0, beam: 2.1, hull: 0xfafafa, deck: 0x11202e, mast: false },
 }
 
+/** Segment → Kenney watercraft modeli (kits.ts manifestiyle BİREBİR aynı adlar) */
+export const BOAT_MODEL: Record<BoatKind, string> = {
+  jetski: 'boat-speed-a', surat: 'boat-speed-e', balikci: 'boat-fishing-small',
+  yelkenli: 'boat-sail-a', gulet: 'boat-house-b', motoryat: 'ship-small', superyat: 'ship-large',
+}
+/** Segment → dünya boyu (birim). Süperyat jet ski'nin ~5 katı: ölçek farkı GÖRÜNMELİ. */
+export const BOAT_LEN: Record<BoatKind, number> = {
+  jetski: 1.6, surat: 2.8, balikci: 3.4, yelkenli: 3.8, gulet: 4.8, motoryat: 5.6, superyat: 8.5,
+}
+
 export function buildBoatMesh(kind: BoatKind): THREE.Group {
   const g = new THREE.Group()
   const sp = BOAT_SPEC[kind]
@@ -240,7 +250,7 @@ function emojiSprite(emoji: string): THREE.Sprite {
   return sp
 }
 
-import { ModelLib, cloneModel, CAR_FILES } from './models'
+import { ModelLib, cloneModel, CAR_FILES, fitModel } from './models'
 
 export class Car {
   group: THREE.Group
@@ -369,8 +379,10 @@ export class Car {
     this.boat = boat
     this.prices = { ...prices }
     if (boat) {
-      // MARİNA: tekne gövdesi (prosedürel). Model kiti gelince buradaki üretici değişir.
-      this.group = buildBoatMesh(boat)
+      // MARİNA: gerçek tekne modeli (Kenney watercraft). Kit inmemişse prosedürel
+      // gövdeye düşülür — sahne her hâlde kurulur, oyun durmaz.
+      const proto = Car.boatKit?.[BOAT_MODEL[boat]] ?? null
+      this.group = proto ? fitModel(proto, BOAT_LEN[boat], 'y') : buildBoatMesh(boat)
       this.hiddenNeedL = Math.round((boat === 'superyat' ? 2200 : boat === 'motoryat' ? 900
         : boat === 'gulet' ? 700 : boat === 'balikci' ? 600 : boat === 'yelkenli' ? 300
         : boat === 'surat' ? 160 : 40) * (0.6 + Math.random() * 0.5))
@@ -549,6 +561,8 @@ export class Car {
     this.windowFxT = 1.8
   }
 
+  /** MARİNA tekne modelleri (şube kitinden gelir; yoksa prosedürel gövde kullanılır) */
+  static boatKit: Record<string, THREE.Group | null> | null = null
   /** ana döngü her karede doldurur: sert engeller (pompa, bina...) */
   static solids: { cx: number; cy: number; w: number; d: number }[] = []
 

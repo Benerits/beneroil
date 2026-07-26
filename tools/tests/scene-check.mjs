@@ -58,5 +58,45 @@ check(`sahne başına model örneği makul (${nFit} fitModel çağrı noktası, 
 check('prosedürel yedek InstancedMesh kullanıyor (tek draw call)',
   /buildBlockSkyline[\s\S]{0,600}InstancedMesh/.test(world))
 
+console.log('\n== 6) MARİNA sahnesi ==')
+const marina = body('buildMarinaScene', 'buildIndustrialDistrict')
+check('marina sahnesi su temasında çağrılıyor',
+  /th\.lane\.kind === 'water'\) this\.buildMarinaScene\(s\)/.test(world))
+check('deniz İKİ katmanlı (tek dokuyla elde edilemeyen dalga hissi)',
+  /seaA/.test(marina) && /seaB/.test(marina) && /seaLayers = \[/.test(marina))
+check('katmanlar TERS yönde kayıyor',
+  /sx: 0\.\d+[\s\S]{0,80}sx: -0\.\d+/.test(marina))
+check('su dokusu prosedürel üretiliyor (ek indirme yok)', /waterTexture\(512/.test(marina))
+check('doku tekrar edebilir (RepeatWrapping)', /wrapS = tex\.wrapT = THREE\.RepeatWrapping/.test(world))
+check('su her karede kayıyor (animasyon bağlı)',
+  /for \(const l of this\.seaLayers\)[\s\S]{0,160}offset\.x/.test(world))
+check('ADA var (dikdörtgen parsel değil, düzensiz kıyı)',
+  /const isle = \(/.test(marina) && /wob/.test(marina))
+check('ada ÜÇ katmanlı (kum + taş + çim)', (marina.match(/^\s+isle\(/gm) || []).length === 3)
+check('kıyı çizgisi DETERMİNİST (her açılışta aynı ada)', !/Math\.random/.test(marina))
+check('liman ağzı dalgakıranlarla daralıyor', /mole/.test(marina))
+check('kırmızı/yeşil fener (denizcilik kuralı)', /0xd44b4b/.test(marina) && /0x3fae5f/.test(marina))
+check('iskeleler + babalar var', /dockMat/.test(marina) && /piles/.test(marina))
+check('şamandıra: kit varsa GERÇEK model, yoksa koni yedeği',
+  /buoyProto/.test(marina) && /ConeGeometry/.test(marina))
+check('arka planda kargo gemisi + römorkör', /ship-cargo-b/.test(marina) && /boat-tug-a/.test(marina))
+check('iskelede konteyner (liman dokusu)', /cargo-container/.test(marina))
+
+console.log('\n== 7) Tekneler gerçek modele bağlı ==')
+const cars = fs.readFileSync(path.join(ROOT, 'src/cars.ts'), 'utf8')
+check('segment → model eşlemesi var', /BOAT_MODEL: Record<BoatKind, string>/.test(cars))
+check('7 tekne türünün hepsi eşlenmiş',
+  ['jetski','surat','balikci','yelkenli','gulet','motoryat','superyat']
+    .every(k => new RegExp(k + ":\\s*'").test(cars)))
+const bm = cars.slice(cars.indexOf('BOAT_MODEL'), cars.indexOf('BOAT_LEN'))
+const models = [...bm.matchAll(/'([a-z-]+)'/g)].map(m => m[1])
+check(`eşlenen ${models.length} modelin hepsi manifestte`,
+  models.every(m => declared.has(m)), 'manifestte yok: ' + models.filter(m => !declared.has(m)))
+check('kit yoksa prosedürel gövdeye düşüyor', /proto \? fitModel[\s\S]{0,40}: buildBoatMesh/.test(cars))
+const bl = cars.slice(cars.indexOf('BOAT_LEN'), cars.indexOf('export function buildBoatMesh'))
+const lens = [...bl.matchAll(/:\s*([\d.]+)/g)].map(m => +m[1])
+check(`süperyat jet ski'den belirgin BÜYÜK (${Math.min(...lens)} → ${Math.max(...lens)}, ≥4×)`,
+  Math.max(...lens) / Math.min(...lens) >= 4)
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)
