@@ -348,6 +348,25 @@ export class GameState {
   genRate() { return this.freeRate() + this.gridRate() }
 
   tick(dt: number) {
+    // ---- ÇEVRE YOLU: ışık döngüsü + yaya müşteri (kasabada features yok → hiç çalışmaz) ----
+    const feat = this.theme().features
+    if (feat?.trafficLight) this.lightT += dt
+    if (feat?.walkIns && !this.closed) {
+      this.walkT += dt
+      if (this.walkT >= feat.walkIns.everySec) {
+        this.walkT = 0
+        // yaya geçidinden gelen müşteri: ARAÇSIZ market/kafe cirosu (yakıt yok)
+        const hasShop = this.marketLevel > 0 || this.hasCoffee || this.hasRestaurant
+        if (hasShop) {
+          const w = feat.walkIns
+          const base = w.min + Math.random() * (w.max - w.min)
+          const mult = 1 + 0.3 * this.marketLevel + (this.hasCoffee ? 0.2 : 0) + (this.hasRestaurant ? 0.3 : 0)
+          const id = this.marketLevel > 0 ? 'market' : this.hasCoffee ? 'coffee' : 'restaurant'
+          this.addPending(id, Math.round(base * mult), t('Yaya müşteri'))
+          this.events.push(t('🚶 Yaya müşteri alışveriş yaptı (yol karşısından geldi)'))
+        }
+      }
+    }
     for (const f of FUELS) {
       const o = this.orders[f]
       if (o.pending) {
@@ -488,7 +507,8 @@ export class GameState {
 
   entryChance() {
     if (this.closed) return 0
-    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor()
+    // ışık çarpanı: kırmızıda sıkışan sürücü istasyona giriyor (çevre yolu/metropol imzası)
+    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor() * this.lightBoost()
     // Şube kısıtları temadan: taban çekicilik, tabela ve itibar AĞIRLIĞI şubeye göre değişir
     // (kasabada itibar belirleyici, otoyolda tabela; kasaba değerleri 1.0 → denge değişmez).
     const th = this.theme()
@@ -580,6 +600,30 @@ export class GameState {
   }
   /** Aktif şubenin teması — ekonomik kısıtlar buradan okunur */
   theme(): LocationTheme { return THEMES[this.activeLoc] ?? THEMES.kasaba }
+
+  // ---- ÇEVRE YOLU İMZASI: trafik ışığı + yaya müşteri (rapor §6.3) ----
+  /** ışık döngüsü içindeki saniye (runtime; kaydedilmez) */
+  lightT = 0
+  /** yaya müşteri sayacı (runtime) */
+  walkT = 0
+  /** ışık şu an KIRMIZI mı — kırmızıda istasyon önü kuyruk olur, giriş şansı fırlar */
+  lightRed(): boolean {
+    const tl = this.theme().features?.trafficLight
+    if (!tl) return false
+    return this.lightT % (tl.greenSec + tl.redSec) >= tl.greenSec
+  }
+  /** kırmızı ışığın bitmesine kalan saniye (HUD göstergesi için) */
+  lightRemaining(): number {
+    const tl = this.theme().features?.trafficLight
+    if (!tl) return 0
+    const p = this.lightT % (tl.greenSec + tl.redSec)
+    return p >= tl.greenSec ? Math.ceil(tl.greenSec + tl.redSec - p) : Math.ceil(tl.greenSec - p)
+  }
+  /** ışık çarpanı: kırmızıda giriş şansı ×boost (yalnız ışıklı şubelerde) */
+  lightBoost(): number {
+    const tl = this.theme().features?.trafficLight
+    return tl && this.lightRed() ? tl.boost : 1
+  }
 
   // ---- PRESTİJ: İSTASYONU DEVRET (lategame raporu §3b) ----
   /** Marka yıldızı geliri kalıcı çarpar (satış + kumbara). 4 yıldız = 2× gelir. */

@@ -558,5 +558,62 @@ console.log('== 17) Çoklu şube veri katmanı (lategame §3a) ==')
   check('otoyolda fiyat esnekliği DÜŞÜK (tavan fiyatta talep yüksek kalır)', k.priceDemandFactor() >= 0.7)
 }
 
+console.log('== 18) Çevre Yolu imzası: trafik ışığı + yaya müşteri (rapor §6.3) ==')
+{
+  const k = new GameState()
+  // KASABA REGRESYONU: hiçbir yeni mekanik çalışmamalı
+  check('kasabada trafik ışığı YOK', k.theme().features?.trafficLight === undefined)
+  check('kasabada lightRed() daima false', k.lightRed() === false)
+  check('kasabada ışık çarpanı 1.0 (denge birebir)', k.lightBoost() === 1)
+  const kBase = k.entryChance()
+  k.lightT = 999 // ışık zamanı ilerlese bile kasabada etkisi olmamalı
+  check('kasabada ışık zamanı akışı etkilemez', Math.abs(k.entryChance() - kBase) < 1e-12)
+  k.tick(30) // yaya müşteri çalışmamalı
+  check('kasabada yaya müşteri geliri YOK', Object.keys(k.pendingCash).length === 0)
+
+  // ÇEVRE YOLU: ışık döngüsü
+  const c = new GameState()
+  c.unlockedLocs.push('cevreyolu'); c.switchLoc('cevreyolu', { placedPos: {}, placedRot: {}, placedRects: [] })
+  const tl = c.theme().features.trafficLight
+  check('çevre yolunda ışık tanımlı (40s yeşil / 15s kırmızı)', tl.greenSec === 40 && tl.redSec === 15)
+  c.lightT = 5
+  check('döngü başı YEŞİL', c.lightRed() === false && c.lightBoost() === 1)
+  const green = c.entryChance()
+  c.lightT = 45 // 40-55 arası kırmızı
+  check('40. saniyeden sonra KIRMIZI', c.lightRed() === true)
+  check('kırmızıda giriş şansı ×2.2 uygulanır', c.lightBoost() === 2.2)
+  check(`kırmızıda akış BELİRGİN artar (${green.toFixed(2)} → ${c.entryChance().toFixed(2)})`, c.entryChance() > green * 1.5)
+  c.lightT = 56 // döngü başa döndü
+  check('55. saniyeden sonra tekrar yeşil (döngü)', c.lightRed() === false)
+  // geri sayım göstergesi
+  c.lightT = 42
+  check('kırmızı kalan süre doğru (13s)', c.lightRemaining() === 13)
+  c.lightT = 10
+  check('yeşil kalan süre doğru (30s)', c.lightRemaining() === 30)
+
+  // YAYA MÜŞTERİ: dükkan varsa ciro gelir, yoksa gelmez
+  const w = new GameState()
+  w.unlockedLocs.push('cevreyolu'); w.switchLoc('cevreyolu', { placedPos: {}, placedRot: {}, placedRects: [] })
+  w.tick(25) // everySec 22
+  check('dükkan yokken yaya müşteri geliri YOK', Object.keys(w.pendingCash).length === 0)
+  w.marketLevel = 2; w.walkT = 0
+  w.tick(25)
+  check('market varken yaya müşteri kumbaraya ciro bırakır', (w.pendingCash.market ?? 0) > 0)
+  const first = w.pendingCash.market
+  w.walkT = 0; w.marketLevel = 3; w.hasCoffee = true; w.hasRestaurant = true
+  w.pendingCash = {}; w.tick(25)
+  check('gelişmiş dükkanlar yaya cirosunu artırır', (w.pendingCash.market ?? 0) > first * 0.9)
+  // istasyon kapalıyken yaya gelmez
+  w.pendingCash = {}; w.walkT = 0; w.closed = true
+  w.tick(25)
+  check('istasyon KAPALIYKEN yaya müşteri gelmez', Object.keys(w.pendingCash).length === 0)
+
+  // metropol daha agresif ışık + yoğun yaya
+  const m = new GameState()
+  m.unlockedLocs.push('metropol'); m.switchLoc('metropol', { placedPos: {}, placedRot: {}, placedRects: [] })
+  check('metropolde ışık daha baskın (boost 2.6)', m.theme().features.trafficLight.boost === 2.6)
+  check('metropolde yaya trafiği daha sık (14s)', m.theme().features.walkIns.everySec === 14)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

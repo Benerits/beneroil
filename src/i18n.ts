@@ -51,6 +51,11 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  'IŞIK': 'LIGHT',
+  'KIRMIZI {0}s · akın!': 'RED {0}s · rush!',
+  'yeşil {0}s': 'green {0}s',
+  'Yaya müşteri': 'Walk-in customer',
+  '🚶 Yaya müşteri alışveriş yaptı (yol karşısından geldi)': '🚶 A walk-in customer shopped (came from across the street)',
   'Şubeler': 'Branches',
   'AKTİF': 'ACTIVE',
   'Şubeye Git': 'Go to Branch',

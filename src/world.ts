@@ -242,6 +242,19 @@ export class World {
   private closedFlag = false
   private signLevel = 0
   private signGroup: THREE.Group | null = null
+  private lightRedLamp: THREE.Mesh | null = null
+  private lightGreenLamp: THREE.Mesh | null = null
+  private lightLast: boolean | null = null
+  /** trafik ışığı görselini mekanikle senkronla (main her karede çağırır — durum
+   *  değişmediyse materyale DOKUNMAZ, gereksiz GPU yazımı olmasın) */
+  setTrafficLight(red: boolean) {
+    if (this.lightLast === red) return
+    this.lightLast = red
+    const rm = this.lightRedLamp?.material as THREE.MeshLambertMaterial | undefined
+    const gm = this.lightGreenLamp?.material as THREE.MeshLambertMaterial | undefined
+    if (rm) { rm.color.setHex(red ? 0xff4d4d : 0x5a1e1e); rm.emissive.setHex(red ? 0x991111 : 0x000000) }
+    if (gm) { gm.color.setHex(red ? 0x1e5a2a : 0x4dff7a); gm.emissive.setHex(red ? 0x000000 : 0x119933) }
+  }
   /** aktif lokasyon teması — zemin/palet/topoloji tek kaynaktan (çoklu lokasyon temeli) */
   theme: LocationTheme = activeTheme('kasaba')
   private marketGroup: THREE.Group | null = null
@@ -312,6 +325,47 @@ export class World {
     ground.receiveShadow = true
     s.add(ground)
 
+    if (th.features?.urban) {
+      // ---- TRAFİK IŞIĞI (mekanik: kırmızıda giriş şansı ×boost) ----
+      const tl = th.features.trafficLight
+      const ly = tl?.y ?? -19
+      const poleX = ROAD_X - 2.6
+      cyl(0.11, 5.2, 0x50565e, poleX, ly, 2.6, 'z', s)          // direk
+      cyl(0.09, 2.4, 0x50565e, poleX + 1.2, ly, 5.1, 'x', s)     // konsol kol
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 1.15), lam(0x22262b))
+      box.position.set(poleX + 2.3, ly, 4.9); s.add(box)
+      // lambalar: referansları saklanır, mekanikle senkron yanar (setTrafficLight)
+      const mk = (color: number, dz: number) => {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshLambertMaterial({ color, emissive: 0x000000 }))
+        m.position.set(poleX + 2.13, ly, 4.9 + dz); s.add(m); return m
+      }
+      this.lightRedLamp = mk(0x5a1e1e, 0.38)
+      this.lightGreenLamp = mk(0x1e5a2a, -0.38)
+      // yaya geçidi (zebra) — yaya müşterinin geldiği yer
+      for (let i = 0; i < 7; i++) {
+        const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 4.4), lam(0xf0efe8))
+        stripe.position.set(ROAD_X - 2.0 + i * 0.62, ly - 3.4, 0.023)
+        stripe.rotation.z = Math.PI / 2
+        s.add(stripe)
+      }
+      // ---- KALDIRIM + KENTSEL SİLUET (arka planda blok apartmanlar) ----
+      const kerb = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 220), lam(0xc9c5ba))
+      kerb.position.set(ROAD_X - 3.1, 0, 0.018); s.add(kerb)
+      let seed = 7
+      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+      const blockN = 17
+      const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x8d949c), blockN)
+      const m4 = new THREE.Matrix4()
+      for (let i = 0; i < blockN; i++) {
+        const h = 6 + rnd() * 14, w = 5 + rnd() * 4, d = 7 + rnd() * 3
+        m4.makeScale(w, d, h)
+        m4.setPosition(ROAD_X + 13 + rnd() * 5, -90 + i * 11, h / 2)
+        inst.setMatrixAt(i, m4)
+      }
+      inst.instanceMatrix.needsUpdate = true
+      s.add(inst)
+    }
+
     const lot = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 20), this.concreteMat)
     lot.position.set(-0.75, 0, 0.015)
     lot.receiveShadow = true
@@ -326,10 +380,43 @@ export class World {
     road.position.set(ROAD_X, 0, 0.01)
     road.receiveShadow = true
     s.add(road)
-    for (const off of [-0.1, 0.1]) {
-      const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 220), lam(0xe0b13e))
-      center.position.set(ROAD_X + off, 0, 0.022)
-      s.add(center)
+    if (th.lane.median) {
+      // ---- KENTSEL YOL (çevre yolu/metropol): orta REFÜJ + şerit çizgileri (rapor §6.3) ----
+      // Refüj: yeşil bant + bordür; karşıya geçiş görsel olarak da ayrılır.
+      const median = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 220), lam(th.palette.vegetation))
+      median.position.set(ROAD_X, 0, 0.022); s.add(median)
+      for (const off of [-0.5, 0.5]) {
+        const kerb = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 220), lam(0xd8d4c8))
+        kerb.position.set(ROAD_X + off, 0, 0.024); s.add(kerb)
+      }
+      // Refüj ağaçları + kesikli şerit çizgileri INSTANCED (mobil ısınma şikâyeti %22 —
+      // 150+ ayrı mesh yerine 3 draw call). Determinist yerleşim, sahne kalabalıklaşmaz.
+      const mkInst = (geo: THREE.BufferGeometry, mat: THREE.Material, n: number, place: (m: THREE.Matrix4, i: number) => void) => {
+        const inst = new THREE.InstancedMesh(geo, mat, n)
+        const m4 = new THREE.Matrix4()
+        for (let i = 0; i < n; i++) { place(m4, i); inst.setMatrixAt(i, m4) }
+        inst.instanceMatrix.needsUpdate = true
+        s.add(inst)
+      }
+      const treeN = 17
+      mkInst(new THREE.CylinderGeometry(0.09, 0.09, 1.1, 8), lam(0x6b4a2f), treeN, (m, i) => {
+        m.makeRotationX(Math.PI / 2); m.setPosition(ROAD_X, -96 + i * 12, 0.55)
+      })
+      mkInst(new THREE.SphereGeometry(0.62, 8, 6), lam(th.palette.vegetation), treeN, (m, i) => {
+        m.makeTranslation(ROAD_X, -96 + i * 12, 1.5)
+      })
+      const dashPerLane = 44
+      mkInst(new THREE.PlaneGeometry(0.08, 2.4), lam(0xe8e4d8), dashPerLane * 2, (m, i) => {
+        const lane = i < dashPerLane ? -1.15 : 1.15
+        const k = i % dashPerLane
+        m.makeTranslation(ROAD_X + lane, -107 + k * 5, 0.021)
+      })
+    } else {
+      for (const off of [-0.1, 0.1]) {
+        const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 220), lam(0xe0b13e))
+        center.position.set(ROAD_X + off, 0, 0.022)
+        s.add(center)
+      }
     }
     for (const off of [-2.16, 2.16]) {
       const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 220), lam(0xe8e4d8))

@@ -1028,6 +1028,10 @@ const cars = new CarManager(world.scene, modelLib, {
   evAngle: i => world.evAngles[i] ?? 0,
   trafficPull: () => (guestPaused ? 1 : state.trafficPull()),
   segments: () => state.activeSegments(),
+  trafficLight: () => {
+    const tl = state.theme().features?.trafficLight
+    return tl ? { red: state.lightRed(), y: tl.y } : null
+  },
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
   farActive: () => world.farStationOn,
@@ -4021,6 +4025,22 @@ function frame() {
   updateWalkers(dt)
 
   world.update(dt)
+  // trafik ışığı: görsel lamba + HUD sayacı (yalnız ışıklı şubelerde)
+  if (state.theme().features?.trafficLight) {
+    world.setTrafficLight(state.lightRed())
+    const chip = document.getElementById('hud-light-chip')
+    if (chip) chip.style.display = 'flex'
+    const el = document.getElementById('hud-light')
+    if (el) {
+      const red = state.lightRed()
+      el.style.display = 'flex'
+      el.textContent = red ? t('KIRMIZI {0}s · akın!', state.lightRemaining()) : t('yeşil {0}s', state.lightRemaining())
+      el.style.color = red ? 'var(--red)' : 'var(--green-dark)'
+    }
+  } else {
+    const chip = document.getElementById('hud-light-chip')
+    if (chip && chip.style.display !== 'none') chip.style.display = 'none' // ışıksız şubede gizli
+  }
   audio.setDiesel(state.dieselRunning() && !state.closed)
   audio.setPump(cars.cars.some(c => c.filling && c.phase === 'atPump' && !c.wrongFuelHandled))
   Car.solids = hardRects()

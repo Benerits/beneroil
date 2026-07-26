@@ -748,6 +748,8 @@ export interface CarManagerOpts {
   segments?: () => CarSegment[]
   /** rezervasyon grafiği açık mı (test A/B + acil valf; verilmezse ?nograph=1 kuralı) */
   graphEnabled?: () => boolean
+  /** trafik ışığı durumu (çevre yolu/metropol): kırmızıda ışık hattında kuyruk oluşur */
+  trafficLight?: () => { red: boolean; y: number } | null
   /** karşı istasyon kapı y'leri (far araç güneye gittiği için giriş +y / çıkış -y) */
   farGateInY?: () => number
   farGateOutY?: () => number
@@ -982,6 +984,19 @@ export class CarManager {
         for (const x of cycle) resolved.add(x)
       }
     }
+    // ---- TRAFİK IŞIĞI KUYRUĞU (çevre yolu/metropol): kırmızıda araçlar ışık hattında durur.
+    // Mekanik karşılığı entryChance ×boost (state); buradaki yalnız GÖRSEL/fiziksel kuyruk.
+    const tl = this.opts.trafficLight?.()
+    if (tl && tl.red) {
+      for (const c of this.cars) {
+        if (c.phase !== 'transit' || c.hold) continue
+        const p = c.group.position
+        const dirY = c.lane === 'far' ? -1 : 1
+        const dist = (tl.y - p.y) * dirY // >0 → ışık hattı ileride
+        if (dist > 0 && dist < 3.2) { c.hold = true; c.waitingForToken = true } // kurallı bekleme
+      }
+    }
+
     // ---- NAZİK ŞERİT: çıkışa boşluk açma ----
     for (const c of this.cars) {
       if (c.phase !== 'transit' || c.hold) continue
