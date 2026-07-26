@@ -134,6 +134,8 @@ export class GameState {
   tankCounts: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
   marketLevel = 0
   market2Level = 0 // karşı yaka marketi (yol karşısı istasyon için — save'e ADDITIVE alan)
+  marketingBudget = 0 // günlük reklam bütçesi ₺ (0-8000) — trafik arz+talep sink'i (ADDITIVE)
+  opexStart = 0 // OPEX rampasının başladığı oyun günü (ilk yüklemede atanır — ADDITIVE)
   toiletLevel = 0
 
   // elektrik
@@ -417,7 +419,57 @@ export class GameState {
     // gelişmiş istasyonda tesis terimleri fiyattan bağımsız kalınca tavan fiyat
     // trafiği neredeyse hiç düşürmüyordu ("fiyat bir şey değiştirmiyor", #374 #414 #124).
     // Varsayılan fiyatta çarpan 1.0 → mevcut denge değişmez; tavanda ~%65 az müşteri.
-    return Math.min(0.95, Math.max(0.05, c * boost))
+    const raw = (c + 0.10 * this.marketingFactor()) * boost
+    // YUMUŞAK TAVAN (lategame raporu Kusur #1): eski sert 0.95 kesimi ₺122k'dan sonraki
+    // HER yatırımı trafiğe ölü kılıyordu ("yaptım ama bir şey değişmedi"). 0.80'e kadar
+    // birebir; üstü azalan verimle 0.95'e asimptotik — geç yatırımlar hâlâ hissedilir.
+    const ent = raw <= 0.80 ? raw : 0.80 + 0.15 * (1 - Math.exp(-(raw - 0.80) / 0.25))
+    return Math.max(0.05, ent)
+  }
+
+  /** Reklam bütçesi → 0..1 etki (azalan verim). Trafik ARZI ve talebe birlikte etkir
+   *  (lategame raporu #2: parayı doğrudan talebe çeviren, sınırsız-anlamlı sink). */
+  marketingFactor(): number {
+    return 1 - Math.exp(-Math.max(0, this.marketingBudget) / 3500)
+  }
+  /** yol trafiği arz çarpanı: tabela + reklam (1.0 .. ~2.0) — cars spawn aralığını böler */
+  trafficPull(): number {
+    return 1 + 0.15 * this.signLevel + 0.6 * this.marketingFactor()
+  }
+
+  /** Varlığa bağlı işletme gideri (lategame raporu #3): amortisman + emlak vergisi.
+   *  Yovmiye AYRI kalemde kalır (çifte sayım yok); şebeke faturası canlı kesiliyor.
+   *  opexStart'tan itibaren 10 günde %0→%100 rampalanır (enflasyon şoku yok). */
+  dailyOpex(): number {
+    const ramp = Math.min(1, Math.max(0, (this.day - this.opexStart) / 10))
+    if (ramp <= 0) return 0
+    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp)
+  }
+  /** kurulu ekipman+tesis alış değeri (sunucu buildingValue ile aynı felsefe, istemce tablolarından) */
+  equipmentValue(): number {
+    const sum = (arr: number[], k: number) => arr.slice(0, Math.max(0, Math.min(arr.length, Math.floor(k) || 0))).reduce((a, b) => a + b, 0)
+    let v = 0
+    v += sum(PUMP_COSTS, this.pumps)
+    v += sum(SIGN_COSTS, this.signLevel) + sum(TANK_COSTS, this.tankLevel)
+    v += sum(MARKET_COSTS, this.marketLevel) + sum(MARKET_COSTS, this.market2Level)
+    v += sum(TOILET_COSTS, this.toiletLevel) + sum(GRID_COSTS, this.gridLevel)
+    v += sum(BATTERY_COSTS, this.batteryLevel) + sum(EV_COSTS, this.evChargers)
+    for (const f of FUELS) v += sum(TANK_ADD_COSTS, this.tankCounts[f])
+    v += SOLAR_COST * this.solarCount + AIRWATER_COST * this.airWaterCount
+    v += SELFWASH_COST * this.selfWashCount + PARKING_COST * this.parkingCount
+    if (this.hasDiesel) v += DIESELGEN_COST
+    if (this.hasSMR) v += SMR_COST
+    if (this.hasWash) v += WASH_COST
+    if (this.hasOil) v += OIL_COST
+    if (this.hasCoffee) v += COFFEE_COST
+    if (this.hasRestaurant) v += RESTAURANT_COST
+    if (this.hasTruckPark) v += TRUCKPARK_COST
+    if (this.wideGates) v += WIDEGATE_COST
+    return v
+  }
+  /** sahip olunan arsaların taban değeri (düşük tahmin — vergi matrahı) */
+  landValue(): number {
+    return this.ownedParcels.size * LAND_COST + this.pavedParcels.size * PAVE_COST
   }
 
   /** Sipariş miktar çarpanı (× ORDER_STEP litre parti). 1 = minimum; + ile full'e kadar step. */
@@ -815,7 +867,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds',
+  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {

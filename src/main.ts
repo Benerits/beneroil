@@ -549,6 +549,7 @@ function openOfficePanel() {
     row(t('Aktif (varlık)'), `₺${tl(state.assets())}`, 'good')
     + row(t('Net işletme sermayesi'), `₺${tl(nwc)}`, nwc >= 0 ? '' : 'bad')
     + row(t('Kasa'), `₺${tl(state.money)}`)
+    + row(t('Günlük gider (yovmiye+OPEX+reklam)'), `₺${tl(state.dailyWages() + state.dailyOpex() + state.marketingBudget)}`, 'bad')
 
   // 2) Yakıt satış fiyatları (+/-)
   const pricesEl = document.getElementById('of-prices')
@@ -815,6 +816,7 @@ function seizeCollateral() {
   }
   state.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
   Car.solids = hardRects()
+  cars.rerouteForGates() // dünya değişti: rotalar tazelensin (eski konuma süren araç kalmasın)
   ui.toast(t('🏦 Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!'), 'bad')
   if (selectedBuilding) refreshBuildingCard()
   persist()
@@ -873,6 +875,7 @@ const cars = new CarManager(world.scene, modelLib, {
   evSlot: i => world.evSlots[i],
   pumpAngle: i => world.pumpAngles[i] ?? 0,
   evAngle: i => world.evAngles[i] ?? 0,
+  trafficPull: () => (guestPaused ? 1 : state.trafficPull()),
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
   farActive: () => world.farStationOn,
@@ -1790,15 +1793,25 @@ function rebuildFromState() {
 }
 
 /** araçların ASLA içinden geçemeyeceği katı objeler (fiziksel gövdeler) */
+/** ünitenin GERÇEK gövde dikdörtgeni — 90°/270° dönüşte en-boy takas (B7),
+ *  gövde konumu world.pumpBase/evBase'ten (slottan geriye türetme karşı yakada
+ *  3.6 birim kayıyordu: gerçek pompa korumasız + kapı koridorunda hayalet duvar, B1) */
+function unitRect(base: { x: number; y: number }, ang: number, w: number, d: number) {
+  const swap = Math.abs(Math.sin(ang)) > 0.5
+  return { cx: base.x, cy: base.y, w: swap ? d : w, d: swap ? w : d }
+}
+
 function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
   const r: { cx: number; cy: number; w: number; d: number }[] = []
   for (let i = 0; i < state.pumps; i++) {
-    const s = world.pumpSlots[i]
-    r.push({ cx: s.x - 1.8, cy: s.y, w: 1.5, d: 3.4 })
+    const b = world.pumpBase[i]
+    if (b) r.push(unitRect(b, world.pumpAngles[i] ?? 0, 1.5, 3.4))
+    else { const s = world.pumpSlots[i]; r.push({ cx: s.x - 1.8, cy: s.y, w: 1.5, d: 3.4 }) }
   }
   for (let i = 0; i < state.evChargers; i++) {
-    const s = world.evSlots[i]
-    r.push({ cx: s.x - 1.1, cy: s.y, w: 0.9, d: 1.4 })
+    const b = world.evBase[i]
+    if (b) r.push(unitRect(b, world.evAngles[i] ?? 0, 0.9, 1.4))
+    else { const s = world.evSlots[i]; r.push({ cx: s.x - 1.1, cy: s.y, w: 0.9, d: 1.4 }) }
   }
   r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.2, d: 2.2 }) // CANLI/main ile birebir
   const of = world.buildings.find(b => b.id === 'office')
@@ -1830,15 +1843,19 @@ function fixedObstacles(skipId = ''): Rect[] {
     const of = world.buildings.find(b => b.id === 'office')
     if (of) r.push({ cx: of.group.position.x, cy: of.group.position.y, w: 4.6, d: 5.0 })
   }
+  // ünite rezervi = gövde + araç yuvası. Merkez, gövde ile slotun ORTA noktası —
+  // her yakada ve her açıda doğru (eski slot-0.9 türetmesi karşı yakada 3.6 birim kayıktı, B1)
   for (let i = 0; i < state.pumps; i++) {
     if (skipId === `pump-${i}`) continue
-    const s = world.pumpSlots[i]
-    r.push({ cx: s.x - 0.9, cy: s.y, w: 4.4, d: 4.0 })
+    const b = world.pumpBase[i]; const s = world.pumpSlots[i]
+    if (b) r.push(unitRect({ x: (b.x + s.x) / 2, y: (b.y + s.y) / 2 }, world.pumpAngles[i] ?? 0, 4.4, 4.0))
+    else r.push({ cx: s.x - 0.9, cy: s.y, w: 4.4, d: 4.0 })
   }
   for (let i = 0; i < state.evChargers; i++) {
     if (skipId === `charger-${i}`) continue
-    const s = world.evSlots[i]
-    r.push({ cx: s.x - 0.6, cy: s.y, w: 4.0, d: 2.6 })
+    const b = world.evBase[i]; const s = world.evSlots[i]
+    if (b) r.push(unitRect({ x: (b.x + s.x) / 2, y: (b.y + s.y) / 2 }, world.evAngles[i] ?? 0, 4.0, 2.6))
+    else r.push({ cx: s.x - 0.6, cy: s.y, w: 4.0, d: 2.6 })
   }
   return r
 }
@@ -2378,6 +2395,7 @@ ui.onSell = id => {
   world.setSelected(null)
   ui.hideBuildingCard()
   Car.solids = hardRects()
+  cars.rerouteForGates() // ünite/bina taşındı: araçlar eski konuma sürmesin (B3 ek kuralı)
   persist()
 }
 
@@ -2636,6 +2654,16 @@ async function doRegister(email: string, pass: string) {
 // (Eski halt akışından kalma koşulsuz remove(), misafirin gate'ini siliyordu → otomatik-giriş bug'ı.)
 if (auth.loggedIn()) document.getElementById('authgate')?.remove()
 {
+  // ---- OPEX rampa başlangıcı: alan yoksa (eski save / yeni oyuncu) bu günden başlat ----
+  // 10 günlük %0→%100 rampa: mevcut oyuncular şok yaşamaz; bir kez duyurulur.
+  if (!isFullMode && !isPromoMode && !state.opexStart) {
+    state.opexStart = state.day
+    if (state.equipmentValue() > 50_000 && !localStorage.getItem('beneloil-opex-note')) {
+      localStorage.setItem('beneloil-opex-note', '1')
+      ui.toast(t('🏛️ YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.'), '', true)
+    }
+  }
+
   // ---- 🎁 Kayıt bonusu: register / OAuth-yeni-hesap sonrası İLK açılışta bir kez ----
   if (!isFullMode && !isPromoMode && auth.loggedIn() && localStorage.getItem(auth.REG_BONUS_KEY)) {
     localStorage.removeItem(auth.REG_BONUS_KEY)
@@ -2887,7 +2915,11 @@ function syncSignPrices() {
 }
 syncSignPrices()
 ui.onPriceChange = (f, delta) => {
-  if (f === 'elec') {
+  if ((f as string) === 'mkt') {
+    // reklam bütçesi: ± ₺1.000 kademe (0..8.000) — fiyat satırıyla aynı +/- kalıbı
+    const step = delta < 0 ? -1000 : 1000
+    state.marketingBudget = Math.min(8000, Math.max(0, state.marketingBudget + step))
+  } else if (f === 'elec') {
     state.elecPrice = Math.min(18, Math.max(4, Math.round((state.elecPrice + delta) * 2) / 2))
     syncSignPrices()
   } else {
@@ -2915,6 +2947,12 @@ function fuelPriceRows(): NonNullable<BuildingCard['priceRows']> {
     {
       f: 'elec' as FuelType | 'elec', label: 'Elektrik (kWh)', price: state.elecPrice, cost: 'santralden',
       canDown: state.elecPrice > 4, canUp: state.elecPrice < 18,
+    },
+    {
+      // günlük reklam bütçesi — parayı doğrudan trafiğe çeviren sink (lategame raporu #2)
+      f: 'mkt' as unknown as FuelType | 'elec', label: t('Reklam (günlük)'), price: state.marketingBudget,
+      cost: t('trafik ×{0}', state.trafficPull().toFixed(2)),
+      canDown: state.marketingBudget > 0, canUp: state.marketingBudget < 8000,
     },
   ]
 }
@@ -3598,6 +3636,20 @@ function frame() {
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
     const wages = state.dailyWages()
     if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
+    // İşletme gideri (OPEX): amortisman + emlak vergisi — geç oyunda birikimi düzleştiren sink.
+    // 10 günlük rampayla devreye girer (enflasyon şoku yok); erken oyunda ~₺10, hissedilmez.
+    const opex = state.dailyOpex()
+    if (opex > 0) {
+      state.money = Math.max(0, state.money - opex)
+      ui.toast(t('🏛️ İşletme gideri (bakım+vergi): -₺{0}', opex.toLocaleString('tr-TR')), '')
+    }
+    // Reklam bütçesi tahsilatı: para yetmiyorsa o günün kampanyası kısılır (bütçe korunur)
+    if (state.marketingBudget > 0) {
+      const spend = Math.min(state.marketingBudget, Math.max(0, Math.floor(state.money))) // floor: kesirli kasada eksiye taşma yok (reviewer bulgusu)
+      if (spend > 0) state.money -= spend
+      if (spend < state.marketingBudget) ui.toast(t('📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.'), 'bad')
+      else ui.toast(t('📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})', spend.toLocaleString('tr-TR'), state.trafficPull().toFixed(2)), '')
+    }
     // kredi taksiti (aylık = 1 oyun günü)
     const loanRes = state.processLoanDay()
     if (loanRes === 'done') ui.toast(t('🏦 Kredi tamamen ödendi — teminatların serbest! 🎉'), 'good')

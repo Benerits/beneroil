@@ -51,6 +51,14 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  'Reklam (günlük)': 'Marketing (daily)',
+  'trafik ×{0}': 'traffic ×{0}',
+  '🏛️ İşletme gideri (bakım+vergi): -₺{0}': '🏛️ Operating cost (upkeep+tax): -₺{0}',
+  '📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})': '📣 Ad campaign running: -₺{0} (traffic ×{1})',
+  '📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.': '📣 Not enough cash for the ad budget — campaign reduced today.',
+  '🏛️ YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.':
+    '🏛️ NEW: Operating costs arrived (upkeep+tax, scales with assets) — phased in over 10 days. Track them in the Office panel.',
+  'Günlük gider (yovmiye+OPEX+reklam)': 'Daily costs (wages+OPEX+ads)',
   '⛽ Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!':
     '⛽ Your attendants sold ~{0}L of fuel while you were away (+₺{1}) — check your tank levels!',
   '⛽ Tankların bitmek üzere — sipariş verme vakti!': '⛽ Your tanks are almost empty — time to order fuel!',

@@ -243,6 +243,8 @@ export class Car {
   truckStagePos: THREE.Vector3 | null = null
   /** otopark yanaşma noktası — çıkışta önce buradan çıkılır (stage) */
   parkStage: THREE.Vector3 | null = null
+  /** kararlı otopark yeri kimliği ('parking#2:1') — B4: indeksle takip bina taşınınca kayıyordu */
+  parkId: string | null = null
   /** aracın gizli yakıt ihtiyacı (litre) — tipine göre: binek/SUV/kamyon */
   hiddenNeedL = 30
   /** araç-üstü dijital sayaç güncelleme throttle'ı (çok hızlı akmasın) */
@@ -690,7 +692,7 @@ export interface CarManagerOpts {
   isPumpBroken: (i: number) => boolean
   isChargerBroken: (i: number) => boolean
   /** yerleştirilmiş otoparkın park noktaları (yoksa boş) */
-  parkSpots: () => { pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[]
+  parkSpots: () => { id: string; pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[]
   /** araçların kaçınacağı ek engeller (ör. tanker) */
   extraObstacles: () => THREE.Vector3[]
   /** geniş giriş/çıkış satın alındı mı — kapılardan ikili sıra geçilir */
@@ -708,6 +710,8 @@ export interface CarManagerOpts {
   /** ünitenin oyuncu açısı (rad) — araç slotta bu açıyla hizalanır */
   pumpAngle?: (i: number) => number
   evAngle?: (i: number) => number
+  /** trafik arz çarpanı (tabela+reklam; 1.0..~2.0) — spawn aralığını böler, transit cap'i büyütür */
+  trafficPull?: () => number
   /** karşı istasyon kapı y'leri (far araç güneye gittiği için giriş +y / çıkış -y) */
   farGateInY?: () => number
   farGateOutY?: () => number
@@ -727,7 +731,9 @@ export class CarManager {
   private farTimer = 2.5
   private pumpOcc: (Car | null)[] = Array(16).fill(null)
   private evOcc: (Car | null)[] = Array(16).fill(null)
-  private parkOcc: (Car | null)[] = []
+  // B4: otopark işgali KARARLI KİMLİKLE (Map) — pozisyon indeksi bina taşınınca/yıkılınca
+  // kayıyordu ("sadece bir otopark kullanılıyor", "araçlar üst üste biniyor", 38 kayıt)
+  private parkOcc = new Map<string, Car>()
   private waitOcc: (Car | null)[] = [null, null, null, null]
   private waitOccFar: (Car | null)[] = [null, null, null, null]
 
@@ -786,16 +792,20 @@ export class CarManager {
     // spawn noktası doluysa bekle (üst üste doğmasınlar)
     const spawnClear = (lane: 'near' | 'far') => !this.cars.some(c =>
       c.phase === 'transit' && c.lane === lane && Math.abs(c.group.position.y) > 35)
-    if (this.nearTimer <= 0 && transitCount < 18) {
+    // trafik ARZI artık gelişmişliğe bağlı (lategame raporu Kusur #2): tabela + reklam
+    // bütçesi yol trafiğini çoğaltır — sabit arz, gelir tavanını yapısal kılıyordu.
+    const pull = this.opts.trafficPull?.() ?? 1
+    const cap = 18 + Math.round(8 * (pull - 1))
+    if (this.nearTimer <= 0 && transitCount < cap) {
       if (spawnClear('near')) {
         this.spawnTransit('near')
-        this.nearTimer = 1.5 + Math.random() * 1.8
+        this.nearTimer = (1.5 + Math.random() * 1.8) / pull
       } else this.nearTimer = 0.5
     }
-    if (this.farTimer <= 0 && transitCount < 18) {
+    if (this.farTimer <= 0 && transitCount < cap) {
       if (spawnClear('far')) {
         this.spawnTransit('far')
-        this.farTimer = 2.0 + Math.random() * 2.4
+        this.farTimer = (2.0 + Math.random() * 2.4) / pull
       } else this.farTimer = 0.5
     }
 
@@ -835,18 +845,26 @@ export class CarManager {
     }
     // trafik kuralı: şeride çıkacak araç yaklaşan trafiğe YOL VERİR ve
     // öndeki araç takip mesafesi kadar (4.5 birim) açılmadan yola atlamaz
+    // YAKAYA GÖRE genelleştirildi (B2): eski hali yalnız near sabitleriyle çalışıyordu —
+    // karşı istasyondan çıkan araç akan karşı-şerit trafiğine KÖR dalıyor, kapı ağzı kilitleniyordu.
     for (const c of this.cars) {
       if (c.hold || c.phase !== 'leaving') continue
+      const G = this.geom(c.station)
       const p = c.group.position
-      const inMergeZone = p.x > 3.9 && p.x < LANE_NEAR - 0.25
-      if (!inMergeZone) continue
+      // birleşme bölgesi: kapı ile şerit arası (her iki yaka için simetrik)
+      const lo = Math.min(G.gateX, G.lane) - 0.3 + 0.55
+      const hi = Math.max(G.gateX, G.lane) + 0.3 - 0.55
+      if (p.x <= lo || p.x >= hi) continue
       const laneBusy = this.cars.some(o => {
-        if (o === c || o.lane === 'far') return false
+        if (o === c || o.lane !== c.station) return false // yalnız KENDİ şeridinin trafiği
         const oy = o.group.position.y
-        // arkadan yaklaşan akan trafik
-        if (o.phase === 'transit' && !o.hold && oy > p.y - 12 && oy < p.y + 1.5) return true
-        // az önce şeride çıkmış öndeki araç yeterince uzaklaşmadıysa bekle
-        if (o.phase === 'leaving' && o.group.position.x > 5.2 && oy > p.y - 1 && oy < p.y + 6) return true
+        // arkadan yaklaşan akan trafik — seyir yönüne göre (near +y, far −y)
+        const behind = G.dirY > 0 ? (oy > p.y - 12 && oy < p.y + 1.5) : (oy < p.y + 12 && oy > p.y - 1.5)
+        if (o.phase === 'transit' && !o.hold && behind) return true
+        // az önce şeride katılmış öndeki araç yeterince açılmadıysa bekle
+        const merged = G.sideSign < 0 ? o.group.position.x > G.lane - 1.75 : o.group.position.x < G.lane + 1.75
+        const ahead = G.dirY > 0 ? (oy > p.y - 1 && oy < p.y + 6) : (oy < p.y + 1 && oy > p.y - 6)
+        if (o.phase === 'leaving' && merged && ahead) return true
         return false
       })
       if (laneBusy) c.hold = true
@@ -968,8 +986,12 @@ export class CarManager {
         const d2 = isNaN(car.prevFramePos.x) ? 1 : car.group.position.distanceToSquared(car.prevFramePos)
         if (d2 < 0.0006) car.hardStuckT += dt
         else car.hardStuckT = Math.max(0, car.hardStuckT - dt * 3)
-        // giriş rampasında/manevrada tıkanan araç yolu tıkamasın: 7 sn'de çekilir; genelde 12 sn
-        const atEntry = car.phase === 'driving' && car.group.position.x > 2.5 && car.slotIndex < 0
+        // giriş rampasında/manevrada tıkanan araç yolu tıkamasın: hızlı çekilir; genelde 9 sn.
+        // Eşik DERİNLİK cinsinden (3.2 fixi): eski x>2.5 near sabiti karşı yakada HEP doğruydu —
+        // karşı istasyondaki her sıkışan araç 3.5 sn'de buharlaşıyordu (sessiz müşteri kaybı).
+        const Ge = this.geom(car.station)
+        const depth = Ge.sideSign < 0 ? (Ge.gateX - car.group.position.x) : (car.group.position.x - Ge.gateX)
+        const atEntry = car.phase === 'driving' && car.slotIndex < 0 && depth > -1.3
         if (car.hardStuckT > (atEntry ? 3.5 : 9)) this.evaporate(car)
       } else {
         car.hardStuckT = 0
@@ -1143,26 +1165,30 @@ export class CarManager {
   /** kapı taşındı: rotası eski kapıdan geçen araçları güncel kapıya yönlendir.
    *  Yalnızca henüz istasyona girmemiş (yolda, x>5.5) ve çıkışa yönelmiş ama
    *  henüz yola çıkmamış (x<3.9) araçlar — apron ortasındakiler yerinde kalır. */
+  /** Kapı/ünite taşınınca TÜM araçları yeni geometriye göre yeniden rotala.
+   *  (B3: eski hali yalnız near'dı — oyuncu KARŞI kapıyı taşıyınca karşı yakadaki
+   *  araçlar eski kapı koordinatına sürüp çite çakılıyor, buharlaşıyordu.)
+   *  Tüm eşikler DERİNLİK (kapıdan istasyon içine mesafe) cinsinden — yaka bağımsız. */
   rerouteForGates() {
     for (const c of this.cars) {
-      if (c.station !== 'near') continue // yalnız YAKIN kapılar oyuncu tarafından taşınır (karşı kapılar sabit/otomatik)
+      const G = this.geom(c.station)
       const p = c.group.position
-      if (c.phase === 'driving' && p.x > 5.5) {
+      // depth: kapıdan istasyonun içine doğru mesafe. Negatif = hâlâ yol tarafında.
+      const depth = G.sideSign < 0 ? (G.gateX - p.x) : (p.x - G.gateX)
+      if (c.phase === 'driving' && depth < -1.3) {
+        // henüz yolda: baştan tam giriş rotası
         if (c.slotIndex >= 0) {
           const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
-          c.setPath(this.entryPath(slot, 'near'), () => this.arriveAtSlot(c))
+          c.setPath(this.entryPath(slot, c.station), () => this.arriveAtSlot(c))
         } else if (c.waitIndex >= 0) {
           c.setPath([
-            new THREE.Vector3(this.serveLane, this.opts.gateInY() - 3.5, 0),
-            new THREE.Vector3(this.gateX, this.opts.gateInY(), 0),
-            this.waitSpotAt(c.waitIndex, 'near'),
+            new THREE.Vector3(G.lane, G.gateInY - G.dirY * 3.5, 0),
+            new THREE.Vector3(G.gateX, G.gateInY, 0),
+            this.waitSpotAt(c.waitIndex, c.station),
           ], () => { c.phase = 'waiting' })
         }
-      } else if (c.phase === 'driving' && p.x <= 5.5) {
-        // APRON İÇİNDEKİLER (eski davranış: yerinde bırakılıyordu → ESKİ kapı noktasına
-        // sürüp duvara/binaya çakılıyorlardı). Kalan rotayı mevcut konumdan yeniden kur:
-        // eski kapı waypoint'leri atılır, iç koridor üzerinden hedefe temiz rota.
-        const G = this.geom('near')
+      } else if (c.phase === 'driving') {
+        // apron içindekiler: kalan rotayı mevcut konumdan kur (eski kapı waypoint'i atılır)
         if (c.slotIndex >= 0) {
           const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
           c.setPath([
@@ -1170,16 +1196,15 @@ export class CarManager {
             slot.clone(),
           ], () => this.arriveAtSlot(c))
         } else if (c.waitIndex >= 0) {
-          c.setPath([this.waitSpotAt(c.waitIndex, 'near')], () => { c.phase = 'waiting' })
+          c.setPath([this.waitSpotAt(c.waitIndex, c.station)], () => { c.phase = 'waiting' })
         }
-      } else if (c.phase === 'leaving' && p.x < 5.5) {
-        // henüz yola çıkmamış (apron/kapı şeridindeki) çıkan araç: yeni çıkışa yönlendir.
-        // Eşik 3.9 idi; kapı şeridine (x≈4.2) çıkmış araç kaçıyor, eski çıkışa gidiyordu.
-        const outY = this.opts.gateOutY()
+      } else if (c.phase === 'leaving' && depth > -1.3) {
+        // henüz yola çıkmamış çıkan araç: yeni çıkışa yönlendir
+        const outY = G.gateOutY
         c.setPath([
-          new THREE.Vector3(this.gateX, outY, 0),
-          new THREE.Vector3(this.serveLane, outY + 4, 0),
-          new THREE.Vector3(this.serveLane, 44, 0),
+          new THREE.Vector3(G.gateX, outY, 0),
+          new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
+          new THREE.Vector3(G.lane, G.dirY * 44, 0),
         ])
       }
     }
@@ -1294,20 +1319,20 @@ export class CarManager {
     // kullanabilir — karşı istasyon otopark+tesisle gerçek istasyon olur.
     const spots = this.opts.parkSpots()
     if (spots.length === 0) return false
-    while (this.parkOcc.length < spots.length) this.parkOcc.push(null)
-    let spot = -1
-    for (let i = 0; i < spots.length; i++) {
-      if (this.parkOcc[i]) continue
-      if ((spots[i].pos.x > ROAD_X) === (car.station === 'far')) { spot = i; break }
-    }
-    if (spot < 0) return false
-    // pompayı/şarjı hemen boşalt ki sıradaki müşteri girsin
+    // ölü kayıtları temizle (otopark taşındı/yıkıldı → id artık yok)
+    const live = new Set(spots.map(s => s.id))
+    for (const id of [...this.parkOcc.keys()]) if (!live.has(id)) this.parkOcc.delete(id)
+    const sp = spots.find(s => !this.parkOcc.has(s.id)
+      && (s.pos.x > ROAD_X) === (car.station === 'far'))
+    if (!sp) return false
+    // pompayı/şarjı hemen boşalt ki sıradaki müşteri girsin — slotIndex'i EZME (B4), ayrı alan
     if (car.slotIndex >= 0) {
       if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
       else this.pumpOcc[car.slotIndex] = null
+      car.slotIndex = -1
     }
-    car.slotIndex = spot
-    this.parkOcc[spot] = car
+    car.parkId = sp.id
+    this.parkOcc.set(sp.id, car)
     car.phase = 'toPark'
     car.beingServed = false
     car.filling = false
@@ -1315,7 +1340,6 @@ export class CarManager {
     car.hideBars()
     // spot+stage+açı: araç otoparkın KENDİ girişinden (stage) yanaşır — sabit park şeridi
     // detourı (ofis önü yığılması) yok; park açısı otoparkın rotasyonuna uyar (yan park bitti).
-    const sp = spots[spot]
     const p = sp.pos.clone(); p.z = 0
     const stage = sp.stage.clone(); stage.z = 0
     car.parkStage = stage.clone()
@@ -1350,13 +1374,20 @@ export class CarManager {
     }
   }
 
+  /** buharlaşma telemetrisi (3.1): trafik sağlığının tek objektif metriği.
+   *  Hedef: 10 dk tam yüklü oturumda total = 0. Testler ve debug için public. */
+  evapStats = { total: 0, near: 0, far: 0 }
+
   /** son çare: aracı sahneden sil, tuttuğu her yeri boşalt — hiçbir şey sonsuza dek tıkalı kalamaz */
   private evaporate(car: Car) {
+    this.evapStats.total++
+    if (car.station === 'far') this.evapStats.far++
+    else this.evapStats.near++
     if (car.waitIndex >= 0) { this.waitOccFor(car.station)[car.waitIndex] = null; car.waitIndex = -1 }
     if (car.truckSlot >= 0) { this.truckOcc[car.truckSlot] = null; car.truckSlot = -1 }
+    if (car.parkId) { this.parkOcc.delete(car.parkId); car.parkId = null }
     if (car.slotIndex >= 0) {
-      if (car.phase === 'parked' || car.phase === 'toPark') this.parkOcc[car.slotIndex] = null
-      else if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
+      if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
       else this.pumpOcc[car.slotIndex] = null
       car.slotIndex = -1
     }
@@ -1413,9 +1444,9 @@ export class CarManager {
       car.waitIndex = -1
     }
     const fromPark = car.phase === 'parked' || car.phase === 'toPark'
+    if (car.parkId) { this.parkOcc.delete(car.parkId); car.parkId = null }
     if (car.slotIndex >= 0) {
-      if (fromPark) this.parkOcc[car.slotIndex] = null
-      else if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
+      if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
       else this.pumpOcc[car.slotIndex] = null
     }
     car.slotIndex = -1

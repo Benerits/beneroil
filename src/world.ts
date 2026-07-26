@@ -816,6 +816,10 @@ export class World {
   /** pompa/şarj oyuncu açıları (rad) — araç slotta bu açıyla hizalanır (döndürülmüş ünitede yan durma fixi) */
   pumpAngles: number[] = []
   evAngles: number[] = []
+  /** pompa/şarj GÖVDE konumları — çarpışma kutuları slottan geriye türetilmez (karşı yakada
+   *  türetme 3.6 birim kayıyordu: hayalet duvar kapı koridorunun üstüne geliyordu, B1) */
+  pumpBase: THREE.Vector2[] = []
+  evBase: THREE.Vector2[] = []
   evSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => (EV_SLOTS_POS[i] ?? EV_SLOTS_POS[3]).clone())
   tankAnchor = new THREE.Vector2(TANK_POS.x, TANK_POS.y)
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
@@ -1154,6 +1158,7 @@ export class World {
     const flip = far ? -1 : 1
     this.pumpSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.8 * flip, base.y + Math.sin(ang) * 1.8, 0)
     this.pumpAngles[index] = ang // araç pompanın uzun eksenine paralel dursun (yan durma fixi)
+    this.pumpBase[index] = base.clone()
     const g = new THREE.Group()
     box(1.7, 3.4, 0.2, 0xc7ccd1, 0, 0, 0.1, g)
     box(1.75, 3.45, 0.05, 0xe0b13e, 0, 0, 0.02, g)
@@ -1185,6 +1190,7 @@ export class World {
     const evFlip = base.x > ROAD_X ? -1 : 1
     this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.1 * evFlip, base.y + Math.sin(ang) * 1.1, 0)
     this.evAngles[index] = ang // araç ünitenin açısına paralel dursun
+    this.evBase[index] = base.clone()
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({
       color: 0x2f8fd6, transparent: true, opacity: 0.28,
@@ -1623,8 +1629,8 @@ export class World {
   /** yerleştirilen otoparkın dünya park noktaları: pozisyon + yanaşma (stage) + park AÇISI.
    *  Açı otoparkın rotasyonundan türetilir — döndürülen otoparkta araç artık YAN park etmez;
    *  stage noktası girişin önünde (yerel +Y) — araç nereye konursa konsun kendi önünden yanaşır. */
-  getParkingSpots(): { pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] {
-    const spots: { pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] = []
+  getParkingSpots(): { id: string; pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] {
+    const spots: { id: string; pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] = []
     for (const b of this.buildings) {
       if (!(b.id === 'parking' || b.id.startsWith('parking#'))) continue
       const g = b.group as THREE.Group
@@ -1632,6 +1638,7 @@ export class World {
       for (let i = 0; i < 4; i++) {
         const lx = -1.53 + i * 1.02
         spots.push({
+          id: `${b.id}:${i}`, // KARARLI KİMLİK (B4) — bina taşınsa da yer kimliği değişmez
           pos: new THREE.Vector3(lx, -0.1, 0).applyMatrix4(g.matrixWorld),
           stage: new THREE.Vector3(lx, 2.4, 0).applyMatrix4(g.matrixWorld),
           rot: g.rotation.z - Math.PI / 2, // stoper yerel -Y'de → burun stopere bakar

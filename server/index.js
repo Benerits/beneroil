@@ -322,6 +322,8 @@ function sanitizeSave(save) {
   s.tankLevel = clamp(s.tankLevel, 0, 3, 0)
   s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
   if ('market2Level' in s) s.market2Level = clamp(s.market2Level, 0, 3, 0) // karşı market (additive alan — eski save'lerde yok)
+  if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
+  if ('opexStart' in s) s.opexStart = clamp(s.opexStart, 0, 100000, 0) // OPEX rampa başlangıç günü (additive)
   s.toiletLevel = clamp(s.toiletLevel, 0, 2, 0)
   s.gridLevel = clamp(s.gridLevel, 0, 2, 0)
   s.batteryLevel = clamp(s.batteryLevel, 0, 3, 0)
