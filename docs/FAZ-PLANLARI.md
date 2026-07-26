@@ -16,8 +16,10 @@
 > isteyince · SQL'de oyuncu save'ine dokunma yok · save formatı yalnız additive ·
 > `state.ts` maliyet/limit değişince `server/index.js` COST/clamp senkronu şart.
 >
-> **Testler:** `npm run test:all` → faz-checks (200) · wealth-check (8) · sim-smoke ·
-> traffic-load (A/B + T4/T5 otoyol).
+> **Testler:** `npm run test:all` →
+> faz-checks (345) · marina (69) · rival (41) · wealth-check (17) · news (11) ·
+> metrics (11) · sim-smoke · traffic-load (A/B + T4/T5 otoyol).
+> Ayrıca `npm run bench:collision` — çarpışma taramasının eski/yeni kıyası.
 
 ---
 
@@ -32,15 +34,15 @@
 | B7 | Çarpışma kutuları rotasyonu yok sayıyor | ✅ **prod** | `unitRect()` en-boy takası |
 | 3.1 | Buharlaşma telemetrisi | ✅ **prod** | `evapStats` |
 | 3.2 | `atEntry` eşiği near sabiti | ✅ **prod** | depth tabanlı |
-| §5 | **Rezervasyon tabanlı mimari** | ✅ **prod** | `src/traffic-graph.ts` — A/B: buharlaşma %55↓ |
+| §5 | **Rezervasyon tabanlı mimari** | ✅ **prod** + açlık fixi **dev** | `src/traffic-graph.ts` — A/B: buharlaşma %76↓ |
 | §6.3 | Yaka simetrisi regresyon testi | ✅ | faz-checks §4/§14 |
-| B5 | Bekleme noktaları sabit dünya koordinatı | ⬜ | S |
-| B6 | Tır parkı yalnız near yakada | ⬜ | S |
-| B8 | Yaka başına tesis nüshaları | 🟡 yalnız `market2` | M |
-| 3.3 | O(n²) çarpışma → uniform grid | ⬜ | M (mobil ısınma) |
-| 3.4 | Kapı ayrım kısıtı (giriş/çıkış ≥6 birim) | 🟡 mevcut kısıt ≥5 | XS |
-| 3.5 | İç koridor rezervasyonu | ⬜ | XS |
-| §6.1 | `?traffic=1` debug overlay | ⬜ | S |
+| B5 | Bekleme noktaları sabit dünya koordinatı | ✅ **dev** | kapı-göreli `waitSpotAt()` |
+| B6 | Tır parkı yalnız near yakada | ✅ **dev** | yaka-duyarlı |
+| B8 | Yaka başına tesis nüshaları | ✅ **dev** | market2/toilet2/wash2/oil2/coffee2/restaurant2 |
+| 3.3 | O(n²) çarpışma → uniform grid | ✅ **dev** | 25 araçta 2.8× hızlı, ayırma 600→0 |
+| 3.4 | Kapı ayrım kısıtı | ✅ **dev** | — |
+| 3.5 | İç koridor rezervasyonu | ✅ **dev** | — |
+| §6.1 | `?traffic=1` debug overlay | ✅ **dev** | `src/traffic-debug.ts` |
 
 ## 2. Ekonomi raporu — madde takibi
 
@@ -51,33 +53,38 @@
 | 1c | Müşteri segmentleri — ₺/müşteri ekseni | ✅ **prod** | premium/filo/otobüs, ₺233→₺1.076 |
 | 2a | Varlığa bağlı OPEX | ✅ **prod** | 10 günlük rampa |
 | 2b | Reklam/pazarlama bütçesi sink'i | ✅ **prod** | ₺0-8.000/gün |
-| 2b | Ruhsat, sigorta, personel eğitimi, dekorasyon, ekipman yaşlanması | ⬜ | M |
-| 2c | Her yapı için yıkma/satma | 🟡 kısmen | XS |
+| 2b | Ruhsat, sigorta, personel eğitimi, dekorasyon, ekipman yaşlanması | ✅ **dev** | — |
+| 2c | Her yapı için yıkma/satma | ✅ **dev** | herhangi bir örnek satılabilir |
 | 3a | Ortak şirket kasası + şube bazlı P&L | ✅ **dev** | `locSnapshots`, `switchLoc()` |
 | 3b | Prestij "Devret" | ✅ **prod** | marka yıldızı, eşik ikiye katlanır |
-| 3c | Şehir katmanı (5 lokasyon) | 🟡 **3/5** | kasaba ✅ · çevre yolu ✅dev · otoyol ✅dev |
+| 3c | Şehir katmanı (5 lokasyon) | ✅ **5/5 dev** | kasaba · çevre yolu · otoyol · **marina** · **metropol** |
 | 4a | B2B sözleşmeler | ✅ **prod** | 5 şablon, kapasite şartı |
-| 4b | Piyasa dalgalanması | ⬜ | S |
-| 4c | Leaderboard + haftalık + sezon | ⬜ | S / M |
-| 4d | AI rakip istasyon | ⬜ | XL |
+| 4b | Piyasa dalgalanması | ✅ **dev** | günlük ±%15, 7 günlük tahmin |
+| 4c | Leaderboard + sezon | ✅ **dev** | `/api/leaderboard` + 4 mevsim döngüsü |
+| 4d | AI rakip istasyon | ✅ **dev** | `src/rival.ts` — pazar payı + 3 denge valfi |
 | §6.1 | `LocationTheme` altyapısı | ✅ **prod** | `src/themes.ts` |
-| §6.2 | Kasaba — "müdavim müşteri" mekaniği | ⬜ | S |
+| §6.2 | Kasaba — "müdavim müşteri" mekaniği | ✅ **dev** | fiyata duyarsız sadık taban |
 | §6.3 | **Çevre Yolu** (ışık penceresi + yaya müşteri) | ✅ **dev** | — |
 | §6.4 | **Otoyol** (ramp/merge + kaçan müşteri) | ✅ **dev** | — |
-| §6.5 | **Marina** | ⬜ | XL (10-14 gün) |
-| §6.6 | Metropol | 🟡 tema+ışık var, sahne yok | M |
-| §7 #5 | **Müdür/asistan otomasyonu** | ⬜ | S — ~10 feedback ister, en çok istenen QoL |
-| §7 #7 | Personel derinliği (kademe/maaş/skill) | ⬜ | M — 76 feedback |
-| §9 | Ölçüm planı (doygunluk günü, nakit/varlık, D7/D30) | ⬜ | telemetri yok |
+| §6.5 | **Marina** | ✅ **dev** | `src/marina.ts` — segmentler, ÖTV defteri, bağlama, Mavi Bayrak |
+| §6.6 | Metropol | ✅ **dev** | alan kıtlığı (6 parsel, 3.2× fiyat) + gökdelen silueti |
+| §7 #5 | **Müdür/asistan otomasyonu** | ✅ **dev** | 3 kademe |
+| §7 #7 | Personel derinliği | ✅ **dev** | 4 kademe eğitim |
+| §9 | Ölçüm planı | ✅ **dev** | `/api/metrics` — doygunluk, nakit/varlık, D1/D7/D30 |
 
-## 3. Raporlarda olmayan, feedback'ten gelen kalanlar
+## 3. Raporlarda olmayan, feedback'ten gelenler
 
-- Tekil bug'lar: restoran/kafe ciro 0 (#193) · market kasaya eklemiyor (#423) · haciz sonrası işlevsiz bina (#495) · pompacı cam silmiyor (#451)
-- İtibar 5.0'da yapışıyor (#456)
-- Raporlama: gün sonu özet modali, 7 günlük kâr grafiği, karşı yaka gelir ayrımı (#317)
-- Taşınamayan objeler: tabela/totem (~10), sokak lambası geri konamıyor (#358)
-- Oyun içi "Yenilikler" modali (#465) · EN eksik çeviriler (#464) · FR (#435)
-- Perf: rAF bütçesi + düşük güç modu (InstancedMesh yapıldı)
+| Madde | Durum | Nerede |
+|---|---|---|
+| Restoran/kafe ciro 0 (#193) · market kasaya eklemiyor (#423) | ✅ **dev** | kumbara taşması sessizce siliniyordu — %40 verimle devam + kayıp raporu |
+| Haciz sonrası işlevsiz bina (#495) | ✅ **dev** | haciz artık satışla aynı yoldan geçiyor |
+| Pompacı cam silmiyor (#451) | ✅ **dev** | her araçta siler; şarj görevlisi de |
+| İtibar 5.0'da yapışıyor (#456, #216-4) | ✅ **dev** | günlük hizmet kalitesine mutabakat |
+| 7 günlük kâr grafiği + yaka gelir ayrımı (#317) | ✅ **dev** | ofis paneli |
+| Sokak lambası geri konamıyor (#358, #679-1, #835) | ✅ **dev** | satın alınabilir/taşınabilir obje |
+| "Yenilikler" modali (#465) + bildirim geçmişi | ✅ **dev** | `src/news.ts` |
+| EN eksik çeviriler (#464) · FR (#435) | ✅ **dev** | +67 EN anahtarı, 835 anahtarlık FR |
+| Perf: mobil ısınma (#113/#117/#511) | ✅ **dev** | uniform grid + InstancedMesh |
 
 ## 4. Operasyonel (kod dışı)
 
@@ -94,3 +101,13 @@
 ### Eski faz numaralarının karşılığı (25 Tem sürümü)
 Faz 0-3 = save/clamp/şikâyet/karşı-yaka paketleri (hepsi prod) · Faz 4 ≈ ekonomi
 Katman 1-2 + müdür · Faz 5 ≈ Katman 4 + lokasyonlar · Faz 6 = platform/cila.
+
+---
+
+## 5. Durum özeti (26 Tem 2026)
+
+**Her iki rapordaki KOD maddelerinin tamamı `dev` üzerinde uygulandı ve testle kilitlendi.**
+Prod'a alma bekliyor (Oğuz kararı). Açık kalan tek başlık §4 operasyonel işler.
+
+Yeni test dosyaları: `marina-check` · `rival-check` · `news-check` · `metrics-check` ·
+`collision-bench`. Toplam otomatik doğrulama: **494 assertion + A/B yük testi**.

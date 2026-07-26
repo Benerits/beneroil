@@ -5,6 +5,8 @@ import { UI, BuildingCard } from './ui'
 import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
 import { shareLabel } from './rival'
+import { openLogbook } from './logbook-ui'
+import { makeLogbook, resolveLogbook } from './marina'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
@@ -1534,6 +1536,16 @@ function concludeService(car: Car, score: number) {
   if (ui.activeCar === car) autoSelect(nextServableCar())
 }
 
+/** defter kararı bekleyen tekneler (aynı tekneye iki kez sorulmasın) */
+const logbookPending = new Set<Car>()
+const BOAT_NAMES = ['MAVİ RÜZGAR', 'DENİZ YILDIZI', 'REİS', 'POYRAZ', 'KISMET', 'LODOS', 'MARTI', 'YAKAMOZ']
+function boatName(car: Car): string {
+  // determinist: aynı tekne hep aynı isimle anılır (araç kimliği üzerinden)
+  const anyCar = car as unknown as { __bn?: string }
+  if (!anyCar.__bn) anyCar.__bn = BOAT_NAMES[Math.floor(Math.random() * BOAT_NAMES.length)]
+  return anyCar.__bn
+}
+
 function finishSale(car: Car) {
   const revenue0 = Math.min(car.filledValue, car.demandAmount)
   let revenue = revenue0
@@ -1587,6 +1599,27 @@ function finishSale(car: Car) {
   if (state.brandStars > 0) {
     const boost = Math.round(revenue * (state.prestigeMult() - 1))
     if (boost > 0) revenue += boost
+  }
+  // ---- ÖTV'SİZ YAKIT ALIM DEFTERİ (marina §6.5.3) ----
+  // Balıkçı teknesi vergi muafiyetli yakıt için defter ibraz eder. Karar oyuncunun:
+  // incele → onayla/reddet. Yanlış karar pahalı. Kara şubelerinde bu blok hiç çalışmaz.
+  if (state.isMarina && car.boat === 'balikci' && !logbookPending.has(car)) {
+    logbookPending.add(car)
+    const lb = makeLogbook(state.day, state.stats.served, boatName(car), Math.max(50, Math.round(car.filled || 800)))
+    const full = state.prices.dizel
+    openLogbook(lb, t('Balıkçı Teknesi'), state.buyPrice('dizel') * 1.08, full, (choice, inspected) => {
+      const out = resolveLogbook(lb, choice, revenue)
+      state.money = Math.max(0, state.money + out.money)
+      state.addRep(out.rep)
+      if (out.violation) state.marinaViolations++
+      if (out.correct) state.logbookOk++; else state.logbookBad++
+      ui.toast(out.msg, out.money < 0 || !out.correct ? 'bad' : 'good')
+      if (!inspected && !out.correct) {
+        ui.toast(t('💡 İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.'), '')
+      }
+      logbookPending.delete(car)
+      persist()
+    })
   }
   state.money += revenue
   state.stats.served++
