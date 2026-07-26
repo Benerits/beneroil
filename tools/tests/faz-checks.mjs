@@ -767,5 +767,69 @@ console.log('== 21) Müdür + personel eğitimi (rapor §7 #5, #7) ==')
     LOC_FIELDS.includes('managerLevel') && LOC_FIELDS.includes('staffLevel'))
 }
 
+console.log('== 22) Katman 2b sink'.replace("'","’") + ' + 2c yıkma/satma ==')
+{
+  const { getShopItems: shopS, buyItem: buyS, sellInfo: sellS, applySell: applyS } = await import('../../src/state.ts')
+  const b = new GameState()
+  b.pumps = 6; b.evChargers = 4; b.marketLevel = 3; b.money = 500000
+  // SİGORTA
+  check('başlangıçta sigorta yok, hasar çarpanı 1.0', b.insurance === false && b.damageMult() === 1)
+  check('sigorta primi 0 (yokken)', b.insuranceDaily() === 0)
+  check('sigorta satın alındı', buyS(b, 'insurance') === true && b.insurance === true)
+  check('sigortalıyken hasar YARIYA iner', b.damageMult() === 0.5)
+  check('sigorta günlük prim getirir (OPEX artar)', b.insuranceDaily() > 0)
+  const opexWithIns = b.dailyOpex()
+  b.insurance = false
+  check('sigortasızken OPEX daha düşük', b.dailyOpex() < opexWithIns)
+
+  // DEKORASYON: gelir etkisi yok, itibar +
+  const d = new GameState(); d.money = 200000
+  check('dekorasyon itibar katkısı 0 (başlangıç)', d.decorRep() === 0)
+  const before = d.entryChance()
+  buyS(d, 'decor')
+  check('dekorasyon alındı (Sv.1)', d.decorLevel === 1)
+  check('dekorasyon itibarı +0.15 etkiler', Math.abs(d.decorRep() - 0.15) < 1e-9 && d.entryChance() > before)
+  buyS(d, 'decor'); buyS(d, 'decor')
+  check('dekorasyon Sv.3 MAKS', d.decorLevel === 3 && shopS(d).find(x => x.id === 'decor').status === 'maxed')
+
+  // EKİPMAN YAŞLANMASI
+  const w = new GameState(); w.pumps = 8; w.evChargers = 6; w.money = 500000
+  check('yeni ekipman verim 1.0', w.wearEfficiency() === 1)
+  check('yıpranma yokken mağazada yenileme YOK', !shopS(w).find(x => x.id === 'renew'))
+  w.tick(200) // yıpranma birikir
+  check('zamanla yıpranma birikir', w.wear > 0)
+  w.wear = 1
+  check('tam yıpranmada verim %60', Math.abs(w.wearEfficiency() - 0.6) < 1e-9)
+  check('yıpranınca yenileme mağazada belirir', !!shopS(w).find(x => x.id === 'renew'))
+  const cost = w.renewCost()
+  check('yenileme bedeli ekipmanın %60ı', Math.abs(cost - w.equipmentValue() * 0.6) < 2)
+  const m0 = w.money
+  check('yenileme yapıldı', w.renewEquipment() === cost && w.wear === 0 && w.money === m0 - cost)
+  const poor = new GameState(); poor.pumps = 8; poor.wear = 1; poor.money = 10
+  check('parası yetmezse yenileme olmaz', poor.renewEquipment() === null && poor.wear === 1)
+
+  // RUHSAT
+  const l = new GameState(); l.pumps = 6; l.marketLevel = 2
+  check('ruhsat bedeli varlıkla ölçekli', l.licenseFee() > 8000)
+  check('ilk ruhsat günü 30', l.licenseDueDay === 30)
+
+  // 2c: HER yapı satılabilir
+  const sv = new GameState()
+  sv.signLevel = 2; sv.wideGates = true; sv.gridLevel = 2; sv.airWaterCount = 2; sv.parkingCount = 3
+  check('tabela satılabilir (2c)', !!sellS(sv, 'sign'))
+  check('geniş kapı satılabilir (2c)', !!sellS(sv, 'widegate'))
+  check('şebeke satılabilir (bağlı ünite yokken)', !!sellS(sv, 'grid'))
+  sv.evChargers = 2
+  check('şebeke bağlı ünite varken SATILAMAZ (kilitlenme koruması)', sellS(sv, 'grid') === null)
+  check('hava-su satılabilir', !!sellS(sv, 'airwater'))
+  check('otopark satılabilir', !!sellS(sv, 'parking'))
+  applyS(sv, 'sign')
+  check('tabela satışı uygulandı', sv.signLevel === 0)
+
+  // save round-trip
+  const ser2 = serializeState(b); const d2 = new GameState(); hydrateState(d2, ser2)
+  check('2b alanları save round-trip', d2.insurance === b.insurance && d2.decorLevel === b.decorLevel)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

@@ -10,7 +10,8 @@ export type LocId = 'kasaba' | 'cevreyolu' | 'otoyol' | 'marina' | 'metropol'
  *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
 export const LOC_FIELDS = [
   'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level',
-  'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'managerLevel', 'staffLevel', 'gridLevel',
+  'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'managerLevel', 'staffLevel',
+  'insurance', 'decorLevel', 'wear', 'gridLevel',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
@@ -101,6 +102,11 @@ export const WIDEGATE_COST = 6000
  *  servis hâlâ bahşişle daha kârlı, ama pompacı yetişemediğin pompayı net kâra çevirir). */
 export const POMPACI_HIRE = 800
 export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) işe alma bedeli
+// KATMAN 2b sink'leri (rapor: "her musluğun bir gideri olmalı")
+export const INSURANCE_DAILY = 0.0004      // varlık değerinin binde 0.4'ü / gün
+export const LICENSE_PERIOD = 30           // ruhsat yenileme aralığı (oyun günü)
+export const DECOR_COSTS = [15_000, 40_000, 90_000] // dekorasyon kademeleri (itibar +0.15/kademe)
+export const RENEW_RATIO = 0.6             // ekipman yenileme = alış değerinin %60'ı
 // MÜDÜR (rapor §7 #5): kademeli otomasyon — Sv.1 kumbara toplar, Sv.2 + panel temizler,
 // Sv.3 + arıza tamir eder. Yovmiyesi pasif geliri "aktifin %30'unu geçmesin" kuralına göre.
 export const MANAGER_COSTS = [18_000, 34_000, 60_000]   // Sv.1/2/3 kurulum
@@ -229,6 +235,14 @@ export class GameState {
   /** PERSONEL eğitimi seviyesi 1-4: dolum hızı, bahşiş şansı, yanlış yakıt riski. ADDITIVE */
   staffLevel = 1
   managerT = 0 // runtime: müdür tur sayacı
+  /** SİGORTA: primi ödenirse felaket/arıza maliyeti yarıya iner (ADDITIVE) */
+  insurance = false
+  /** RUHSAT: 30 günde bir yenilenir; ödenmezse itibar cezası (ADDITIVE) */
+  licenseDueDay = 30
+  /** DEKORASYON seviyesi 0-3: gelir etkisi ~0, itibar +küçük — klasik "parayı göster" sink'i */
+  decorLevel = 0
+  /** EKİPMAN YAŞLANMASI: 0-1 arası yıpranma; %100'de verim -%40, yenileme maliyeti */
+  wear = 0
   managerResult: { collected: number; cleaned: boolean; fixed: number } | null = null
   toiletLevel = 0
 
@@ -481,6 +495,9 @@ export class GameState {
 
     // bakım özeni zamanla azalır
     this.maintCare = Math.max(0, this.maintCare - 0.0004 * dt)
+    // EKİPMAN YAŞLANMASI (Katman 2b): ünite sayısıyla orantılı, ~1 oyun gününde %1.5
+    const units = this.pumps + this.evChargers + this.solarCount + (this.hasSMR ? 3 : 0)
+    this.wear = Math.min(1, this.wear + dt * 0.000055 * Math.max(1, units))
 
     // rastgele arızalar — seyrek; para azken (Murphy) artar, bakım özeni yüksekken düşer
     const stress = this.graceActive ? 1 : this.money < 1000 ? 3 : this.money < 3000 ? 2 : 1
@@ -535,7 +552,7 @@ export class GameState {
     // (kasabada itibar belirleyici, otoyolda tabela; kasaba değerleri 1.0 → denge değişmez).
     const th = this.theme()
     const c = th.econ.entryBase + 0.1 * th.econ.signWeight * this.signLevel
-      + 0.05 * th.econ.repWeight * (this.reputation - 3)
+      + 0.05 * th.econ.repWeight * (this.reputation + this.decorRep() - 3)
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
       + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
       + (this.hasCoffee ? 0.02 : 0) + (this.hasRestaurant ? 0.03 : 0)
@@ -825,7 +842,7 @@ export class GameState {
   dailyOpex(): number {
     const ramp = Math.min(1, Math.max(0, (this.day - this.opexStart) / 10))
     if (ramp <= 0) return 0
-    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp)
+    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp) + this.insuranceDaily()
   }
   /** kurulu ekipman+tesis alış değeri (sunucu buildingValue ile aynı felsefe, istemce tablolarından) */
   equipmentValue(): number {
@@ -933,6 +950,26 @@ export class GameState {
     return Math.round((this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE) * staffMul)
       + MANAGER_WAGES[Math.min(3, this.managerLevel)]
   }
+  /** EKİPMAN YAŞLANMASI: yıpranma arttıkça verim düşer (%100'de -%40) */
+  wearEfficiency(): number { return 1 - 0.4 * Math.min(1, Math.max(0, this.wear)) }
+  /** yenileme bedeli: ekipman değerinin %60'ı × yıpranma */
+  renewCost(): number { return Math.round(this.equipmentValue() * RENEW_RATIO * Math.min(1, this.wear)) }
+  /** ekipmanı yenile (yıpranma sıfırlanır) */
+  renewEquipment(): number | null {
+    const c = this.renewCost()
+    if (c <= 0 || this.money < c) return null
+    this.money -= c; this.wear = 0
+    return c
+  }
+  /** sigortalıysa hasar/ceza yarıya iner (rapor 2b) */
+  damageMult(): number { return this.insurance ? 0.5 : 1 }
+  /** SİGORTA günlük primi (varlığa bağlı) */
+  insuranceDaily(): number { return this.insurance ? Math.round((this.equipmentValue() + this.landValue()) * INSURANCE_DAILY) : 0 }
+  /** RUHSAT bedeli (30 günde bir, varlıkla ölçekli) */
+  licenseFee(): number { return Math.round(8_000 + (this.equipmentValue() + this.landValue()) * 0.004) }
+  /** dekorasyonun itibar katkısı */
+  decorRep(): number { return 0.15 * this.decorLevel }
+
   /** personel eğitimi etkileri (rapor §7 #7): dolum hızı, bahşiş, hata riski */
   staffFillMult(): number { return 1 + 0.12 * (this.staffLevel - 1) }   // Sv.4 → +%36 hız
   staffTipBonus(): number { return 0.05 * (this.staffLevel - 1) }        // bahşiş oranına eklenir
@@ -1225,6 +1262,22 @@ export function getShopItems(s: GameState): ShopRow[] {
       t('Karşı yakada yemek molası.'), s.hasRestaurant2 ? null : RESTAURANT_COST, s.hasRestaurant)
   }
 
+  // ---- KATMAN 2b SİNK'LERİ: sigorta, dekorasyon, ekipman yenileme ----
+  row('insurance', 'i-star', s.insurance ? t('Sigorta: AKTİF') : t('Sigorta Yaptır'),
+    s.insurance ? t('hasar yarı') : t('günlük prim'),
+    t('Arıza, patlama ve ceza maliyetleri YARIYA iner. Günlük primi varlığınla ölçeklenir.'),
+    s.insurance ? null : 5_000, null)
+  row('decor', 'i-star', s.decorLevel === 0 ? t('Peyzaj & Dekorasyon') : t('Dekorasyon Sv.{0}', Math.min(3, s.decorLevel + 1)),
+    t('+{0} itibar', (0.15 * Math.min(3, s.decorLevel + 1)).toFixed(2)),
+    t('Çiçeklik, aydınlatma, marka renkleri — gelir etkisi yok ama itibar ve görüntü kazandırır.'),
+    s.decorLevel >= 3 ? null : DECOR_COSTS[s.decorLevel], null)
+  if (s.wear > 0.25) {
+    row('renew', 'i-wrench', t('Ekipman Yenileme (yıpranma %{0})', Math.round(s.wear * 100)),
+      t('verim +%{0}', Math.round((1 - s.wearEfficiency()) * 100)),
+      t('Yıpranan ünitelerin verimi düşer. Yenileme yıpranmayı sıfırlar.'),
+      s.renewCost(), null)
+  }
+
   // ---- MÜDÜR + PERSONEL EĞİTİMİ (geç oyun otomasyonu, raporun 5. ve 7. öncelikleri) ----
   row('manager', 'i-gear',
     s.managerLevel === 0 ? t('Müdür Tut') : t('Müdür Sv.{0}', Math.min(3, s.managerLevel + 1)),
@@ -1343,7 +1396,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel',
+  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -1507,6 +1560,9 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'widegate': s.wideGates = true; break
     case 'tank': s.tankLevel++; break
     case 'market': s.marketLevel++; break
+    case 'insurance': s.insurance = true; break
+    case 'decor': s.decorLevel++; break
+    case 'renew': s.wear = 0; break
     case 'manager': s.managerLevel++; break
     case 'train': s.staffLevel++; break
     case 'market2': s.market2Level++; break
@@ -1571,11 +1627,16 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
     case 'truckpark': return s.hasTruckPark ? { refund: half(TRUCKPARK_COST) } : null
     case 'dieselgen': return s.hasDiesel ? { refund: half(DIESELGEN_COST) } : null
     case 'smr': return s.hasSMR ? { refund: half(SMR_COST) } : null
-    case 'solar': return s.solarCount > 0 && inst === s.solarCount - 1 ? { refund: half(SOLAR_COST) } : null
-    case 'parking': return s.parkingCount > 0 && inst === s.parkingCount - 1 ? { refund: half(PARKING_COST) } : null
-    case 'selfwash': return s.selfWashCount > 0 && inst === s.selfWashCount - 1 ? { refund: half(SELFWASH_COST) } : null
-    case 'airwater': return s.airWaterCount > 0 && inst === s.airWaterCount - 1 ? { refund: half(AIRWATER_COST) } : null
-    default: return null // sign/tank/grid/widegate/office: yükseltme ya da kritik altyapı, satılmaz
+    case 'solar': return s.solarCount > 0 ? { refund: half(SOLAR_COST) } : null // 2c: herhangi bir örnek satılabilir
+    case 'parking': return s.parkingCount > 0 ? { refund: half(PARKING_COST) } : null // 2c: herhangi bir örnek satılabilir
+    case 'selfwash': return s.selfWashCount > 0 ? { refund: half(SELFWASH_COST) } : null // 2c: herhangi bir örnek satılabilir
+    case 'airwater': return s.airWaterCount > 0 ? { refund: half(AIRWATER_COST) } : null // 2c: herhangi bir örnek satılabilir
+    // 2c: geri kalan yapılar da satılabilir (ölü sermaye geri döner, yeniden planlama strateji olur)
+    case 'sign': return s.signLevel > 0 ? { refund: half(SIGN_COSTS.slice(0, s.signLevel).reduce((a, b) => a + b, 0)) } : null
+    case 'grid': return s.gridLevel > 0 && s.evChargers === 0 && s.batteryLevel === 0 && !s.hasSMR && s.solarCount === 0 && !s.hasDiesel
+      ? { refund: half(GRID_COSTS.slice(0, s.gridLevel).reduce((a, b) => a + b, 0)) } : null
+    case 'widegate': return s.wideGates ? { refund: half(WIDEGATE_COST) } : null
+    default: return null // tank/office: kritik altyapı, satılmaz
   }
 }
 
@@ -1595,6 +1656,9 @@ export function applySell(s: GameState, id: string): number | null {
     case 'oil2': s.hasOil2 = false; break
     case 'coffee2': s.hasCoffee2 = false; break
     case 'restaurant2': s.hasRestaurant2 = false; break
+    case 'sign': s.signLevel = 0; break
+    case 'grid': s.gridLevel = 0; break
+    case 'widegate': s.wideGates = false; break
     case 'toilet': s.toiletLevel = 0; break
     case 'battery': s.batteryLevel = 0; s.battery = 0; break
     case 'wash': s.hasWash = false; break

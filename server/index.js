@@ -276,6 +276,7 @@ const COST = {
   battery: [5000, 9000, 16000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000],
 }
 const MANAGER_COSTS = [18000, 34000, 60000]      // istemci state.ts ile BİREBİR
+const DECOR_COSTS = [15000, 40000, 90000]
 const STAFF_TRAIN_COSTS = [12000, 26000, 48000]
 const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000 }
 const sumUpto = (arr, k) => { let t = 0; const n = Math.max(0, Math.min(arr.length, Math.floor(k) || 0)); for (let i = 0; i < n; i++) t += arr[i]; return t }
@@ -293,6 +294,8 @@ function buildingValue(s) {
   if (s.hasRestaurant2) v += FLAT.restaurant
   v += sumUpto(MANAGER_COSTS, n(s.managerLevel))               // müdür kurulumu servete girer
   v += sumUpto(STAFF_TRAIN_COSTS, Math.max(0, n(s.staffLevel, 1) - 1)) // personel eğitimi
+  v += sumUpto(DECOR_COSTS, n(s.decorLevel))                            // dekorasyon
+  if (s.insurance) v += 5000                                            // sigorta kurulumu
   v += sumUpto(COST.toilet, n(s.toiletLevel)) + sumUpto(COST.grid, n(s.gridLevel)) + sumUpto(COST.battery, n(s.batteryLevel))
   v += sumUpto(COST.ev, n(s.evChargers))
   if (s.tankCounts && typeof s.tankCounts === 'object') for (const k of ['benzin', 'dizel', 'lpg']) v += sumUpto(COST.tankAdd, n(s.tankCounts[k], 1))
@@ -346,6 +349,10 @@ function sanitizeSave(save) {
   if ('toilet2Level' in s) s.toilet2Level = clamp(s.toilet2Level, 0, 2, 0)  // B8 karşı yaka nüshaları
   if ('managerLevel' in s) s.managerLevel = clamp(s.managerLevel, 0, 3, 0)   // müdür otomasyonu
   if ('staffLevel' in s) s.staffLevel = clamp(s.staffLevel, 1, 4, 1)         // personel eğitimi
+  if ('decorLevel' in s) s.decorLevel = clamp(s.decorLevel, 0, 3, 0)         // dekorasyon sink'i
+  if ('wear' in s) s.wear = clamp(s.wear, 0, 1, 0)                           // ekipman yaşlanması
+  if ('licenseDueDay' in s) s.licenseDueDay = clamp(s.licenseDueDay, 0, 100000, 30)
+  if ('insurance' in s) s.insurance = !!s.insurance
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
   if ('brandStars' in s) s.brandStars = clamp(s.brandStars, 0, 40, 0)      // prestij (additive)
   if ('handoverCount' in s) s.handoverCount = clamp(s.handoverCount, 0, 40, 0)
@@ -443,6 +450,8 @@ function sanitizeSave(save) {
       if ('toilet2Level' in f) f.toilet2Level = clamp(f.toilet2Level, 0, 2, 0)
       if ('managerLevel' in f) f.managerLevel = clamp(f.managerLevel, 0, 3, 0)
       if ('staffLevel' in f) f.staffLevel = clamp(f.staffLevel, 1, 4, 1)
+      if ('decorLevel' in f) f.decorLevel = clamp(f.decorLevel, 0, 3, 0)
+      if ('wear' in f) f.wear = clamp(f.wear, 0, 1, 0)
       f.toiletLevel = clamp(f.toiletLevel, 0, 2, 0)
       f.gridLevel = clamp(f.gridLevel, 0, 2, 0)
       f.batteryLevel = clamp(f.batteryLevel, 0, 3, 0)

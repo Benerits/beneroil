@@ -51,6 +51,21 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  'Sigorta Yaptır': 'Buy Insurance', 'Sigorta: AKTİF': 'Insurance: ACTIVE',
+  'hasar yarı': 'half damage', 'günlük prim': 'daily premium',
+  'Arıza, patlama ve ceza maliyetleri YARIYA iner. Günlük primi varlığınla ölçeklenir.':
+    'Breakdown, explosion and penalty costs are HALVED. Daily premium scales with your assets.',
+  'Peyzaj & Dekorasyon': 'Landscaping & Decor', 'Dekorasyon Sv.{0}': 'Decor Lv.{0}',
+  '+{0} itibar': '+{0} reputation',
+  'Çiçeklik, aydınlatma, marka renkleri — gelir etkisi yok ama itibar ve görüntü kazandırır.':
+    'Planters, lighting, brand colours — no income effect but improves reputation and looks.',
+  'Ekipman Yenileme (yıpranma %{0})': 'Equipment Renewal (wear {0}%)',
+  'verim +%{0}': '+{0}% efficiency',
+  'Yıpranan ünitelerin verimi düşer. Yenileme yıpranmayı sıfırlar.':
+    'Worn units lose efficiency. Renewal resets wear to zero.',
+  '📜 İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)': '📜 Operating licence renewed: -₺{0} (valid 30 days)',
+  '📜 Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!':
+    '📜 Licence renewal failed (₺{0} needed) — inspection penalty: reputation dropped!',
   'Müdür Tut': 'Hire Manager', 'Müdür Sv.{0}': 'Manager Lv.{0}',
   'kumbara toplar': 'collects piggy banks', '+ panel temizliği': '+ panel cleaning', '+ arıza tamiri': '+ breakdown repairs',
   'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. Yovmiyesi vardır.':

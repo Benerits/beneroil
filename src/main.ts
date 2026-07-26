@@ -1488,7 +1488,7 @@ function finishSale(car: Car) {
 function wrongFuel(car: Car) {
   car.wrongFuelHandled = true
   car.filling = false
-  const wfPenalty = state.graceActive ? 100 : WRONG_FUEL_PENALTY // grace: yeni oyuncu daha az cezalanır
+  const wfPenalty = Math.round((state.graceActive ? 100 : WRONG_FUEL_PENALTY) * state.damageMult()) // sigorta hasarı yarılar
   state.money -= wfPenalty
   state.addRep(-0.4)
   ui.toast(t('🚨 {0} isteyen araca {1} bastın! -{2} ₺', FUEL_LABEL[car.demandType], FUEL_LABEL[car.nozzle!], wfPenalty), 'bad')
@@ -2608,10 +2608,16 @@ ui.onSell = id => {
   // servis noktasındaki aracı serbest bırak, sonra görseli kaldır
   if (base === 'pump') cars.evictSlot('fuel', Number(id.slice(5)))
   else if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
-  world.removeBuildingGroup(id)
-  delete placedPos[id]
-  delete placedRot[id]
-  const ri = placedRects.findIndex(r => r.id === id)
+  // Sayılabilir tesislerde (solar/parking/selfwash/airwater) hangi örneğe tıklanırsa
+  // tıklansın SON örneğin görseli kaldırılır — indeks boşluğu oluşmaz, sayaçla tutarlı.
+  const countable = COUNTABLE[base]?.()
+  const target = (countable !== undefined)
+    ? (countable === 0 ? base : `${base}#${countable}`) // applySell sonrası sayaç azaldı → son örnek bu
+    : id
+  world.removeBuildingGroup(target)
+  delete placedPos[target]
+  delete placedRot[target]
+  const ri = placedRects.findIndex(r => r.id === target)
   if (ri >= 0) placedRects.splice(ri, 1)
   audio.build()
   ui.toast(t('🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}', refund.toLocaleString('tr-TR')), 'good', true)
@@ -3892,6 +3898,20 @@ function frame() {
     else if (cres.kind === 'fail') ui.toast(t('❌ {0} sözleşmesi ihlalden feshedildi — prim yok.', cres.name), 'bad', true)
     // panel açıkken gün döndüyse tazele: teklif id'leri güne bağlı, eski butonlar ölü kalırdı
     if (document.getElementById('officewrap')?.classList.contains('show')) openOfficePanel()
+    // RUHSAT & DENETİM (Katman 2b): 30 günde bir, varlıkla ölçekli. Ödenmezse itibar cezası
+    // — ritim + tehdit. Parası olan otomatik öder (mikro-yönetim yaratmaz).
+    if (state.day >= state.licenseDueDay) {
+      const fee = state.licenseFee()
+      if (state.money >= fee) {
+        state.money -= fee
+        state.licenseDueDay = state.day + 30
+        ui.toast(t('📜 İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)', fee.toLocaleString('tr-TR')), '')
+      } else {
+        state.licenseDueDay = state.day + 3 // 3 günde bir tekrar dener
+        state.addRep(-0.3)
+        ui.toast(t('📜 Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!', fee.toLocaleString('tr-TR')), 'bad', true)
+      }
+    }
     // İşletme gideri (OPEX): amortisman + emlak vergisi — geç oyunda birikimi düzleştiren sink.
     // 10 günlük rampayla devreye girer (enflasyon şoku yok); erken oyunda ~₺10, hissedilmez.
     const opex = state.dailyOpex()
@@ -4065,7 +4085,8 @@ function frame() {
       finishSale(c)
       continue
     }
-    const amount = Math.min(FILL_RATE * state.staffFillMult() * dt, state.tanks[c.nozzle]) // personel eğitimi hızı
+    // personel eğitimi hızlandırır, EKİPMAN YIPRANMASI yavaşlatır (Katman 2b)
+    const amount = Math.min(FILL_RATE * state.staffFillMult() * state.wearEfficiency() * dt, state.tanks[c.nozzle])
     c.filled += amount
     state.tanks[c.nozzle] -= amount
     c.bubbleT -= dt // sayaç ~9/sn güncellensin (her frame değil) — okunur, çok hızlı akmaz
