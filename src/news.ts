@@ -168,8 +168,8 @@ export function injectNewsStyle() {
     .news-log-row { display: grid; grid-template-columns: 62px 1fr; gap: 9px; align-items: baseline;
       font-size: 12.5px; font-weight: 700; padding: 7px 0; border-top: 1px solid var(--line); color: var(--ink); }
     .news-log-row:first-child { border-top: 0; }
-    .news-log-row.good { color: var(--green, #3d9a5d); }
-    .news-log-row.bad  { color: var(--red, #c4534a); }
+    .news-log-row.good { color: var(--green-dark); }
+    .news-log-row.bad  { color: var(--red); }
     .news-log-day { font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
       color: var(--muted); font-variant-numeric: tabular-nums; }`
   document.head.appendChild(st)

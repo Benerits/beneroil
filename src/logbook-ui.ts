@@ -37,9 +37,9 @@ function ensureShell(): HTMLDivElement {
       font-weight:700; padding:6px 0; border-top:1px solid var(--line); }
     #logbookwrap .lb-line:first-child { border-top:0; }
     #logbookwrap .lb-doc { margin-top:10px; padding:11px 12px; border-radius:12px;
-      background:#fbf7ea; border:1.5px dashed #d8c9a0; }
+      background:var(--paper-2); border:1.5px dashed var(--edge); }
     #logbookwrap .lb-flag { font-size:12.5px; font-weight:800; color:var(--red); padding:4px 0; }
-    #logbookwrap .lb-clean { font-size:12.5px; font-weight:800; color:var(--green-dark,#2f7d4f); padding:4px 0; }
+    #logbookwrap .lb-clean { font-size:12.5px; font-weight:800; color:var(--green-dark); padding:4px 0; }
     #logbookwrap .lb-hint { font-size:11.5px; font-weight:650; color:var(--muted); margin-top:8px; line-height:1.45; }
     #logbookwrap .lb-btns { display:flex; gap:8px; margin-top:14px; }
     #logbookwrap .lb-btns .btn { flex:1; justify-content:center; }`

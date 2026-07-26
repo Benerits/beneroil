@@ -795,17 +795,23 @@ function openOfficePanel() {
   const hist = document.getElementById('of-history')
   if (hist) hist.innerHTML = accHistory()
 
+  // panel her açılışta ÖZET sekmesiyle başlar — kapatıp açınca eski sekmede kalmaz
+  for (const t2 of document.querySelectorAll('#oftabs .tab')) t2.classList.toggle('active', (t2 as HTMLElement).dataset.oftab === 'ozet')
+  for (const pn of document.querySelectorAll<HTMLElement>('.ofpane')) pn.classList.toggle('is-on', pn.dataset.ofpane === 'ozet')
+  const ob = document.querySelector('#officewrap .mbody'); if (ob) ob.scrollTop = 0
   document.getElementById('officewrap')?.classList.add('show')
 }
 document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
 
-// Ofis sekmeleri: panel tek uzun liste olarak taşacak kadar büyüdü, işe göre gruplandı.
-for (const tab of document.querySelectorAll<HTMLButtonElement>('.oftab')) {
+// Ofis sekmeleri — mağaza modalıyla AYNI bileşen (.tabs/.tab). Panel tek uzun liste
+// olarak taşacak kadar büyüdüğü için işe göre gruplandı: özet/fiyat/muhasebe/ihale/büyüme.
+for (const tab of document.querySelectorAll<HTMLButtonElement>('#oftabs .tab')) {
   tab.addEventListener('click', () => {
     const id = tab.dataset.oftab
-    for (const t2 of document.querySelectorAll('.oftab')) t2.classList.toggle('is-on', t2 === tab)
+    for (const t2 of document.querySelectorAll('#oftabs .tab')) t2.classList.toggle('active', t2 === tab)
     for (const p of document.querySelectorAll<HTMLElement>('.ofpane')) p.classList.toggle('is-on', p.dataset.ofpane === id)
-    document.querySelector('#officewrap .mbody')?.scrollTo({ top: 0 })
+    const body = document.querySelector('#officewrap .mbody')
+    if (body) body.scrollTop = 0   // yeni sekme baştan başlasın
   })
 }
 

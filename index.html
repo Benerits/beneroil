@@ -354,24 +354,24 @@
     .acc-cols.acc-head { border-top: 0; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 800; }
     .acc-plabel { font-weight: 800; color: var(--ink); }
     /* anonim sıralama: kendi satırın vurgulanır, kimsenin adı gösterilmez (KVKK) */
-    .lb-me { font-weight: 900; color: var(--green-dark, #2f7d4f); }
+    .lb-me { font-weight: 900; color: var(--green-dark); }
     .lb-star { color: #d9a521; letter-spacing: -.05em; }
     /* marka yıldızı kartı: ne verir · nasıl kazanılır · ne kadar kaldı */
-    .pz-card { background: var(--surface-2, #f6f4ec); border: 1.5px solid var(--edge, #e5ddc8);
+    .pz-card { background: var(--paper-2); border: 1.5px solid var(--edge);
                border-radius: 13px; padding: 12px 13px; margin: 4px 0 8px; }
     .pz-top { display: flex; align-items: baseline; gap: 9px; }
     .pz-stars { font-size: 19px; color: #d9a521; letter-spacing: -.04em; line-height: 1; }
     .pz-count { font-size: 12.5px; font-weight: 800; color: var(--ink); }
     .pz-what { font-size: 12px; font-weight: 650; line-height: 1.5; color: var(--muted); margin-top: 7px; }
     .pz-now { font-size: 13px; font-weight: 750; color: var(--ink); margin-top: 8px; }
-    .pz-gain { color: var(--green-dark, #2f7d4f); font-weight: 800; }
+    .pz-gain { color: var(--green-dark); font-weight: 800; }
     .pz-ready { font-size: 12.5px; font-weight: 650; line-height: 1.55; padding: 4px 2px; color: var(--ink); }
     .pz-lock, .pz-fine { font-size: 11.5px; font-weight: 650; line-height: 1.5; color: var(--muted); padding: 3px 2px; }
     .pz-prog-head { display: flex; justify-content: space-between; align-items: baseline;
                     font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
                     color: var(--muted); margin-top: 6px; }
     .pz-prog-num { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
-    .pz-bar { height: 8px; border-radius: 99px; background: var(--line, #e2ded2); overflow: hidden; margin: 5px 0 4px; }
+    .pz-bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin: 5px 0 4px; }
     .pz-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #e8c256, #d9a521); transition: width .35s ease; }
     /* ofis: alt başlık + açıklama satırı (7 günlük grafik, yaka dağılımı) */
     .acc-sub { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
@@ -388,16 +388,7 @@
     .pchart-na  { background: var(--line); }
     .pchart-day { font-size: 9px; font-weight: 800; color: var(--muted); margin-top: 3px;
                   overflow: hidden; text-overflow: ellipsis; }
-    /* ofis sekmeleri */
-    .oftabs { display: flex; gap: 4px; padding: 0 14px 10px; border-bottom: 1.5px solid var(--line); overflow-x: auto; }
-    .oftab { flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; gap: 3px;
-             padding: 8px 10px; border: 0; background: transparent; cursor: pointer; border-radius: 10px;
-             font: inherit; font-size: 10.5px; font-weight: 800; letter-spacing: .02em;
-             color: var(--muted); transition: background .15s, color .15s; }
-    .oftab .ic { width: 17px; height: 17px; }
-    .oftab:hover { background: rgba(127,127,127,.09); }
-    .oftab.is-on { color: var(--ink); background: rgba(127,127,127,.13); }
-    .oftab:focus-visible { outline: 2px solid var(--green-dark, #2f7d4f); outline-offset: 1px; }
+    /* ofis: sekme panelleri — sekme bileşeni oyunun ortak .tabs/.tab'ı */
     .ofpane { display: none; }
     .ofpane.is-on { display: block; }
     .ofsec { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted);
@@ -785,19 +776,19 @@
   </div>
 
   <div class="backdrop" id="officewrap">
-    <div class="modal" style="height:auto; max-height:86vh">
+    <div class="modal">
       <div class="mhead">
         <h3 data-i18n="Ofis">Ofis</h3>
         <button class="mclose" data-close="officewrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <!-- Sekmeler: ofis paneli tek uzun liste olarak taşamayacak kadar büyüdü.
            Gruplama işe göre: durum · fiyat · muhasebe · ihale · büyüme. -->
-      <div class="oftabs" role="tablist">
-        <button class="oftab is-on" role="tab" data-oftab="ozet"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Özet">Özet</span></button>
-        <button class="oftab" role="tab" data-oftab="fiyat"><svg class="ic"><use href="#i-fuel"/></svg><span data-i18n="Fiyat">Fiyat</span></button>
-        <button class="oftab" role="tab" data-oftab="muhasebe"><svg class="ic"><use href="#i-coin"/></svg><span data-i18n="Muhasebe">Muhasebe</span></button>
-        <button class="oftab" role="tab" data-oftab="ihale"><svg class="ic"><use href="#i-truck"/></svg><span data-i18n="İhaleler">İhaleler</span></button>
-        <button class="oftab" role="tab" data-oftab="buyume"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Büyüme">Büyüme</span></button>
+      <div class="tabs" id="oftabs">
+        <button class="tab active" data-oftab="ozet" data-i18n="Özet">Özet</button>
+        <button class="tab" data-oftab="fiyat" data-i18n="Fiyat">Fiyat</button>
+        <button class="tab" data-oftab="muhasebe" data-i18n="Muhasebe">Muhasebe</button>
+        <button class="tab" data-oftab="ihale" data-i18n="İhaleler">İhaleler</button>
+        <button class="tab" data-oftab="buyume" data-i18n="Büyüme">Büyüme</button>
       </div>
       <div class="mbody">
 
