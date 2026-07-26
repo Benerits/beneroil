@@ -830,6 +830,8 @@ export interface CarManagerOpts {
   segments?: () => CarSegment[]
   /** MARİNA: gelen tekne türleri (paylarıyla). Boş dizi = kara şubesi, tekne doğmaz. */
   boats?: () => { id: string; share: number }[]
+  /** SU ŞUBESİ (marina): yalnız tekne doğar, araba ASLA doğmaz. */
+  waterOnly?: () => boolean
   /** 4 ŞERİTLİ YOL: istasyona girecek araçların kullandığı servis şeridi x'i.
    *  undefined = tek şeritli yol (mevcut davranış). */
   serviceLane?: () => { near: number; far: number } | undefined
@@ -1368,6 +1370,10 @@ export class CarManager {
 
   private spawnTransit(lane: 'near' | 'far') {
     const boat = this.pickBoat()
+    // MARİNA: denizin ortasına ARABA GELMEZ. Su şubesinde tekne segmenti yoksa
+    // (henüz yakıt iskelesi kurulmadıysa) hiçbir şey doğmaz — eskiden pickBoat null
+    // dönünce kod arabaya düşüyordu ve deniz haritasında araba beliriyordu.
+    if (!boat && this.opts.waterOnly?.()) return
     const isEv = !boat && Math.random() < this.opts.evShare()
     const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), this.opts.segments?.() ?? null, boat)
     car.lane = lane

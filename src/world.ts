@@ -473,12 +473,17 @@ export class World {
     // 4 ŞERİTLİ YOL: servis şeridi tanımlıysa koridor genişler (x 4.9..10.9).
     // Bir yanda çim bandı, diğer yanda karşı parsel (10.9) sınır — bu 6.0 birim,
     // 0.6 refüjle birlikte yön başına iki adet 1.35'lik şerit demek.
+    // SU ŞUBESİ (marina): asfalt/refüj/şerit HİÇ çizilmez — yolun yerini seyir kanalı alır.
+    // Bu blok atlanmazsa denizin üstünde asfalt şerit görünüyordu.
+    const isWater = th.lane.kind === 'water'
     const roadW = th.lane.service ? 6.0 : 4.6
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 220), roadMat)
-    road.position.set(ROAD_X, 0, 0.01)
-    road.receiveShadow = true
-    s.add(road)
-    if (th.lane.median) {
+    if (!isWater) {
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 220), roadMat)
+      road.position.set(ROAD_X, 0, 0.01)
+      road.receiveShadow = true
+      s.add(road)
+    }
+    if (th.lane.median && !isWater) {
       // ---- KENTSEL YOL (çevre yolu/metropol): orta REFÜJ + şerit çizgileri (rapor §6.3) ----
       // Refüj: yeşil bant + bordür; karşıya geçiş görsel olarak da ayrılır.
       const medW = th.lane.service ? 0.6 : 0.9
@@ -527,14 +532,14 @@ export class World {
     }
     // kenar çizgileri asfalt kenarına oturur (yol genişleyince onlar da kayar)
     const edgeOff = (th.lane.service ? 6.0 : 4.6) / 2 - 0.14
-    for (const off of [-edgeOff, edgeOff]) {
+    for (const off of isWater ? [] : [-edgeOff, edgeOff]) {
       const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 220), lam(0xe8e4d8))
       edgeLine.position.set(ROAD_X + off, 0, 0.02)
       s.add(edgeLine)
     }
     // Şerit içi kesikler — YALNIZ refüjsüz (kasaba) yolda. Refüjlü yollar kendi
     // instanced kesiklerini yukarıda çiziyor; ikisi birden çizilirse çizgiler çakışır.
-    if (!th.lane.median) {
+    if (!th.lane.median && !isWater) {
       for (let y = -108; y < 109; y += 5) {
         for (const off of [-1.1, 1.1]) {
           const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 1.5), lam(0xd9d5c9))

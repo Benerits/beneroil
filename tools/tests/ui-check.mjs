@@ -58,5 +58,40 @@ check('paneller .mbody İÇİNDE', ofBlock.indexOf('class="mbody"') < ofBlock.in
 check('modal sabit yükseklikli (sekme değişince zıplamaz)',
   /<div class="backdrop" id="officewrap">\s*<div class="modal">/.test(html))
 
+console.log('\n== 6) CarManager seçenekleri GERÇEKTEN bağlı mı ==')
+// Bu testin sebebi: birkaç seçenek (boats/waterOnly/serviceLane/carsPassThrough)
+// cars.ts'te tanımlıydı, testlerde kullanılıyordu ama main.ts'te HİÇ verilmiyordu.
+// Yük testi kendi opts'unu kurduğu için yeşil kalıyordu; oyunda ölü koddu.
+// Belirti: marinada araba doğuyordu, 4 şerit servis şeridi çalışmıyordu.
+const cars = fs.readFileSync(new URL('../../src/cars.ts', import.meta.url), 'utf8')
+const optsBlock = main.slice(main.indexOf('new CarManager('), main.indexOf('new CarManager(') + 3000)
+const declared = [...cars.slice(cars.indexOf('CarManagerOpts'), cars.indexOf('export class CarManager'))
+  .matchAll(/^\s{2}(\w+)\??:/gm)].map(m => m[1])
+const KRITIK = ['boats', 'waterOnly', 'serviceLane', 'carsPassThrough', 'segments', 'entryChance', 'trafficPull']
+for (const k of KRITIK) {
+  check(`opts.${k} main.ts'te veriliyor`, new RegExp(`^\\s*${k}:`, 'm').test(optsBlock),
+    'cars.ts\'te tanımlı ama oyuna bağlanmamış → ölü kod')
+}
+check(`cars.ts'te ${declared.length} seçenek tanımlı, kritik ${KRITIK.length} tanesi bağlı`, true)
+
+console.log('\n== 7) Model kitlerinin DOKUSU var mı ==')
+// Belirti: kit modelleri BEYAZ render oluyordu. GLB'ler "Textures/colormap.png"
+// referansı taşıyor; klasör yoksa GLTFLoader 404 alıp map=null bırakıyor ve model
+// dokusuz (beyaz) çiziliyor. Sessiz: konsola hata düşmüyor, sahne "boş" görünüyor.
+import path2 from 'node:path'
+const KITS = ['industrial', 'commercial2', 'watercraft']
+const kroot = path2.join(new URL('../../', import.meta.url).pathname, 'public/kenney')
+for (const k of KITS) {
+  const tex = path2.join(kroot, k, 'Textures/colormap.png')
+  check(`${k}/Textures/colormap.png var`, fs.existsSync(tex))
+}
+// her paket KENDİ paletini kullanmalı — kök atlası yanlış renk verir
+const rootTex = fs.readFileSync(path2.join(kroot, 'Textures/colormap.png'))
+for (const k of KITS) {
+  const p2 = path2.join(kroot, k, 'Textures/colormap.png')
+  if (!fs.existsSync(p2)) continue
+  check(`${k} KENDİ paletini kullanıyor (kök atlası değil)`, !rootTex.equals(fs.readFileSync(p2)))
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

@@ -1195,6 +1195,15 @@ const cars = new CarManager(world.scene, modelLib, {
   evAngle: i => world.evAngles[i] ?? 0,
   trafficPull: () => (guestPaused ? 1 : state.trafficPull()),
   segments: () => state.activeSegments(),
+  // MARİNA: tekne segmentleri (kara şubede boş dizi döner → tekne doğmaz)
+  boats: () => state.boatSegments().map(b => ({ id: b.id, share: b.share })),
+  // MARİNA: su şubesinde ARABA ASLA doğmaz — tekne yoksa hiçbir şey doğmaz
+  waterOnly: () => state.theme().lane.kind === 'water',
+  // 4 ŞERİTLİ YOL: istasyona girecek araçların servis şeridi (temadan)
+  serviceLane: () => state.theme().lane.service,
+  // Araçlar birbirinin içinden geçer (ölçüm: servis 267→363, tıkanma 41→0).
+  // ?collide=1 ile eski davranış açılır.
+  carsPassThrough: () => !new URLSearchParams(location.search).has('collide'),
   trafficLight: () => {
     const tl = state.theme().features?.trafficLight
     return tl ? { red: state.lightRed(), y: tl.y } : null
@@ -2093,15 +2102,46 @@ function applyOfflineEarnings() {
   const facilities = (state.marketLevel > 0 ? state.marketLevel : 0)
     + (state.hasCoffee ? 1 : 0) + (state.hasRestaurant ? 1 : 0) + (state.hasWash ? 1 : 0)
     + (state.hasOil ? 1 : 0) + (state.hasTruckPark ? 1 : 0) + state.selfWashCount + (state.hasSMR ? 2 : 0)
-  const ratePerSec = 1 + state.pumps * 1.2 + state.evChargers * 0.8 + facilities * 0.6
-  const income = Math.min(150_000, Math.round(ratePerSec * capped * 0.4)) // %40 offline verim
+  const pumpRate = state.pumps * 1.2
+  const ratePerSec = 1 + pumpRate + state.evChargers * 0.8 + facilities * 0.6
+  let income = Math.min(150_000, Math.round(ratePerSec * capped * 0.4)) // %40 offline verim
+
+  // ---- YAKIT GERÇEKTEN SATILIR: gelirin pompa payı kadar TANK DÜŞER ----
+  // Bu gelirin `pumps * 1.2` kısmı yakıt satışıdır; eskiden para veriliyor ama tanktan
+  // tek litre inmiyordu. Oyuncunun gördüğü tutarsızlık ("para birikiyor, tanklar dolu")
+  // tam buradan geliyordu. Artık satılan litre tanktan düşer; stok yetmezse gelir de
+  // stokla SINIRLANIR — olmayan yakıt satılamaz.
+  const fuelShare = ratePerSec > 0 ? pumpRate / ratePerSec : 0
+  let soldL = 0
+  if (fuelShare > 0 && income > 0) {
+    const stock: Record<string, number> = {}
+    let totalStock = 0
+    for (const f of OFFLINE_FUELS) { stock[f] = Math.max(0, state.tanks[f]); totalStock += stock[f] }
+    // ortalama satış fiyatı (stok ağırlıklı) → gelirden litreye çevir
+    const avgPrice = totalStock > 0
+      ? OFFLINE_FUELS.reduce((a, f) => a + state.prices[f] * stock[f], 0) / totalStock
+      : 0
+    const wantIncome = income * fuelShare
+    const wantL = avgPrice > 0 ? wantIncome / avgPrice : 0
+    soldL = Math.min(wantL, totalStock)
+    if (soldL > 0) {
+      for (const f of OFFLINE_FUELS) {
+        const sell = soldL * (stock[f] / totalStock)
+        state.tanks[f] = Math.max(0, state.tanks[f] - sell)
+        state.addContractDelivery(f, sell) // offline satış da taahhüde sayılır
+      }
+    }
+    // stok yetmediyse yakıt geliri gerçekleşen litreye göre kırpılır
+    const gotIncome = soldL * avgPrice
+    income = Math.round(income - wantIncome + gotIncome)
+  }
   if (income < 50) return
   state.money += income
-  showOfflineModal(income, elapsedSec)
+  showOfflineModal(income, elapsedSec, Math.round(soldL))
 }
 
 /** "Tekrar hoş geldin — yokken istasyonun kazandı" modalı (oyunun krem/kırmızı dili) */
-function showOfflineModal(income: number, elapsedSec: number) {
+function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
   const h = Math.floor(elapsedSec / 3600), m = Math.floor((elapsedSec % 3600) / 60)
   const dur = h > 0 ? `${h} sa ${m} dk` : `${m} dk`
   const o = document.createElement('div')
@@ -2112,7 +2152,12 @@ function showOfflineModal(income: number, elapsedSec: number) {
     + `<div style="font-size:22px;font-weight:800;color:#1e2a36;margin:8px 0 2px">Tekrar hoş geldin!</div>`
     + `<div style="font-size:13px;font-weight:700;color:#7a6152">${dur} yoktun — istasyonun senin için çalıştı ⛽</div>`
     + `<div style="font-size:34px;font-weight:800;color:#2fa05a;margin:14px 0 2px">+₺${income.toLocaleString('tr-TR')}</div>`
-    + `<div style="font-size:11px;font-weight:700;color:#9aa4b0;margin-bottom:16px">kasana eklendi</div>`
+    + `<div style="font-size:11px;font-weight:700;color:#9aa4b0;margin-bottom:${soldL > 0 ? 10 : 16}px">kasana eklendi</div>`
+    + (soldL > 0
+        ? `<div style="font-size:12.5px;font-weight:750;color:#5c6b76;background:#efe8d6;border-radius:12px;padding:9px 11px;margin-bottom:14px;line-height:1.45">`
+          + t('⛽ {0} L yakıt satıldı — tank seviyelerine göz at.', soldL.toLocaleString('tr-TR'))
+          + `</div>`
+        : '')
     + `<button id="off-ok" style="width:100%;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">Devam et 🚀</button>`
     + `</div>`
   document.body.appendChild(o)
