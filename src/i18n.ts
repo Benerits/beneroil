@@ -51,6 +51,21 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  'Marka & Devir': 'Brand & Handover',
+  'Marka yıldızı': 'Brand stars',
+  'Gelir çarpanı': 'Income multiplier',
+  'Devredilen istasyon': 'Stations handed over',
+  'Devredersen: kasana <b>+₺{0}</b> eklenir, <b>{1}. yıldız</b> kazanırsın → gelir çarpanı ×{2} → <b>×{3}</b>. Ekipman satılır (bedelin %60’ı), ARSALARIN VE BETONUN KALIR.':
+    'If you hand over: <b>+₺{0}</b> is added to your cash, you earn <b>star #{1}</b> → income multiplier ×{2} → <b>×{3}</b>. Equipment is sold (60% of value), YOUR LAND AND PAVING STAY.',
+  'Devir, ₺{0} kurulu ekipmanla açılır (şu an ₺{1}). Her devirde eşik ikiye katlanır.':
+    'Handover unlocks at ₺{0} of installed equipment (currently ₺{1}). The threshold doubles with each handover.',
+  'İstasyonu Devret': 'Hand Over Station',
+  'EMİN MİSİN? Devretmek için tekrar bas': 'ARE YOU SURE? Tap again to hand over',
+  'Devir için önce kredi/ortaklık kapatılmalı.': 'Close your loan/partnership before handing over.',
+  'Devir, ₺250.000 üzeri kurulu ekipmanla açılır (şu an ₺{0}).': 'Handover unlocks with over ₺250,000 of installed equipment (currently ₺{0}).',
+  'Devir şartları sağlanmıyor.': 'Handover requirements are not met.',
+  '🤝 İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})':
+    '🤝 Station handed over! Cash: ₺{0} · you earned Brand Star #{1} (income ×{2})',
   'Kurumsal Sözleşmeler': 'Corporate Contracts',
   'Premium yakıt müşterisi': 'Premium fuel customer',
   'Filo aracı': 'Fleet vehicle',

@@ -578,6 +578,31 @@ function openOfficePanel() {
       + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
   }
 
+  // 3a) PRESTİJ: marka yıldızı durumu + devir önizlemesi (rapor: önizleme ZORUNLU)
+  const pel = document.getElementById('of-prestige')
+  if (pel) {
+    const pv = state.handoverPreview()
+    const stars = '★'.repeat(Math.min(10, state.brandStars)) || '—'
+    let html = row(t('Marka yıldızı'), `${stars} (${state.brandStars})`, state.brandStars > 0 ? 'good' : '')
+      + row(t('Gelir çarpanı'), `×${pv.multNow.toFixed(2)}`, state.brandStars > 0 ? 'good' : '')
+      + (state.handoverCount > 0 ? row(t('Devredilen istasyon'), `${state.handoverCount}`) : '')
+    if (state.canHandover()) {
+      html += `<div class="sd" style="padding:6px 4px;line-height:1.5">`
+        + t('Devredersen: kasana <b>+₺{0}</b> eklenir, <b>{1}. yıldız</b> kazanırsın → gelir çarpanı ×{2} → <b>×{3}</b>. Ekipman satılır (bedelin %60’ı), ARSALARIN VE BETONUN KALIR.',
+            tl(pv.cash), pv.starsAfter, pv.multNow.toFixed(2), pv.multAfter.toFixed(2))
+        + `</div><button class="btn warn" id="of-handover" style="width:100%;justify-content:center;margin-top:4px">`
+        + (handoverArmed() ? t('EMİN MİSİN? Devretmek için tekrar bas') : t('İstasyonu Devret')) + `</button>`
+    } else {
+      html += `<div class="sd" style="padding:6px 4px">`
+        + (state.loan.active || state.partner.active
+          ? t('Devir için önce kredi/ortaklık kapatılmalı.')
+          : t('Devir, ₺{0} kurulu ekipmanla açılır (şu an ₺{1}). Her devirde eşik ikiye katlanır.',
+              tl(state.handoverThreshold()), tl(state.equipmentValue())))
+        + `</div>`
+    }
+    pel.innerHTML = html
+  }
+
   // 3b) B2B sözleşmeleri: aktif taahhüt durumu + imzalanabilir teklifler
   const cel = document.getElementById('of-contracts')
   if (cel) {
@@ -656,6 +681,35 @@ document.getElementById('of-prices')?.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
   if (btn) ui.onPriceChange(btn.dataset.pf as FuelType | 'elec', Number(btn.dataset.pd))
 })
+// PRESTİJ: İstasyonu Devret — iki aşamalı onay (geri dönüşü yok, gönüllü)
+let handoverArmedAt = 0
+const handoverArmed = () => Date.now() - handoverArmedAt < 6000
+document.getElementById('of-prestige')?.addEventListener('click', e => {
+  if (!(e.target as HTMLElement).closest('#of-handover')) return
+  if (!handoverArmed()) {
+    handoverArmedAt = Date.now()
+    openOfficePanel() // metin render'dan gelir → panel yeniden çizilse de onay durumu KAYBOLMAZ
+    return
+  }
+  handoverArmedAt = 0
+  const res = state.handover()
+  if (!res) { ui.toast(t('Devir şartları sağlanmıyor.'), 'bad'); return }
+  // Yerleşim tablolarını da temizle: yoksa boşalan arsada GÖRÜNMEZ DUVARLAR kalır
+  // (hardRects → Car.solids) ve oyuncu eski ayak izlerine yeni bina koyamaz.
+  for (const k of Object.keys(placedPos)) if (k !== 'gatein' && k !== 'gateout' && k !== 'office' && k !== 'tank') delete placedPos[k]
+  for (const k of Object.keys(placedRot)) if (k !== 'gatein' && k !== 'gateout' && k !== 'office' && k !== 'tank') delete placedRot[k]
+  for (let i = placedRects.length - 1; i >= 0; i--) {
+    const id = placedRects[i].id
+    if (id !== 'gatein' && id !== 'gateout' && id !== 'office' && id !== 'tank') placedRects.splice(i, 1)
+  }
+  Car.solids = hardRects()
+  ui.toast(t('🤝 İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})',
+    res.cash.toLocaleString('tr-TR'), res.stars, state.prestigeMult().toFixed(2)), 'good', true)
+  audio.achieve()
+  persist()
+  setTimeout(() => location.reload(), 1800) // sahne temiz kurulsun (ekipman gitti)
+})
+
 // B2B sözleşme imzalama
 document.getElementById('of-contracts')?.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest('button[data-sign]') as HTMLButtonElement | null
@@ -1327,6 +1381,11 @@ function finishSale(car: Car) {
       revenue += bonus
       ui.toast(t('⭐ Premium müşteri primi: +₺{0}', bonus), 'good')
     }
+  }
+  // MARKA YILDIZI (prestij) kalıcı gelir çarpanı — devir yatırımının geri dönüşü
+  if (state.brandStars > 0) {
+    const boost = Math.round(revenue * (state.prestigeMult() - 1))
+    if (boost > 0) revenue += boost
   }
   state.money += revenue
   state.stats.served++

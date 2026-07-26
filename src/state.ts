@@ -168,6 +168,10 @@ export class GameState {
   contract: Contract | null = null
   contractsDone = 0 // tamamlanan sözleşme sayısı (ADDITIVE)
   contractsFailed = 0
+  /** MARKA YILDIZI (prestij): kalıcı gelir çarpanı verir. 'reset' değil 'DEVRET' —
+   *  save silinme travması tazeyken reset kelimesi kullanılmaz (rapor uyarısı). ADDITIVE. */
+  brandStars = 0
+  handoverCount = 0 // kaç kez devredildi (ADDITIVE)
   toiletLevel = 0
 
   // elektrik
@@ -459,6 +463,60 @@ export class GameState {
     return Math.max(0.05, ent)
   }
 
+  // ---- PRESTİJ: İSTASYONU DEVRET (lategame raporu §3b) ----
+  /** Marka yıldızı geliri kalıcı çarpar (satış + kumbara). 4 yıldız = 2× gelir. */
+  prestigeMult(): number { return 1 + 0.25 * this.brandStars }
+  /** Bir sonraki devir için gereken kurulu ekipman değeri — her yıldızda İKİYE KATLANIR
+   *  (Idle Miner kalıbı: her kademe daha pahalı). Farm döngüsünü matematiksel olarak kapatır. */
+  handoverThreshold(): number { return 250_000 * Math.pow(2, this.handoverCount) }
+  /** Devir bedeli: ekipmanın %60'ı (yıkım iadesi %50, devir biraz daha iyi) + son 30 günün
+   *  ortalama kârının 10 katı (≤100k). TAM iade DEĞİL — devir gerçek bir maliyet taşır,
+   *  yoksa "kur-devret-kur" sonsuz para/yıldız farmı olur. Arsa/beton korunduğu için sayılmaz. */
+  handoverValue(): number {
+    const profit30 = Math.max(0, this.salesInPeriod(30) - this.fuelCostInPeriod(30) - this.wagesInPeriod(30))
+    const perDay = profit30 / Math.min(30, Math.max(1, this.day))
+    return Math.round(this.equipmentValue() * 0.6 + Math.min(100_000, perDay * 10))
+  }
+  /** Devir şartı: eşik ekipman + borçsuzluk (gönüllü, asla zorunlu değil). */
+  canHandover(): boolean {
+    return this.equipmentValue() >= this.handoverThreshold() && !this.loan.active && !this.partner.active
+  }
+  /** Devirden sonraki büyüme önizlemesi (rapor: ZORUNLU gösterilmeli) */
+  handoverPreview(): { cash: number; starsAfter: number; multAfter: number; multNow: number } {
+    return {
+      cash: this.handoverValue(), starsAfter: this.brandStars + 1,
+      multAfter: 1 + 0.25 * (this.brandStars + 1), multNow: this.prestigeMult(),
+    }
+  }
+  /** DEVRET: ekipman gider, ARSA/BETON ve marka yıldızları KALIR, kasaya devir bedeli girer. */
+  handover(): { cash: number; stars: number } | null {
+    if (!this.canHandover()) return null
+    const cash = this.handoverValue()
+    // ekipman sıfırlanır (arsa/beton, isim, başarımlar, sözleşme sayaçları korunur)
+    this.pumps = 1; this.evChargers = 0; this.signLevel = 0; this.tankLevel = 0
+    this.marketLevel = 0; this.market2Level = 0; this.toiletLevel = 0
+    this.gridLevel = 0; this.batteryLevel = 0; this.battery = 0
+    this.solarCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0
+    this.hasDiesel = false; this.hasSMR = false; this.hasWash = false; this.hasOil = false
+    this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
+    this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
+    for (const f of FUELS) { this.tankCounts[f] = 1; this.tanks[f] = 0 }
+    this.brokenPumps.clear(); this.brokenChargers.clear()
+    for (const f of FUELS) this.orders[f] = { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
+    this.uraniumPending = false; this.uraniumEta = 0
+    this.dayStartMoney = this.money + cash // gün sonu raporu uydurma sayı göstermesin
+    this.autoPumps.clear(); this.autoChargers.clear()
+    this.pendingCash = {}
+    this.contract = null
+    this.marketingBudget = 0
+    this.brandStars++
+    this.handoverCount++
+    this.money += cash // KASA KORUNUR (oyuncunun parası kendi); bina değeri düştüğü için servet zaten azalır
+    // (6) itibar cezası gerçek olmalı: eski Math.max(3, …) düşük itibarı YÜKSELTİYORDU (aklama)
+    this.reputation = Math.max(0, this.reputation - 0.5)
+    return { cash, stars: this.brandStars }
+  }
+
   // ---- B2B SÖZLEŞMELERİ (lategame raporu Katman 4a) ----
   /** Sözleşme teklifleri: gün + kapasiteye göre ölçeklenir. Şart: ilgili yakıt kapasitesi
    *  taahhüdün en az 2 katı olmalı (yoksa oyuncu kendini batırır). Deterministik değil —
@@ -510,14 +568,14 @@ export class GameState {
     let amount = 0
     let kind: 'ok' | 'miss' = 'ok'
     if (delivered >= c.dailyLiters - 1) {
-      amount = Math.round(c.dailyLiters * c.pricePerL)
+      amount = Math.round(c.dailyLiters * c.pricePerL * this.prestigeMult())
       this.money += amount
       this.stats.revenue += amount // ciro raporlarında görünsün (ofis: Satış & Faaliyet Kârı)
       this.salesLog.push({ day: this.day, rev: amount })
       if (this.salesLog.length > 370) this.salesLog.shift()
     } else {
       // eksik teslim: teslim edilen kadar ödeme + gün cezası
-      const paid = Math.round(delivered * c.pricePerL)
+      const paid = Math.round(delivered * c.pricePerL * this.prestigeMult())
       amount = paid - c.penalty
       this.money = Math.max(0, this.money + amount)
       if (paid > 0) {
@@ -536,8 +594,9 @@ export class GameState {
       const failed = c.missedDays >= Math.max(1, Math.ceil(c.daysTotal * 0.25))
       const name = c.name
       if (failed) { this.contractsFailed++; this.contract = null; return { kind: 'fail', amount: 0, name } }
-      this.money += c.bonus
-      this.stats.revenue += c.bonus
+      const bonusPaid = Math.round(c.bonus * this.prestigeMult())
+      this.money += bonusPaid
+      this.stats.revenue += bonusPaid
       this.contractsDone++
       this.addRep(0.3)
       this.contract = null
@@ -785,7 +844,9 @@ export class GameState {
   }
 
   collectPending(id: string): number {
-    const amt = Math.round(this.pendingCash[id] ?? 0)
+    // Prestij çarpanı TOPLAMA anında uygulanır — biriktirme sırasında uygulanınca kumbara
+    // cap'i fazlayı çöpe atıyordu (yıldızın kumbara gelirine etkisi sıfır kalıyordu).
+    const amt = Math.round((this.pendingCash[id] ?? 0) * this.prestigeMult())
     if (amt > 0) {
       this.money += amt
       delete this.pendingCash[id]
@@ -1006,7 +1067,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed',
+  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -1111,6 +1172,9 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       missedDays: Math.max(0, Math.round(Number(ct.missedDays) || 0)),
     }
   } else s.contract = null
+  // prestij alanları: bozuk save NaN/negatif getirirse tüm ekonomi NaN olur, '★'.repeat crash
+  s.brandStars = Math.max(0, Math.min(40, Math.round(Number(s.brandStars) || 0)))
+  s.handoverCount = Math.max(0, Math.min(40, Math.round(Number(s.handoverCount) || 0)))
   if (Array.isArray(data.ownedParcels)) s.ownedParcels = new Set(data.ownedParcels as string[])
   if (Array.isArray(data.pavedParcels)) s.pavedParcels = new Set(data.pavedParcels as string[])
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])

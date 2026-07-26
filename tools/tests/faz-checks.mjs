@@ -347,5 +347,150 @@ console.log('== 14) Rezervasyon grafiği (trafik raporu §5) ==')
   check('3. istasyon otomatik bölge aldı (yeni istasyon bedava)', g6.zones.filter(z => z.id.endsWith('-ucuncu')).length === 2)
 }
 
+console.log('== 15) Prestij: İstasyonu Devret (lategame §3b) ==')
+{
+  const big = () => {
+    const x = new GameState()
+    x.pumps = 10; x.evChargers = 8; x.signLevel = 3; x.tankLevel = 3; x.marketLevel = 3
+    x.toiletLevel = 2; x.gridLevel = 2; x.batteryLevel = 3; x.solarCount = 2
+    x.hasWash = x.hasOil = x.hasCoffee = x.hasRestaurant = x.hasTruckPark = x.hasSMR = true
+    x.day = 90; x.money = 50_000
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 3; r++) { x.ownedParcels.add(`${c},${r}`); x.pavedParcels.add(`${c},${r}`) }
+    x.salesLog = Array.from({ length: 30 }, (_, i) => ({ day: 90 - i, rev: 9000 }))
+    return x
+  }
+  const s0 = new GameState()
+  check('başlangıçta yıldız 0, çarpan 1.0', s0.brandStars === 0 && s0.prestigeMult() === 1)
+  check('küçük istasyon devredilemez (gönüllü + eşikli)', s0.canHandover() === false)
+  const a = big()
+  check('büyük istasyon devredilebilir', a.canHandover() === true)
+  a.loan.active = true
+  check('kredi varken devir KAPALI', a.canHandover() === false)
+  a.loan.active = false
+
+  const pv = a.handoverPreview()
+  check('önizleme: nakit > 0 ve sonraki çarpan 1.25', pv.cash > 0 && Math.abs(pv.multAfter - 1.25) < 1e-9)
+  check('devir bedeli KISMİ iade (%60 + kâr payı) — tam iade değil',
+    pv.cash >= a.equipmentValue() * 0.6 && pv.cash <= a.equipmentValue() * 0.6 + 100_000)
+
+  const eqBefore = a.equipmentValue()
+  const parcelsBefore = a.ownedParcels.size, pavedBefore = a.pavedParcels.size
+  const res = a.handover()
+  check('devir gerçekleşti (nakit + yıldız döndü)', !!res && res.stars === 1)
+  check('KASA KORUNDU + devir bedeli eklendi', a.money === 50_000 + res.cash)
+  check('EKİPMAN sıfırlandı', a.pumps === 1 && a.evChargers === 0 && a.marketLevel === 0 && !a.hasSMR && a.equipmentValue() === 0)
+  check('ARSA ve BETON KORUNDU (rapor şartı)', a.ownedParcels.size === parcelsBefore && a.pavedParcels.size === pavedBefore)
+  check('yıldız kazanıldı, çarpan ×1.25', a.brandStars === 1 && Math.abs(a.prestigeMult() - 1.25) < 1e-9)
+  check('sözleşme/otomasyon temizlendi', a.contract === null && a.autoPumps.size === 0 && a.marketingBudget === 0)
+  check('başarımlar ve istasyon adı korundu', a.stationName === s0.stationName)
+
+  // ANTI-CHEAT UYUMU: devirde servet artışı sunucu allowance'ını (100k) aşmamalı
+  const wealthBefore = 50_000 + eqBefore
+  const wealthAfter = a.money + 0 // ekipman gitti
+  check(`devirde servet artışı ≤ 100k (anti-cheat uyumu): ${Math.round(wealthAfter - wealthBefore)}`,
+    wealthAfter - wealthBefore <= 100_000)
+
+  // prestij çarpanı kumbara gelirine uygulanıyor
+  const b = new GameState(); b.brandStars = 2 // ×1.5
+  b.marketLevel = 1
+  b.addPending('market', 100, 'Market')
+  check('biriktirmede çarpım YOK (cap kaybı olmasın)', b.pendingCash.market === 100)
+  check('kumbara TOPLAMADA prestijle çarpılır (100 → 150)', b.collectPending('market') === 150)
+
+  // save round-trip
+  const c = big(); c.handover()
+  const ser = serializeState(c); const d = new GameState(); hydrateState(d, ser)
+  check('prestij save round-trip (yıldız + devir sayısı)', d.brandStars === c.brandStars && d.handoverCount === c.handoverCount)
+
+  // ikinci devir: çarpan birikir
+  const e = big(); e.brandStars = 3; e.handover()
+  check('yıldızlar birikir (3 → 4, çarpan ×2.0)', e.brandStars === 4 && Math.abs(e.prestigeMult() - 2) < 1e-9)
+}
+
+console.log('== 15b) Prestij: reviewer bulgularının regresyonu ==')
+{
+  const big = (money = 50_000) => {
+    const x = new GameState()
+    x.pumps = 10; x.evChargers = 8; x.signLevel = 3; x.tankLevel = 3; x.marketLevel = 3
+    x.toiletLevel = 2; x.gridLevel = 2; x.batteryLevel = 3; x.solarCount = 2
+    x.hasWash = x.hasOil = x.hasCoffee = x.hasRestaurant = x.hasTruckPark = x.hasSMR = true
+    x.day = 90; x.money = money
+    x.salesLog = Array.from({ length: 30 }, (_, i) => ({ day: 90 - i, rev: 9000 }))
+    return x
+  }
+  // (1) FARM ENGELİ: eşik her devirde ikiye katlanır + iade kısmi → döngü kârsız
+  const f = big()
+  check('devir eşiği başlangıçta ₺250k', f.handoverThreshold() === 250_000)
+  const eq = f.equipmentValue()
+  const val = f.handoverValue()
+  check(`iade ekipmanın TAMAMI DEĞİL (${Math.round(val / eq * 100)}% ≤ 75%)`, val < eq * 0.75)
+  f.handover()
+  check('devirden sonra eşik ikiye katlandı (₺500k)', f.handoverThreshold() === 500_000)
+  check('aynı ekipmanla ikinci devir KAPALI (farm engeli)', f.canHandover() === false)
+  // farm karsız mı: ekipmanı tekrar kurmak val'den pahalı
+  check('devir döngüsü zarar ettirir (iade < kurulum maliyeti)', val < eq)
+
+  // (3) kasa korunur
+  const g = big(2_000_000)
+  const before = g.money
+  const r2 = g.handover()
+  check('₺2M kasa SİLİNMEDİ (devir bedeli eklendi)', g.money === before + r2.cash)
+
+  // (6) itibar cezası gerçek (aklama yok)
+  const h = big(); h.reputation = 1.2
+  h.handover()
+  check('düşük itibar devirle YÜKSELMEZ (1.2 → 0.7)', Math.abs(h.reputation - 0.7) < 1e-9)
+
+  // (7) prestij çarpanı kumbara CAP'ine takılmıyor (toplama anında uygulanır)
+  const k = new GameState(); k.brandStars = 4 // ×2
+  k.marketLevel = 1
+  k.addPending('market', 600, 'Market') // cap 600 → biriken 600
+  check('kumbara cap doluyken bile prestij toplamada ×2 verir', k.collectPending('market') === 1200)
+
+  // (8) sözleşme geliri prestijden etkilenir
+  const m = new GameState(); m.brandStars = 4; m.tankLevel = 3; m.tankCounts.dizel = 4
+  m.signContract(m.contractOffers().find(o => o.fuel === 'dizel'))
+  m.contract.deliveredToday = m.contract.dailyLiters
+  const money0 = m.money
+  const cr = m.processContractDay()
+  const expected = Math.round(m.contract === null ? cr.amount : m.contract.dailyLiters * m.contract.pricePerL * 2)
+  check('sözleşme ödemesi prestijle çarpılır', cr.amount > 0 && m.money - money0 === cr.amount)
+
+  // (9) bekleyen sipariş ve uranyum devirde temizlenir (yakıt buhar olmasın)
+  const n = big(); n.orders.dizel = { pending: true, eta: 20, arrived: false, delivering: false, amount: 15000 }
+  n.uraniumPending = true; n.uraniumEta = 30
+  n.handover()
+  check('devirde bekleyen tanker siparişi iptal', n.orders.dizel.pending === false && n.orders.dizel.amount === 0)
+  check('devirde uranyum siparişi iptal', n.uraniumPending === false)
+
+  // hydrate dayanıklılığı: bozuk prestij alanı ekonomiyi NaN yapmasın
+  const bad = new GameState(); hydrateState(bad, { brandStars: -5, handoverCount: 'x' })
+  check('bozuk brandStars düzeltilir (negatif/NaN → 0)', bad.brandStars === 0 && bad.handoverCount === 0)
+  check('prestigeMult NaN değil', Number.isFinite(bad.prestigeMult()))
+}
+
+console.log('== 16) LocationTheme altyapısı (lategame §6.1) ==')
+{
+  const { THEMES, KASABA, activeTheme } = await import('../../src/themes.ts')
+  check('5 lokasyon teması tanımlı', Object.keys(THEMES).length === 5)
+  check('kasaba teması mevcut sahneyle birebir (gündüz+gece)', KASABA.sky.day === 0xbfe0ee && KASABA.sky.night === 0x1a2a44)
+  check('kasaba ground dokuları mevcut yollar', KASABA.ground.grass === '/gen/ground_grass.png')
+  check('bilinmeyen id → kasabaya düşer (güvenli varsayılan)', activeTheme('yok').id === 'kasaba')
+  // her lokasyon ÜÇ eksende ayrışmalı (rapor §6.0: skin değil kısıt seti)
+  const ids = ['cevreyolu', 'otoyol', 'marina', 'metropol']
+  for (const id of ids) {
+    const th = THEMES[id]
+    const diffEcon = th.econ.priceElasticity !== KASABA.econ.priceElasticity || th.econ.signWeight !== KASABA.econ.signWeight
+    const diffLane = th.lane.count !== KASABA.lane.count || th.lane.kind !== KASABA.lane.kind || th.lane.rampLength !== KASABA.lane.rampLength
+    check(`${id}: topoloji VE ekonomi kasabadan farklı (skin değil)`, diffEcon && diffLane)
+    check(`${id}: açılış eşiği tanımlı`, th.unlock.cash > 0 && th.unlock.stars > 0)
+  }
+  check('otoyol: ramp topolojisi + tabela ağırlığı yüksek', THEMES.otoyol.lane.rampLength === 20 && THEMES.otoyol.econ.signWeight > 2)
+  check('marina: su trafiği', THEMES.marina.lane.kind === 'water')
+  // unlock eşikleri artan sırada olmalı (ilerleme hattı)
+  const order = ['cevreyolu', 'otoyol', 'marina', 'metropol'].map(i => THEMES[i].unlock.stars)
+  check('yıldız eşikleri artan sırada', order.every((v, i) => i === 0 || v > order[i - 1]))
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

@@ -323,6 +323,8 @@ function sanitizeSave(save) {
   s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
   if ('market2Level' in s) s.market2Level = clamp(s.market2Level, 0, 3, 0) // karşı market (additive alan — eski save'lerde yok)
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
+  if ('brandStars' in s) s.brandStars = clamp(s.brandStars, 0, 40, 0)      // prestij (additive)
+  if ('handoverCount' in s) s.handoverCount = clamp(s.handoverCount, 0, 40, 0)
   if ('contractsDone' in s) s.contractsDone = clamp(s.contractsDone, 0, 100000, 0)
   if ('contractsFailed' in s) s.contractsFailed = clamp(s.contractsFailed, 0, 100000, 0)
   // aktif B2B sözleşmesi (additive): alanları makul sınırlara kırp, bozuksa düşür
@@ -703,7 +705,17 @@ async function handleApi(req, res, url) {
         const gameDays = (typeof clean.s.day === 'number') ? Math.min(Math.max(0, clean.s.day), 8) : 0 // misafir eşiği 5 + tampon
         // İlk-save (misafirden taşınan) tavanı SIKI: legit gün-5 misafiri ~50-100k yapar.
         // Eski gün×400k tavanı localStorage'ı elle şişiren hilecinin 1.86M'sini geçirdi (furkan123 vakası).
-        const allowance = firstSave ? (60_000 + gameDays * 40_000) : (100_000 + elapsed * 2500)
+        // Marka yıldızı (prestij) geliri kalıcı çarpar; tavan da aynı oranda genişlemeli,
+        // yoksa devretmiş oyuncunun meşru geliri "imkânsız artış" sanılıp kırpılır.
+        // GÜVENLİK: yıldız istemci alanı → DOĞRULANIR, yoksa tavan ×11 yapılıp para enjekte edilir.
+        //  • ilk save'de (yeni/misafirden taşınan hesap) prestij YOK sayılır
+        //  • yıldız, önceki save'in yıldızından en fazla +1 olabilir (devir tek tek yapılır)
+        const prevStars = Math.max(0, Math.min(40, Number(prevSave?.s?.brandStars) || 0))
+        let stars = Math.max(0, Math.min(40, Number(clean.s.brandStars) || 0))
+        if (firstSave) stars = 0
+        else if (stars > prevStars + 1) { stars = prevStars; clean.s.brandStars = prevStars }
+        const starMult = 1 + 0.25 * stars
+        const allowance = (firstSave ? (60_000 + gameDays * 40_000) : (100_000 + elapsed * 2500)) * starMult
         const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
         const bval = buildingValue(clean.s)
         let money = Number(clean.s.money) || 0

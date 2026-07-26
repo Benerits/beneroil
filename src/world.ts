@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { t } from './i18n'
 import { StaticLib, fitModel } from './models'
 import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
+import { LocationTheme, activeTheme } from './themes'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
 // Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
@@ -241,6 +242,8 @@ export class World {
   private closedFlag = false
   private signLevel = 0
   private signGroup: THREE.Group | null = null
+  /** aktif lokasyon teması — zemin/palet/topoloji tek kaynaktan (çoklu lokasyon temeli) */
+  theme: LocationTheme = activeTheme('kasaba')
   private marketGroup: THREE.Group | null = null
   private market2Group: THREE.Group | null = null // karşı yaka marketi
   private toiletGroup: THREE.Group | null = null
@@ -292,12 +295,15 @@ export class World {
       }, undefined, () => {})
       return mat
     }
-    const grassMat = aiGround('/gen/ground_grass.png', 146, 159,
-      noiseTex('#86b06a', [['#79a25e', 900], ['#93bd77', 900], ['#6d9454', 300]], 30))
-    this.concreteMat = aiGround('/gen/ground_concrete.png', 2.5, 4.5,
-      noiseTex('#9aa1a9', [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 8))
-    const roadMat = aiGround('/gen/ground_asphalt.png', 1.5, 84,
-      noiseTex('#4a5058', [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
+    // Zemin/palet TEMADAN okunur (lategame raporu §6.1): yeni lokasyon = yeni tema nesnesi.
+    // Kasaba temasının değerleri bugünkü sahneyle BİREBİR — görünür değişiklik yok.
+    const th = this.theme
+    const grassMat = aiGround(th.ground.grass, 146, 159,
+      noiseTex(th.ground.grassTint, [['#79a25e', 900], ['#93bd77', 900], ['#' + th.palette.vegetation.toString(16).padStart(6, '0'), 300]], 30))
+    this.concreteMat = aiGround(th.ground.concrete, 2.5, 4.5,
+      noiseTex(th.ground.concreteTint, [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 8))
+    const roadMat = aiGround(th.ground.road, 1.5, 84,
+      noiseTex(th.ground.roadTint, [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
 
     // zemin geniş tutulur: mobilde en fazla uzaklaşıldığında bile kenarı görünüp arka plan (gök) sızmasın
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(2600, 2400), grassMat)
@@ -548,8 +554,8 @@ export class World {
     this.sun.intensity = 2.2 - 1.55 * f
     this.sun.color.setHex(f > 0.5 ? 0xb8c8ff : 0xfff0d8)
     this.hemi.intensity = 1.1 - 0.5 * f
-    const day = new THREE.Color(0xbfe0ee)
-    const night = new THREE.Color(0x1a2a44)
+    const day = new THREE.Color(this.theme.sky.day)   // gökyüzü de temadan (kasaba: aynı renk)
+    const night = new THREE.Color(this.theme.sky.night)
     ;(this.scene.background as THREE.Color).copy(day.lerp(night, f))
     for (const n of this.nightMats) {
       n.mat.emissiveIntensity = n.day + (n.night - n.day) * f
