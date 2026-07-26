@@ -1188,20 +1188,28 @@ function facilityVisits(car: Car): Visit[] {
       v.push({ buildingId: mid, revenue: () => Math.round((25 + Math.random() * 35) * lvl), toastMsg: m => t('🛒 Market alışverişi: +₺{0}', m), score: 0.2 })
     }
   }
-  if (car.wantsToilet && state.toiletLevel > 0 && sameSide('toilet')) {
+  const pickFac = (base: string, has: boolean, has2: boolean): string | null => {
+    if (has && sameSide(base)) return base
+    if (has2 && sameSide(base + '2')) return base + '2'
+    return null
+  }
+  const toiletId = pickFac('toilet', state.toiletLevel > 0, state.toilet2Level > 0)
+  if (car.wantsToilet && toiletId) {
     const fee = state.toiletFee
     v.push({
-      buildingId: 'toilet',
+      buildingId: toiletId,
       revenue: () => fee,
       toastMsg: mm => t('🚻 Tuvalet ücreti: +₺{0}', mm),
       score: 0.15 * state.toiletLevel - (fee > 0 ? 0.03 + fee * 0.012 : 0),
     })
   }
-  if (car.wantsCoffee && state.hasCoffee && sameSide('coffee')) {
-    v.push({ buildingId: 'coffee', revenue: () => Math.round(20 + Math.random() * 25), toastMsg: m => t('☕ Kahve satışı: +₺{0}', m), score: 0.15 })
+  const coffeeId = pickFac('coffee', state.hasCoffee, state.hasCoffee2)
+  if (car.wantsCoffee && coffeeId) {
+    v.push({ buildingId: coffeeId, revenue: () => Math.round(20 + Math.random() * 25), toastMsg: m => t('☕ Kahve satışı: +₺{0}', m), score: 0.15 })
   }
-  if (car.wantsFood && state.hasRestaurant && sameSide('restaurant')) {
-    v.push({ buildingId: 'restaurant', revenue: () => Math.round(80 + Math.random() * 80), toastMsg: m => t('🍽️ Restoran hesabı: +₺{0}', m), score: 0.25 })
+  const foodId = pickFac('restaurant', state.hasRestaurant, state.hasRestaurant2)
+  if (car.wantsFood && foodId) {
+    v.push({ buildingId: foodId, revenue: () => Math.round(80 + Math.random() * 80), toastMsg: m => t('🍽️ Restoran hesabı: +₺{0}', m), score: 0.25 })
   }
   return v
 }
@@ -1227,14 +1235,16 @@ function vehicleServices(car: Car): number {
   const anyOnSide = (base: string) => world.buildings.some(x =>
     (x.id === base || x.id.startsWith(base + '#'))
     && (x.group.position.x > ROAD_X) === (car.station === 'far'))
-  if (car.wantsWash && state.hasWash && anyOnSide('wash')) {
+  const washId = (state.hasWash && anyOnSide('wash')) ? 'wash' : (state.hasWash2 && anyOnSide('wash2')) ? 'wash2' : null
+  if (car.wantsWash && washId) {
     const m = Math.round(60 + Math.random() * 60)
-    state.addPending('wash', m, t('Oto yıkama')); d += 0.2
+    state.addPending(washId, m, t('Oto yıkama')); d += 0.2
     ui.toast(t('Araç yıkandı: ₺{0} kumbarada', m), 'good')
   }
-  if (car.wantsOil && state.hasOil && anyOnSide('oil')) {
+  const oilId = (state.hasOil && anyOnSide('oil')) ? 'oil' : (state.hasOil2 && anyOnSide('oil2')) ? 'oil2' : null
+  if (car.wantsOil && oilId) {
     const m = Math.round(150 + Math.random() * 100)
-    state.addPending('oil', m, t('Yağ değişimi')); d += 0.25
+    state.addPending(oilId, m, t('Yağ değişimi')); d += 0.25
     ui.toast(t('🔧 Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
   if (car.wantsAir && state.hasAirWater && anyOnSide('airwater')) {
@@ -1256,7 +1266,8 @@ interface Walker {
 const walkers: Walker[] = []
 /** tesis adı (kumbara etiketi için) */
 function facName(id: string): string {
-  return ({ market: t('Market'), market2: t('Karşı Market'), toilet: t('Tuvalet'), coffee: t('Kahveci'), restaurant: t('Restoran'), oil: t('Yağ değişimi') } as Record<string, string>)[id] ?? id
+  return ({ market: t('Market'), market2: t('Karşı Market'), toilet2: t('Karşı Tuvalet'),
+    wash2: t('Karşı Oto Yıkama'), oil2: t('Karşı Yağ Değişimi'), coffee2: t('Karşı Kahveci'), restaurant2: t('Karşı Restoran'), toilet: t('Tuvalet'), coffee: t('Kahveci'), restaurant: t('Restoran'), oil: t('Yağ değişimi') } as Record<string, string>)[id] ?? id
 }
 const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean }>()
 
@@ -1631,6 +1642,11 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'tank': world.upgradeTankVisual(state.tankLevel); break
     case 'market': world.buildMarket(state.marketLevel, pos); break
     case 'market2': world.buildMarket(state.market2Level, pos, 'market2'); break
+    case 'toilet2': world.buildToilet(state.toilet2Level, pos, 'toilet2'); break
+    case 'wash2': world.buildWash(pos, 'wash2'); break
+    case 'oil2': world.buildOil(pos, 'oil2'); break
+    case 'coffee2': world.buildCoffee(pos, 'coffee2'); break
+    case 'restaurant2': world.buildRestaurant(pos, 'restaurant2'); break
     case 'toilet': world.buildToilet(state.toiletLevel, pos); break
     case 'battery': world.buildBattery(state.batteryLevel, pos); break
     case 'evcharger': world.addEvCharger(state.evChargers - 1); break
@@ -1655,6 +1671,11 @@ interface Footprint { w: number; d: number; grass?: boolean }
 const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   market: () => ({ w: 6, d: 7 }), // 3 seviyede de AYNI footprint (yerinde yükselir, yıkmak gerekmez)
   market2: () => ({ w: 6, d: 7 }), // karşı yaka marketi — aynı footprint
+  toilet2: () => ({ w: 3, d: 4 }),
+  wash2: () => ({ w: 4.5, d: 5 }),
+  oil2: () => ({ w: 4, d: 4 }),
+  coffee2: () => ({ w: 3.2, d: 3.2 }),
+  restaurant2: () => ({ w: 5.5, d: 6 }),
   toilet: () => ({ w: 3, d: 4 }),
   battery: () => ({ w: 3, d: 2 }),
   solar: () => ({ w: 5, d: 7, grass: true }),
@@ -1938,6 +1959,11 @@ function rebuildFromState() {
   const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
   if (state.marketLevel > 0) world.buildMarket(state.marketLevel, pv('market'))
   if (state.market2Level > 0) world.buildMarket(state.market2Level, pv('market2'), 'market2')
+  if (state.toilet2Level > 0) world.buildToilet(state.toilet2Level, pv('toilet2'), 'toilet2')
+  if (state.hasWash2) world.buildWash(pv('wash2'), 'wash2')
+  if (state.hasOil2) world.buildOil(pv('oil2'), 'oil2')
+  if (state.hasCoffee2) world.buildCoffee(pv('coffee2'), 'coffee2')
+  if (state.hasRestaurant2) world.buildRestaurant(pv('restaurant2'), 'restaurant2')
   if (state.toiletLevel > 0) world.buildToilet(state.toiletLevel, pv('toilet'))
   if (state.batteryLevel > 0) world.buildBattery(state.batteryLevel, pv('battery'))
   for (let i = 0; i < state.solarCount; i++) {
@@ -2027,6 +2053,11 @@ function fixedObstacles(skipId = ''): Rect[] {
   // araç yuvası (base−1.8) kapının yeterince DOĞUsuna düşer, araçlar temiz yol bulur.
   if (world.farStationOn || [...state.ownedParcels].some(k => +k.split(',')[0] >= 3))
     r.push({ cx: 11.6, cy: 0, w: 3.0, d: 48 })
+  // 3.5: kapıdan pompalara giden İÇ KORİDOR + bekleme koridoru rezerve (oyuncu buraya
+  // bina koyup kendi trafiğini kilitleyebiliyordu). Her iki yaka için simetrik.
+  r.push({ cx: 4.2 - 1.4, cy: 0, w: 1.5, d: 44 })
+  if (world.farStationOn || [...state.ownedParcels].some(k => +k.split(',')[0] >= 3))
+    r.push({ cx: FAR_GATE_X + 1.4, cy: 0, w: 1.5, d: 44 })
   if (skipId !== 'tank') r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.0, d: 2.0 }) // CANLI/main ile birebir
   if (skipId !== 'office') {
     const of = world.buildings.find(b => b.id === 'office')
@@ -2068,7 +2099,7 @@ function makePreview(id: string): THREE.Group | null {
     g = (existing.group as THREE.Group).clone(true)
   } else {
     // binayı gerçekten kur, kayıttan düşüp hayalet olarak kullan
-    const bump = id === 'market' ? 'marketLevel' : id === 'market2' ? 'market2Level' : id === 'toilet' ? 'toiletLevel' : id === 'battery' ? 'batteryLevel' : null
+    const bump = id === 'market' ? 'marketLevel' : id === 'market2' ? 'market2Level' : id === 'toilet' ? 'toiletLevel' : id === 'toilet2' ? 'toilet2Level' : id === 'battery' ? 'batteryLevel' : null
     if (bump) (state as any)[bump]++
     buildVisual(id, new THREE.Vector2(0, 0))
     if (bump) (state as any)[bump]--
@@ -2142,7 +2173,7 @@ function buildThumbSubject(id: string): THREE.Group | null {
     return g
   }
   if (id in PLACEABLE) {
-    const bump = id === 'market' ? 'marketLevel' : id === 'market2' ? 'market2Level' : id === 'toilet' ? 'toiletLevel' : id === 'battery' ? 'batteryLevel' : null
+    const bump = id === 'market' ? 'marketLevel' : id === 'market2' ? 'market2Level' : id === 'toilet' ? 'toiletLevel' : id === 'toilet2' ? 'toilet2Level' : id === 'battery' ? 'batteryLevel' : null
     let orig = 0
     if (bump) {
       orig = (state as any)[bump]
@@ -2221,12 +2252,15 @@ function landOk(x: number, y: number, grassOk: boolean): boolean {
   return grassOk || state.isPaved(p[0], p[1])
 }
 
+/** B8: karşı yaka nüshaları YALNIZ karşı yakaya kurulabilir (ziyaretler yaka-duyarlı) */
+const FAR_ONLY = new Set(['market2', 'toilet2', 'wash2', 'oil2', 'coffee2', 'restaurant2'])
+
 function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
   // Not: pompa/şarj/tank artık yol karşısına da konabilir (sahip olunan+betonlanmış karşı parsele).
   // İlk karşı pompa/şarj konunca karşı istasyon (otomatik giriş-çıkış + karşı şerit trafiği) aktive olur.
   // Sahiplik/beton kısıtı aşağıdaki landOk tarafından zaten uygulanır.
   // Karşı Market yalnız KARŞI yakaya kurulabilir (ziyaretler yaka-duyarlı; near'a kurulursa işlevsiz kalırdı)
-  if (skipId === 'market2' && p.cx <= ROAD_X) return false
+  if (skipId.endsWith('2') && FAR_ONLY.has(skipId) && p.cx <= ROAD_X) return false
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
     if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
   }
@@ -2371,14 +2405,14 @@ function repositionPlacing(x: number, y: number) {
     placing.cy = Math.max(-24, Math.min(24, Math.round(y)))
     placing.root.position.set(placing.cx, placing.cy, 0)
     const otherY = placing.id === 'gatein' ? world.gateOut.y : world.gateIn.y
-    placing.valid = Math.abs(placing.cy - otherY) >= 5
+    placing.valid = Math.abs(placing.cy - otherY) >= 6 // 3.4: giriş/çıkış en az 6 birim ayrı
   } else if (placing.id === 'gatein2' || placing.id === 'gateout2') {
     // karşı kapı yol karşısı kenarda sabit x'te (FAR_GATE_X), yalnız y ayarlanır; diğer kapıdan ≥5 uzak + karşı-yapıya binmesin
     placing.cx = FAR_GATE_X
     placing.cy = Math.max(-22, Math.min(22, Math.round(y)))
     placing.root.position.set(placing.cx, placing.cy, 0)
     const otherY = placing.id === 'gatein2' ? world.gateOut2.y : world.gateIn2.y
-    placing.valid = Math.abs(placing.cy - otherY) >= 5 && !farGateBlockedAt(placing.cy)
+    placing.valid = Math.abs(placing.cy - otherY) >= 6 && !farGateBlockedAt(placing.cy)
   } else if (placing.id === 'sign') {
     // Tabela dekoratif (araç engeli DEĞİL) → yol kenarına konabilir, sahiplik/beton aranmaz.
     // İstasyon çevresi + yol kenarı boyunca UZUN yerleştirme (yola çok uzaklaşmasın: cx≤6.5).
@@ -2546,6 +2580,7 @@ ui.onBuy = id => {
   const inPlaceUpgrade = (id === 'battery' && state.batteryLevel > 0)
     || (id === 'market' && state.marketLevel > 0)
     || (id === 'market2' && state.market2Level > 0)
+    || (id === 'toilet2' && state.toilet2Level > 0)
     || (id === 'toilet' && state.toiletLevel > 0)
   const needsPlacement = id in PLACEABLE && !inPlaceUpgrade
   if (needsPlacement) {
@@ -3299,6 +3334,22 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Uğrama oranı'), '~%35'],
         ],
       }
+    case 'toilet2':
+      return { icon: 'i-toilet', name: t('Karşı Tuvalet Sv.{0}', state.toilet2Level),
+        desc: t('Yol karşısı istasyonun tuvaleti — karşı yakanın müşterileri kullanır.'),
+        stats: [[t('Ücret'), state.toiletFee > 0 ? `₺${state.toiletFee}` : t('ücretsiz')], [t('Kullanım oranı'), '~%12']] }
+    case 'wash2':
+      return { icon: 'i-wash', name: t('Karşı Oto Yıkama'),
+        desc: t('Karşı yakadaki müşteriler araç yıkatır.'), stats: [['+₺60-120', '~%25']] }
+    case 'oil2':
+      return { icon: 'i-oil', name: t('Karşı Yağ Değişimi'),
+        desc: t('Karşı yakada yağ değişimi hizmeti.'), stats: [['+₺150-250', '~%12']] }
+    case 'coffee2':
+      return { icon: 'i-coffee', name: t('Karşı Kahveci'),
+        desc: t('Karşı yakadaki yolcular kahve molası verir.'), stats: [['+₺20-45', '~%30']] }
+    case 'restaurant2':
+      return { icon: 'i-food', name: t('Karşı Restoran'),
+        desc: t('Karşı yakada yemek molası.'), stats: [['+₺80-160', '~%18']] }
     case 'market2':
       return {
         icon: 'i-market', name: t('Karşı Market Sv.{0}', state.market2Level),
@@ -3430,7 +3481,8 @@ function refreshBuildingCard() {
   const card = buildingCard(selectedBuilding)
   if (!card) return
   const facId = selectedBuilding.split('#')[0]
-  if (['market', 'market2', 'toilet', 'wash', 'oil', 'coffee', 'restaurant', 'truckpark', 'selfwash', 'airwater'].includes(facId)) {
+  if (['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2', 'coffee', 'coffee2',
+       'restaurant', 'restaurant2', 'truckpark', 'selfwash', 'airwater'].includes(facId)) {
     card.stats.push([t('Bugünkü ciro'), `₺${Math.round(state.facDaily[facId] ?? 0).toLocaleString('tr-TR')}`, 'good'])
   }
   // karttan doğrudan yükseltme: ilgili mağaza kalemi alınabilir durumdaysa buton koy

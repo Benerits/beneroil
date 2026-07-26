@@ -1473,9 +1473,12 @@ export class World {
     this.register(regId, t('MARKET'), g, H + 1.0)
   }
 
-  buildToilet(level: number, pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(2.0, 12.8)
-    if (this.toiletGroup) { this.scene.remove(this.toiletGroup); this.unregister('toilet') }
+  buildToilet(level: number, pos?: THREE.Vector2, regId = 'toilet') {
+    const at = pos ?? (regId.endsWith('2')
+      ? new THREE.Vector2(2 * ROAD_X - (2.0), -(12.8))
+      : new THREE.Vector2(2.0, 12.8))
+    if (regId === 'toilet') { if (this.toiletGroup) { this.scene.remove(this.toiletGroup); this.unregister('toilet') } }
+    else this.unregister(regId)
     const g = new THREE.Group()
     let H = level >= 2 ? 2.4 : 2.1
     if (this.statics?.toilet) {
@@ -1505,8 +1508,8 @@ export class World {
     }
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.toiletGroup = g
-    this.register('toilet', t('TUVALET'), g, H + 0.85)
+    if (regId === 'toilet') this.toiletGroup = g
+    this.register(regId, t('TUVALET'), g, H + 0.85)
   }
 
   upgradeTankVisual(level: number) {
@@ -1587,8 +1590,10 @@ export class World {
     this.register('dieselgen', t('JENERATÖR'), g, 2.2)
   }
 
-  buildWash(pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(-4.7, -12.6)
+  buildWash(pos?: THREE.Vector2, regId = 'wash') {
+    const at = pos ?? (regId.endsWith('2')
+      ? new THREE.Vector2(2 * ROAD_X - (-4.7), -(-12.6))
+      : new THREE.Vector2(-4.7, -12.6))
     const g = new THREE.Group()
     // tünel yıkama: iki yan duvar + tonozlu çatı, iki ucu açık
     box(0.3, 4.6, 2.4, 0x8fb8d8, 1.85, 0, 1.2, g)
@@ -1631,11 +1636,13 @@ export class World {
     this.facadeLights(g, [[2.02, -1.6, 1.1]], 0.7, 0.5)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('wash', t('OTO YIKAMA'), g, 3.6)
+    this.register(regId, t('OTO YIKAMA'), g, 3.6)
   }
 
-  buildCoffee(pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(-9.5, 3)
+  buildCoffee(pos?: THREE.Vector2, regId = 'coffee') {
+    const at = pos ?? (regId.endsWith('2')
+      ? new THREE.Vector2(2 * ROAD_X - (-9.5), -(3))
+      : new THREE.Vector2(-9.5, 3))
     const g = new THREE.Group()
     box(2.8, 2.8, 2.3, 0xe8dcc8, 0, 0, 1.15, g)
     box(3.0, 3.0, 0.2, 0x7a5738, 0, 0, 2.4, g)
@@ -1654,11 +1661,13 @@ export class World {
     this.facadeLights(g, [[1.44, -0.5, 1.2]], 0.9, 0.6)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('coffee', t('KAHVECİ'), g, 3.0)
+    this.register(regId, t('KAHVECİ'), g, 3.0)
   }
 
-  buildRestaurant(pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(-13.5, 5)
+  buildRestaurant(pos?: THREE.Vector2, regId = 'restaurant') {
+    const at = pos ?? (regId.endsWith('2')
+      ? new THREE.Vector2(2 * ROAD_X - (-13.5), -(5))
+      : new THREE.Vector2(-13.5, 5))
     const g = new THREE.Group()
     box(4.8, 5.4, 2.8, 0xdfd0b8, 0, 0, 1.4, g)
     box(5.0, 5.6, 0.25, 0x9c3b3b, 0, 0, 2.9, g)
@@ -1679,7 +1688,7 @@ export class World {
     this.facadeLights(g, [[2.44, -1.3, 1.4], [2.44, 1.0, 1.4]], 1.1, 0.7)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('restaurant', t('RESTORAN'), g, 3.6)
+    this.register(regId, t('RESTORAN'), g, 3.6)
   }
 
   buildTruckPark(pos?: THREE.Vector2) {
@@ -1816,8 +1825,10 @@ export class World {
     this.register(regId, t('HAVA-SU ÜNİTESİ'), g, 2.3)
   }
 
-  buildOil(pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(-4.7, -16.8)
+  buildOil(pos?: THREE.Vector2, regId = 'oil') {
+    const at = pos ?? (regId.endsWith('2')
+      ? new THREE.Vector2(2 * ROAD_X - (-4.7), -(-16.8))
+      : new THREE.Vector2(-4.7, -16.8))
     const g = new THREE.Group()
     box(3.4, 3.0, 2.4, 0xb8bec4, 0, 0, 1.2, g)
     box(3.6, 3.2, 0.22, 0x39424e, 0, 0, 2.5, g)
@@ -1838,7 +1849,7 @@ export class World {
     this.facadeLights(g, [[1.74, 0, 1.6]], 1.4, 0.4)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('oil', t('YAĞ DEĞİŞİMİ'), g, 3.3)
+    this.register(regId, t('YAĞ DEĞİŞİMİ'), g, 3.3)
   }
 
   buildSMR(side: 'north' | 'south', pos?: THREE.Vector2) {

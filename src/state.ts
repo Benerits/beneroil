@@ -9,7 +9,7 @@ export type LocId = 'kasaba' | 'cevreyolu' | 'otoyol' | 'marina' | 'metropol'
 /** Şubeye AİT (lokasyon-bazlı) alanlar. Bunun dışındaki her şey şirket seviyesidir:
  *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
 export const LOC_FIELDS = [
-  'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'gridLevel',
+  'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'gridLevel',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
@@ -193,6 +193,13 @@ export class GameState {
   tankCounts: Record<FuelType, number> = { benzin: 1, dizel: 1, lpg: 1 }
   marketLevel = 0
   market2Level = 0 // karşı yaka marketi (yol karşısı istasyon için — save'e ADDITIVE alan)
+  // B8: karşı yaka tesis NÜSHALARI (ADDITIVE). Kural: aynı tip tesisten YAKA BAŞINA 1 adet.
+  // Böylece karşı istasyon "yarım" kalmıyor; sessiz gelir/servis kaybı biter.
+  toilet2Level = 0
+  hasWash2 = false
+  hasOil2 = false
+  hasCoffee2 = false
+  hasRestaurant2 = false
   marketingBudget = 0 // günlük reklam bütçesi ₺ (0-8000) — trafik arz+talep sink'i (ADDITIVE)
   opexStart = 0 // OPEX rampasının başladığı oyun günü (ilk yüklemede atanır — ADDITIVE)
   /** aktif B2B sözleşmesi (ADDITIVE alan; null = yok) — geç oyunun karar motoru */
@@ -981,6 +988,11 @@ export class GameState {
     switch (id) {
       case 'market': return 600 * Math.max(1, this.marketLevel)                          // gelir ×level → cap ×level
       case 'market2': return 600 * Math.max(1, this.market2Level)                        // karşı market — aynı ölçek
+      case 'toilet2': return 500 * Math.max(1, this.toilet2Level)
+      case 'wash2': return 700
+      case 'oil2': return 1000
+      case 'coffee2': return 500
+      case 'restaurant2': return 1200
       case 'toilet': return 500 * Math.max(1, this.toiletLevel)                          // seviyeyle büyür
       case 'selfwash': return 400 * Math.min(5, Math.max(1, this.selfWashCount))
       case 'airwater': return 250 * Math.min(6, Math.max(1, this.airWaterCount))
@@ -1125,6 +1137,25 @@ export function getShopItems(s: GameState): ShopRow[] {
     s.hasTruckPark ? null : TRUCKPARK_COST, null)
 
   // elektrik zinciri (teknoloji sırası korunur, arsa şartı yok)
+  // ---- B8: karşı yaka nüshaları (yalnız karşıda betonlu arsa varken görünür) ----
+  {
+    const hasFarPaved = [...s.pavedParcels].some(k => Number(String(k).split(',')[0]) >= 3)
+    const far = (id: string, icon: string, title: string, stat: string, desc: string, cost: number | null, need: boolean) =>
+      row(id, icon, title, stat, desc, cost, !need ? t('Önce bu yakadaki tesisi kur')
+        : hasFarPaved ? null : t('Karşıda betonlu arsa gerekli'))
+    far('toilet2', 'i-toilet', s.toilet2Level === 0 ? t('Karşı Tuvalet') : t('Karşı Tuvalet Sv.2'), t('+moral'),
+      t('Yol karşısı istasyon için tuvalet — karşı yakanın müşterileri kullanır.'),
+      s.toilet2Level >= 2 ? null : TOILET_COSTS[s.toilet2Level], s.toiletLevel > 0)
+    far('wash2', 'i-wash', t('Karşı Oto Yıkama'), '+₺60-120',
+      t('Karşı yakadaki müşteriler araç yıkatır.'), s.hasWash2 ? null : WASH_COST, s.hasWash)
+    far('oil2', 'i-oil', t('Karşı Yağ Değişimi'), '+₺150-250',
+      t('Karşı yakada yağ değişimi hizmeti.'), s.hasOil2 ? null : OIL_COST, s.hasOil)
+    far('coffee2', 'i-coffee', t('Karşı Kahveci'), '+₺20-45',
+      t('Karşı yakadaki yolcular kahve molası verir.'), s.hasCoffee2 ? null : COFFEE_COST, s.hasCoffee)
+    far('restaurant2', 'i-food', t('Karşı Restoran'), '+₺80-160',
+      t('Karşı yakada yemek molası.'), s.hasRestaurant2 ? null : RESTAURANT_COST, s.hasRestaurant)
+  }
+
   row('grid', 'i-bolt', t('Elektrik Altyapısı Sv.{0}', Math.min(s.gridLevel + 1, 2)),
     s.gridLevel === 0 ? t('temel') : t('+%30 üretim'),
     s.gridLevel === 0 ? t('Şarj ve enerji yapılarının önünü açar') : t('Tüm üretimi güçlendirir, yeni yapılar açılır'),
@@ -1225,6 +1256,7 @@ export function checkAchievements(s: GameState) {
 
 const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
+  'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
@@ -1394,6 +1426,11 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'tank': s.tankLevel++; break
     case 'market': s.marketLevel++; break
     case 'market2': s.market2Level++; break
+    case 'toilet2': s.toilet2Level++; break
+    case 'wash2': s.hasWash2 = true; break
+    case 'oil2': s.hasOil2 = true; break
+    case 'coffee2': s.hasCoffee2 = true; break
+    case 'restaurant2': s.hasRestaurant2 = true; break
     case 'toilet': s.toiletLevel++; break
     case 'grid': s.gridLevel++; break
     case 'battery': s.batteryLevel++; break
@@ -1436,6 +1473,11 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
   switch (base) {
     case 'market': return s.marketLevel > 0 ? { refund: half(MARKET_COSTS.slice(0, s.marketLevel).reduce((a, b) => a + b, 0)) } : null
     case 'market2': return s.market2Level > 0 ? { refund: half(MARKET_COSTS.slice(0, s.market2Level).reduce((a, b) => a + b, 0)) } : null
+    case 'toilet2': return s.toilet2Level > 0 ? { refund: half(TOILET_COSTS.slice(0, s.toilet2Level).reduce((a, b) => a + b, 0)) } : null
+    case 'wash2': return s.hasWash2 ? { refund: half(WASH_COST) } : null
+    case 'oil2': return s.hasOil2 ? { refund: half(OIL_COST) } : null
+    case 'coffee2': return s.hasCoffee2 ? { refund: half(COFFEE_COST) } : null
+    case 'restaurant2': return s.hasRestaurant2 ? { refund: half(RESTAURANT_COST) } : null
     case 'toilet': return s.toiletLevel > 0 ? { refund: half(TOILET_COSTS.slice(0, s.toiletLevel).reduce((a, b) => a + b, 0)) } : null
     case 'battery': return s.batteryLevel > 0 ? { refund: half(BATTERY_COSTS.slice(0, s.batteryLevel).reduce((a, b) => a + b, 0)) } : null
     case 'wash': return s.hasWash ? { refund: half(WASH_COST) } : null
@@ -1464,6 +1506,11 @@ export function applySell(s: GameState, id: string): number | null {
   else switch (base) {
     case 'market': s.marketLevel = 0; break
     case 'market2': s.market2Level = 0; break
+    case 'toilet2': s.toilet2Level = 0; break
+    case 'wash2': s.hasWash2 = false; break
+    case 'oil2': s.hasOil2 = false; break
+    case 'coffee2': s.hasCoffee2 = false; break
+    case 'restaurant2': s.hasRestaurant2 = false; break
     case 'toilet': s.toiletLevel = 0; break
     case 'battery': s.batteryLevel = 0; s.battery = 0; break
     case 'wash': s.hasWash = false; break

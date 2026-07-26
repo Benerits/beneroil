@@ -660,5 +660,43 @@ console.log('== 19) Otoyol Dinlenme Tesisi (rapor §6.4) ==')
   check('çevre yolunda highway topolojisi yok', !THEMES.cevreyolu.features?.highway)
 }
 
+console.log('== 20) B8: yaka başına tesis nüshaları + B5/B6 (trafik raporu) ==')
+{
+  const { getShopItems: shop2, sellInfo, applySell, buyItem } = await import('../../src/state.ts')
+  const s20 = new GameState()
+  // kilit zinciri: önce bu yakadaki tesis, sonra karşıda beton
+  let r = shop2(s20).find(x => x.id === 'wash2')
+  check('karşı yıkama kilitli: önce bu yakadaki tesis', r.status === 'locked' && /bu yakadaki/.test(r.note))
+  s20.hasWash = true
+  r = shop2(s20).find(x => x.id === 'wash2')
+  check('ana tesis var, karşı beton yok → kilitli', r.status === 'locked' && /betonlu/.test(r.note))
+  s20.ownedParcels.add('3,1'); s20.pavedParcels.add('3,1')
+  r = shop2(s20).find(x => x.id === 'wash2')
+  check('ana tesis + karşı beton → satın alınabilir', r.status === 'buy')
+  // 5 nüshanın hepsi tanımlı
+  for (const id of ['toilet2', 'wash2', 'oil2', 'coffee2', 'restaurant2']) {
+    check(`${id} mağazada tanımlı`, !!shop2(s20).find(x => x.id === id))
+  }
+  // satın alma + satış
+  s20.money = 200000; s20.toiletLevel = 1; s20.hasOil = true; s20.hasCoffee = true; s20.hasRestaurant = true
+  check('karşı yıkama satın alındı', buyItem(s20, 'wash2') === true && s20.hasWash2 === true)
+  check('karşı tuvalet seviyeli alınır', buyItem(s20, 'toilet2') === true && s20.toilet2Level === 1)
+  check('karşı restoran alındı', buyItem(s20, 'restaurant2') === true && s20.hasRestaurant2 === true)
+  check('karşı nüsha satılabilir (%50 iade)', !!sellInfo(s20, 'wash2'))
+  applySell(s20, 'wash2')
+  check('satış sonrası karşı yıkama gitti', s20.hasWash2 === false)
+  // save round-trip
+  const ser = serializeState(s20); const d20 = new GameState(); hydrateState(d20, ser)
+  check('B8 alanları save round-trip', d20.toilet2Level === 1 && d20.hasRestaurant2 === true)
+  // şube snapshot'ında da taşınır (LOC_FIELDS)
+  const { LOC_FIELDS } = await import('../../src/state.ts')
+  check('karşı nüshalar şube alanlarında (LOC_FIELDS)',
+    ['toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2'].every(f => LOC_FIELDS.includes(f)))
+  // kumbara cap'leri tanımlı
+  for (const id of ['toilet2', 'wash2', 'oil2', 'coffee2', 'restaurant2']) {
+    check(`${id} kumbara cap'i tanımlı`, s20.pendingCap(id) > 0)
+  }
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

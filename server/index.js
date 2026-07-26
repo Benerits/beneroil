@@ -284,6 +284,11 @@ function buildingValue(s) {
   v += sumUpto(COST.pump, n(s.pumps, 1))
   v += sumUpto(COST.sign, n(s.signLevel)) + sumUpto(COST.tank, n(s.tankLevel)) + sumUpto(COST.market, n(s.marketLevel))
   v += sumUpto(COST.market, n(s.market2Level)) // karşı yaka marketi (aynı maliyet tablosu)
+  v += sumUpto(COST.toilet, n(s.toilet2Level)) // B8: karşı yaka tesis nüshaları
+  if (s.hasWash2) v += FLAT.wash
+  if (s.hasOil2) v += FLAT.oil
+  if (s.hasCoffee2) v += FLAT.coffee
+  if (s.hasRestaurant2) v += FLAT.restaurant
   v += sumUpto(COST.toilet, n(s.toiletLevel)) + sumUpto(COST.grid, n(s.gridLevel)) + sumUpto(COST.battery, n(s.batteryLevel))
   v += sumUpto(COST.ev, n(s.evChargers))
   if (s.tankCounts && typeof s.tankCounts === 'object') for (const k of ['benzin', 'dizel', 'lpg']) v += sumUpto(COST.tankAdd, n(s.tankCounts[k], 1))
@@ -334,6 +339,7 @@ function sanitizeSave(save) {
   s.tankLevel = clamp(s.tankLevel, 0, 3, 0)
   s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
   if ('market2Level' in s) s.market2Level = clamp(s.market2Level, 0, 3, 0) // karşı market (additive alan — eski save'lerde yok)
+  if ('toilet2Level' in s) s.toilet2Level = clamp(s.toilet2Level, 0, 2, 0)  // B8 karşı yaka nüshaları
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
   if ('brandStars' in s) s.brandStars = clamp(s.brandStars, 0, 40, 0)      // prestij (additive)
   if ('handoverCount' in s) s.handoverCount = clamp(s.handoverCount, 0, 40, 0)
@@ -428,6 +434,7 @@ function sanitizeSave(save) {
       f.tankLevel = clamp(f.tankLevel, 0, 3, 0)
       f.marketLevel = clamp(f.marketLevel, 0, 3, 0)
       if ('market2Level' in f) f.market2Level = clamp(f.market2Level, 0, 3, 0)
+      if ('toilet2Level' in f) f.toilet2Level = clamp(f.toilet2Level, 0, 2, 0)
       f.toiletLevel = clamp(f.toiletLevel, 0, 2, 0)
       f.gridLevel = clamp(f.gridLevel, 0, 2, 0)
       f.batteryLevel = clamp(f.batteryLevel, 0, 3, 0)
