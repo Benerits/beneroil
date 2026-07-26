@@ -1804,6 +1804,34 @@ export class World {
     }))
   }
 
+  /** OYUNCUNUN KURDUĞU sokak lambası — kapı yerleştirince silinen dekoratif lambalardan
+   *  farklı olarak KAYITLIDIR: tıklanır, taşınır, satılır (#358, #679-1 "tüm lambaları
+   *  yok ettim, nasıl geri ekleyeceğim"). Karşı yakaya da kurulabilir (#835). */
+  buildStreetLamp(pos?: THREE.Vector2, regId = 'lamp') {
+    const at = pos ?? new THREE.Vector2(-6.5, 6)
+    const g = new THREE.Group()
+    if (this.statics?.lamp) {
+      const l = fitModel(this.statics.lamp, 3.4, 'z')
+      l.rotation.z = Math.PI
+      l.traverse(m => { m.castShadow = true })
+      g.add(l)
+    } else {
+      buildLampProc(0, 0, g)
+    }
+    const bulbMat = glow(0xfff3c4, 0.05)
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), bulbMat)
+    bulb.position.set(0.6, 0, 3.0)
+    g.add(bulb)
+    this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner: regId })
+    const light = new THREE.PointLight(0xffd9a0, 0, 18, 1.7)
+    light.position.set(0.6, 0, 3.2)
+    g.add(light)
+    this.nightLights.push(light)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register(regId, t('SOKAK LAMBASI'), g, 3.4)
+  }
+
   buildAirWater(pos?: THREE.Vector2, regId = 'airwater') {
     const at = pos ?? new THREE.Vector2(-4.5, 0.2)
     const g = new THREE.Group()

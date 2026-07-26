@@ -545,6 +545,48 @@ function accHistory(): string {
 }
 
 // Ofis: finansal durum → fiyatlar → müşteri&itibar → dönemsel satış/kâr → yakıt geçmişi
+/** 7 GÜNLÜK KÂR GRAFİĞİ — kütüphanesiz, saf DOM çubukları.
+ *  Kâr `salesLog`'a gün sonunda yazılır; eski save'lerdeki kayıtlarda `profit` alanı yoktur
+ *  (o günler "veri yok" olarak çizilir, sıfır sanılmasın diye soluk gösterilir). */
+function sevenDayChart(): string {
+  const log = state.salesLog.slice(-7)
+  if (log.length < 2) return `<div class="acc-note">${t('Grafik için en az 2 günlük veri gerekli.')}</div>`
+  const vals = log.map(e => e.profit)
+  const known = vals.filter((v): v is number => typeof v === 'number')
+  if (!known.length) return ''
+  const max = Math.max(1, ...known.map(Math.abs))
+  const bars = log.map(e => {
+    const v = e.profit
+    if (typeof v !== 'number') {
+      return `<div class="pchart-col" title="${t('Gün {0}: veri yok', e.day)}">`
+        + `<div class="pchart-bar pchart-na" style="height:6%"></div>`
+        + `<div class="pchart-day">${e.day}</div></div>`
+    }
+    const h = Math.max(4, Math.round(Math.abs(v) / max * 100))
+    const cls = v >= 0 ? 'pchart-pos' : 'pchart-neg'
+    return `<div class="pchart-col" title="${t('Gün {0}: ₺{1}', e.day, Math.round(v).toLocaleString('tr-TR'))}">`
+      + `<div class="pchart-bar ${cls}" style="height:${h}%"></div>`
+      + `<div class="pchart-day">${e.day}</div></div>`
+  }).join('')
+  const best = Math.max(...known), worst = Math.min(...known)
+  return `<div class="acc-sub">${t('Son 7 günün kârı')}</div>`
+    + `<div class="pchart">${bars}</div>`
+    + `<div class="acc-note">${t('En iyi ₺{0} · en kötü ₺{1}',
+        Math.round(best).toLocaleString('tr-TR'), Math.round(worst).toLocaleString('tr-TR'))}</div>`
+}
+
+/** #317 "karşı yakanın geliri ayrı görünsün" — bugünün cirosunun yaka dağılımı */
+function sideSplitRow(): string {
+  const n = Math.round(state.sideDaily.near), f = Math.round(state.sideDaily.far)
+  if (n + f <= 0) return ''
+  const pct = Math.round(f / (n + f) * 100)
+  return `<div class="acc-sub">${t('Bugünkü ciro — yaka dağılımı')}</div>`
+    + `<div class="acc-cols"><span class="acc-plabel">${t('Ana yaka')}</span>`
+    + `<span class="v good">₺${n.toLocaleString('tr-TR')}</span><span class="v">${100 - pct}%</span></div>`
+    + `<div class="acc-cols"><span class="acc-plabel">${t('Karşı yaka')}</span>`
+    + `<span class="v good">₺${f.toLocaleString('tr-TR')}</span><span class="v">${pct}%</span></div>`
+}
+
 function openOfficePanel() {
   const card = buildingCard('office')
   const tl = (n: number) => Math.round(n).toLocaleString('tr-TR')
@@ -692,6 +734,8 @@ function openOfficePanel() {
         + `<span class="v good">₺${tl(rev)}</span>`
         + `<span class="v ${prof >= 0 ? 'good' : 'bad'}">₺${tl(prof)}</span></div>`
     }
+    html += sevenDayChart()
+    html += sideSplitRow()
     sales.innerHTML = html
   }
 
@@ -977,17 +1021,35 @@ document.getElementById('bank-body')?.addEventListener('click', e => {
   }
 })
 
+/** Bir binanın GÖRSELİNİ + yerleşim kaydını kaldırır (state sayacı applySell ile zaten düşmüş olmalı).
+ *  Sayılabilir tesislerde (solar/parking/selfwash/airwater) hangi örnek verilirse verilsin SON örneğin
+ *  görseli kaldırılır — aksi halde ortadaki görsel silinip fazlalık bina sahnede "işlevsiz" kalır (#495).
+ *  Satış ve HACİZ bu tek yoldan geçer; eskiden haciz kendi (eksik) kopyasını kullanıyordu. */
+function removeBuildingVisual(id: string) {
+  const base = id.split('#')[0]
+  if (base === 'pump') cars.evictSlot('fuel', Number(id.slice(5)))
+  else if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
+  const countable = COUNTABLE[base]?.()
+  const target = (countable !== undefined)
+    ? (countable === 0 ? base : `${base}#${countable}`)
+    : id
+  world.removeBuildingGroup(target)
+  delete placedPos[target]
+  delete placedRot[target]
+  const ri = placedRects.findIndex(r => r.id === target)
+  if (ri >= 0) placedRects.splice(ri, 1)
+  // kaldırılan tesisin kumbarası da gitsin: yoksa yok olan binaya ait para toplanamaz halde kalır
+  delete state.pendingCash[id]; delete state.pendingCash[target]
+  delete state.facLost[id]; delete state.facLost[target]
+}
+
 /** Ödeme yapılamayınca teminatları haczet: binaları istasyondan kaldır (iade YOK), krediyi kapat. */
 function seizeCollateral() {
   for (const id of [...state.loan.collateral]) {
     if (!sellInfo(state, id)) continue // zaten satılmış/kaldırılmış olabilir
     const refund = applySell(state, id) // state sayaçlarını düşürür + iade ekler
     if (refund) state.money -= refund   // haciz: iade geri alınır (banka borca karşılık alır)
-    const base = id.split('#')[0]
-    if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
-    world.removeBuildingGroup(id)
-    delete placedPos[id]; delete placedRot[id]
-    const ri = placedRects.findIndex(r => r.id === id); if (ri >= 0) placedRects.splice(ri, 1)
+    removeBuildingVisual(id)            // satışla AYNI yol (son-örnek eşlemesi + pompa tahliyesi) — #495
   }
   state.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
   Car.solids = hardRects()
@@ -1501,6 +1563,7 @@ function finishSale(car: Car) {
   state.money += revenue
   state.stats.served++
   state.stats.revenue += revenue
+  state.addSideRevenue(car.station === 'far', revenue) // #317: yaka bazlı ciro ayrımı
   // aktif sözleşme: bu satışın litresi taahhüde sayılır (yalnız sözleşmenin yakıtı)
   if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
   if (car.nozzle) state.stats.liters[car.nozzle] += car.filled
@@ -1682,6 +1745,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'restaurant': world.buildRestaurant(pos); break
     case 'truckpark': world.buildTruckPark(pos); break
     case 'airwater': world.buildAirWater(pos, id); break
+    case 'lamp': world.buildStreetLamp(pos, id); break
     case 'selfwash': world.buildSelfWash(pos, id); break
     case 'parking': world.buildParking(pos, id); break
     case 'office': world.buildOffice(pos); break
@@ -1710,6 +1774,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   restaurant: () => ({ w: 5.5, d: 6 }),
   truckpark: () => ({ w: 8, d: 6 }),
   airwater: () => ({ w: 1.6, d: 2 }),
+  lamp: () => ({ w: 1.2, d: 1.2, grass: true }), // dekoratif: çimen üstüne de konabilir
   selfwash: () => ({ w: 5.5, d: 7 }),
   parking: () => ({ w: 4.6, d: 3.2 }),
   office: () => ({ w: 5, d: 5.5 }),
@@ -2003,6 +2068,10 @@ function rebuildFromState() {
   for (let i = 0; i < state.airWaterCount; i++) {
     const iid = i === 0 ? 'airwater' : `airwater#${i}`
     world.buildAirWater(pv(iid), iid)
+  }
+  for (let i = 0; i < state.lampCount; i++) {
+    const iid = i === 0 ? 'lamp' : `lamp#${i}`
+    world.buildStreetLamp(pv(iid), iid)
   }
   for (let i = 0; i < state.selfWashCount; i++) {
     const iid = i === 0 ? 'selfwash' : `selfwash#${i}`
@@ -2555,6 +2624,7 @@ const COUNTABLE: Record<string, () => number> = {
   solar: () => state.solarCount,
   selfwash: () => state.selfWashCount,
   airwater: () => state.airWaterCount,
+  lamp: () => state.lampCount,
 }
 
 /** varsayılan slot sahipli+betonlu ve boş mu? değilse alım yerleştirme moduna düşer
@@ -2627,21 +2697,7 @@ ui.onSell = id => {
   if (!sellInfo(state, id)) return
   const refund = applySell(state, id)
   if (refund === null) return
-  const base = id.split('#')[0]
-  // servis noktasındaki aracı serbest bırak, sonra görseli kaldır
-  if (base === 'pump') cars.evictSlot('fuel', Number(id.slice(5)))
-  else if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
-  // Sayılabilir tesislerde (solar/parking/selfwash/airwater) hangi örneğe tıklanırsa
-  // tıklansın SON örneğin görseli kaldırılır — indeks boşluğu oluşmaz, sayaçla tutarlı.
-  const countable = COUNTABLE[base]?.()
-  const target = (countable !== undefined)
-    ? (countable === 0 ? base : `${base}#${countable}`) // applySell sonrası sayaç azaldı → son örnek bu
-    : id
-  world.removeBuildingGroup(target)
-  delete placedPos[target]
-  delete placedRot[target]
-  const ri = placedRects.findIndex(r => r.id === target)
-  if (ri >= 0) placedRects.splice(ri, 1)
+  removeBuildingVisual(id)
   audio.build()
   ui.toast(t('🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}', refund.toLocaleString('tr-TR')), 'good', true)
   selectedBuilding = null
@@ -2674,6 +2730,7 @@ function buyToast(id: string) {
     case 'restaurant': ui.toast('🍽️ Restoran açıldı — yolcular yemek molası verecek!', 'good'); break
     case 'truckpark': ui.toast('🚛 Tır parkı açıldı — düzenli konaklama geliri!', 'good'); break
     case 'airwater': ui.toast('💨 Hava-su ünitesi kuruldu!', 'good'); break
+    case 'lamp': ui.toast(t('💡 Sokak lambası kuruldu — gece istasyon aydınlık!'), 'good'); break
     case 'selfwash': ui.toast('🧽 Self yıkama açıldı — köpük ve su otomatik satılacak!', 'good'); break
     case 'parking': ui.toast('🅿️ Otopark açıldı — müşteriler park edip tesisleri gezebilecek!', 'good'); break
   }
@@ -3761,6 +3818,7 @@ function handleClick(e: PointerEvent) {
     const cashFor = hits.find(h => h.object.userData.cashFor)?.object.userData.cashFor
     if (cashFor) {
       const amt = state.collectPending(cashFor)
+      state.addSideRevenue(/2$/.test(cashFor.split('#')[0]), amt) // #317
       if (amt > 0) {
         audio.cash()
         // çok üniteli tesiste kumbara ORTAKTIR (gelir zaten adetle çarpılır) — bunu söyle,
@@ -3951,6 +4009,14 @@ function frame() {
       if (spend < state.marketingBudget) ui.toast(t('📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.'), 'bad')
       else ui.toast(t('📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})', spend.toLocaleString('tr-TR'), state.trafficPull().toFixed(2)), '')
     }
+    // İTİBAR MUTABAKATI (#456): itibar günün hizmet kalitesine çekilir — 5.0'da donmaz
+    const rep = state.reconcileReputation()
+    if (Math.abs(rep.delta) >= 0.03) {
+      ui.toast(rep.delta > 0
+        ? t('⭐ İtibar yükseldi: {0} (bekleyen müşteri kaybın az)', state.reputation.toFixed(2))
+        : t('⭐ İtibar düştü: {0} — müşteriler beklemekten gidiyor!', state.reputation.toFixed(2)),
+        rep.delta > 0 ? 'good' : 'bad')
+    }
     // kredi taksiti (aylık = 1 oyun günü)
     const loanRes = state.processLoanDay()
     if (loanRes === 'done') ui.toast(t('🏦 Kredi tamamen ödendi — teminatların serbest! 🎉'), 'good')
@@ -3966,8 +4032,11 @@ function frame() {
     if (document.getElementById('bankwrap')?.classList.contains('show')) renderBank()
     // dönemsel muhasebe: biten günün satış cirosunu kaydet
     const dayRev = Math.max(0, Math.round(state.stats.revenue - state.dayStartRevenue))
-    state.salesLog.push({ day: state.day, rev: dayRev })
+    // ADDITIVE: kâr + yaka dağılımı da kaydedilir; eski kayıtlarda bu alanlar yok, okuyucu ?? ile karşılar
+    state.salesLog.push({ day: state.day, rev: dayRev, profit: Math.round(profit),
+      near: Math.round(state.sideDaily.near), far: Math.round(state.sideDaily.far) })
     if (state.salesLog.length > 370) state.salesLog.shift()
+    state.sideDaily = { near: 0, far: 0 }
     state.dayStartRevenue = state.stats.revenue
     state.dayStartMoney = state.money
     state.facDaily = {}
@@ -4177,6 +4246,7 @@ function frame() {
     if (c.kind === 'ev' && c.phase === 'atPump' && !c.charging && !c.squatting
       && c.chargedKwh === 0 && c.slotIndex >= 0 && state.autoChargers.has(c.slotIndex)) {
       startCharging(c, true)
+      c.cleanWindows() // #451: şarj görevlisi de camı siler (eskiden yalnız yakıt pompacısı silerdi)
     }
   }
   // pompacı: işaretli pompaya yanaşan araç doğru yakıtla kendiliğinden dolar,
@@ -4193,7 +4263,7 @@ function frame() {
       else c.targetAmount = c.demandAmount
       c.filling = true
       c.beingServed = true
-      if (Math.random() < 0.6) c.cleanWindows() // pompacı bazen camları da siler (rastgele) — oyuncunun işi değil
+      c.cleanWindows() // #451: pompacı HER araçta camı siler — tam hizmet, parası bunun için veriliyor
       tutDismiss() // pompacı devraldı → "hoşgeldin patron" ipucu takılı kalmasın
     }
   }

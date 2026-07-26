@@ -11,7 +11,7 @@ export type LocId = 'kasaba' | 'cevreyolu' | 'otoyol' | 'marina' | 'metropol'
 export const LOC_FIELDS = [
   'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level',
   'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'managerLevel', 'staffLevel',
-  'insurance', 'decorLevel', 'wear', 'gridLevel',
+  'insurance', 'decorLevel', 'wear', 'gridLevel', 'lampCount',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
@@ -105,6 +105,7 @@ export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) 
 // KATMAN 2b sink'leri (rapor: "her musluğun bir gideri olmalı")
 export const INSURANCE_DAILY = 0.0004      // varlık değerinin binde 0.4'ü / gün
 export const LICENSE_PERIOD = 30           // ruhsat yenileme aralığı (oyun günü)
+export const LAMP_COST = 2_500 // sokak lambası (dekoratif; gece görünürlük + küçük itibar)
 export const DECOR_COSTS = [15_000, 40_000, 90_000] // dekorasyon kademeleri (itibar +0.15/kademe)
 export const RENEW_RATIO = 0.6             // ekipman yenileme = alış değerinin %60'ı
 // MÜDÜR (rapor §7 #5): kademeli otomasyon — Sv.1 kumbara toplar, Sv.2 + panel temizler,
@@ -189,7 +190,9 @@ export class GameState {
   /** muhasebe: günlük yovmiye ödeme geçmişi (gün/tutar) — son 40 kayıt */
   wageLog: { day: number; amount: number }[] = []
   /** muhasebe: günlük satış cirosu (gün/ciro) — dönemsel satış/kâr için, son ~370 kayıt */
-  salesLog: { day: number; rev: number }[] = []
+  /** günlük muhasebe defteri. profit/near/far ADDITIVE alanlardır: eski save'lerdeki
+   *  kayıtlarda bulunmaz, okuyucu `?? 0` ile karşılar (geriye dönük uyumlu). */
+  salesLog: { day: number; rev: number; profit?: number; near?: number; far?: number }[] = []
   /** o günün başındaki toplam ciro (günlük satış = stats.revenue - dayStartRevenue) */
   dayStartRevenue = 0
   noAds = false // "Reklamları Kaldır" satın alındı mı (IAP) — interstitial gösterilmez
@@ -278,6 +281,8 @@ export class GameState {
   licenseDueDay = 30
   /** DEKORASYON seviyesi 0-3: gelir etkisi ~0, itibar +küçük — klasik "parayı göster" sink'i */
   decorLevel = 0
+  /** oyuncunun kurduğu sokak lambası adedi (#358/#679: yok edilen lambalar geri konabilsin) */
+  lampCount = 0
   /** EKİPMAN YAŞLANMASI: 0-1 arası yıpranma; %100'de verim -%40, yenileme maliyeti */
   wear = 0
   managerResult: { collected: number; cleaned: boolean; fixed: number } | null = null
@@ -299,6 +304,12 @@ export class GameState {
   wideGates = false
   /** tesis bazında bugünkü ciro (gün dönümünde sıfırlanır) */
   facDaily: Record<string, number> = {}
+  /** #317 "karşı yaka geliri ayrı görünsün": günün cirosunun yaka dağılımı (runtime, save'e yazılmaz) */
+  sideDaily = { near: 0, far: 0 }
+  /** karşı yaka gelirini kaydet — main.ts satış/tesis yollarından çağrılır */
+  addSideRevenue(far: boolean, amt: number) {
+    if (amt > 0) this.sideDaily[far ? 'far' : 'near'] += amt
+  }
   /** tesis bazında ömür boyu ciro (istatistik için, sıfırlanmaz) */
   facTotal: Record<string, number> = {}
   /** ömür boyu istatistikler */
@@ -735,7 +746,7 @@ export class GameState {
     this.pumps = 1; this.evChargers = 0; this.signLevel = 0; this.tankLevel = 0
     this.marketLevel = 0; this.market2Level = 0; this.toiletLevel = 0
     this.gridLevel = 0; this.batteryLevel = 0; this.battery = 0
-    this.solarCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0
+    this.solarCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0; this.lampCount = 0
     this.hasDiesel = false; this.hasSMR = false; this.hasWash = false; this.hasOil = false
     this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
     this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
@@ -898,6 +909,7 @@ export class GameState {
     if (this.hasSMR) v += SMR_COST
     if (this.hasWash) v += WASH_COST
     if (this.hasOil) v += OIL_COST
+    v += LAMP_COST * this.lampCount
     if (this.hasCoffee) v += COFFEE_COST
     if (this.hasRestaurant) v += RESTAURANT_COST
     if (this.hasTruckPark) v += TRUCKPARK_COST
@@ -1006,7 +1018,7 @@ export class GameState {
   /** RUHSAT bedeli (30 günde bir, varlıkla ölçekli) */
   licenseFee(): number { return Math.round(8_000 + (this.equipmentValue() + this.landValue()) * 0.004) }
   /** dekorasyonun itibar katkısı */
-  decorRep(): number { return 0.15 * this.decorLevel }
+  decorRep(): number { return 0.15 * this.decorLevel + Math.min(0.30, 0.04 * this.lampCount) }
 
   /** personel eğitimi etkileri (rapor §7 #7): dolum hızı, bahşiş, hata riski */
   staffFillMult(): number { return 1 + 0.12 * (this.staffLevel - 1) }   // Sv.4 → +%36 hız
@@ -1132,16 +1144,41 @@ export class GameState {
     }
   }
 
+  /** TAŞMA KAYBI — bu turda kumbara tavanı yüzünden eriyen ciro (gün sonu raporunda gösterilir) */
+  facLost: Record<string, number> = {}
+
+  /** Kumbaraya para biriktir.
+   *
+   *  #193 "restoran cirosu 0" / #423 "market kasaya eklemiyor" KÖK NEDENİ: eskiden tavanı
+   *  aşan ciro `Math.min(cap, ...)` ile SESSİZCE siliniyordu. Ofis raporu (facDaily) tam
+   *  tutarı yazdığı için oyuncu "ciro var ama para yok" görüyordu — haklı olarak bug diyordu.
+   *
+   *  Yeni davranış: tavana kadar %100, tavanın üstünde %40 verimle DEVAM eder (sert tavan
+   *  3× cap). Yani hiçbir şey tamamen buharlaşmaz ama ihmal etmek yine cezalı — müdür
+   *  otomasyonu (§7 #5) ve sık toplama değerini korur. Kayıp artık GÖRÜNÜR. */
   addPending(id: string, amt: number, name: string) {
     this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
     this.facTotal[id] = (this.facTotal[id] ?? 0) + amt
     const cap = this.pendingCap(id)
+    const hard = cap * 3
     const cur = this.pendingCash[id] ?? 0
-    this.pendingCash[id] = Math.min(cap, cur + amt)
-    if (cur < cap && this.pendingCash[id] >= cap) {
-      this.events.push(t('{0} kumbarası doldu — üstüne tıklayıp topla!', name))
+    // tavana kadar tam, sonrası kısılmış verim
+    const toFull = Math.max(0, cap - cur)
+    const full = Math.min(amt, toFull)
+    const over = amt - full
+    const next = Math.min(hard, cur + full + over * 0.4)
+    const gained = next - cur
+    if (amt - gained >= 1) this.facLost[id] = (this.facLost[id] ?? 0) + (amt - gained)
+    this.pendingCash[id] = next
+    if (cur < cap && next >= cap) {
+      this.events.push(t('{0} kumbarası doldu — tıklayıp topla, yoksa ciro erimeye başlar!', name))
+    } else if (cur >= hard - 1 && amt > 0) {
+      this.events.push(t('⚠️ {0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!', name))
     }
   }
+
+  /** gün sonu raporu için: tavan yüzünden eriyen toplam ciro */
+  lostTotal(): number { return Object.values(this.facLost).reduce((a, v) => a + (v || 0), 0) }
 
   collectPending(id: string): number {
     // Prestij çarpanı TOPLAMA anında uygulanır — biriktirme sırasında uygulanınca kumbara
@@ -1150,6 +1187,7 @@ export class GameState {
     if (amt > 0) {
       this.money += amt
       delete this.pendingCash[id]
+      delete this.facLost[id]
     }
     return amt
   }
@@ -1192,6 +1230,37 @@ export class GameState {
     if (this.graceActive && d < 0) d *= 0.5 // grace: itibar cezaları yarı
     const floor = this.graceActive ? 2.5 : 0 // grace: itibar 2.5 altına düşmez (trafik çökmesin)
     this.reputation = Math.max(floor, Math.min(5, this.reputation + d))
+  }
+
+  // ---- İTİBAR MUTABAKATI (#456 + #216-4: "itibar 5.0'a çıkıyor, ne olursa olsun düşmüyor") ----
+  // KÖK NEDEN: itibar ömür boyu BİRİKİMDİ. Servis edilen her müşteri +0.06..+0.14 veriyor,
+  // kaybedilen -0.2; yüzlerce servise karşı birkaç kayıp olunca değer 5.0'a çakılıp donuyordu.
+  // ÇÖZÜM: her gün sonunda itibar, O GÜNÜN hizmet kalitesine doğru çekilir. Artık 5.0'da
+  // kalmak için kayıpsız gün gerekir; istasyonu ihmal etmek itibarı gerçekten düşürür.
+  private repMark = { served: 0, lost: 0 }
+  /** son mutabakatın yönü — arayüzde ok göstermek için (+1 arttı, -1 düştü, 0 sabit) */
+  repTrend = 0
+
+  /** gün dönüşünde çağrılır: itibarı günün hizmet kalitesine yaklaştırır (en çok ±0.30/gün) */
+  reconcileReputation(): { target: number; delta: number } {
+    const served = this.stats.served - this.repMark.served
+    const lost = this.stats.lost - this.repMark.lost
+    this.repMark = { served: this.stats.served, lost: this.stats.lost }
+    const total = served + lost
+    let target: number
+    if (total < 3) {
+      // Neredeyse hiç müşteri görmeyen gün: unutulma. İtibar yavaşça 3.0'a doğru aşınır.
+      target = 3.0
+    } else {
+      // Kayıp oranı tek ölçüt: kayıpsız gün 5.0, %10 kayıp ~4.3, %25 kayıp ~3.1, %50+ kayıp 1.5
+      target = Math.max(1, 5 - (lost / total) * 7)
+    }
+    const raw = (target - this.reputation) * 0.35
+    const delta = Math.max(-0.30, Math.min(0.30, raw)) // şok yok: mevcut save'ler kademeli oturur
+    const before = this.reputation
+    this.addRep(delta)
+    this.repTrend = this.reputation > before + 0.004 ? 1 : this.reputation < before - 0.004 ? -1 : 0
+    return { target, delta: this.reputation - before }
   }
 }
 
@@ -1248,6 +1317,8 @@ export function getShopItems(s: GameState): ShopRow[] {
   }
   row('airwater', 'i-air', s.airWaterCount ? t('Hava-Su Ünitesi ({0})', s.airWaterCount) : t('Hava-Su Ünitesi'), '+₺10-20',
     t('Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)'), AIRWATER_COST, null)
+  row('lamp', 'i-star', s.lampCount ? t('Sokak Lambası ({0})', s.lampCount) : t('Sokak Lambası'), t('+itibar'),
+    t('Gece aydınlatması — istasyon güvenli görünür (sınırsız kurulur, taşınır, satılır)'), LAMP_COST, null)
   row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
     t('Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)'), PARKING_COST, null)
 
@@ -1434,7 +1505,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear',
+  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -1622,6 +1693,7 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'restaurant': s.hasRestaurant = true; break
     case 'truckpark': s.hasTruckPark = true; break
     case 'airwater': s.airWaterCount++; break
+    case 'lamp': s.lampCount++; break
     case 'selfwash': s.selfWashCount++; break
     case 'parking': s.parkingCount++; break
     default: return false
@@ -1669,6 +1741,7 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
     case 'parking': return s.parkingCount > 0 ? { refund: half(PARKING_COST) } : null // 2c: herhangi bir örnek satılabilir
     case 'selfwash': return s.selfWashCount > 0 ? { refund: half(SELFWASH_COST) } : null // 2c: herhangi bir örnek satılabilir
     case 'airwater': return s.airWaterCount > 0 ? { refund: half(AIRWATER_COST) } : null // 2c: herhangi bir örnek satılabilir
+    case 'lamp': return s.lampCount > 0 ? { refund: half(LAMP_COST) } : null
     // 2c: geri kalan yapılar da satılabilir (ölü sermaye geri döner, yeniden planlama strateji olur)
     case 'sign': return s.signLevel > 0 ? { refund: half(SIGN_COSTS.slice(0, s.signLevel).reduce((a, b) => a + b, 0)) } : null
     case 'grid': return s.gridLevel > 0 && s.evChargers === 0 && s.batteryLevel === 0 && !s.hasSMR && s.solarCount === 0 && !s.hasDiesel
@@ -1710,6 +1783,7 @@ export function applySell(s: GameState, id: string): number | null {
     case 'parking': s.parkingCount--; break
     case 'selfwash': s.selfWashCount--; break
     case 'airwater': s.airWaterCount--; break
+    case 'lamp': s.lampCount--; break
   }
   return info.refund
 }

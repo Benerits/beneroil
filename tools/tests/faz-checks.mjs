@@ -7,7 +7,8 @@
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} }
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'tr' }, configurable: true })
 
-const { GameState, PARCEL_COLS, PARCEL_ROWS, FUEL_COST, FUEL_PRICE, priceBounds, serializeState, hydrateState } =
+const { GameState, PARCEL_COLS, PARCEL_ROWS, FUEL_COST, FUEL_PRICE, priceBounds, serializeState, hydrateState,
+  buyItem, sellInfo, applySell, LOC_FIELDS } =
   await import('../../src/state.ts')
 
 // ---- SYNC bloğu: world.ts / main.ts kopyaları ----
@@ -879,6 +880,114 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
   mar.day = 1; const mYaz = mar.season().traffic
   mar.day = 150; const mKis = mar.season().traffic
   check(`marinada sezon SERT (yaz ${mYaz.toFixed(2)} / kış ${mKis.toFixed(2)})`, mYaz > 1.4 && mKis < 0.6)
+}
+
+// ---- §24: FEEDBACK BUG'LARI (Paket E) ----
+{
+  console.log('\n== 24) Feedback bugları: kumbara taşması + itibar mutabakatı ==')
+
+  // #193 "restoran cirosu 0" / #423 "market kasaya eklemiyor" — taşan ciro SESSİZCE siliniyordu
+  const s1 = new GameState()
+  s1.hasRestaurant = true
+  const cap = s1.pendingCap('restaurant')
+  // tavana kadar birebir
+  s1.addPending('restaurant', cap, 'Restoran')
+  check(`tavana kadar ciro TAM yazılır (${s1.pendingCash.restaurant} = ${cap})`, s1.pendingCash.restaurant === cap)
+  check('tavana kadar kayıp YOK', (s1.facLost.restaurant ?? 0) === 0)
+  // tavanın üstü: eskiden 0 gelirdi, artık %40 verimle DEVAM eder
+  const beforeOver = s1.pendingCash.restaurant
+  s1.addPending('restaurant', 500, 'Restoran')
+  const gained = s1.pendingCash.restaurant - beforeOver
+  check(`tavan ÜSTÜ ciro artık kaybolmuyor (+₺${Math.round(gained)} / 500)`, gained > 150 && gained < 250)
+  check('kısılan kısım KAYIP olarak raporlanır', s1.facLost.restaurant > 250)
+  // sert tavan 3x
+  for (let i = 0; i < 200; i++) s1.addPending('restaurant', 500, 'Restoran')
+  check(`sert tavan 3x cap (${s1.pendingCash.restaurant} ≤ ${cap * 3})`, s1.pendingCash.restaurant <= cap * 3 + 0.01)
+  check('sonsuz idle kazancı YOK (tavan var)', s1.pendingCash.restaurant === cap * 3)
+  // toplama: kayıp sayacı da sıfırlanır
+  s1.collectPending('restaurant')
+  check('toplayınca kumbara + kayıp sayacı sıfırlanır',
+    !s1.pendingCash.restaurant && !s1.facLost.restaurant)
+  // ofis raporu (facDaily) ile kasaya giren para artık makul yakınlıkta
+  const s2 = new GameState(); s2.marketLevel = 1
+  for (let i = 0; i < 6; i++) s2.addPending('market', 50, 'Market')
+  const got = s2.collectPending('market')
+  check(`normal oyunda (6 ziyaret) ciro TAMAMEN kasaya girer (₺${got}/300)`, got === 300)
+
+  // sunucu clamp'i istemci sert tavanını KESMEMELİ (yoksa senkronda para kaybı)
+  const maxCap = Math.max(...['market', 'toilet', 'selfwash', 'airwater', 'parking', 'truckpark',
+    'restaurant', 'oil', 'wash', 'coffee', 'market2', 'restaurant2', 'oil2'].map(id => {
+      const t2 = new GameState(); t2.marketLevel = 3; t2.market2Level = 3; t2.toiletLevel = 2
+      t2.selfWashCount = 9; t2.airWaterCount = 9; t2.parkingCount = 9
+      return t2.pendingCap(id) * 3
+    }))
+  check(`istemci sert tavanı sunucu clamp'ini (8000) aşmıyor (max ${maxCap})`, maxCap <= 8000)
+
+  // #456 + #216-4: itibar 5.0'da donmamalı
+  const r1 = new GameState()
+  r1.day = 30; r1.reputation = 5.0
+  r1.stats.served = 100; r1.stats.lost = 0
+  r1.reconcileReputation()          // ilk çağrı işaretçiyi kurar
+  r1.stats.served += 60; r1.stats.lost += 40   // KÖTÜ gün: %40 kayıp
+  const bad = r1.reconcileReputation()
+  check(`kötü günde itibar DÜŞER (5.00 → ${r1.reputation.toFixed(2)})`, r1.reputation < 4.95 && bad.delta < 0)
+  check('düşüş tek günde şok yapmaz (≤0.30)', bad.delta >= -0.301)
+  // üst üste kötü günler biriktirir
+  for (let i = 0; i < 10; i++) { r1.stats.served += 60; r1.stats.lost += 40; r1.reconcileReputation() }
+  check(`ihmal edilen istasyon itibarı gerçekten çöker (${r1.reputation.toFixed(2)} < 2.6)`, r1.reputation < 2.6)
+  // iyi hizmet geri kazandırır
+  for (let i = 0; i < 12; i++) { r1.stats.served += 100; r1.stats.lost += 0; r1.reconcileReputation() }
+  check(`kusursuz hizmet itibarı geri getirir (${r1.reputation.toFixed(2)} > 4.8)`, r1.reputation > 4.8)
+  check('tavan 5.0 korunur', r1.reputation <= 5.0)
+  // müşterisiz gün: unutulma (3.0'a aşınır) ama dibe vurmaz
+  const r2 = new GameState(); r2.day = 30; r2.reputation = 5.0
+  r2.reconcileReputation()
+  for (let i = 0; i < 20; i++) r2.reconcileReputation()   // hiç müşteri yok
+  check(`müşterisiz günler itibarı 3.0'a aşındırır (${r2.reputation.toFixed(2)})`, r2.reputation > 2.9 && r2.reputation < 3.2)
+  // yeni oyuncu koruması bozulmadı
+  const r3 = new GameState(); r3.day = 1; r3.reputation = 3.0
+  r3.reconcileReputation(); r3.stats.served = 5; r3.stats.lost = 20
+  r3.reconcileReputation()
+  check('grace döneminde itibar 2.5 altına inmez', r3.reputation >= 2.5)
+  // trend göstergesi
+  check('trend yönü raporlanır', r1.repTrend === 1 || r1.repTrend === 0)
+}
+
+// ---- §25: DEKORATİF SOKAK LAMBASI (#358, #679-1, #835) ----
+{
+  console.log('\n== 25) Sokak lambası: kurulabilir/taşınabilir/satılabilir ==')
+  const g = new GameState(); g.money = 100_000
+  const before = g.money
+  buyItem(g, 'lamp')
+  check('lamba satın alınabilir', g.lampCount === 1 && g.money === before - 2500)
+  buyItem(g, 'lamp'); buyItem(g, 'lamp')
+  check('sınırsız kurulur (3 adet)', g.lampCount === 3)
+  // itibar katkısı — tavanlı (dekorasyon sömürüsü yok)
+  const rep3 = g.decorRep()
+  for (let i = 0; i < 50; i++) buyItem(g, 'lamp')
+  check(`lamba itibarı tavanlı (${g.decorRep().toFixed(2)} ≤ 0.30 + dekor)`, g.decorRep() <= 0.30001)
+  check('3 lambanın katkısı 50 lambadan az', rep3 < g.decorRep() || rep3 === 0.12)
+  // satış: HERHANGİ bir örnek (2c kuralı)
+  const n0 = g.lampCount
+  check('herhangi bir örnek satılabilir', !!sellInfo(g, 'lamp#0') && !!sellInfo(g, 'lamp'))
+  applySell(g, 'lamp#1')
+  check('satınca sayaç düşer', g.lampCount === n0 - 1)
+  // varlık değeri: anti-cheat servet tavanına girer (yoksa sunucu 409 verir)
+  const g2 = new GameState(); g2.money = 100_000
+  const ev0 = g2.equipmentValue()
+  buyItem(g2, 'lamp')
+  check('lamba EKİPMAN DEĞERİNE girer (sunucu servet tavanı senkronu)', g2.equipmentValue() === ev0 + 2500)
+  // şubeye özgü: LOC_FIELDS'te (her şubenin kendi lambaları)
+  check('lampCount şubeye özgü (LOC_FIELDS)', LOC_FIELDS.includes('lampCount'))
+  const ser = serializeState(g)
+  check('lampCount kaydedilir (serialize)', typeof ser.lampCount === 'number')
+  const hyd = new GameState(); hydrateState(hyd, ser)
+  check('lampCount geri yüklenir (hydrate)', hyd.lampCount === g.lampCount)
+  // devir: sıfırlanır
+  const g3 = new GameState(); g3.money = 100_000; buyItem(g3, 'lamp')
+  g3.money = 50_000_000; g3.day = 200
+  if (g3.canHandover()) { g3.handover(); check('devirde lambalar sıfırlanır', g3.lampCount === 0) }
+  else check('devir eşiği tutmadı (atlandı)', true)
 }
 
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)

@@ -278,7 +278,7 @@ const COST = {
 const MANAGER_COSTS = [18000, 34000, 60000]      // istemci state.ts ile BİREBİR
 const DECOR_COSTS = [15000, 40000, 90000]
 const STAFF_TRAIN_COSTS = [12000, 26000, 48000]
-const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000 }
+const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000, lamp: 2500 }
 const sumUpto = (arr, k) => { let t = 0; const n = Math.max(0, Math.min(arr.length, Math.floor(k) || 0)); for (let i = 0; i < n; i++) t += arr[i]; return t }
 function buildingValue(s) {
   if (!s || typeof s !== 'object') return 0
@@ -300,6 +300,7 @@ function buildingValue(s) {
   v += sumUpto(COST.ev, n(s.evChargers))
   if (s.tankCounts && typeof s.tankCounts === 'object') for (const k of ['benzin', 'dizel', 'lpg']) v += sumUpto(COST.tankAdd, n(s.tankCounts[k], 1))
   v += FLAT.solar * n(s.solarCount) + FLAT.airwater * n(s.airWaterCount) + FLAT.selfwash * n(s.selfWashCount) + FLAT.parking * n(s.parkingCount)
+  v += FLAT.lamp * n(s.lampCount) // sokak lambası (state.ts LAMP_COST ile senkron)
   if (s.hasDiesel) v += FLAT.dieselgen
   if (s.hasSMR) v += FLAT.smr
   if (s.hasWash) v += FLAT.wash
@@ -338,7 +339,7 @@ function sanitizeSave(save) {
   // Bu ünitelerin istemcide sınırı YOK ("sınırsız kurulur"). 30 clamp'i 31. üniteyi
   // save'de siliyordu (para gitti, ünite yok — gir-çık şikâyetinin bir kolu). 200 = abuse
   // tavanı; meşru oyuncunun asla ulaşamayacağı kadar yüksek.
-  for (const k of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount']) {
+  for (const k of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount', 'lampCount']) {
     if (k in s) s[k] = clamp(s[k], 0, 200, 0)
   }
   s.evChargers = clamp(s.evChargers, 0, 12, 0) // state.ts EV_COSTS = 12 kademe
@@ -399,7 +400,7 @@ function sanitizeSave(save) {
   if (s.pendingCash && typeof s.pendingCash === 'object') {
     // kumbara cap'i tesis gelişmişliğine göre 1800'e kadar çıkabilir (istemci pendingCap);
     // sabit 600 clamp'i geliştirilmiş kumbarayı senkronda kırpıyordu → 2500'e (güvenli tavan) çıkarıldı
-    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 2500, 0)
+    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 8000, 0) // taşma tavanı 3x cap
   }
   if (typeof s.stationName === 'string') s.stationName = s.stationName.slice(0, 14)
   if (s.prices && typeof s.prices === 'object') {
@@ -457,7 +458,7 @@ function sanitizeSave(save) {
       f.batteryLevel = clamp(f.batteryLevel, 0, 3, 0)
       f.battery = clamp(f.battery, 0, 600, 0)
       f.uranium = clamp(f.uranium, 0, 100, 0)
-      for (const key of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount']) {
+      for (const key of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount', 'lampCount']) {
         if (key in f) f[key] = clamp(f[key], 0, 200, 0)
       }
       if (sn.tankCounts && typeof sn.tankCounts === 'object') {
@@ -471,7 +472,7 @@ function sanitizeSave(save) {
         }
       }
       if (sn.pendingCash && typeof sn.pendingCash === 'object') {
-        for (const key of Object.keys(sn.pendingCash)) sn.pendingCash[key] = clamp(sn.pendingCash[key], 0, 2500, 0)
+        for (const key of Object.keys(sn.pendingCash)) sn.pendingCash[key] = clamp(sn.pendingCash[key], 0, 8000, 0)
       }
       for (const arr of ['ownedParcels', 'pavedParcels']) {
         if (Array.isArray(sn[arr])) sn[arr] = sn[arr].filter(k2 => {
