@@ -464,6 +464,7 @@ const world = new World(staticLib, locHint)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
 let parkInfoShown = 0
+let rampFullT = 0 // otoyol: "şerit doldu" uyarısı spam olmasın
 let autoChargeShown = 0
 let appConfig: any = null // /api/config yanıtı (RevenueCat key vb. lazy kullanım için)
 const isPromoMode = new URLSearchParams(location.search).has('promo')
@@ -1032,9 +1033,24 @@ const cars = new CarManager(world.scene, modelLib, {
     const tl = state.theme().features?.trafficLight
     return tl ? { red: state.lightRed(), y: tl.y } : null
   },
+  highway: () => {
+    const hw = state.theme().features?.highway
+    return hw ? { ...hw, signLevel: state.signLevel } : null
+  },
+  onRampFull: () => {
+    // Yavaşlama şeridi doldu → müşteri otobana geri döndü. Otoyolun imza kayıp türü:
+    // oyuncuyu APRON KAPASİTESİ yatırımına iter (rapor §6.4 kural 2).
+    state.stats.lost++
+    if (rampFullT <= 0) {
+      rampFullT = 12
+      ui.toast(t('🛣️ Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.'), 'bad')
+    }
+  },
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
-  farActive: () => world.farStationOn,
+  // Otoyolda orta BARİYER var: karşı yön fiziksel olarak erişilemez → karşı istasyon YOK
+  // (rapor §6.4: bunun yerine ayna simetrik ikinci tesis ayrı yatırımdır).
+  farActive: () => world.farStationOn && !state.theme().lane.barrier,
   farGateInY: () => world.gateIn2.y,
   farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
@@ -4041,6 +4057,7 @@ function frame() {
     const chip = document.getElementById('hud-light-chip')
     if (chip && chip.style.display !== 'none') chip.style.display = 'none' // ışıksız şubede gizli
   }
+  if (rampFullT > 0) rampFullT -= dt
   audio.setDiesel(state.dieselRunning() && !state.closed)
   audio.setPump(cars.cars.some(c => c.filling && c.phase === 'atPump' && !c.wrongFuelHandled))
   Car.solids = hardRects()

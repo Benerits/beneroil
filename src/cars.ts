@@ -750,6 +750,10 @@ export interface CarManagerOpts {
   graphEnabled?: () => boolean
   /** trafik ışığı durumu (çevre yolu/metropol): kırmızıda ışık hattında kuyruk oluşur */
   trafficLight?: () => { red: boolean; y: number } | null
+  /** OTOYOL topolojisi: erken sapma kararı + ramp kapasitesi + zor birleşme */
+  highway?: () => { decisionDist: number; rampCap: number; mergeHard: number; signReach: number; signLevel: number } | null
+  /** yavaşlama şeridi dolu → müşteri otobana geri döndü (kayıp sayacı) */
+  onRampFull?: () => void
   /** karşı istasyon kapı y'leri (far araç güneye gittiği için giriş +y / çıkış -y) */
   farGateInY?: () => number
   farGateOutY?: () => number
@@ -942,9 +946,11 @@ export class CarManager {
       })
       if (laneBusy) {
         c.yieldT += dt
-        // 3.5 sn'den fazla yol veremediyse ZORLA katıl: yoğun trafikte çıkış ağzı tıkanıp
-        // araçlar buharlaşıyordu (yük testi: gate-out'ta 19 araç birikmesi).
-        if (c.yieldT < 3.5) { c.hold = true; c.waitingForToken = true }
+        // 3.5 sn'den fazla yol veremediyse ZORLA katıl (yoğun trafikte çıkış ağzı tıkanıp
+        // araçlar buharlaşıyordu). OTOYOLDA birleşme daha zor: süre mergeHard katı —
+        // hızlı akışa katılmak için gerçek boşluk beklenir (rapor §6.4 kural 3).
+        const hardMul = this.opts.highway?.()?.mergeHard ?? 1
+        if (c.yieldT < 3.5 * hardMul) { c.hold = true; c.waitingForToken = true }
       } else c.yieldT = 0
     }
 
@@ -1003,8 +1009,10 @@ export class CarManager {
       const G = this.geom(c.station)
       const dy = (G.gateOutY - c.group.position.y) * G.dirY // >0 → çıkış ağzı İLERİDE
       if (dy <= 0 || dy > 16) continue
-      const waiting = this.cars.some(o => o !== c && o.phase === 'leaving' && o.station === c.station && o.yieldT > 0.7)
-      if (waiting) c.speedScale = Math.min(c.speedScale, 0.5)
+      const hardMul2 = this.opts.highway?.()?.mergeHard ?? 1
+      const waitThresh = 0.7 / hardMul2 // birleşme zorsa DAHA ERKEN yol aç (otoyol: ~0.3 sn)
+      const waiting = this.cars.some(o => o !== c && o.phase === 'leaving' && o.station === c.station && o.yieldT > waitThresh)
+      if (waiting) c.speedScale = Math.min(c.speedScale, hardMul2 > 1.5 ? 0.34 : 0.5)
     }
 
     // ---- REZERVASYON KAPISI (trafik raporu §5): çakışma bölgesine (kapı ağzı / iç koridor)
@@ -1071,15 +1079,33 @@ export class CarManager {
       }
     }
 
-    // giriş kararı — yakın şeritte y>-26'da, karşı şeritte (araç güneye gider) y<+26'da
+    // giriş kararı — yakın şeritte y>-26'da, karşı şeritte (araç güneye gider) y<+26'da.
+    // OTOYOL (rapor §6.4): karar çok daha ERKEN verilir (tesisten decisionDist birim önce)
+    // ve tabela bu mesafeyi UZATIR — tabela burada birinci kaldıraç. Karar noktasında
+    // yavaşlama şeridi DOLUYSA araç otobana geri döner = KAÇAN MÜŞTERİ (yeni kayıp türü).
+    const hw = this.opts.highway?.()
     for (const car of this.cars) {
       if (car.phase !== 'transit' || car.converted) continue
+      const gateInY = this.opts.gateInY()
+      const decisionY = hw
+        ? gateInY - (hw.decisionDist + hw.signReach * hw.signLevel) // near: tesisten önce
+        : DECISION_Y
       const atDecision = car.lane === 'near'
-        ? car.group.position.y > DECISION_Y
-        : car.group.position.y < -DECISION_Y
+        ? car.group.position.y > (hw ? decisionY : DECISION_Y)
+        : car.group.position.y < -(hw ? Math.abs(decisionY) : DECISION_Y)
       if (!atDecision) continue
       car.converted = true
-      if (car.wantsEnter) this.tryEnter(car)
+      if (!car.wantsEnter) continue
+      if (hw) {
+        // yavaşlama şeridi kuyruğu: kapasite dolu → giremez, otobana devam (kayıp)
+        // Yavaşlama şeridi kapasitesi APRON'DAKİ TÜM manevra trafiğini kapsar (slot ayırmış
+        // olsun olmasın). Eskiden yalnız slotsuzlar sayılıyordu → apron'a 9 araç birikip
+        // fiziksel sıkışma/buharlaşma üretiyordu; şerit dolunca araç OTOBANA DÖNMELİ.
+        const inRamp = this.cars.filter(o => o !== car && o.station === car.station
+          && (o.phase === 'driving' || o.phase === 'waiting')).length
+        if (inRamp >= hw.rampCap) { this.opts.onRampFull?.(); continue }
+      }
+      this.tryEnter(car)
     }
 
     // bekleyen yakıt müşterilerini boş (ve sağlam) pompaya yolla — pompanın istasyonuyla eşleşen müşteri
@@ -1188,7 +1214,11 @@ export class CarManager {
       car.group.position.set(LANE_NEAR, -40, 0)
       car.group.rotation.z = Math.PI / 2
       car.setPath([new THREE.Vector3(LANE_NEAR, 44, 0)])
-      car.wantsEnter = Math.random() < this.opts.entryChance() * this.stationCrowdFactor(isEv, 'near')
+      // OTOYOL: sürücü tesisi 40+ birim öncesinden görüp karar verir — doluluğu BİLEMEZ.
+      // Bu yüzden kalabalık frenini yumuşat; asıl kısıt YAVAŞLAMA ŞERİDİ kapasitesidir
+      // (dolu ise araç karar noktasında otobana döner = kaçan müşteri, rapor §6.4 kural 2).
+      const crowd = this.stationCrowdFactor(isEv, 'near')
+      car.wantsEnter = Math.random() < this.opts.entryChance() * (this.opts.highway?.() ? Math.max(0.75, crowd) : crowd)
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
     } else {
       car.station = 'far'

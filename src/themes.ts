@@ -45,6 +45,11 @@ export interface LocationTheme {
 
   /** şubeye özgü sahne/mekanik öğeleri — kasabada hepsi kapalı (davranış birebir korunur) */
   features?: {
+    /** OTOYOL: yavaşlama/hızlanma şeridi + erken sapma kararı (rapor §6.4).
+     *  decisionDist: tesisten kaç birim önce sapma kararı verilmeli (tabela bunu uzatır)
+     *  rampCap: yavaşlama şeridinde bekleyebilecek araç sayısı (dolunca müşteri KAÇAR)
+     *  mergeHard: hızlanma şeridinde birleşme zorluğu (yol verme süresi çarpanı) */
+    highway?: { decisionDist: number; rampCap: number; mergeHard: number; signReach: number }
     /** trafik ışığı: kırmızıda istasyon önünde kuyruk → giriş şansı ×boost (çevre yolu imzası) */
     trafficLight?: { greenSec: number; redSec: number; boost: number; y: number }
     /** yaya müşteri: yaya geçidinden gelip araçsız market/kafe cirosu bırakır */
@@ -107,6 +112,13 @@ export const OTOYOL: LocationTheme = {
   // otoyolda fiyat esnekliği ~0 (60 km alternatif yok), itibar önemsiz, TABELA kritik
   econ: { entryBase: 0.26, priceElasticity: 0.25, repWeight: 0.3, signWeight: 2.2, tipRate: 0.08 },
   unlock: { cash: 2_000_000, stars: 6 },
+  features: {
+    // Sapma kararı 34 birim önce verilir; her tabela seviyesi bunu 9 birim UZATIR
+    // (tabela burada birinci kaldıraç). Yavaşlama şeridi 3 araç alır; dolunca gelen
+    // otobana geri döner = KAÇAN MÜŞTERİ. Birleşme zor: yüksek hızlı akışa katılmak sürer.
+    highway: { decisionDist: 34, rampCap: 3, mergeHard: 1.6, signReach: 9 },
+    urban: false,
+  },
 }
 
 export const THEMES: Record<LocationTheme['id'], LocationTheme> = {

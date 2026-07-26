@@ -325,6 +325,47 @@ export class World {
     ground.receiveShadow = true
     s.add(ground)
 
+    if (th.lane.barrier) {
+      // ---- OTOYOL (rapor §6.4): 2×3 şerit, ORTA BARİYER, ramp şeritleri ----
+      // Yol daha geniş: şerit sayısı temadan (count=3) → toplam genişlik ~4.6 * count/1.6
+      const extra = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 220), roadMat)
+      extra.position.set(ROAD_X - 3.6, 0, 0.009); s.add(extra)   // near yönü ek şeritler
+      const extra2 = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 220), roadMat)
+      extra2.position.set(ROAD_X + 3.6, 0, 0.009); s.add(extra2) // karşı yön ek şeritler
+      // orta bariyer (new-jersey): karşıya geçiş fiziksel olarak YOK
+      const barrier = new THREE.Mesh(new THREE.BoxGeometry(0.55, 220, 0.85), lam(0xd6d2c6))
+      barrier.position.set(ROAD_X, 0, 0.42); s.add(barrier)
+      // YAVAŞLAMA + HIZLANMA şeridi: apron boyunca yola paralel ek asfalt bandı
+      const gi = APRON_IN_Y, go = APRON_OUT_Y
+      const decel = new THREE.Mesh(new THREE.PlaneGeometry(2.2, th.lane.rampLength), roadMat)
+      decel.position.set(ROAD_X - 3.0, gi - th.lane.rampLength / 2 + 2, 0.012); s.add(decel)
+      const accel = new THREE.Mesh(new THREE.PlaneGeometry(2.2, th.lane.rampLength + 4), roadMat)
+      accel.position.set(ROAD_X - 3.0, go + (th.lane.rampLength + 4) / 2 - 2, 0.012); s.add(accel)
+      // ramp kenar çizgileri (kesikli değil: sürekli, çıkış/giriş şeridi işareti)
+      for (const [cy, len] of [[gi - th.lane.rampLength / 2 + 2, th.lane.rampLength], [go + (th.lane.rampLength + 4) / 2 - 2, th.lane.rampLength + 4]] as [number, number][]) {
+        const line = new THREE.Mesh(new THREE.PlaneGeometry(0.12, len), lam(0xe8e4d8))
+        line.position.set(ROAD_X - 4.1, cy, 0.02); s.add(line)
+      }
+      // yüksek direkli aydınlatma (12 m) — otoyol imzası, instanced
+      const poleN = 9
+      const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.13, 0.16, 11, 8), lam(0x6a7078), poleN)
+      const pm = new THREE.Matrix4()
+      for (let i = 0; i < poleN; i++) {
+        pm.makeRotationX(Math.PI / 2)
+        pm.setPosition(ROAD_X + 5.6, -88 + i * 22, 5.5)
+        poles.setMatrixAt(i, pm)
+      }
+      poles.instanceMatrix.needsUpdate = true; s.add(poles)
+      // gürültü bariyeri (karşı yakada duvar) + uzak dağ silüeti
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 220, 3.2), lam(0x9aa1a9))
+      wall.position.set(ROAD_X + 7.4, 0, 1.6); s.add(wall)
+      for (let i = 0; i < 5; i++) {
+        const mt = new THREE.Mesh(new THREE.ConeGeometry(14 + i * 3, 10 + i * 2, 5), lam(0x8a94a0))
+        mt.rotation.x = Math.PI / 2
+        mt.position.set(ROAD_X + 46 + i * 6, -70 + i * 34, 5); s.add(mt)
+      }
+    }
+
     if (th.features?.urban) {
       // ---- TRAFİK IŞIĞI (mekanik: kırmızıda giriş şansı ×boost) ----
       const tl = th.features.trafficLight

@@ -615,5 +615,50 @@ console.log('== 18) Çevre Yolu imzası: trafik ışığı + yaya müşteri (rap
   check('metropolde yaya trafiği daha sık (14s)', m.theme().features.walkIns.everySec === 14)
 }
 
+console.log('== 19) Otoyol Dinlenme Tesisi (rapor §6.4) ==')
+{
+  const { THEMES } = await import('../../src/themes.ts')
+  const hw = THEMES.otoyol.features.highway
+  check('otoyolda ramp topolojisi tanımlı', THEMES.otoyol.lane.rampLength === 20 && !!hw)
+  check('orta BARİYER var → karşı istasyon YOK (rapor kuralı)', THEMES.otoyol.lane.barrier === true)
+  check('kasabada bariyer yok (karşı istasyon çalışır)', THEMES.kasaba.lane.barrier === false)
+  check('yavaşlama şeridi kapasitesi 3 araç', hw.rampCap === 3)
+  check('birleşme otoyolda ZOR (mergeHard 1.6 — ölçümle dengelendi)', hw.mergeHard > 1.5)
+
+  // ERKEN SAPMA KARARI: tabela mesafeyi uzatır (tabela = birinci kaldıraç)
+  const decisionY = (gateInY, signLevel) => gateInY - (hw.decisionDist + hw.signReach * signLevel)
+  const d0 = decisionY(-8, 0), d3 = decisionY(-8, 3)
+  check(`tabela 0 → karar ${Math.abs(d0 + 8)} birim önce`, Math.abs(d0 + 8) === 34)
+  check(`tabela 3 → karar ${Math.abs(d3 + 8)} birim önce (27 birim DAHA ERKEN)`, Math.abs(d3 + 8) === 61)
+  check('tabela sapma kararını uzatır (kaçan müşteri azalır)', d3 < d0)
+
+  // EKONOMİK KİMLİK: fiyat serbest, itibar önemsiz, tabela kritik
+  const o = new GameState()
+  o.unlockedLocs.push('otoyol'); o.switchLoc('otoyol', { placedPos: {}, placedRot: {}, placedRects: [] })
+  const base = o.entryChance()
+  for (const f of ['benzin', 'dizel', 'lpg']) o.prices[f] = priceBounds(f)[1]
+  check(`otoyolda TAVAN FİYAT akışı çok az düşürür (${(o.entryChance() / base * 100).toFixed(0)}% ≥ 80%)`,
+    o.entryChance() / base >= 0.8)
+  // itibar etkisi zayıf
+  const rBefore = o.entryChance(); o.reputation = 5
+  const repEffect = o.entryChance() - rBefore
+  const k = new GameState(); const kBefore = k.entryChance(); k.reputation = 5
+  check('otoyolda itibarın etkisi kasabadan ZAYIF', repEffect < (k.entryChance() - kBefore))
+  // tabela etkisi güçlü
+  const o2 = new GameState()
+  o2.unlockedLocs.push('otoyol'); o2.switchLoc('otoyol', { placedPos: {}, placedRot: {}, placedRects: [] })
+  const s0 = o2.entryChance(); o2.signLevel = 3
+  const k2 = new GameState(); const ks0 = k2.entryChance(); k2.signLevel = 3
+  check('otoyolda TABELA etkisi kasabadan GÜÇLÜ (birinci kaldıraç)',
+    (o2.entryChance() - s0) > (k2.entryChance() - ks0) * 1.9)
+
+  // otoyolda ışık/yaya YOK (şehir mekaniği sızmamalı)
+  check('otoyolda trafik ışığı yok', !THEMES.otoyol.features.trafficLight)
+  check('otoyolda yaya müşteri yok', !THEMES.otoyol.features.walkIns)
+  // kasaba/çevre yolunda highway mekaniği YOK
+  check('kasabada highway topolojisi yok', !THEMES.kasaba.features?.highway)
+  check('çevre yolunda highway topolojisi yok', !THEMES.cevreyolu.features?.highway)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

@@ -13,7 +13,7 @@ const { CarManager } = await import('../../src/cars.ts')
 const { GameState, FUEL_PRICE } = await import('../../src/state.ts')
 
 const ROAD_X = 7.9
-function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet = false }) {
+function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet = false, highway = null }) {
   __seed = 20260726 // her senaryo AYNI tohumla başlar → A/B birebir karşılaştırılabilir
   const scene = new THREE.Scene()
   const state = new GameState()
@@ -35,7 +35,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet =
     const { onFar, y } = lay(evs, i, 5)
     return onFar ? new THREE.Vector3(2 * ROAD_X - 1.8, -y, 0) : new THREE.Vector3(1.8, y, 0)
   })
-  let served = 0, lost = 0
+  let served = 0, lost = 0, rampLost = 0
   const mgr = new CarManager(scene, null, {
     pumpCount: () => pumps, evCount: () => evs,
     pumpSlot: i => pumpSlots[Math.min(i, pumpSlots.length - 1)],
@@ -52,6 +52,8 @@ function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet =
     onCarLost: () => { lost++ },
     farActive: () => far, farGateInY: () => 8, farGateOutY: () => -8,
     graphEnabled: () => graph,
+    highway: () => highway,
+    onRampFull: () => { rampLost++ },
   })
   // servis simülasyonu: pompaya varan araç 6 sn sonra uğurlanır (gerçek oyun temposu)
   const busy = new Map()
@@ -75,9 +77,9 @@ function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet =
     if (st3.length) console.log('   sıkışanlar:', st3.join(' | '))
   }
   const stuck = mgr.cars.filter(c => c.hardStuckT > 3).length
-  if (!quiet) console.log(`${label}: servis=${served} kayıp=${lost} | buharlaşma=${st.total} (near ${st.near}/far ${st.far}) | ` +
+  if (!quiet) console.log(`${label}: servis=${served} kayıp=${lost}${highway ? ' rampKayıp=' + rampLost : ''} | buharlaşma=${st.total} (near ${st.near}/far ${st.far}) | ` +
     `rezervasyon: verildi ${gs.granted}, beklendi ${gs.denied} | kalıcı sıkışan=${stuck}`)
-  return { st, stuck, served }
+  return { st, stuck, served, rampLost }
 }
 
 let fail = 0
@@ -88,6 +90,23 @@ const SC = [
 ]
 console.log('--- GRAFİK AÇIK ---')
 const on = SC.map(([n, c]) => [n, run(n, { ...c, graph: true })])
+console.log('--- OTOYOL (ramp/merge — grafiğin sınavı) ---')
+const HW = { decisionDist: 34, rampCap: 3, mergeHard: 1.6, signReach: 9, signLevel: 2 }
+const t4 = run('T4 otoyol 6 pompa, dar kapı', { pumps: 6, evs: 4, far: false, wide: false, graph: true, highway: HW })
+if (t4.stuck > 12) { console.log(`✗ T4: kalıcı sıkışan çok (${t4.stuck})`); fail++ }
+else console.log(`✓ T4: kalıcı sıkışan ${t4.stuck}`)
+if (t4.st.total > 3) { console.log(`✗ T4: buharlaşma ${t4.st.total} (hedef ≤3)`); fail++ }
+else console.log(`✓ T4: buharlaşma ${t4.st.total}`)
+if (t4.served < 60) { console.log(`✗ T4: servis çok az (${t4.served}) — ramp akmıyor`); fail++ }
+else console.log(`✓ T4: servis ${t4.served} · ramp kaybı ${t4.rampLost} (apron kapasitesi baskısı)`)
+
+// T5: DAR APRON — ramp kapasitesi dolmalı ve "kaçan müşteri" mekaniği çalışmalı
+const t5 = run('T5 otoyol DAR apron (2 pompa)', { pumps: 2, evs: 0, far: false, wide: false, graph: true, highway: HW })
+if (t5.rampLost <= 0) { console.log('✗ T5: ramp hiç dolmadı — kaçan müşteri mekaniği ÇALIŞMIYOR'); fail++ }
+else console.log(`✓ T5: yavaşlama şeridi doldu, ${t5.rampLost} müşteri otobana döndü (apron kapasitesi baskısı GERÇEK)`)
+if (t5.st.total > 3) { console.log(`✗ T5: buharlaşma ${t5.st.total}`); fail++ }
+else console.log(`✓ T5: buharlaşma ${t5.st.total} (kayıp kuyruk değil, KARAR noktasında)`)
+
 console.log('--- GRAFİK KAPALI (referans) ---')
 const off = SC.map(([n, c]) => [n, run(n, { ...c, graph: false })])
 
