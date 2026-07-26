@@ -1,105 +1,96 @@
-# BenelOil — Kalan Faz Planları (2026-07-25 itibarıyla)
+# BenelOil — Yol Haritası ve Rapor Takip Tablosu
 
-> Ana yol haritası: `MAJOR-PLAN.md`. Bu dosya KALAN fazların uygulanabilir detay planı.
-> Çalışma kuralları: değişiklik önce `dev` (petrol-dev), prod'a Oğuz onayıyla · SQL'de
-> oyuncu save'ine dokunma YOK · save formatı yalnız additive · `state.ts` maliyet/limit
-> değişince `server/index.js` COST/clamp senkronu ŞART (tycoon-economy skill'i).
-
-## Tamamlananlar (özet)
-- **Faz 0-3 ✅ PROD'da** (25 Tem): save-wipe + clamp fixleri, dönüşüm paketi, şikâyet
-  üçlüsü, karşı-yaka istasyon + Karşı Market, trafik rahatlaması (banket kuyruğu, tabela,
-  otopark tahliyesi), rezerv görselleştirme. Feedback: 515 → ~340 açık.
-
----
-
-## Faz 4 — Otomasyon + Ekonomi Derinliği (~1 gün, skill: tycoon-economy)
-
-### 4.1 Müdür/Asistan (en çok istenen QoL, ~10 kayıt: #345 #481 #496 #351 #358 #368)
-- Yeni tesis "Yönetici Ofisi" personeli: **Müdür** — kademeli (Sv.1-3):
-  Sv.1 kumbara otomatik toplama (60 sn'de bir) · Sv.2 + panel temizliği · Sv.3 + arıza tamiri.
-- Yovmiye: pasif gelir %30 kuralına göre dengele (Sv.1 ~₺400/gün, Sv.3 ~₺1.200/gün).
-- Save: `managerLevel` (additive). Sunucu: COST tablosuna müdür kademe maliyetleri.
-- Kabul: müdürlü oyuncu 10 dk hiç tıklamadan kumbara kaybetmiyor; müdürsüz oyuncunun
-  geliri değişmiyor (nötr).
-
-### 4.2 İtibar + fiyat esnekliği görünürlüğü (#414 #456 #124 #290 #143)
-- İtibar 5.0'da yapışıp kalıyor → addRep kaynakları denetle; tavan fiyatta memnuniyet
-  düşüşü ekle (fiyat oranı entryChance'e ZATEN etkiyorsa oyuncuya GÖSTER).
-- HUD'a trafik göstergesi (#79 isteği): mevcut entryChance'i %'lik "müşteri akışı" chip'i.
-- elecPrice müşteri etkisi (#143 #290): EV entryChance'ine elektrik fiyat oranını bağla.
-- Kabul: fiyatı tavana çeken oyuncu trafik chip'inin düştüğünü GÖRÜYOR.
-
-### 4.3 Tekil ekonomi bug'ları
-- Restoran/kafe "Bugünkü ciro 0" (#193): facDaily key uyuşmazlığı kontrolü.
-- Market alışverişi kasaya eklenmiyor iddiası (#423): kumbara vs kasa karışıklığı —
-  muhtemelen UX (kumbarada birikiyor); kartta "kumbarada" ibaresini netleştir.
-- Haciz sonrası bina görünüyor ama çalışmıyor (#495): seizeCollateral görsel kaldırma.
-- Pompacı cam silmiyor (#451): attendant akışında cam-silme rastgeleliği (bahşiş %20 şansı).
-- Karşı yaka gelir ayrımı raporu (#317): ofis panelinde near/far satırları.
-
-### 4.4 Raporlama (#430 #480 #245 #384)
-- Gün sonu özet modali: tesis bazlı gelir dökümü + kâr/zarar sade tablo.
-- Ofis panelinde son 7 gün kâr grafiği (basit sparkline).
+> **TEK KAYNAK: `docs/raporlar/` altındaki iki rapor.** Bu dosya onların uygulama durumunu
+> izler; kendi başına bir plan DEĞİLDİR.
+>
+> - `raporlar/beneloil-trafik-ve-karsi-istasyon-cozum-raporu.md` (26 Tem 2026)
+> - `raporlar/beneloil-lategame-ekonomi-raporu.md` (26 Tem 2026)
+>
+> **Tarihçe:** Bu dosyanın ilk hali (25 Tem) raporlar gelmeden önce, 481 feedback'in
+> kümelenmesi + `WHY-IT-WORKS.md` üzerine yazılmış "Faz 0-6" planıydı. Raporlar geldikten
+> sonra uygulama tamamen rapor maddelerine göre yürüdü; bu sürüm o eski fazları bırakıp
+> rapor maddeleriyle birebir eşleşen bir takip tablosuna dönüştü. (Eski faz numaralarının
+> karşılığı en altta.)
+>
+> **Çalışma kuralları:** değişiklikler önce `dev` (petrol-dev) — prod'a alma yalnız Oğuz
+> isteyince · SQL'de oyuncu save'ine dokunma yok · save formatı yalnız additive ·
+> `state.ts` maliyet/limit değişince `server/index.js` COST/clamp senkronu şart.
+>
+> **Testler:** `npm run test:all` → faz-checks (200) · wealth-check (8) · sim-smoke ·
+> traffic-load (A/B + T4/T5 otoyol).
 
 ---
 
-## Faz 5 — Endgame İçerik (~2-3 gün, skill: tycoon-design + tycoon-economy)
+## 1. Trafik raporu — madde takibi
 
-> Sorun: "oyun bitti, para var harcayacak yer yok" (~8 kayıt: #420 #422 #497 #503 #512).
-> Kural: her yeni gelir kaynağının yanına SINK koy (bakım/riziko/artan maliyet).
+| # | Madde | Durum | Nerede |
+|---|---|---|---|
+| B1 | Karşı pompa/şarj çarpışma kutusu 3.6 birim kayık (hayalet duvar) | ✅ **prod** | `world.pumpBase/evBase` + `unitRect()` |
+| B2 | Çıkışta yol verme yalnız near koordinatında | ✅ **prod** | `cars.ts` merge-yield, `geom()` tabanlı |
+| B3 | `rerouteForGates` karşı yakayı atlıyor | ✅ **prod** | depth tabanlı, ünite taşımada da çağrılıyor |
+| B4 | Otopark indeks kayması | ✅ **prod** | kararlı kimlik `parking#N:i` + `parkId` |
+| B7 | Çarpışma kutuları rotasyonu yok sayıyor | ✅ **prod** | `unitRect()` en-boy takası |
+| 3.1 | Buharlaşma telemetrisi | ✅ **prod** | `evapStats` |
+| 3.2 | `atEntry` eşiği near sabiti | ✅ **prod** | depth tabanlı |
+| §5 | **Rezervasyon tabanlı mimari** | ✅ **prod** | `src/traffic-graph.ts` — A/B: buharlaşma %55↓ |
+| §6.3 | Yaka simetrisi regresyon testi | ✅ | faz-checks §4/§14 |
+| B5 | Bekleme noktaları sabit dünya koordinatı | ⬜ | S |
+| B6 | Tır parkı yalnız near yakada | ⬜ | S |
+| B8 | Yaka başına tesis nüshaları | 🟡 yalnız `market2` | M |
+| 3.3 | O(n²) çarpışma → uniform grid | ⬜ | M (mobil ısınma) |
+| 3.4 | Kapı ayrım kısıtı (giriş/çıkış ≥6 birim) | 🟡 mevcut kısıt ≥5 | XS |
+| 3.5 | İç koridor rezervasyonu | ⬜ | XS |
+| §6.1 | `?traffic=1` debug overlay | ⬜ | S |
 
-### 5.1 Lastikçi (3 bağımsız istek: #376 #377 #496)
-- vehicleServices kalıbında yeni tesis (yağ değişimi klonu): ₺120-200/servis, %10 kullanım.
-- Kademe: Sv.1 tamir → Sv.2 + satış → Sv.3 + balans (gelir artar, yovmiye ekle).
+## 2. Ekonomi raporu — madde takibi
 
-### 5.2 Senaryo/risk olayları (#350'de hazır liste, #328 #152)
-- Olay motoru: gün başında zar — tanker kazası (yakıt gelmez, iade), lavabo tıkanması
-  (vidanjör ₺), pompacı grevi (1 gün otomasyon kapalı), müfettiş denetimi (temiz istasyona
-  bonus itibar). Murphy kuralı: aynı anda maks 1 olay, para tamponuna göre tartılı.
-- Kabul: olaylar gün geliri ±%15 bandında kalır; grace (gün 1-2) muaf.
+| Katman | Madde | Durum | Nerede |
+|---|---|---|---|
+| 1a | `entryChance` yumuşak tavan (Kusur #1) | ✅ **prod** | asimptotik 0.95 |
+| 1b | Trafik arzı gelişmişliğe bağlı (Kusur #2) | ✅ **prod** | `trafficPull()` |
+| 1c | Müşteri segmentleri — ₺/müşteri ekseni | ✅ **prod** | premium/filo/otobüs, ₺233→₺1.076 |
+| 2a | Varlığa bağlı OPEX | ✅ **prod** | 10 günlük rampa |
+| 2b | Reklam/pazarlama bütçesi sink'i | ✅ **prod** | ₺0-8.000/gün |
+| 2b | Ruhsat, sigorta, personel eğitimi, dekorasyon, ekipman yaşlanması | ⬜ | M |
+| 2c | Her yapı için yıkma/satma | 🟡 kısmen | XS |
+| 3a | Ortak şirket kasası + şube bazlı P&L | ✅ **dev** | `locSnapshots`, `switchLoc()` |
+| 3b | Prestij "Devret" | ✅ **prod** | marka yıldızı, eşik ikiye katlanır |
+| 3c | Şehir katmanı (5 lokasyon) | 🟡 **3/5** | kasaba ✅ · çevre yolu ✅dev · otoyol ✅dev |
+| 4a | B2B sözleşmeler | ✅ **prod** | 5 şablon, kapasite şartı |
+| 4b | Piyasa dalgalanması | ⬜ | S |
+| 4c | Leaderboard + haftalık + sezon | ⬜ | S / M |
+| 4d | AI rakip istasyon | ⬜ | XL |
+| §6.1 | `LocationTheme` altyapısı | ✅ **prod** | `src/themes.ts` |
+| §6.2 | Kasaba — "müdavim müşteri" mekaniği | ⬜ | S |
+| §6.3 | **Çevre Yolu** (ışık penceresi + yaya müşteri) | ✅ **dev** | — |
+| §6.4 | **Otoyol** (ramp/merge + kaçan müşteri) | ✅ **dev** | — |
+| §6.5 | **Marina** | ⬜ | XL (10-14 gün) |
+| §6.6 | Metropol | 🟡 tema+ışık var, sahne yok | M |
+| §7 #5 | **Müdür/asistan otomasyonu** | ⬜ | S — ~10 feedback ister, en çok istenen QoL |
+| §7 #7 | Personel derinliği (kademe/maaş/skill) | ⬜ | M — 76 feedback |
+| §9 | Ölçüm planı (doygunluk günü, nakit/varlık, D7/D30) | ⬜ | telemetri yok |
 
-### 5.3 Piyasa dalgalanması / borsa-lite (#310 #409 #431)
-- FUEL_COST günlük ±%15 salınım (haber toast'u: "OPEC toplantısı — mazot ucuzladı").
-- İleri seviye: vadeli alım (3 gün sonrası için bugünden fiyat kilitle) — tek buton.
-- Sunucu senkronu: anti-cheat servet tavanı fiyat salınımını hesaba katmalı (allowance payı).
+## 3. Raporlarda olmayan, feedback'ten gelen kalanlar
 
-### 5.4 İkinci şehir / prestij (#479 #274 #497)
-- Tasarım kararı gerekli (Oğuz): (A) prestij-reset — istasyonu "sat", kalıcı çarpanla
-  yeniden başla (ucuz, hızlı) vs (B) gerçek 2. harita (pahalı, büyük).
-- Öneri: önce (A) — endgame parası için dev sink + tekrar oynanabilirlik.
+- Tekil bug'lar: restoran/kafe ciro 0 (#193) · market kasaya eklemiyor (#423) · haciz sonrası işlevsiz bina (#495) · pompacı cam silmiyor (#451)
+- İtibar 5.0'da yapışıyor (#456)
+- Raporlama: gün sonu özet modali, 7 günlük kâr grafiği, karşı yaka gelir ayrımı (#317)
+- Taşınamayan objeler: tabela/totem (~10), sokak lambası geri konamıyor (#358)
+- Oyun içi "Yenilikler" modali (#465) · EN eksik çeviriler (#464) · FR (#435)
+- Perf: rAF bütçesi + düşük güç modu (InstancedMesh yapıldı)
 
-### 5.5 Sosyal (#16 #397 #70 #361)
-- Read-only leaderboard: istasyon adı + servet + gün (sunucuda mevcut save verisinden,
-  yeni tablo gerekmez). Oyun içi "Sıralama" sekmesi.
-- Klan/ittifak: v2'ye ertele (sunucu yükü + moderasyon maliyeti).
+## 4. Operasyonel (kod dışı)
+
+| İş | Durum |
+|---|---|
+| iOS build + `native-shim.js` ORIGIN kararı (dev→prod) | ⬜ Oğuz kararı — bugünkü hiçbir fix TestFlight'ta yok |
+| Dokploy API key rotasyonu | ⬜ |
+| GitHub Support: eski commit cache'inden SQL dump temizliği | ⬜ |
+| Dev'deki 3 paketin prod'a alınması | ⬜ Oğuz onayı |
+| Prod'a çıkan fixlerin feedback'te kapatılması | ⬜ |
 
 ---
 
-## Faz 6 — Platform & Cila (~1 gün + App Store süreci, skill: tycoon-retention)
-
-### 6.1 iOS lansmanı (EN KRİTİK — bugünkü fixlerin hiçbiri iOS'ta yok)
-1. `beneloil-ios/scripts/native-shim.js` ORIGIN kararı: petrol-dev → petrol.benerits.com (Oğuz onayı).
-2. CI tetikle (`build-testflight.yml`) → yeni bundle TestFlight'a.
-3. RevenueCat env'leri prod'a (`REVENUECAT_SECRET_KEY` fail-closed doğrulama hazır).
-4. App Store v1 checklist: `docs/ios-cikis-analizi.md` + reklamsız v1 kararı.
-
-### 6.2 Performans/ısınma (#113 #117 #511 #105)
-- rAF bütçesi: arka plan sekmede render durdur (ses de sussun — #325 bug'ı birlikte çözülür).
-- Düşük güç modu: gölge/bloom kapat toggle'ı (Ayarlar).
-- Kabul: iPhone'da 10 dk oyunda ısınma şikâyeti smoke-test ile makul.
-
-### 6.3 Oyun içi güncelleme notları (#465 #264)
-- Ayarlar'a "Yenilikler" modali: sürüm başlıkları elle `CHANGELOG.md`'den (build'e gömülü).
-- Yeni sürümde bir kez rozet göster.
-
-### 6.4 Çeviri tamamlama (#464 #435)
-- EN eksikleri: i18n dict taraması (t() çağrısı olup dict'te olmayanlar) — script yaz.
-- FR: i18n altyapısı hazır; dict çevirisi + dil seçici 3. buton.
-
----
-
-## Sıralama önerisi
-1. **Faz 6.1 iOS** (öne çekilebilir — oyuncu tabanının fixleri alması her şeyden değerli)
-2. Faz 4 (otomasyon en çok istenen; müdür = tık angaryasının sonu)
-3. Faz 5 (içerik — retention'ın uzun vadeli bacağı)
-4. Faz 6 kalanı (cila)
+### Eski faz numaralarının karşılığı (25 Tem sürümü)
+Faz 0-3 = save/clamp/şikâyet/karşı-yaka paketleri (hepsi prod) · Faz 4 ≈ ekonomi
+Katman 1-2 + müdür · Faz 5 ≈ Katman 4 + lokasyonlar · Faz 6 = platform/cila.

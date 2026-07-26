@@ -1,4 +1,15 @@
-# BenelOil Major Plan — 2026-07-25
+# BenelOil Major Plan — 2026-07-25 (TARİHÎ BELGE)
+
+> ⚠️ **BU DOSYA GÜNCEL PLAN DEĞİLDİR.** 25 Temmuz'da, 481 feedback'in kümelenmesi üzerine
+> yazıldı; ertesi gün Oğuz iki kapsamlı rapor verdi ve uygulama tamamen onlara göre yürüdü.
+>
+> **Güncel yol haritası:** `docs/FAZ-PLANLARI.md` (rapor maddelerinin takip tablosu)
+> **Kaynak raporlar:** `docs/raporlar/`
+>
+> Bu dosya, Faz 0-3'ün (save wipe, clamp, dönüşüm, karşı yaka, trafik) hangi kanıtla
+> yapıldığını gösteren tarihî kayıt olarak duruyor.
+
+---
 
 Kanıta dayalı yol haritası: 481 açık feedback'in semantik kümelenmesi (`tycoon-feedback-ops`) +
 `WHY-IT-WORKS.md` kayıp analizi üzerine kurulu. Her faz ilgili skill'e bağlı; bir faza başlarken
