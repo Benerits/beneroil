@@ -819,6 +819,9 @@ export interface CarManagerOpts {
   /** 4 ŞERİTLİ YOL: istasyona girecek araçların kullandığı servis şeridi x'i.
    *  undefined = tek şeritli yol (mevcut davranış). */
   serviceLane?: () => { near: number; far: number } | undefined
+  /** Araçlar birbirinin içinden geçebilir mi (varsayılan: EVET).
+   *  Kapatılırsa eski "hiçbir araç diğerinin içinden geçmez" kuralı geri gelir. */
+  carsPassThrough?: () => boolean
   /** rezervasyon grafiği açık mı (test A/B + acil valf; verilmezse ?nograph=1 kuralı) */
   graphEnabled?: () => boolean
   /** trafik ışığı durumu (çevre yolu/metropol): kırmızıda ışık hattında kuyruk oluşur */
@@ -1004,15 +1007,20 @@ export class CarManager {
       } else this.farTimer = 0.5
     }
 
-    // çarpışma önleme: HİÇBİR araç bir diğerinin içinden geçmez.
-    // Önümdeki koridorda (2.8 birim ileri, 1.25 yana) araç varsa dururum.
+    // ---- ARAÇ-ARAÇ ÇARPIŞMASI: KAPALI (ürün kararı) ----
+    // Eskiden hiçbir araç diğerinin içinden geçemezdi; kuyruklar birbirini kilitleyip
+    // tıkanma ve "müşteri buharlaşması" üretiyordu. Oyuncu geri bildirimlerinin en
+    // büyük kümesi buydu. Araçlar artık birbirinin içinden geçebiliyor — izometrik
+    // görünümde ve bu hızda çakışma neredeyse fark edilmiyor, buna karşılık kilitlenme
+    // İMKÂNSIZ hâle geliyor.
+    // Bina/pompa çarpışması AYNEN duruyor (Car.solids): araç yapıların içinden geçmez.
+    // `passThrough` kapatılırsa eski davranış geri gelir (yük testi ikisini kıyaslıyor).
+    const passThrough = this.opts.carsPassThrough?.() ?? true
     const blockers = new Map<Car, Car>()
     for (const c of this.cars) { c.hold = false; c.speedScale = 1 }
+    if (!passThrough) {
     // 3.3 UNIFORM GRID: eskiden her araç HER araca bakıyordu (O(n²)) ve iç döngüde kare
     // başına yüzlerce THREE.Vector3 ayrılıyordu → GC baskısı, mobilde ısınma (#113/#117/#511).
-    // Artık araçlar ızgaraya yazılır, yalnız 3×3 komşu hücre taranır ve vektör matematiği
-    // ayırmasız skalerle yapılır. Tek davranış farkı: engelleyici olarak listede ilk denk
-    // gelen değil EN YAKIN araç seçilir — fiziksel doğrusu ve iterasyon sırasından bağımsız.
     this.rebuildCarGrid()
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked' || c.phase === 'waiting') continue
@@ -1022,28 +1030,31 @@ export class CarManager {
       let nearest: Car | null = null, nearestF = Infinity
       for (const o of this.neighbors(cp.x, cp.y)) {
         if (o === c || o.phase === 'gone') continue
-        // otopark içi: park etmiş komşu araçlar engel sayılmaz (dar aralıkta kilitlenme olmasın)
         if (o.phase === 'parked' && (c.phase === 'toPark' || c.phase === 'leaving')) continue
         const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
         const forward = dx * dir.x + dy * dir.y
         if (forward < 0.4 || forward > 3.6) continue
         const lx = dx - dir.x * forward, ly = dy - dir.y * forward
         if (lx * lx + ly * ly < 1.25 * 1.25) {
-          // iki kademe: 1.5 birime kadar orantılı YAVAŞLA, altında DUR.
-          // (eski binary dur/kalk şok dalgaları yaratıyordu — kuyruk artık akordeon gibi esner)
           if (forward < 1.5) { if (forward < nearestF) { nearestF = forward; nearest = o } }
           else c.speedScale = Math.min(c.speedScale, 0.3 + 0.7 * ((forward - 1.5) / 2.1))
         }
       }
       if (nearest) { c.hold = true; blockers.set(c, nearest) }
-      if (!c.hold) {
-        for (const ob of this.opts.extraObstacles()) {
-          const rel = new THREE.Vector3().subVectors(ob, c.group.position)
-          rel.z = 0
-          const forward = rel.dot(dir)
-          if (forward < 0.2 || forward > 3.8) continue
-          if (rel.addScaledVector(dir, -forward).length() < 1.5) { c.hold = true; break }
-        }
+    }
+    } // /if (!passThrough)
+    // Engel (yaya vb.) kontrolü çarpışma modundan BAĞIMSIZ: araçlar araçtan geçebilir
+    // ama sahnedeki engellere yine takılır.
+    for (const c of this.cars) {
+      if (c.hold || c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked') continue
+      const dir = c.headingDir()
+      if (!dir) continue
+      for (const ob of this.opts.extraObstacles()) {
+        const dx = ob.x - c.group.position.x, dy = ob.y - c.group.position.y
+        const forward = dx * dir.x + dy * dir.y
+        if (forward < 0.2 || forward > 3.8) continue
+        const lx = dx - dir.x * forward, ly = dy - dir.y * forward
+        if (lx * lx + ly * ly < 2.25) { c.hold = true; break }
       }
     }
     // trafik kuralı: şeride çıkacak araç yaklaşan trafiğe YOL VERİR ve

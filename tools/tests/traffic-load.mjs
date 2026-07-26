@@ -13,7 +13,7 @@ const { CarManager } = await import('../../src/cars.ts')
 const { GameState, FUEL_PRICE } = await import('../../src/state.ts')
 
 const ROAD_X = 7.9
-function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet = false, highway = null, service = null }) {
+function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet = false, highway = null, service = null, passThrough = true }) {
   __seed = 20260726 // her senaryo AYNI tohumla başlar → A/B birebir karşılaştırılabilir
   const scene = new THREE.Scene()
   const state = new GameState()
@@ -54,6 +54,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet =
     graphEnabled: () => graph,
     highway: () => highway,
     serviceLane: () => service,
+    carsPassThrough: () => passThrough,
     onRampFull: () => { rampLost++ },
   })
   // servis simülasyonu: pompaya varan araç 6 sn sonra uğurlanır (gerçek oyun temposu)
@@ -138,6 +139,19 @@ if (prob(t6b) > prob(t6a) * 1.1) {
 if (t6b.laneUse === undefined || t6b.laneUse <= 0) {
   console.log('✗ T6: servis şeridi hiç kullanılmadı — bağlantı kopuk'); fail++
 } else console.log(`✓ T6: servis şeridinde ${t6b.laneUse} araç doğdu (şerit gerçekten kullanılıyor)`)
+
+// ---- T7: ARAÇ-ARAÇ ÇARPIŞMASI AÇIK vs KAPALI ----
+// Ürün kararı: araçlar birbirinin içinden geçsin. Bu kıyas kararın bedelini ve
+// kazancını RAKAMLA gösterir — en kalabalık senaryoda (karşı yaka tam istasyon).
+console.log('--- ÇARPIŞMA: AÇIK vs KAPALI (aynı tohum) ---')
+const cOn  = run('T7a çarpışma AÇIK ', { pumps: 8, evs: 8, far: true, wide: true, graph: true, passThrough: false })
+const cOff = run('T7b çarpışma KAPALI', { pumps: 8, evs: 8, far: true, wide: true, graph: true, passThrough: true })
+const pr = r => r.st.total + r.stuck
+console.log(`A/B çarpışma: sorun ${pr(cOn)} → ${pr(cOff)} · servis ${cOn.served} → ${cOff.served}`)
+if (cOff.served < cOn.served) { console.log(`✗ T7: çarpışmasız mod servisi DÜŞÜRDÜ (${cOn.served} → ${cOff.served})`); fail++ }
+else console.log(`✓ T7: servis hacmi arttı (${cOn.served} → ${cOff.served})`)
+if (pr(cOff) > 0) { console.log(`✗ T7: çarpışmasız modda hâlâ ${pr(cOff)} sorun var — kilitlenme başka yerden geliyor`); fail++ }
+else console.log('✓ T7: tıkanma ve buharlaşma TAMAMEN sıfır (kilitlenme imkânsız)')
 
 console.log('--- GRAFİK KAPALI (referans) ---')
 const off = SC.map(([n, c]) => [n, run(n, { ...c, graph: false })])
