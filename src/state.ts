@@ -145,7 +145,9 @@ export function parcelCost(c: number, _r: number, s?: GameState) {
   const base = c === 0 ? 6000 : (c === 1 || c === 3) ? 9000 : 14000
   if (!s) return base
   const mult = Math.min(1 + 0.12 * s.developmentScore(), 2) // gelişmişlik zammı en fazla 2 katına çıkarır
-  return Math.round(base * mult / 100) * 100
+  // METROPOL (§6.6): şehirde arsa pahalı. Kasabada çarpan yok → mevcut denge korunur.
+  const land = s.theme().features?.land?.priceMult ?? 1
+  return Math.round(base * mult * land / 100) * 100
 }
 /** komşuluk: aynı blokta yan yana/alt alta; 0↔3 yol karşısı sayılır */
 export function parcelsAdjacent(c1: number, r1: number, c2: number, r2: number): boolean {
@@ -363,6 +365,14 @@ export class GameState {
   private promoTimer = 150
 
   owns(c: number, r: number) { return this.ownedParcels.has(parcelKey(c, r)) }
+
+  /** ALAN KITLIĞI (§6.6): bu şubede kaç parsel alınabilir (yoksa sınırsız) */
+  parcelLimit(): number | null { return this.theme().features?.land?.maxParcels ?? null }
+  /** Parsel sınırı doldu mu — arsa satın alma yolunda kontrol edilir */
+  parcelLimitReached(): boolean {
+    const lim = this.parcelLimit()
+    return lim !== null && this.ownedParcels.size >= lim
+  }
   isPaved(c: number, r: number) { return this.pavedParcels.has(parcelKey(c, r)) }
   /** eski kilitler bu getter'ları kullanır: sahip + zemin döşeli sayılır */
   get landSouth() { return this.pavedParcels.has(parcelKey(0, 0)) }

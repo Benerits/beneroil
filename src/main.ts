@@ -2603,6 +2603,12 @@ function confirmZone() {
   const z = zoneMode!
   const key = parcelKey(z.c, z.r)
   if (z.kind === 'land') {
+    // METROPOL alan kıtlığı (§6.6): şehirde satın alınabilecek parsel sayısı sınırlı
+    if (state.parcelLimitReached()) {
+      ui.toast(t('🏙️ Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.',
+        String(state.parcelLimit())), 'bad')
+      return
+    }
     const cost = parcelCost(z.c, z.r, state)
     if (state.money < cost) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
     state.money -= cost
@@ -3703,6 +3709,7 @@ function updateZoneAt(x: number, y: number) {
   zoneMode.ghost.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.06)
   zoneMode.valid = zoneMode.kind === 'land'
     ? !state.owns(c, r) && state.parcelAdjacentToOwned(c, r) && state.money >= parcelCost(c, r, state)
+      && !state.parcelLimitReached()
     : state.owns(c, r) && !state.isPaved(c, r) && state.money >= PAVE_COST
   ;(zoneMode.ghost.material as THREE.MeshBasicMaterial).color.setHex(zoneMode.valid ? 0x37c97e : 0xec5b5b)
   // canlı fiyat + durum etiketi (karşı/uzak arsalar pahalı — sürpriz olmasın) + mobil İPTAL
@@ -3710,7 +3717,9 @@ function updateZoneAt(x: number, y: number) {
   const zc = document.getElementById('zonecost')
   if (zw && zc) {
     const cost = zoneMode.kind === 'land' ? parcelCost(c, r, state) : PAVE_COST
-    const across = c >= 3 ? t(' · yol karşısı') : ''
+    const lim = state.parcelLimit()
+    const across = (c >= 3 ? t(' · yol karşısı') : '')
+      + (lim !== null ? t(' · {0}/{1} parsel', String(state.ownedParcels.size), String(lim)) : '')
     zw.style.display = 'flex'
     zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ' ✗'}`
     zc.style.color = zoneMode.valid ? 'var(--green-dark)' : 'var(--red)'

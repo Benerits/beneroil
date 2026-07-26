@@ -56,6 +56,10 @@ export interface LocationTheme {
     walkIns?: { everySec: number; min: number; max: number }
     /** görsel: orta refüj bandı + kaldırım + kentsel siluet */
     urban?: boolean
+    /** METROPOL İMZASI (rapor §6.6): ALAN KITLIĞI. Şehirde arsa hem AZ hem PAHALI;
+     *  oyuncu "her şeyi kur" yerine "neyi kurmayacağım" kararını vermek zorunda kalır.
+     *  maxParcels: satın alınabilecek toplam parsel · priceMult: arsa fiyat çarpanı */
+    land?: { maxParcels: number; priceMult: number }
     /** KASABA İMZASI (rapor §6.2): MÜDAVİM MÜŞTERİ. Küçük yerde herkes birbirini tanır;
      *  itibarını yükselten oyuncu, fiyattan BAĞIMSIZ sadık bir taban kazanır.
      *  repFloor: müdavimlerin oluşmaya başladığı itibar · share: 5.0 itibarda akışın kaç
@@ -166,6 +170,9 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
       trafficLight: { greenSec: 30, redSec: 20, boost: 2.6, y: -19 }, // şehirde ışık daha baskın
       walkIns: { everySec: 14, min: 40, max: 110 },                   // yoğun yaya trafiği
       urban: true,
+      // Metropol'ün asıl kısıtı yer: 18 parsel yerine 6, üstelik 3.2 katı fiyata.
+      // Tesis seçimi burada gerçek bir ödünleşim olur (rapor §6.6).
+      land: { maxParcels: 6, priceMult: 3.2 },
     },
   },
 }

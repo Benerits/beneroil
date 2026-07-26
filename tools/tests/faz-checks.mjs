@@ -8,7 +8,7 @@ globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: 
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'tr' }, configurable: true })
 
 const { GameState, PARCEL_COLS, PARCEL_ROWS, FUEL_COST, FUEL_PRICE, priceBounds, serializeState, hydrateState,
-  buyItem, sellInfo, applySell, LOC_FIELDS } =
+  buyItem, sellInfo, applySell, LOC_FIELDS, parcelCost } =
   await import('../../src/state.ts')
 
 // ---- SYNC bloğu: world.ts / main.ts kopyaları ----
@@ -1059,6 +1059,37 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
   o.switchLoc('otoyol', { placedPos: {}, placedRot: {}, placedRects: [] })
   o.reputation = 5.0
   check('otoyolda müdavim mekaniği KAPALI (tema kısıtı)', o.regularsShare() === 0 && o.regularsTipMult() === 1)
+}
+
+// ---- §27: METROPOL — ALAN KITLIĞI (lategame raporu §6.6) ----
+{
+  console.log('\n== 27) Metropol imzası: alan kıtlığı ==')
+  const k = new GameState()   // kasaba
+  check('kasabada parsel sınırı YOK (mevcut denge korunur)', k.parcelLimit() === null && !k.parcelLimitReached())
+  const kCost = parcelCost(1, 1, k)
+
+  const m = new GameState()
+  m.unlockedLocs.push('metropol')
+  m.switchLoc('metropol', { placedPos: {}, placedRot: {}, placedRects: [] })
+  check('metropolde parsel sınırı 6', m.parcelLimit() === 6)
+  const mCost = parcelCost(1, 1, m)
+  check(`metropolde arsa 3.2× pahalı (₺${kCost} → ₺${mCost})`, mCost > kCost * 3 && mCost < kCost * 3.5)
+  // sınır dolunca satın alma kapanır
+  check('başlangıçta sınır dolu DEĞİL', !m.parcelLimitReached())
+  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) m.ownedParcels.add(`${c}:${r}`)
+  check(`9 parselde sınır DOLU (${m.ownedParcels.size} ≥ 6)`, m.parcelLimitReached())
+  // ekonomik kimlik: fiyat esnekliği en yüksek, tabela en etkisiz
+  const th = m.theme()
+  check('metropolde fiyat esnekliği EN YÜKSEK (alternatif bol)', th.econ.priceElasticity > 1.5)
+  check('metropolde tabela neredeyse etkisiz', th.econ.signWeight < 0.4)
+  check('metropolde müdavim YOK (şehirde kimse esnafı tanımaz)', m.regularsShare() === 0)
+  // ışık mekaniği metropolde daha baskın (çevre yolundan ayrışır)
+  const cy = new GameState(); cy.unlockedLocs.push('cevreyolu')
+  cy.switchLoc('cevreyolu', { placedPos: {}, placedRot: {}, placedRects: [] })
+  check('metropolde ışık etkisi çevre yolundan GÜÇLÜ',
+    th.features.trafficLight.boost > cy.theme().features.trafficLight.boost)
+  check('metropolde yaya trafiği çevre yolundan YOĞUN',
+    th.features.walkIns.everySec < cy.theme().features.walkIns.everySec)
 }
 
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)

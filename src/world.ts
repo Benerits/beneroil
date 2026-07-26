@@ -452,6 +452,29 @@ export class World {
         const k = i % dashPerLane
         m.makeTranslation(ROAD_X + lane, -107 + k * 5, 0.021)
       })
+      // ---- METROPOL SİLUETİ (rapor §6.6): çevre yolundan görsel olarak AYRIŞSIN ----
+      // Çevre yolu alçak kentsel doku; metropol gökdelen duvarı. Determinist yükseklikler
+      // (rastgele değil) — sahne her açılışta aynı görünür. Tek InstancedMesh = 1 draw call.
+      if (th.id === 'metropol') {
+        const TOWERS = 26
+        mkInst(new THREE.BoxGeometry(1, 1, 1), lam(0x6d7683), TOWERS, (m, i) => {
+          const side = i % 2 === 0 ? -1 : 1
+          const k = Math.floor(i / 2)
+          // yükseklik determinist ama tekdüze değil: iki farklı periyotlu sinüsün karışımı
+          const h = 16 + 11 * Math.abs(Math.sin(i * 1.7)) + 7 * Math.abs(Math.sin(i * 0.53))
+          const w = 5 + 2.4 * Math.abs(Math.sin(i * 2.3))
+          m.makeScale(w, w, h)
+          m.setPosition(ROAD_X + side * (34 + (k % 3) * 11), -84 + k * 13.5, h / 2)
+        })
+        // ikinci sıra: daha uzak, daha soluk (derinlik hissi)
+        mkInst(new THREE.BoxGeometry(1, 1, 1), lam(0x8b94a1), 18, (m, i) => {
+          const side = i % 2 === 0 ? -1 : 1
+          const k = Math.floor(i / 2)
+          const h = 24 + 15 * Math.abs(Math.sin(i * 1.13))
+          m.makeScale(7, 7, h)
+          m.setPosition(ROAD_X + side * (68 + (k % 2) * 14), -76 + k * 19, h / 2)
+        })
+      }
     } else {
       for (const off of [-0.1, 0.1]) {
         const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 220), lam(0xe0b13e))

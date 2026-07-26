@@ -24,6 +24,8 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  '🏙️ Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.': '🏙️ You have reached this branch’s land limit ({0} plots) — space is tight in the city, choose carefully.',
+  ' · {0}/{1} parsel': ' · {0}/{1} plots',
   'Müdavim müşteri': 'Regular customers',
   // --- fiyat kartı / araç sayacı (kod içi literaller) ---
   'Elektrik (kWh)': 'Electricity (kWh)',
@@ -766,6 +768,8 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  '🏙️ Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.': '🏙️ Vous avez atteint la limite de terrains de cette succursale ({0} parcelles) — l’espace est rare en ville, choisissez bien.',
+  ' · {0}/{1} parsel': ' · {0}/{1} parcelles',
   'Müdavim müşteri': 'Clients fidèles',
   // --- fiyat kartı / araç sayacı (kod içi literaller) ---
   'Elektrik (kWh)': 'Électricité (kWh)',

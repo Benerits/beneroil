@@ -13,8 +13,9 @@
     "test:sim": "tsx tools/tests/sim-smoke.mjs",
     "test:wealth": "tsx tools/tests/wealth-check.mjs",
     "test:news": "tsx tools/tests/news-check.mjs",
-    "test:all": "npm run test:faz && npm run test:wealth && npm run test:news && npm run test:sim && npm run test:traffic",
-    "bench:collision": "node tools/tests/collision-bench.mjs"
+    "test:all": "npm run test:faz && npm run test:wealth && npm run test:news && npm run test:metrics && npm run test:sim && npm run test:traffic",
+    "bench:collision": "node tools/tests/collision-bench.mjs",
+    "test:metrics": "node tools/tests/metrics-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

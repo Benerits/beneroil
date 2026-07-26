@@ -494,6 +494,7 @@ function sanitizeSave(save) {
 
 // ---- hız limitleri (bellek içi; tek konteyner için yeterli) ----
 const buckets = new Map() // key -> { n, resetAt }
+let metricsCache = { data: null, at: 0 } // §9 ölçüm önbelleği (5 dk)
 let statsCache = { data: null, at: 0 }
 let lbCache = { data: null, at: 0 } // leaderboard önbelleği (60 sn)
 async function bumpStat(kind) {
@@ -580,6 +581,69 @@ async function handleApi(req, res, url) {
       }
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=45' })
       return res.end(JSON.stringify({ top: lbCache.data }))
+    }
+    // ---- §9 ÖLÇÜM PLANI (lategame raporu) ----
+    // Raporun sorduğu üç soru: (1) oyuncu kaçıncı günde DOYUYOR (para birikmeye başlıyor,
+    // harcayacak yer kalmıyor), (2) nakit/varlık oranı — sink'ler işliyor mu, (3) D1/D7/D30.
+    // Mevcut save verisinden hesaplanır: YENİ TABLO YOK, oyuncu kaydına DOKUNULMAZ.
+    // Yalnız okuma; ADMIN_KEY ile korunur (kişisel veri dönmez, hepsi toplulaştırılmış).
+    if (url === '/api/metrics' && req.method === 'GET') {
+      const key = process.env.ADMIN_KEY
+      if (!key || req.headers['x-admin-key'] !== key) {
+        res.writeHead(403, { 'content-type': 'application/json' })
+        return res.end(JSON.stringify({ error: 'forbidden' }))
+      }
+      const now = Date.now()
+      if (!metricsCache.data || now - metricsCache.at > 300_000) {
+        // Elde tuttuğumuz: her oyuncunun save'i (gün, para, ekipman) + zaman damgaları.
+        const r = await pool.query(`SELECT save, created_at, last_seen_at FROM benzinlik_player
+          WHERE save IS NOT NULL AND banned_at IS NULL`)
+        const buckets = new Map()   // gün aralığı → { n, money[], ratio[] }
+        const bucketOf = d => d < 8 ? '1-7' : d < 15 ? '8-14' : d < 31 ? '15-30' : d < 61 ? '31-60' : d < 121 ? '61-120' : '121+'
+        let d1 = 0, d7 = 0, d30 = 0, eligible1 = 0, eligible7 = 0, eligible30 = 0
+        for (const row of r.rows) {
+          const s2 = row.save && row.save.s ? row.save.s : row.save
+          if (!s2) continue
+          const day = Number(s2.day) || 1
+          const money = Number(s2.money) || 0
+          const equip = buildingValue(s2) + snapshotsValue(s2) // servet tavanıyla AYNI hesap (şubeler dahil)
+          const b = bucketOf(day)
+          let e = buckets.get(b)
+          if (!e) { e = { n: 0, money: [], ratio: [] }; buckets.set(b, e) }
+          e.n++
+          e.money.push(money)
+          // nakit / (nakit + ekipman): 1'e yaklaşırsa harcayacak yer kalmamış demektir
+          e.ratio.push(equip + money > 0 ? money / (equip + money) : 0)
+          // tutulma: hesap açıldıktan N gün SONRA hâlâ görülmüş mü
+          const age = (Date.now() - new Date(row.created_at).getTime()) / 86400000
+          const seen = (new Date(row.last_seen_at).getTime() - new Date(row.created_at).getTime()) / 86400000
+          if (age >= 1) { eligible1++; if (seen >= 1) d1++ }
+          if (age >= 7) { eligible7++; if (seen >= 7) d7++ }
+          if (age >= 30) { eligible30++; if (seen >= 30) d30++ }
+        }
+        const med = a => { if (!a.length) return 0; const x = [...a].sort((p, q) => p - q); return x[Math.floor(x.length / 2)] }
+        const order = ['1-7', '8-14', '15-30', '31-60', '61-120', '121+']
+        const progression = order.filter(k => buckets.has(k)).map(k => {
+          const e = buckets.get(k)
+          return { gun: k, oyuncu: e.n, medyanNakit: Math.round(med(e.money)),
+                   nakitOrani: Number(med(e.ratio).toFixed(3)) }
+        })
+        // DOYGUNLUK: nakit oranının medyanı 0.5'i ilk aştığı gün aralığı — bu noktadan
+        // sonra oyuncu parayı harcayamıyor demektir (raporun aradığı "doygunluk günü").
+        const sat = progression.find(p => p.nakitOrani > 0.5)
+        metricsCache = { at: now, data: {
+          toplamOyuncu: r.rows.length,
+          ilerleme: progression,
+          doygunlukAraligi: sat ? sat.gun : null,
+          tutulma: {
+            D1: eligible1 ? Number((d1 / eligible1).toFixed(3)) : null,
+            D7: eligible7 ? Number((d7 / eligible7).toFixed(3)) : null,
+            D30: eligible30 ? Number((d30 / eligible30).toFixed(3)) : null,
+          },
+        } }
+      }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      return res.end(JSON.stringify(metricsCache.data))
     }
     if (url === '/api/stats' && req.method === 'GET') {
       const now = Date.now()
