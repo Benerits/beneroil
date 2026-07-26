@@ -7,14 +7,32 @@ const ROOT = new URL('../../', import.meta.url).pathname
 const world = fs.readFileSync(path.join(ROOT, 'src/world.ts'), 'utf8')
 const kits = fs.readFileSync(path.join(ROOT, 'src/kits.ts'), 'utf8')
 
+// Metot gövdesini SIRAYA GÖRE dilimle. Dosyadaki tanım sırası:
+// buildMarinaScene → buildIndustrialDistrict → buildCommercialDistrict →
+// buildRingRoadDistrict → buildBlockSkyline. Yanlış sıra boş dilim verir ve
+// test sessizce yanlış sonuç üretir (ilk sürümde tam bu oldu).
+const ORDER = ['buildMarinaScene', 'buildIndustrialDistrict', 'buildCommercialDistrict',
+               'buildRingRoadDistrict', 'buildBlockSkyline']
+const body = (name) => {
+  const i = ORDER.indexOf(name)
+  const a = world.indexOf(`private ${name}(`)
+  const b = i + 1 < ORDER.length ? world.indexOf(`private ${ORDER[i + 1]}(`) : world.length
+  if (a < 0 || b <= a) throw new Error(`gövde dilimlenemedi: ${name}`)
+  return world.slice(a, b)
+}
+const industrial = body('buildIndustrialDistrict')
+const commercial = body('buildCommercialDistrict')
+const ring = body('buildRingRoadDistrict')
+const marina = body('buildMarinaScene')
+
 let pass = 0, fail = 0
 const check = (n, c, d = '') => { c ? (pass++, console.log('  ✓ ' + n)) : (fail++, console.log(`  ✗ ${n}${d ? ' — ' + d : ''}`)) }
 
 console.log('== 1) Sahneler kite bağlı ve yedekli ==')
 check('otoyol sanayi bölgesi çağrılıyor', /this\.buildIndustrialDistrict\(s\)/.test(world))
 check('metropol ticari doku çağrılıyor', /this\.buildCommercialDistrict\(s\)/.test(world))
-check('sanayi: kit yoksa sessizce atlanıyor (oyun durmaz)',
-  /buildIndustrialDistrict[\s\S]{0,300}if \(!K\) return/.test(world))
+check('sanayi: kit yoksa model konmaz, sahne yine kurulur (put() null-korumalı)',
+  /const proto = K\?\.\[name\]\s*\n\s*if \(!proto\) return/.test(industrial))
 check('metropol: kit yoksa PROSEDÜREL siluete düşüyor (boş sahne kalmaz)',
   /buildCommercialDistrict[\s\S]{0,300}if \(!K\) \{ this\.buildBlockSkyline\(s\); return \}/.test(world))
 check('metropol: kit geldi ama hiç model yerleşmediyse de yedeğe düşüyor',
@@ -34,13 +52,9 @@ check(`sahnede kullanılan ${used.size} modelin hepsi manifestte`, missing.lengt
 console.log('\n== 3) Yerleşim DETERMİNİST (her açılışta aynı sahne) ==')
 // metot GÖVDESİNİ al — çağrı yeri tanımdan önce geçiyor, ona göre dilimlemek
 // yol çizim kodunu inceler ve yanlış sonuç verir (ilk sürümde tam bunu yaptı).
-const body = (name, until) =>
-  world.slice(world.indexOf(`private ${name}(`), world.indexOf(`private ${until}(`))
-const industrial = body('buildIndustrialDistrict', 'buildCommercialDistrict')
-const commercial = body('buildCommercialDistrict', 'buildBlockSkyline')
 check('sanayi yerleşiminde Math.random YOK', !/Math\.random/.test(industrial))
 check('ticari yerleşimde Math.random YOK', !/Math\.random/.test(commercial))
-check('sanayi seçimi indeks tabanlı (tekrar üretilebilir)', /\[\(i \* \d+ \+ row \* \d+\) %/.test(industrial))
+check('sanayi yerleşimi SABİT koordinatlı (ölçülmüş banda göre)', /put\('building-q', 4\.5, 22\.60/.test(industrial))
 
 console.log('\n== 4) Sanayi/ticari yapılar oyun alanını kapatmıyor ==')
 // oyuncunun arsası x -29.5..5 (near) ve 10.9..45.4 (far); yol koridoru x 4.9..10.9
@@ -58,8 +72,16 @@ check(`sahne başına model örneği makul (${nFit} fitModel çağrı noktası, 
 check('prosedürel yedek InstancedMesh kullanıyor (tek draw call)',
   /buildBlockSkyline[\s\S]{0,600}InstancedMesh/.test(world))
 
+console.log('\n== 6b) ÇEVRE YOLU sahnesi ==')
+check('çevre yolu sahnesi çağrılıyor', /th\.id === 'cevreyolu'\) this\.buildRingRoadDistrict/.test(world))
+check('parsele denk gelen binalar decor\'a kaydediliyor (betonlanınca silinsin)',
+  /if \(onParcel\) this\.decor\.push/.test(ring))
+check('yaya bariyerinde zebra hizasında BOŞLUK var', /y < -24\.6 \|\| y > -20\.2/.test(ring))
+check('zebra TEK draw call (7 mesh değil, çizgili canvas)', /CanvasTexture/.test(ring))
+check('otobüs durakları parsel DIŞINDA (kamu alanı, silinmez)', /\[-25\.40, 25\.40\]/.test(ring))
+check('yerleşim determinist', !/Math\.random/.test(ring))
+
 console.log('\n== 6) MARİNA sahnesi ==')
-const marina = body('buildMarinaScene', 'buildIndustrialDistrict')
 check('marina sahnesi su temasında çağrılıyor',
   /th\.lane\.kind === 'water'\) this\.buildMarinaScene\(s\)/.test(world))
 check('deniz İKİ katmanlı (tek dokuyla elde edilemeyen dalga hissi)',
@@ -70,16 +92,17 @@ check('su dokusu prosedürel üretiliyor (ek indirme yok)', /waterTexture\(512/.
 check('doku tekrar edebilir (RepeatWrapping)', /wrapS = tex\.wrapT = THREE\.RepeatWrapping/.test(world))
 check('su her karede kayıyor (animasyon bağlı)',
   /for \(const l of this\.seaLayers\)[\s\S]{0,160}offset\.x/.test(world))
-check('ADA var (dikdörtgen parsel değil, düzensiz kıyı)',
-  /const isle = \(/.test(marina) && /wob/.test(marina))
-check('ada ÜÇ katmanlı (kum + taş + çim)', (marina.match(/^\s+isle\(/gm) || []).length === 3)
+check('ADA var (yuvarlatılmış dikdörtgen + dalgalanma)', /islePoly/.test(marina))
+check('ada BEŞ katmanlı (sığlık+köpük+kum+kaya+çim)', (marina.match(/^\s+(const foam = )?layer\(/gm) || []).length === 5)
 check('kıyı çizgisi DETERMİNİST (her açılışta aynı ada)', !/Math\.random/.test(marina))
-check('liman ağzı dalgakıranlarla daralıyor', /mole/.test(marina))
+  check('doğu yüzü DÜZ rıhtım (organik kıyı değil)', /if \(X > X1\) X = X1/.test(marina))
+  check('köpük halkası nefes alıyor', /marinaFoam/.test(world))
+check('dış dalgakıran + fenerler', /const mole = /.test(marina) && /0xd44b4b/.test(marina))
 check('kırmızı/yeşil fener (denizcilik kuralı)', /0xd44b4b/.test(marina) && /0x3fae5f/.test(marina))
-check('iskeleler + babalar var', /dockMat/.test(marina) && /piles/.test(marina))
-check('şamandıra: kit varsa GERÇEK model, yoksa koni yedeği',
-  /buoyProto/.test(marina) && /ConeGeometry/.test(marina))
-check('arka planda kargo gemisi + römorkör', /ship-cargo-b/.test(marina) && /boat-tug-a/.test(marina))
+check('yakıt güvertesi + babalar var', /const dock = /.test(marina) && /bollard|CylinderGeometry\(0\.13/.test(marina))
+check('şamandıra: kırmızı iskele / yeşil sancak ayrımı (denizcilik kuralı)',
+  /buoyAt\('buoy', 10\.40/.test(marina) && /buoyAt\('buoy-flag', 17\.20/.test(marina))
+check('römorkör + bağlı tekne + kargo gemisi', /boat-tug-a/.test(marina) && /boat-row-large/.test(marina) && /ship-cargo-b/.test(marina))
 check('iskelede konteyner (liman dokusu)', /cargo-container/.test(marina))
 
 console.log('\n== 7) Tekneler gerçek modele bağlı ==')
@@ -97,6 +120,40 @@ const bl = cars.slice(cars.indexOf('BOAT_LEN'), cars.indexOf('export function bu
 const lens = [...bl.matchAll(/:\s*([\d.]+)/g)].map(m => +m[1])
 check(`süperyat jet ski'den belirgin BÜYÜK (${Math.min(...lens)} → ${Math.max(...lens)}, ≥4×)`,
   Math.max(...lens) / Math.min(...lens) >= 4)
+
+console.log('\n== 8) GÖRÜNÜRLÜK: her öğe kamera bandında mı ==')
+// Ölçüm (oyunun kendi kamera matematiğiyle): çekirdek x -28..28, y -27..27;
+// varsayılan görüş ±35/±39; ±56 ötesi HİÇBİR açıda görünmez.
+// Bu test o bandı kilitler — sahneye ölü bölgeye öğe konursa kırılır.
+const CEK = 28, GORUS = 40, OLU = 56
+function coords(src, label) {
+  const bad = [], far = []
+  // put(...)/place(...) çağrılarındaki (x, y) argümanları
+  for (const m of src.matchAll(/\b(?:put|place)\('[^']+',\s*[\d.]+,\s*(-?[\d.]+),\s*(-?[\d.]+)/g)) {
+    const x = +m[1], y = +m[2]
+    if (Math.abs(x) > OLU || Math.abs(y) > OLU) bad.push(`(${x},${y})`)
+    else if (Math.abs(x) > CEK || Math.abs(y) > CEK) far.push(`(${x},${y})`)
+  }
+  // setPosition(x, y, z) — instanced yerleşimler (sabit sayı olanlar)
+  for (const m of src.matchAll(/setPosition\((-?[\d.]+),\s*(-?[\d.]+)/g)) {
+    const x = +m[1], y = +m[2]
+    if (Math.abs(x) > OLU || Math.abs(y) > OLU) bad.push(`inst(${x},${y})`)
+  }
+  check(`${label}: ÖLÜ BÖLGEDE (±${OLU}) öğe yok`, bad.length === 0, bad.slice(0, 6).join(' '))
+  if (far.length) console.log(`      ↳ ${far.length} öğe arka plan bandında (±${CEK}..${OLU}) — bilinçli`)
+  return far.length
+}
+coords(industrial, 'otoyol')
+coords(commercial, 'metropol')
+coords(ring, 'çevre yolu')
+coords(marina, 'marina')
+// marina adası çekirdek bantta mı (koordinatlar koddan)
+const X1 = +(marina.match(/X1 = (-?[\d.]+)/) || [])[1]
+const X0 = +(marina.match(/X0 = (-?[\d.]+)/) || [])[1]
+const Y1 = +(marina.match(/Y1 = (-?[\d.]+)/) || [])[1]
+check(`marina adası çekirdek bantta (x ${X0}..${X1}, y ±${Y1})`,
+  Math.abs(X0) < CEK && Math.abs(X1) < CEK && Math.abs(Y1) < CEK)
+check('ada doğu kenarı ana arsanın (x=5) hemen dışında — rıhtım', X1 > 5 && X1 < 6)
 
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

@@ -7,7 +7,7 @@
  * geri bildirimlerin %22'si zaten mobil ısınma/performans.
  *
  * Kural: bir kit YALNIZ o şubeye ilk geçişte iner, sonra bellekte tutulur.
- * Kasaba ve çevre yolu hiçbir ek paket indirmez (bir bayt bile).
+ * Kasaba hiçbir ek paket indirmez (bir bayt bile).
  *
  * MANİFEST NEDEN VAR: pakette 46 tekne var ama sahnede ~14'ü kullanılıyor. Manifest
  * yalnız kullanılanı indirir; diskte duran fazlalık modeller ÇALIŞMA ANINDA maliyet
@@ -22,41 +22,38 @@ export type Kit = Record<string, THREE.Group | null>
 
 /** Hangi şube hangi klasörden hangi modelleri ister */
 const MANIFEST: Partial<Record<LocId, { dir: string; files: string[] }>> = {
-  // OTOYOL — çevresi sanayi bölgesi: depolar, bacalar, tanklar
+  // OTOYOL — sanayi çevresi. 9 model / 896 KB (eski 14 modelden 419 KB daha hafif:
+  // ölü bölgeye konan küçük depolar çıkarıldı, kalanlar daha büyük ölçekte kullanılıyor).
   otoyol: {
     dir: 'industrial',
-    files: [
-      'building-a', 'building-c', 'building-e', 'building-f', 'building-h',
-      'building-j', 'building-l', 'building-n', 'building-q', 'building-s',
-      'chimney-large', 'chimney-medium', 'chimney-small', 'detail-tank',
-    ],
+    files: ['building-c', 'building-f', 'building-l', 'building-q', 'building-s', 'building-t',
+            'chimney-large', 'chimney-medium', 'detail-tank'],
   },
-  // METROPOL — ticari doku: ön planda detaylı binalar, arkada düşük detaylı siluet
+  // METROPOL — ticari doku. 11 model / 1371 KB. building-j (430 KB) ve building-l (284 KB)
+  // çıkarıldı: building-k aynı genişliği 241 KB'a veriyor. Yerine iki GERÇEK kule geldi.
   metropol: {
     dir: 'commercial2',
-    files: [
-      'building-b', 'building-e', 'building-h', 'building-k', 'building-n',
-      'building-skyscraper-a', 'building-skyscraper-c', 'building-skyscraper-e',
-      'low-detail-building-b', 'low-detail-building-f', 'low-detail-building-j',
-      'low-detail-building-wide-a', 'detail-awning', 'detail-parasol-a',
-    ],
+    files: ['building-c', 'building-h', 'building-k', 'building-n',
+            'building-skyscraper-b', 'building-skyscraper-c', 'building-skyscraper-d',
+            'building-skyscraper-e', 'low-detail-building-c', 'detail-awning', 'detail-parasol-a'],
   },
-  // MARİNA — segmentlerle birebir eşleşen tekneler + liman detayı
+  // ÇEVRE YOLU — şehir çeperi. 8 model / 496 KB. Eskiden hiç model indirmiyordu ve
+  // yolun iki yanı bomboştu; metropolden AYRIŞSIN diye alçak ticari doku seçildi.
+  cevreyolu: {
+    dir: 'commercial2',
+    files: ['building-c', 'building-f', 'building-i',
+            'low-detail-building-wide-b', 'low-detail-building-k', 'low-detail-building-e',
+            'detail-awning-wide', 'detail-overhang-wide'],
+  },
+  // MARİNA — deniz. 16 model / 558 KB: 7 müşteri teknesi + dekor + seyir + tersane.
   marina: {
     dir: 'watercraft',
-    files: [
-      'boat-speed-a',            // jet ski
-      'boat-speed-e',            // sürat teknesi
-      'boat-fishing-small',      // balıkçı
-      'boat-sail-a',             // yelkenli
-      'boat-house-b',            // gulet
-      'ship-small',              // motor yat
-      'ship-large',              // süperyat
-      'boat-tug-a',              // römorkör (dekor)
-      'ship-cargo-b',            // arka planda geçen kargo
-      'buoy', 'buoy-flag',       // seyir kanalı
-      'cargo-container-a', 'cargo-container-b', 'cargo-pile-a',
-    ],
+    files: ['boat-speed-f', 'boat-speed-a', 'boat-fishing-small', 'boat-sail-a',
+            'boat-house-c', 'boat-tow-a', 'ship-ocean-liner-small',
+            'boat-tug-a', 'boat-row-large',
+            'buoy', 'buoy-flag',
+            'cargo-container-a', 'cargo-container-b', 'cargo-pile-a', 'ramp',
+            'ship-cargo-b'],
   },
 }
 
@@ -83,7 +80,7 @@ function convert(scene: THREE.Group): THREE.Group {
   return proto
 }
 
-/** Bu şube ek paket ister mi? (kasaba/çevre yolu istemez) */
+/** Bu şube ek paket ister mi? (yalnız kasaba istemez) */
 export function kitNeeded(loc: LocId): boolean { return !!MANIFEST[loc] }
 /** Kit zaten bellekte mi (indirme gerekmez) */
 export function kitReady(loc: LocId): boolean { return cache.has(loc) }

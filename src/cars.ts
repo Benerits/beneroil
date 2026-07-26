@@ -84,8 +84,9 @@ const BOAT_SPEC: Record<BoatKind, { len: number; beam: number; hull: number; dec
 
 /** Segment → Kenney watercraft modeli (kits.ts manifestiyle BİREBİR aynı adlar) */
 export const BOAT_MODEL: Record<BoatKind, string> = {
-  jetski: 'boat-speed-a', surat: 'boat-speed-e', balikci: 'boat-fishing-small',
-  yelkenli: 'boat-sail-a', gulet: 'boat-house-b', motoryat: 'ship-small', superyat: 'ship-large',
+  jetski: 'boat-speed-a', surat: 'boat-speed-f', balikci: 'boat-fishing-small',
+  yelkenli: 'boat-sail-a', gulet: 'boat-house-c', motoryat: 'boat-tow-a',
+  superyat: 'ship-ocean-liner-small',
 }
 /** Segment → dünya boyu (birim). Süperyat jet ski'nin ~5 katı: ölçek farkı GÖRÜNMELİ. */
 export const BOAT_LEN: Record<BoatKind, number> = {
@@ -382,7 +383,8 @@ export class Car {
       // MARİNA: gerçek tekne modeli (Kenney watercraft). Kit inmemişse prosedürel
       // gövdeye düşülür — sahne her hâlde kurulur, oyun durmaz.
       const proto = Car.boatKit?.[BOAT_MODEL[boat]] ?? null
-      this.group = proto ? fitModel(proto, BOAT_LEN[boat], 'y') : buildBoatMesh(boat)
+      // 'x' = BOY ekseni: BOAT_LEN gerçek tekne boyudur (kiriş değil), ölçek farkı korunur
+      this.group = proto ? fitModel(proto, BOAT_LEN[boat], 'x') : buildBoatMesh(boat)
       this.hiddenNeedL = Math.round((boat === 'superyat' ? 2200 : boat === 'motoryat' ? 900
         : boat === 'gulet' ? 700 : boat === 'balikci' ? 600 : boat === 'yelkenli' ? 300
         : boat === 'surat' ? 160 : 40) * (0.6 + Math.random() * 0.5))

@@ -156,7 +156,10 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
     },
     sky: { day: 0xa8dcea, night: 0x0f2436 },
     palette: { line: 0xffffff, accent: 0x1fa8bc, vegetation: 0x4f8f6a },
-    lane: { kind: 'water', count: 1, median: false, barrier: false, rampLength: 6, speed: 0.55 },
+    // SEYİR KANALI: giren tekne 12.40, çıkan 15.20 (ölçüm: gövdeler çakışmıyor,
+    // ada rıhtımı x=5.30, kapı 9.20, dış dalgakıran 25.60 — hepsi çekirdek bantta).
+    lane: { kind: 'water', count: 1, median: false, barrier: false, rampLength: 6, speed: 0.55,
+            service: { near: 12.40, far: 15.20 } },
     econ: { entryBase: 0.09, priceElasticity: 0.45, repWeight: 1.9, signWeight: 0.25, tipRate: 0.2 },
     unlock: { cash: 5_000_000, stars: 9 },
   },

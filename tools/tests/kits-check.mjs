@@ -17,8 +17,10 @@ for (const m of mBlock.matchAll(/(\w+):\s*\{\s*dir:\s*'([^']+)',\s*files:\s*\[([
 
 console.log('== 1) Hangi şube ne indiriyor ==')
 check('kasaba HİÇBİR ek paket indirmiyor', !manifest.kasaba)
-check('çevre yolu HİÇBİR ek paket indirmiyor', !manifest.cevreyolu)
+check('çevre yolu artık şehir dokusu indiriyor (eskiden yolun iki yanı boştu)', !!manifest.cevreyolu)
 check('otoyol sanayi kiti istiyor', manifest.otoyol?.dir === 'industrial')
+// KORUNAN VAAT: kasaba oyuncusu tek bayt fazla indirmez
+check('kasaba manifestte HİÇ YOK', !('kasaba' in manifest))
 check('metropol ticari kit istiyor', manifest.metropol?.dir === 'commercial2')
 check('marina deniz kiti istiyor', manifest.marina?.dir === 'watercraft')
 
@@ -64,7 +66,8 @@ check('hiçbiri gelmezse önbelleğe ALINMIYOR (ağ düzelince tekrar denenir)',
 
 console.log('\n== 5) Kasaba oyuncusunun maliyeti ==')
 check('kasaba için indirilecek model sayısı: 0', (manifest.kasaba?.files.length ?? 0) === 0)
-check('çevre yolu için indirilecek model sayısı: 0', (manifest.cevreyolu?.files.length ?? 0) === 0)
+check(`çevre yolu kiti KÜÇÜK tutuldu (${manifest.cevreyolu?.files.length ?? 0} model ≤ 10)`,
+  (manifest.cevreyolu?.files.length ?? 0) <= 10)
 const boot = main.slice(main.indexOf('const [modelLib, staticLib, branchKit]'), main.indexOf('const world = new World'))
 check('açılış yüklemesi TÜM kitleri çekmiyor', !/industrial|commercial2|watercraft/.test(boot))
 

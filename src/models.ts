@@ -95,10 +95,11 @@ export async function loadStatics(): Promise<StaticLib | null> {
  * Klonu hedef genişliğe (dünya y ekseni) ölçekler, tabanını z=0'a,
  * merkezini x/y=0'a oturtur.
  */
-export function fitModel(proto: THREE.Group, targetWidth: number, axis: 'y' | 'z' = 'y'): THREE.Group {
+export function fitModel(proto: THREE.Group, targetWidth: number, axis: 'x' | 'y' | 'z' = 'y'): THREE.Group {
   const g = proto.clone(true)
   const box = new THREE.Box3().setFromObject(g)
-  const extent = axis === 'y' ? box.max.y - box.min.y : box.max.z - box.min.z
+  const extent = axis === 'x' ? box.max.x - box.min.x
+    : axis === 'y' ? box.max.y - box.min.y : box.max.z - box.min.z
   const s = targetWidth / Math.max(0.001, extent)
   g.scale.setScalar(s)
   const box2 = new THREE.Box3().setFromObject(g)
