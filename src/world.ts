@@ -366,6 +366,58 @@ export class World {
       }
     }
 
+    // ---- MARİNA: DENİZ SAHNESİ (rapor §6.5.2 — kara trafiğinin birebir izomorfu) ----
+    // Şerit → seyir kanalı (fairway, şamandıralı) · kapı → liman ağzı (dalgakıranlar arası)
+    // · apron → iç havuz · pompa slotu → yakıt iskelesi mevkisi · otopark → parmak iskele.
+    // Geometri AYNI kaldığı için trafik grafiği (§5) hiç değiştirilmeden çalışır.
+    if (th.lane.kind === 'water') {
+      // Deniz: yolun olduğu bandın iki yanı da su. Hafif dalga için iki katman.
+      const sea = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), lam(0x1f6f8c))
+      sea.position.set(ROAD_X, 0, 0.005); s.add(sea)
+      const shimmer = new THREE.Mesh(new THREE.PlaneGeometry(260, 260),
+        new THREE.MeshBasicMaterial({ color: 0x63c6d8, transparent: true, opacity: 0.16, depthWrite: false }))
+      shimmer.position.set(ROAD_X, 0, 0.008); s.add(shimmer)
+      this.seaShimmer = shimmer
+
+      // DALGAKIRAN: liman ağzını daraltan iki mendirek. Kapı bölgesini FİZİKSEL olarak
+      // tek sıraya indirir — rezervasyon grafiğinin en temiz çalıştığı topoloji.
+      const gi2 = APRON_IN_Y // liman ağzı = giriş kapısıyla aynı y (kara ile izomorf)
+      for (const side of [-1, 1]) {
+        const mole = new THREE.Mesh(new THREE.BoxGeometry(1.6, 26, 1.5), lam(0x8d8577))
+        mole.position.set(ROAD_X + side * 5.6, gi2 + side * 15, 0.75); s.add(mole)
+        // mendirek başı feneri
+        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 2.2, 8),
+          lam(side < 0 ? 0xd44b4b : 0x3fae5f))
+        lamp.rotation.x = Math.PI / 2
+        lamp.position.set(ROAD_X + side * 5.6, gi2 + side * 2.2, 1.9); s.add(lamp)
+      }
+      // SEYİR KANALI ŞAMANDIRALARI: kara şeridinin çizgilerinin muadili (instanced)
+      const buoyN = 22
+      const buoys = new THREE.InstancedMesh(new THREE.ConeGeometry(0.32, 1.1, 7), lam(0xe04b3a), buoyN)
+      const bm = new THREE.Matrix4()
+      for (let i = 0; i < buoyN; i++) {
+        bm.makeRotationX(-Math.PI / 2)
+        bm.setPosition(ROAD_X + (i % 2 === 0 ? -2.5 : 2.5), -100 + Math.floor(i / 2) * 18, 0.5)
+        buoys.setMatrixAt(i, bm)
+      }
+      buoys.instanceMatrix.needsUpdate = true; s.add(buoys)
+      // PARMAK İSKELELER: otoparkın deniz muadili — ahşap platformlar
+      const dockN = 5
+      const docks = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 13, 0.35), lam(0xa8875c), dockN)
+      const dm = new THREE.Matrix4()
+      for (let i = 0; i < dockN; i++) {
+        dm.makeTranslation(-3.5 - i * 4.6, 4 + (i % 2) * 3, 0.18)
+        docks.setMatrixAt(i, dm)
+      }
+      docks.instanceMatrix.needsUpdate = true; s.add(docks)
+      // uzak kıyı silueti (marinanın manzarası — dekorasyon itibarının görsel karşılığı)
+      for (let i = 0; i < 6; i++) {
+        const hill = new THREE.Mesh(new THREE.ConeGeometry(18 + i * 4, 7 + i * 1.5, 6), lam(0x5f8f6a))
+        hill.rotation.x = Math.PI / 2
+        hill.position.set(ROAD_X - 60 - i * 9, -80 + i * 32, 3.5); s.add(hill)
+      }
+    }
+
     if (th.features?.urban) {
       // ---- TRAFİK IŞIĞI (mekanik: kırmızıda giriş şansı ×boost) ----
       const tl = th.features.trafficLight
@@ -721,6 +773,14 @@ export class World {
 
   /** her kare çağrılır: buhar animasyonu vb. */
   update(dt: number) {
+    // marina: su parıltısı yavaşça kayar (canlı deniz hissi, tek mesh — bedava)
+    if (this.seaShimmer) {
+      const m2 = this.seaShimmer.material as THREE.MeshBasicMaterial
+      this.seaT = (this.seaT + dt * 0.35) % (Math.PI * 2)
+      m2.opacity = 0.12 + 0.06 * Math.sin(this.seaT)
+      this.seaShimmer.position.x = ROAD_X + Math.sin(this.seaT * 0.7) * 0.6
+      this.seaShimmer.position.y = Math.cos(this.seaT * 0.5) * 0.6
+    }
     this.steamT += dt
     for (const p of this.steam) {
       const t = (this.steamT * 0.3 + p.offset) % 1
@@ -981,6 +1041,9 @@ export class World {
   evSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => (EV_SLOTS_POS[i] ?? EV_SLOTS_POS[3]).clone())
   tankAnchor = new THREE.Vector2(TANK_POS.x, TANK_POS.y)
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
+  /** marina deniz parıltısı — her karede hafifçe kaydırılır (canlı su hissi) */
+  private seaShimmer: THREE.Mesh | null = null
+  private seaT = 0
   gateIn = new THREE.Vector2(4.2, APRON_IN_Y)
   gateOut = new THREE.Vector2(4.2, APRON_OUT_Y)
   /** karşı istasyon kapıları — far araç GÜNEYE gittiği için giriş yukarıda (+y), çıkış aşağıda (-y):

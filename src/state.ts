@@ -1386,6 +1386,19 @@ export interface ShopRow {
   note: string
 }
 
+/** Marina tesis açıklamaları — mağazada ne işe yaradığı görünsün (rapor §6.5.3) */
+const MARINA_DESC: Record<string, string> = {
+  fueldock: t('Çekirdek döngü: tekneler buraya yanaşıp yakıt alır. Marinanın kalbi — bu olmadan hiç tekne gelmez.'),
+  chandlery: t('Halat, can yeleği, olta, harita. Marketin deniz muadili — sepet tutarı 3 katı.'),
+  shower: t('Duş & çamaşırhane. Gulet mürettebatı için ZORUNLU — yoksa gulet uğramaz.'),
+  clubhouse: t('Yat kulübü / sahil restoranı. Akşam saatlerinde zirve yapar.'),
+  icebait: t('Buz & yem. Sabah balıkçı akınında talep patlar.'),
+  travelift: t('Tekne asansörü. Karaya çekme-indirme ve KARADA KIŞLAMA gelirinin kilidi.'),
+  pumpout: t('Atık su tahliyesi. Kurmazsan tekneler denize basar, ceza SANA yazılır.'),
+  wasteoil: t('Atık yağ toplama. Çevre denetiminde aranır.'),
+  boom: t('Yakıt sızıntı bariyeri. Sızıntı olayını TAMAMEN önler.'),
+}
+
 export function getShopItems(s: GameState): ShopRow[] {
   const rows: ShopRow[] = []
   const row = (id: string, icon: string, title: string, stat: string, desc: string,
@@ -1393,6 +1406,29 @@ export function getShopItems(s: GameState): ShopRow[] {
     if (cost === null) rows.push({ id, icon, title, desc, stat, cost: null, status: 'maxed', note: t('MAKS') })
     else if (locked) rows.push({ id, icon, title, desc, stat, cost, status: 'locked', note: locked })
     else rows.push({ id, icon, title, desc, stat, cost, status: 'buy', note: '' })
+  }
+  // MARİNA ŞUBESİ: kara tesisleri yerine deniz kataloğu (rapor §6.5.3). Kara şubelerinde
+  // bu blok hiç çalışmaz — mevcut mağaza birebir aynı kalır.
+  if (s.isMarina) {
+    for (const [id, f] of Object.entries(MARINA_FACILITIES)) {
+      const owned = s.hasMarinaFac(id as MarinaFacId)
+      const envNote = f.env ? t('Mavi Bayrak şartı') : ''
+      row(id, f.env ? 'i-star' : 'i-market', f.label,
+        owned ? t('KURULU') : `₺${f.cost.toLocaleString('tr-TR')}`,
+        MARINA_DESC[id] ?? envNote, owned ? null : f.cost,
+        id === 'fueldock' || s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    }
+    for (const [id, b] of Object.entries(BERTH_KINDS)) {
+      const n = s.berths[id] ?? 0
+      row('berth_' + id, 'i-parking', n ? t('{0} ({1})', b.label, String(n)) : b.label,
+        t('+₺{0}/gün', b.daily.toLocaleString('tr-TR')),
+        t('Bağlama yeri kirala — tekne boyuna göre yer, mevsimlik doluluk.'),
+        b.cost, id === 'mega' && !s.blueFlag().ok ? t('Mavi Bayrak gerekli') : null)
+    }
+    row('winterslot', 'i-parking', s.winterSlots ? t('Karada Kışlama ({0})', String(s.winterSlots)) : t('Karada Kışlama'),
+      t('+₺900/gün (kışın)'), t('Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.'),
+      8_000, s.hasMarinaFac('travelift') ? null : t('Önce Travel Lift kur'))
+    return rows
   }
   const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
 
@@ -1772,6 +1808,9 @@ export function buyItem(s: GameState, id: string): boolean {
   s.money -= item.cost
   // yakıt başına ek tank (dinamik id — switch'e girmeden ele alınır)
   if (id.startsWith('tankadd-')) { s.tankCounts[id.slice('tankadd-'.length) as FuelType]++; return true }
+  // MARİNA: bağlama yeri (dinamik id) ve tesisler
+  if (id.startsWith('berth_')) { const k = id.slice('berth_'.length); s.berths[k] = (s.berths[k] ?? 0) + 1; return true }
+  if (id in MARINA_FACILITIES) { if (!s.marinaFacs.includes(id)) s.marinaFacs.push(id); return true }
   switch (id) {
     case 'pump': s.pumps++; break
     case 'sign': s.signLevel++; break
@@ -1803,6 +1842,7 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'truckpark': s.hasTruckPark = true; break
     case 'airwater': s.airWaterCount++; break
     case 'lamp': s.lampCount++; break
+    case 'winterslot': s.winterSlots++; break
     case 'selfwash': s.selfWashCount++; break
     case 'parking': s.parkingCount++; break
     default: return false

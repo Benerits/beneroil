@@ -4039,6 +4039,34 @@ function frame() {
       if (spend < state.marketingBudget) ui.toast(t('📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.'), 'bad')
       else ui.toast(t('📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})', spend.toLocaleString('tr-TR'), state.trafficPull().toFixed(2)), '')
     }
+    // ---- MARİNA GÜN DÖNÜŞÜ (rapor §6.5): bağlama/kışlama geliri + risk olayı ----
+    if (state.isMarina) {
+      const mi = state.marinaDailyIncome()
+      if (mi.total > 0) {
+        state.money += mi.total
+        ui.toast(mi.winter > 0
+          ? t('⚓ Bağlama ₺{0} + kışlama ₺{1} tahsil edildi', mi.berth.toLocaleString('tr-TR'), mi.winter.toLocaleString('tr-TR'))
+          : t('⚓ Bağlama geliri: +₺{0}', mi.berth.toLocaleString('tr-TR')), 'good')
+      }
+      const ev = state.marinaDayEvent()
+      if (ev) {
+        // KRİTİK KURAL (§6.5.6): kalıcı silme YOK. Para/itibar ağır olabilir ama telafi edilir.
+        if (ev.money) state.money = Math.max(0, state.money + ev.money)
+        if (ev.rep) state.addRep(ev.rep)
+        if (ev.money < 0 || ev.rep < 0) state.marinaViolations++
+        ui.toast(ev.msg, ev.money < 0 || ev.rep < 0 ? 'bad' : '')
+        const bf = state.blueFlag()
+        if (!bf.ok && state.marinaViolations === 3) {
+          ui.toast(t('🏳️ Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.'), 'bad')
+        }
+      } else if (state.marinaViolations > 0 && state.day % 15 === 0) {
+        // sicil zamanla temizlenir: ceza kalıcı değil (raporun telafi ilkesi)
+        state.marinaViolations--
+        if (state.marinaViolations < 3 && state.blueFlag().ok) {
+          ui.toast(t('🏳️ Sicilin temizlendi — Mavi Bayrak geri alındı!'), 'good')
+        }
+      }
+    }
     // İTİBAR MUTABAKATI (#456): itibar günün hizmet kalitesine çekilir — 5.0'da donmaz
     const rep = state.reconcileReputation()
     if (Math.abs(rep.delta) >= 0.03) {

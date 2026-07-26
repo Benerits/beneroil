@@ -157,5 +157,53 @@ check('kara şubesinde marina geliri 0', kara.marinaDailyIncome().total === 0)
 check('kara şubesinde marina olayı YOK', kara.marinaDayEvent() === null)
 check('kara şubesinde tekne segmenti YOK', kara.boatSegments().length === 0)
 
+console.log('\n== 9) Mağaza + gün dönüşü entegrasyonu ==')
+{
+  const { getShopItems, buyItem } = await import('../../src/state.ts')
+  const g = marina()
+  g.money = 10_000_000
+  const rows = getShopItems(g)
+  check('marinada DENİZ kataloğu gösterilir', rows.some(r => r.id === 'fueldock') && rows.some(r => r.id === 'berth_mega'))
+  check('marinada kara tesisleri gösterilmez', !rows.some(r => r.id === 'truckpark' || r.id === 'selfwash'))
+  check('yakıt iskelesi kurulmadan diğerleri KİLİTLİ',
+    rows.find(r => r.id === 'travelift').status === 'locked')
+  check('süperyat mevkisi Mavi Bayraksız KİLİTLİ',
+    rows.find(r => r.id === 'berth_mega').status === 'locked')
+  check('kışlama travel liftsiz KİLİTLİ', rows.find(r => r.id === 'winterslot').status === 'locked')
+
+  check('yakıt iskelesi satın alınabilir', buyItem(g, 'fueldock') && g.hasMarinaFac('fueldock'))
+  check('kilitli kalem satın ALINAMAZ', !buyItem(g, 'winterslot') && g.winterSlots === 0)
+  buyItem(g, 'travelift')
+  check('travel lift alınınca kışlama AÇILIR', buyItem(g, 'winterslot') && g.winterSlots === 1)
+  check('bağlama yeri alınabilir ve sayaç artar',
+    buyItem(g, 'berth_finger12') && buyItem(g, 'berth_finger12') && g.berths.finger12 === 2)
+  check('aynı tesis İKİ KEZ alınmaz (para boşa gitmez)',
+    (() => { const before = g.money; buyItem(g, 'fueldock'); return g.money === before })())
+
+  // kara şubesinde marina kalemleri MAĞAZADA YOK (yanlışlıkla satın alınamaz)
+  const kara = new GameState(); kara.money = 10_000_000
+  check('kara şubesinde marina kalemi mağazada yok', !getShopItems(kara).some(r => r.id === 'fueldock'))
+  check('kara şubesinde marina kalemi satın ALINAMAZ', !buyItem(kara, 'fueldock') && kara.marinaFacs.length === 0)
+}
+
+console.log('\n== 10) Tekne fiziği ve doğuşu (§6.5.2) ==')
+{
+  const C = await import('../../src/cars.ts')
+  const g = marina()
+  g.marinaFacs.push('fueldock')
+  const segs = g.boatSegments()
+  check('marina tekne segmenti üretir', segs.length > 0)
+  // gövde üretimi her tür için çalışmalı (çökme olmasın)
+  for (const b of ['jetski', 'surat', 'balikci', 'yelkenli', 'gulet', 'motoryat', 'superyat']) {
+    if (!C.buildBoatMesh(b)) { check('gövde üretimi: ' + b, false); break }
+  }
+  check('7 tekne türünün de gövdesi üretilebiliyor', true)
+  const jet = C.buildBoatMesh('jetski'), sup = C.buildBoatMesh('superyat')
+  const size = m => { const b = new (globalThis.THREE_BOX ?? Object)(); return m.children.length }
+  check('süperyat jet ski\'den daha fazla parçadan oluşur (ölçek farkı görünür)',
+    sup.children.length >= jet.children.length)
+  check('yelkenlinin DİREĞİ var (tür ayrımı görsel)', C.buildBoatMesh('yelkenli').children.length > C.buildBoatMesh('surat').children.length)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

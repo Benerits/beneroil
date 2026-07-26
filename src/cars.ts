@@ -6,6 +6,11 @@ import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, 
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
 const CAR_SPEED = 7
+/** Tekne hız çarpanı: büyüdükçe yavaşlar (süperyat neredeyse üçte bir hızda manevra yapar).
+ *  'yok' = kara aracı → 1, yani kara davranışı BİREBİR korunur. */
+const BOAT_SPEED: Record<string, number> = {
+  yok: 1, jetski: 0.7, surat: 0.62, balikci: 0.5, yelkenli: 0.45, gulet: 0.4, motoryat: 0.42, superyat: 0.32,
+}
 const DEMAND_AMOUNTS = [100, 150, 200, 250, 300, 400]
 const DECISION_Y = -26 // yakın şeritte istasyona girme kararının verildiği nokta
 
@@ -60,6 +65,48 @@ function extrude(points: [number, number][], width: number, color: number): THRE
   m.rotation.x = Math.PI / 2
   m.castShadow = true
   return m
+}
+
+
+/** TEKNE GÖVDESİ (marina, rapor §6.5) — prosedürel; Kenney Watercraft Kit gelince
+ *  buradaki üretici modelle değiştirilir, çağıranlar aynı kalır.
+ *  Boy segmentle ölçeklenir: jet ski küçük ve hızlı, süperyat uzun ve ağır. */
+export type BoatKind = 'jetski' | 'surat' | 'balikci' | 'yelkenli' | 'gulet' | 'motoryat' | 'superyat'
+const BOAT_SPEC: Record<BoatKind, { len: number; beam: number; hull: number; deck: number; mast: boolean }> = {
+  jetski:   { len: 1.5, beam: 0.7, hull: 0x2f6fed, deck: 0xe8e8ec, mast: false },
+  surat:    { len: 2.6, beam: 1.0, hull: 0xffffff, deck: 0x2b3a4a, mast: false },
+  balikci:  { len: 3.2, beam: 1.3, hull: 0x2f8f6a, deck: 0xd8cba8, mast: false },
+  yelkenli: { len: 3.6, beam: 1.1, hull: 0xf2f2f0, deck: 0x35507a, mast: true },
+  gulet:    { len: 4.6, beam: 1.5, hull: 0x8a6438, deck: 0xe7dcc2, mast: true },
+  motoryat: { len: 5.2, beam: 1.6, hull: 0xf7f7f5, deck: 0x1f3346, mast: false },
+  superyat: { len: 8.0, beam: 2.1, hull: 0xfafafa, deck: 0x11202e, mast: false },
+}
+
+export function buildBoatMesh(kind: BoatKind): THREE.Group {
+  const g = new THREE.Group()
+  const sp = BOAT_SPEC[kind]
+  const mat = (c: number) => new THREE.MeshLambertMaterial({ color: c })
+  // gövde: burnu sivri kutu (dört köşeli kutudan farkı burun daralması)
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(sp.len, sp.beam, sp.beam * 0.55), mat(sp.hull))
+  hull.position.z = sp.beam * 0.28
+  hull.castShadow = true
+  g.add(hull)
+  const bow = new THREE.Mesh(new THREE.ConeGeometry(sp.beam * 0.5, sp.len * 0.32, 4), mat(sp.hull))
+  bow.rotation.z = -Math.PI / 2
+  bow.rotation.y = Math.PI / 4
+  bow.position.set(sp.len * 0.63, 0, sp.beam * 0.28)
+  g.add(bow)
+  // güverte üst yapısı
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(sp.len * 0.34, sp.beam * 0.72, sp.beam * 0.5), mat(sp.deck))
+  cabin.position.set(-sp.len * 0.08, 0, sp.beam * 0.72)
+  g.add(cabin)
+  if (sp.mast) {
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, sp.len * 1.15, 6), mat(0xdcdcd6))
+    mast.rotation.x = Math.PI / 2
+    mast.position.set(0, 0, sp.len * 0.62)
+    g.add(mast)
+  }
+  return g
 }
 
 export function buildCarMesh(kind: BodyKind, color: number): THREE.Group {
@@ -313,10 +360,22 @@ export class Car {
   /** aracın spawn anındaki fiyat snapshot'ı (ciro ve prim aynı temeli kullansın) */
   priceOf(f: FuelType): number { return this.prices[f] }
 
-  constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE, segments: CarSegment[] | null = null) {
+  /** MARİNA: bu bir tekne mi (görsel + fizik farkı). Kara şubelerinde hep null. */
+  boat: BoatKind | null = null
+
+  constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE,
+              segments: CarSegment[] | null = null, boat: BoatKind | null = null) {
     this.kind = kind
+    this.boat = boat
     this.prices = { ...prices }
-    if (kind === 'ev') {
+    if (boat) {
+      // MARİNA: tekne gövdesi (prosedürel). Model kiti gelince buradaki üretici değişir.
+      this.group = buildBoatMesh(boat)
+      this.hiddenNeedL = Math.round((boat === 'superyat' ? 2200 : boat === 'motoryat' ? 900
+        : boat === 'gulet' ? 700 : boat === 'balikci' ? 600 : boat === 'yelkenli' ? 300
+        : boat === 'surat' ? 160 : 40) * (0.6 + Math.random() * 0.5))
+      this.isTruck = false
+    } else if (kind === 'ev') {
       if (lib?.evCar) {
         this.group = cloneModel(lib.evCar)
         // EV'ler tek renk gelmesin: gövdeyi rastgele tonla boya
@@ -511,7 +570,9 @@ export class Car {
       const d = new THREE.Vector3().subVectors(target, pos)
       d.z = 0
       const dist = d.length()
-      const step = CAR_SPEED * dt * this.speedScale * (this.reversing ? 0.45 : 1)
+      // MARİNA fizik farkı (rapor §6.5.2): tekneler DAHA YAVAŞ seyreder ve büyük tekne
+      // daha ağır manevra yapar — yerleşim planlaması gerçekten önem kazanır.
+      const step = CAR_SPEED * BOAT_SPEED[this.boat ?? 'yok'] * dt * this.speedScale * (this.reversing ? 0.45 : 1)
       if (dist <= step) {
         pos.copy(target)
         this.path.shift()
@@ -753,6 +814,8 @@ export interface CarManagerOpts {
   trafficPull?: () => number
   /** açık müşteri segmentleri (₺/müşteri ekseni) — kilitliyse null/boş, davranış klasik kalır */
   segments?: () => CarSegment[]
+  /** MARİNA: gelen tekne türleri (paylarıyla). Boş dizi = kara şubesi, tekne doğmaz. */
+  boats?: () => { id: string; share: number }[]
   /** rezervasyon grafiği açık mı (test A/B + acil valf; verilmezse ?nograph=1 kuralı) */
   graphEnabled?: () => boolean
   /** trafik ışığı durumu (çevre yolu/metropol): kırmızıda ışık hattında kuyruk oluşur */
@@ -1259,9 +1322,21 @@ export class CarManager {
     return Math.max(0.05, Math.min(1, free / cap))
   }
 
+  /** MARİNA: gelen teknenin türünü segment paylarına göre seç (rapor §6.5.4).
+   *  Kara şubelerinde `boats()` boş döner → hiç tekne doğmaz, davranış değişmez. */
+  private pickBoat(): BoatKind | null {
+    const segs = this.opts.boats?.() ?? []
+    if (!segs.length) return null
+    const tot = segs.reduce((a, b) => a + b.share, 0)
+    let r = Math.random() * tot
+    for (const b of segs) { r -= b.share; if (r <= 0) return b.id as BoatKind }
+    return segs[segs.length - 1].id as BoatKind
+  }
+
   private spawnTransit(lane: 'near' | 'far') {
-    const isEv = Math.random() < this.opts.evShare()
-    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), this.opts.segments?.() ?? null)
+    const boat = this.pickBoat()
+    const isEv = !boat && Math.random() < this.opts.evShare()
+    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), this.opts.segments?.() ?? null, boat)
     car.lane = lane
     car.phase = 'transit'
     if (lane === 'near') {
