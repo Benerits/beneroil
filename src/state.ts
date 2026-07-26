@@ -1,4 +1,8 @@
 import { t } from './i18n'
+import {
+  BOAT_SEGMENTS, BERTH_KINDS, MARINA_FACILITIES, berthIncome, winterStorageIncome,
+  blueFlagStatus, pickMarinaEvent, type BerthKind, type MarinaFacId, type BoatSegment,
+} from './marina'
 import { THEMES, LocationTheme } from './themes'
 export type FuelType = 'benzin' | 'dizel' | 'lpg'
 
@@ -12,6 +16,7 @@ export const LOC_FIELDS = [
   'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level',
   'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'managerLevel', 'staffLevel',
   'insurance', 'decorLevel', 'wear', 'gridLevel', 'lampCount',
+  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
@@ -245,18 +250,18 @@ export class GameState {
   season(): { id: 'yaz' | 'sonbahar' | 'kis' | 'ilkbahar'; name: string; traffic: number; dayInSeason: number; length: number } {
     const cycle = 270
     let d = ((this.day - 1) % cycle + cycle) % cycle
-    // Şiddet temadan: kara şubelerinde hafif (mevcut denge bozulmaz), marinada sert
-    // (rapor §6.5.5: kışın tekne trafiği çöker, kışlama geliri zirve yapar).
-    const amp = this.theme().lane.kind === 'water' ? 1 : 0.28
-    const mix = (v: number) => 1 + (v - 1) * amp
-    // DÖNGÜ İLKBAHARDA BAŞLAR — bilerek: gün 1 çarpanı ~1.04, yani CANLI OYUNCULARIN
-    // bugünkü dengesi neredeyse aynı kalır. (Yazla başlatınca gün 1'de +%13 trafik oluyordu;
-    // hem mevcut kayıtları sarsıyor hem trafik sistemini kapasite sınırına itiyordu.)
-    // Doğal mevsim sırası korunur: ilkbahar → yaz → sonbahar → kış.
-    const defs: [typeof this.seasonIdCache, string, number, number][] = [
-      ['ilkbahar', t('İlkbahar'), mix(1.15), 45], ['yaz', t('Yaz'), mix(1.45), 90],
-      ['sonbahar', t('Sonbahar'), mix(1.0), 45], ['kis', t('Kış'), mix(0.55), 90],
-    ]
+    // İKİ AYRI EĞRİ — tek çarpanla türetilmiyor, çünkü marina eğrisi ASİMETRİK
+    // (yaz +%150, kış −%70) ve aynı çarpanla kara şubesini de yumuşatmak imkânsız.
+    //  · MARİNA: rapor §6.5.5 tablosuyla birebir. Kışın tekne trafiği çöker ama kışlama
+    //    ve tersane geliri zirve yapar — oyuncu iki farklı işletme modeli öğrenir.
+    //  · KARA: ±%13 bandı. Bilerek hafif: canlı oyuncuların dengesi mevsimle sarsılmamalı.
+    // Döngü İLKBAHARDA başlar → gün 1 çarpanı ~1.04, yani bugünkü denge korunur.
+    const water = this.theme().lane.kind === 'water'
+    const defs: [typeof this.seasonIdCache, string, number, number][] = water
+      ? [['ilkbahar', t('İlkbahar'), 1.2, 45], ['yaz', t('Yaz'), 2.5, 90],
+         ['sonbahar', t('Sonbahar'), 1.0, 45], ['kis', t('Kış'), 0.3, 90]]
+      : [['ilkbahar', t('İlkbahar'), 1.04, 45], ['yaz', t('Yaz'), 1.13, 90],
+         ['sonbahar', t('Sonbahar'), 1.0, 45], ['kis', t('Kış'), 0.87, 90]]
     for (const [id, name, traffic, length] of defs) {
       if (d < length) return { id: id as 'yaz', name, traffic, dayInSeason: d + 1, length }
       d -= length
@@ -290,6 +295,18 @@ export class GameState {
   decorLevel = 0
   /** oyuncunun kurduğu sokak lambası adedi (#358/#679: yok edilen lambalar geri konabilsin) */
   lampCount = 0
+  // ---- MARİNA (rapor §6.5) — hepsi ADDITIVE, kara şubelerinde hep boş kalır ----
+  /** kurulu marina tesisleri (fueldock, pumpout, travelift…) */
+  marinaFacs: string[] = []
+  /** bağlama yerleri: tür → adet */
+  berths: Record<string, number> = {}
+  /** karada kışlama kapasitesi (tekne adedi) */
+  winterSlots = 0
+  /** çevre/uyum sicili — 3 ihlalde Mavi Bayrak askıya alınır (GEÇİCİ, kalıcı silme yok) */
+  marinaViolations = 0
+  /** doğru/yanlış defter kararı sayacı (öğretici geri bildirim için) */
+  logbookOk = 0
+  logbookBad = 0
   /** EKİPMAN YAŞLANMASI: 0-1 arası yıpranma; %100'de verim -%40, yenileme maliyeti */
   wear = 0
   managerResult: { collected: number; cleaned: boolean; fixed: number } | null = null
@@ -784,6 +801,7 @@ export class GameState {
     this.marketLevel = 0; this.market2Level = 0; this.toiletLevel = 0
     this.gridLevel = 0; this.batteryLevel = 0; this.battery = 0
     this.solarCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0; this.lampCount = 0
+    this.marinaFacs = []; this.berths = {}; this.winterSlots = 0; this.marinaViolations = 0
     this.hasDiesel = false; this.hasSMR = false; this.hasWash = false; this.hasOil = false
     this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
     this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
@@ -947,6 +965,7 @@ export class GameState {
     if (this.hasWash) v += WASH_COST
     if (this.hasOil) v += OIL_COST
     v += LAMP_COST * this.lampCount
+    v += this.marinaValue()
     if (this.hasCoffee) v += COFFEE_COST
     if (this.hasRestaurant) v += RESTAURANT_COST
     if (this.hasTruckPark) v += TRUCKPARK_COST
@@ -1056,6 +1075,48 @@ export class GameState {
   licenseFee(): number { return Math.round(8_000 + (this.equipmentValue() + this.landValue()) * 0.004) }
   /** dekorasyonun itibar katkısı */
   decorRep(): number { return 0.15 * this.decorLevel + Math.min(0.30, 0.04 * this.lampCount) }
+
+  // ---- MARİNA (rapor §6.5) ----
+  /** bu şube marina mı (tema su ise) */
+  get isMarina() { return this.theme().lane.kind === 'water' }
+  hasMarinaFac(id: MarinaFacId) { return this.marinaFacs.includes(id) }
+
+  /** MAVİ BAYRAK: tüm çevre hizmetleri kurulu + sicil temiz. İtibar +0.5, süperyat kilidi,
+   *  denetim sıklığı yarı, marina ücretine %15 prim. */
+  blueFlag() { return blueFlagStatus(new Set(this.marinaFacs), this.marinaViolations) }
+
+  /** Marinaya gelen tekne segmentleri — tesis kısıtlarına göre süzülür (rapor §6.5.4).
+   *  Süperyat YALNIZ Mavi Bayrak varsa, gulet duş/çamaşırhane varsa gelir. */
+  boatSegments(): BoatSegment[] {
+    if (!this.isMarina || !this.hasMarinaFac('fueldock')) return []
+    const bf = this.blueFlag().ok
+    return BOAT_SEGMENTS.filter(s =>
+      (!s.needsBlueFlag || bf) && (!s.needsShower || this.hasMarinaFac('shower')))
+  }
+
+  /** Bağlama + kışlama günlük geliri (pasif omurga). Gün dönüşünde kasaya eklenir. */
+  marinaDailyIncome(): { berth: number; winter: number; total: number } {
+    if (!this.isMarina) return { berth: 0, winter: 0, total: 0 }
+    const sid = this.season().id
+    const berth = berthIncome(this.berths, sid, this.blueFlag().ok)
+    const winter = winterStorageIncome(this.winterSlots, sid, this.hasMarinaFac('travelift'))
+    return { berth, winter, total: berth + winter }
+  }
+
+  /** Günlük risk olayı (determinist). Kalıcı silme YOK — para/itibar/bayrak, hepsi telafi edilebilir. */
+  marinaDayEvent() {
+    if (!this.isMarina) return null
+    return pickMarinaEvent(this.day, this.season().id, new Set(this.marinaFacs), this.blueFlag().ok)
+  }
+
+  /** Marina yatırımlarının varlık değeri — sunucu servet tavanıyla senkron tutulmalı */
+  marinaValue(): number {
+    let v = 0
+    for (const f of this.marinaFacs) v += (MARINA_FACILITIES as Record<string, { cost: number }>)[f]?.cost ?? 0
+    for (const [k, n] of Object.entries(this.berths)) v += (BERTH_KINDS[k as BerthKind]?.cost ?? 0) * n
+    v += this.winterSlots * 8_000
+    return v
+  }
 
   /** personel eğitimi etkileri (rapor §7 #7): dolum hızı, bahşiş, hata riski */
   staffFillMult(): number { return 1 + 0.12 * (this.staffLevel - 1) }   // Sv.4 → +%36 hız
@@ -1553,6 +1614,7 @@ const SAVE_FIELDS = [
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount',
+  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {

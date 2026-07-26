@@ -281,6 +281,43 @@ const COST = {
 const MANAGER_COSTS = [18000, 34000, 60000]      // istemci state.ts ile BİREBİR
 const DECOR_COSTS = [15000, 40000, 90000]
 const STAFF_TRAIN_COSTS = [12000, 26000, 48000]
+// MARİNA (src/marina.ts ile SENKRON — orada değişirse burası da değişmeli)
+const MARINA_FAC_COST = { fueldock: 180000, chandlery: 90000, shower: 60000, clubhouse: 220000,
+  icebait: 45000, travelift: 900000, pumpout: 120000, wasteoil: 70000, boom: 95000 }
+const BERTH_COST = { buoy: 12000, finger8: 40000, finger12: 75000, finger18: 140000, mega: 600000 }
+const WINTER_SLOT_COST = 8000
+/** Marina alanlarını temizle. Bilinmeyen tesis/bağlama anahtarları ATILIR — uydurma
+ *  anahtarla servet şişirme yolu kapalı. Sayılar abuse tavanıyla sınırlanır. */
+function clampMarina(s) {
+  if ('marinaFacs' in s) {
+    s.marinaFacs = Array.isArray(s.marinaFacs)
+      ? [...new Set(s.marinaFacs.filter(f => typeof f === 'string' && f in MARINA_FAC_COST))].slice(0, 16)
+      : []
+  }
+  if ('berths' in s) {
+    const out = {}
+    if (s.berths && typeof s.berths === 'object' && !Array.isArray(s.berths)) {
+      for (const k of Object.keys(s.berths)) {
+        if (k in BERTH_COST) out[k] = clamp(s.berths[k], 0, 60, 0)
+      }
+    }
+    s.berths = out
+  }
+  if ('winterSlots' in s) s.winterSlots = clamp(s.winterSlots, 0, 120, 0)
+  if ('marinaViolations' in s) s.marinaViolations = clamp(s.marinaViolations, 0, 999, 0)
+  if ('logbookOk' in s) s.logbookOk = clamp(s.logbookOk, 0, 1e6, 0)
+  if ('logbookBad' in s) s.logbookBad = clamp(s.logbookBad, 0, 1e6, 0)
+}
+
+function marinaValue(s) {
+  let v = 0
+  if (Array.isArray(s.marinaFacs)) for (const f of s.marinaFacs) v += MARINA_FAC_COST[f] || 0
+  if (s.berths && typeof s.berths === 'object') {
+    for (const k of Object.keys(s.berths)) v += (BERTH_COST[k] || 0) * (Number(s.berths[k]) || 0)
+  }
+  v += (Number(s.winterSlots) || 0) * WINTER_SLOT_COST
+  return v
+}
 const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000, lamp: 2500 }
 const sumUpto = (arr, k) => { let t = 0; const n = Math.max(0, Math.min(arr.length, Math.floor(k) || 0)); for (let i = 0; i < n; i++) t += arr[i]; return t }
 function buildingValue(s) {
@@ -304,6 +341,7 @@ function buildingValue(s) {
   if (s.tankCounts && typeof s.tankCounts === 'object') for (const k of ['benzin', 'dizel', 'lpg']) v += sumUpto(COST.tankAdd, n(s.tankCounts[k], 1))
   v += FLAT.solar * n(s.solarCount) + FLAT.airwater * n(s.airWaterCount) + FLAT.selfwash * n(s.selfWashCount) + FLAT.parking * n(s.parkingCount)
   v += FLAT.lamp * n(s.lampCount) // sokak lambası (state.ts LAMP_COST ile senkron)
+  v += marinaValue(s)             // marina tesisleri + bağlama + kışlama (src/marina.ts senkronu)
   if (s.hasDiesel) v += FLAT.dieselgen
   if (s.hasSMR) v += FLAT.smr
   if (s.hasWash) v += FLAT.wash
@@ -355,6 +393,7 @@ function sanitizeSave(save) {
   if ('staffLevel' in s) s.staffLevel = clamp(s.staffLevel, 1, 4, 1)         // personel eğitimi
   if ('decorLevel' in s) s.decorLevel = clamp(s.decorLevel, 0, 3, 0)         // dekorasyon sink'i
   if ('wear' in s) s.wear = clamp(s.wear, 0, 1, 0)                           // ekipman yaşlanması
+  clampMarina(s)                                                            // marina alanları (additive)
   if ('licenseDueDay' in s) s.licenseDueDay = clamp(s.licenseDueDay, 0, 100000, 30)
   if ('insurance' in s) s.insurance = !!s.insurance
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
@@ -464,6 +503,7 @@ function sanitizeSave(save) {
       for (const key of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount', 'lampCount']) {
         if (key in f) f[key] = clamp(f[key], 0, 200, 0)
       }
+      clampMarina(f) // marina şubesi anlık görüntüsü de temizlenir
       if (sn.tankCounts && typeof sn.tankCounts === 'object') {
         for (const fu of ['benzin', 'dizel', 'lpg']) sn.tankCounts[fu] = clamp(sn.tankCounts[fu], 1, 4, 1)
       }

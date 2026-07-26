@@ -8,9 +8,10 @@ const fs = await import('node:fs')
 
 // sunucu servet fonksiyonlarını server/index.js'ten AYNEN çalıştır (kopya sürüklenmesi olmasın)
 const src = fs.readFileSync(new URL('../../server/index.js', import.meta.url), 'utf8')
-const block = src.slice(src.indexOf('const COST = {'), src.indexOf('function sanitizeSave'))
-const fn = new Function(block + '; return { buildingValue, snapshotsValue }')()
-const { buildingValue, snapshotsValue } = fn
+// clamp'ten başlanır: clampMarina ona bağımlı (COST'tan başlayınca ReferenceError verirdi)
+const block = src.slice(src.indexOf('const clamp = '), src.indexOf('function sanitizeSave'))
+const fn = new Function(block + '; return { buildingValue, snapshotsValue, marinaValue, clampMarina }')()
+const { buildingValue, snapshotsValue, marinaValue, clampMarina } = fn
 const wealth = ser => (Number(ser.money) || 0) + buildingValue(ser) + snapshotsValue(ser)
 
 let pass = 0, fail = 0
@@ -71,6 +72,45 @@ u.unlockLoc('cevreyolu')
 const wu1 = wealth(serializeState(u))
 check(`şube açma serveti 500k düşürür (sink): ${Math.round(wu0 - wu1)}`, Math.abs((wu0 - wu1) - 500_000) < 1)
 check('şube açtıktan sonra ekipman AYNEN durur (fresh-start guard tetiklenmez)', u.pumps === 5 && u.marketLevel === 2)
+
+// ---- MARİNA: istemci ve sunucu AYNI değeri hesaplamalı, yoksa yatırım 409 üretir ----
+console.log('\n-- Marina istemci/sunucu senkronu --')
+{
+  const m = new GameState()
+  m.unlockedLocs.push('marina')
+  m.switchLoc('marina', layout())
+  m.money = 3_000_000
+  m.marinaFacs = ['fueldock', 'pumpout', 'wasteoil', 'boom', 'travelift', 'shower']
+  m.berths = { finger12: 8, finger18: 3, mega: 1 }
+  m.winterSlots = 24
+  const ser = serializeState(m)
+  const cli = m.marinaValue()
+  const srv = marinaValue(ser)
+  check(`istemci ₺${cli.toLocaleString('tr-TR')} = sunucu ₺${srv.toLocaleString('tr-TR')}`, cli === srv,
+    'src/marina.ts ile server/index.js maliyet tabloları AYRIŞMIŞ')
+  check('marina yatırımı sunucu servetine giriyor (409 olmaz)', buildingValue(ser) >= srv)
+
+  // UYDURMA anahtarla servet şişirme kapalı olmalı
+  const hack = { marinaFacs: ['fueldock', 'sahte_tesis', 'altin_iskele'], berths: { mega: 5, sahte: 999 }, winterSlots: 99999 }
+  const before = marinaValue(hack)
+  clampMarina(hack)
+  const after = marinaValue(hack)
+  check('bilinmeyen tesis anahtarı ATILIR', !hack.marinaFacs.includes('sahte_tesis'))
+  check('bilinmeyen bağlama anahtarı ATILIR', !('sahte' in hack.berths))
+  check(`abuse tavanı uygulanır (₺${before.toLocaleString('tr-TR')} → ₺${after.toLocaleString('tr-TR')})`, after < before)
+  check('meşru tesis KORUNUR (aşırı temizlik yok)', hack.marinaFacs.includes('fueldock') && hack.berths.mega === 5)
+
+  // şube geçişinde marina serveti KAYBOLMAZ (locSnapshots yolu)
+  const w1 = wealth(serializeState(m))
+  m.switchLoc('kasaba', layout())
+  const w2 = wealth(serializeState(m))
+  check(`marinadan çıkınca servet SABİT (₺${Math.round(w1).toLocaleString('tr-TR')} → ₺${Math.round(w2).toLocaleString('tr-TR')})`,
+    Math.abs(w1 - w2) < 1)
+  m.switchLoc('marina', layout())
+  const w3 = wealth(serializeState(m))
+  check('marinaya dönünce de sabit (çifte sayım yok)', Math.abs(w1 - w3) < 1)
+  check('dönünce tesisler AYNEN duruyor', m.marinaFacs.length === 6 && m.berths.finger12 === 8 && m.winterSlots === 24)
+}
 
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)
