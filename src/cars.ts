@@ -830,8 +830,12 @@ export interface CarManagerOpts {
   trafficPull?: () => number
   /** açık müşteri segmentleri (₺/müşteri ekseni) — kilitliyse null/boş, davranış klasik kalır */
   segments?: () => CarSegment[]
-  /** MARİNA: gelen tekne türleri (paylarıyla). Boş dizi = kara şubesi, tekne doğmaz. */
-  boats?: () => { id: string; share: number }[]
+  /** MARİNA: gelen tekne segmentleri — TAM veri (tutar dahil).
+   *  Boş dizi = kara şubesi, tekne doğmaz.
+   *  DİKKAT: tutar da buradan gelir. Eskiden yalnız {id,share} geliyordu ve para
+   *  activeSegments()'ten (KARA segmentlerinden) alınıyordu; süperyat sıradan araba
+   *  parası ödüyordu. Marinanın "az müşteri, yüksek tutar" gerekçesi oyunda YOKTU. */
+  boats?: () => CarSegment[]
   /** SU ŞUBESİ (marina): yalnız tekne doğar, araba ASLA doğmaz. */
   waterOnly?: () => boolean
   /** 4 ŞERİTLİ YOL: istasyona girecek araçların kullandığı servis şeridi x'i.
@@ -1361,23 +1365,27 @@ export class CarManager {
 
   /** MARİNA: gelen teknenin türünü segment paylarına göre seç (rapor §6.5.4).
    *  Kara şubelerinde `boats()` boş döner → hiç tekne doğmaz, davranış değişmez. */
-  private pickBoat(): BoatKind | null {
+  private pickBoat(): CarSegment | null {
     const segs = this.opts.boats?.() ?? []
     if (!segs.length) return null
     const tot = segs.reduce((a, b) => a + b.share, 0)
     let r = Math.random() * tot
-    for (const b of segs) { r -= b.share; if (r <= 0) return b.id as BoatKind }
-    return segs[segs.length - 1].id as BoatKind
+    for (const b of segs) { r -= b.share; if (r <= 0) return b }
+    return segs[segs.length - 1]
   }
 
   private spawnTransit(lane: 'near' | 'far') {
-    const boat = this.pickBoat()
+    const boatSeg = this.pickBoat()
     // MARİNA: denizin ortasına ARABA GELMEZ. Su şubesinde tekne segmenti yoksa
     // (henüz yakıt iskelesi kurulmadıysa) hiçbir şey doğmaz — eskiden pickBoat null
     // dönünce kod arabaya düşüyordu ve deniz haritasında araba beliriyordu.
-    if (!boat && this.opts.waterOnly?.()) return
+    if (!boatSeg && this.opts.waterOnly?.()) return
+    const boat = boatSeg ? (boatSeg.id as BoatKind) : null
     const isEv = !boat && Math.random() < this.opts.evShare()
-    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), this.opts.segments?.() ?? null, boat)
+    // Tekne varsa TUTAR da o segmentten gelir: tek elemanlı liste veriyoruz ki Car'ın
+    // kendi zarı model ile parayı AYRIŞTIRMASIN (jet ski süperyat parası ödemesin).
+    const segs = boatSeg ? [{ ...boatSeg, share: 1 }] : (this.opts.segments?.() ?? null)
+    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), segs, boat)
     car.lane = lane
     car.phase = 'transit'
     // 4 ŞERİTLİ YOL (çevre yolu): giriş kararı şerit seçiminden ÖNCE verilir, çünkü

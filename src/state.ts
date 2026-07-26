@@ -1165,6 +1165,25 @@ export class GameState {
       (!s.needsBlueFlag || bf) && (!s.needsShower || this.hasMarinaFac('shower')))
   }
 
+  /** Tekne segmentlerini araç segmenti biçimine çevir — TUTAR buradan geçer.
+   *  cars.ts hem modeli hem parayı bu listeden alır; ayrışırsa süperyat araba
+   *  parası öder (bu bug oyunda vardı ve marinanın gerekçesini yok ediyordu).
+   *  marginMult: BoatSegment.margin oranı 0.30'a normalize edilir → balıkçının
+   *  ÖTV'siz düşük marjı (0.12 → 0.40×), sürat teknesinin yüksek marjı (0.38 → 1.27×). */
+  boatCarSegments(): CarSegment[] {
+    return this.boatSegments().map(b => ({
+      id: b.id,
+      share: b.share,
+      min: b.min,
+      max: b.max,
+      marginMult: Math.round((b.margin / 0.30) * 100) / 100,
+      // Deniz motorini: balıkçı ÖTV defteri dizel üzerinden işliyor
+      ...(b.id === 'balikci' || b.id === 'gulet' || b.id === 'motoryat' || b.id === 'superyat'
+          ? { fuel: 'dizel' as FuelType } : {}),
+      label: b.label,
+    }))
+  }
+
   /** Bağlama + kışlama günlük geliri (pasif omurga). Gün dönüşünde kasaya eklenir. */
   marinaDailyIncome(): { berth: number; winter: number; total: number } {
     if (!this.isMarina) return { berth: 0, winter: 0, total: 0 }

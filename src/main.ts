@@ -1196,7 +1196,7 @@ const cars = new CarManager(world.scene, modelLib, {
   trafficPull: () => (guestPaused ? 1 : state.trafficPull()),
   segments: () => state.activeSegments(),
   // MARİNA: tekne segmentleri (kara şubede boş dizi döner → tekne doğmaz)
-  boats: () => state.boatSegments().map(b => ({ id: b.id, share: b.share })),
+  boats: () => state.boatCarSegments(),   // TUTAR da buradan gelir (bkz. boatCarSegments)
   // MARİNA: su şubesinde ARABA ASLA doğmaz — tekne yoksa hiçbir şey doğmaz
   waterOnly: () => state.theme().lane.kind === 'water',
   // 4 ŞERİTLİ YOL: istasyona girecek araçların servis şeridi (temadan)

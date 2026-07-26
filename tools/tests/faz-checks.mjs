@@ -627,10 +627,21 @@ console.log('== 18) Çevre Yolu imzası: trafik ışığı + yaya müşteri (rap
   w.marketLevel = 2; w.walkT = 0
   w.tick(25)
   check('market varken yaya müşteri kumbaraya ciro bırakır', (w.pendingCash.market ?? 0) > 0)
-  const first = w.pendingCash.market
-  w.walkT = 0; w.marketLevel = 3; w.hasCoffee = true; w.hasRestaurant = true
-  w.pendingCash = {}; w.tick(25)
-  check('gelişmiş dükkanlar yaya cirosunu artırır', (w.pendingCash.market ?? 0) > first * 0.9)
+  // KIRILGANLIK FIXİ: yaya cirosu ₺25-70 arası RASTGELE. Tek örnek karşılaştırmak
+  // kırılgandı — yüksek çekilen ilk örnek, daha iyi çarpanla gelen düşük örneği
+  // geçebiliyordu (test bazen kırmızı yanıyordu). Artık N örneğin TOPLAMI kıyaslanıyor:
+  // rastgelelik ortalamada eriyor, ölçülen şey yalnız ÇARPAN kalıyor.
+  const walkTotal = (st, n) => {
+    st.pendingCash = {}
+    for (let i = 0; i < n; i++) { st.walkT = 0; st.tick(25) }
+    return st.pendingCash.market ?? 0
+  }
+  const N = 60
+  const azDukkan = walkTotal(w, N)
+  w.marketLevel = 3; w.hasCoffee = true; w.hasRestaurant = true
+  const cokDukkan = walkTotal(w, N)
+  check(`gelişmiş dükkanlar yaya cirosunu artırır (${N} örnek: ₺${azDukkan} → ₺${cokDukkan})`,
+    cokDukkan > azDukkan * 1.15)
   // istasyon kapalıyken yaya gelmez
   w.pendingCash = {}; w.walkT = 0; w.closed = true
   w.tick(25)

@@ -3,6 +3,7 @@
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} }
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'tr' }, configurable: true })
 
+import fs from 'node:fs'
 const M = await import('../../src/marina.ts')
 const { GameState } = await import('../../src/state.ts')
 
@@ -203,6 +204,47 @@ console.log('\n== 10) Tekne fiziği ve doğuşu (§6.5.2) ==')
   check('süperyat jet ski\'den daha fazla parçadan oluşur (ölçek farkı görünür)',
     sup.children.length >= jet.children.length)
   check('yelkenlinin DİREĞİ var (tür ayrımı görsel)', C.buildBoatMesh('yelkenli').children.length > C.buildBoatMesh('surat').children.length)
+}
+
+console.log('\n== 11) TUTAR OYUNA BAĞLI MI (sabit değil, DAVRANIŞ testi) ==')
+{
+  // Bu test §1'in tamamlayıcısı. §1 BOAT_SEGMENTS tablosunu ölçüyor — ama tablo
+  // doğru olsa da oyuna bağlı olmayabilir. Nitekim BAĞLI DEĞİLDİ: boats() yalnız
+  // {id,share} gönderiyordu, para activeSegments()'ten (KARA) geliyordu ve süperyat
+  // sıradan araba parası ödüyordu. Bu test o hatayı bir daha geçirmez.
+  const g = marina()
+  g.marinaFacs.push('fueldock', 'shower')
+  for (const f of M.ENV_FACILITIES) g.marinaFacs.push(f)   // Mavi Bayrak → süperyat açılır
+  const segs = g.boatCarSegments()
+  check('boatCarSegments() TUTAR taşıyor (min/max)', segs.every(s => s.min > 0 && s.max > s.min))
+  check('7 segmentin hepsi geliyor', segs.length === 7)
+  const sup = segs.find(s => s.id === 'superyat')
+  const jet = segs.find(s => s.id === 'jetski')
+  check(`süperyat tutarı jet ski'nin en az 30 katı (₺${sup.min}-${sup.max} vs ₺${jet.min}-${jet.max})`,
+    sup.min / jet.max > 30)
+  check('süperyat KARA premium segmentinden çok daha yüksek (₺300-600)', sup.min > 600 * 10)
+  check('balıkçı ÖTV marjı DÜŞÜK (marginMult < 0.5)', segs.find(s => s.id === 'balikci').marginMult < 0.5)
+  check('büyük tekneler DENİZ MOTORİNİ istiyor', segs.find(s => s.id === 'superyat').fuel === 'dizel')
+
+  // main.ts gerçekten boatCarSegments'i mi veriyor (yoksa yine {id,share} mi)?
+  const main = fs.readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')
+  check('main.ts opts.boats TAM segment gönderiyor',
+    /boats: \(\) => state\.boatCarSegments\(\)/.test(main),
+    'yalnız {id,share} gönderilirse tutar KARA segmentinden gelir')
+
+  // cars.ts model ile parayı AYRIŞTIRMIYOR mu?
+  const cars = fs.readFileSync(new URL('../../src/cars.ts', import.meta.url), 'utf8')
+  check('pickBoat SEGMENTİN TAMAMINI döndürüyor', /private pickBoat\(\): CarSegment \| null/.test(cars))
+  check('seçilen segment tek elemanlı liste olarak Car\'a veriliyor (model=para)',
+    /\[\{ \.\.\.boatSeg, share: 1 \}\]/.test(cars))
+  check('kara şubesinde eski davranış korunuyor',
+    /: \(this\.opts\.segments\?\.\(\) \?\? null\)/.test(cars))
+
+  // ortalama bilet: tabloyla oyun AYNI olmalı
+  const avgTable = M.averageTicket(M.BOAT_SEGMENTS)
+  const avgGame = segs.reduce((a, s) => a + s.share * (s.min + s.max) / 2, 0) / segs.reduce((a, s) => a + s.share, 0)
+  check(`tablo ve oyun ortalaması AYNI (₺${Math.round(avgTable)} = ₺${Math.round(avgGame)})`,
+    Math.abs(avgTable - avgGame) < 1)
 }
 
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
