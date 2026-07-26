@@ -325,6 +325,54 @@ function clampMarina(s) {
   if ('logbookBad' in s) s.logbookBad = clamp(s.logbookBad, 0, 1e6, 0)
 }
 
+
+/**
+ * MEŞRU KAZANÇ HIZI — sunucu, istemciye sormadan save'deki EKİPMANDAN türetir.
+ *
+ * Eski hile freni sabit bir taban veriyordu (100.000/push). Rate limit 3 sn'de 2 push'a
+ * izin verdiği için taban her push'ta yeniden alınıyordu: gün-1 oyuncusu bile saatte
+ * ~249 milyon, 40 yıldızlı ~2,7 milyar çekebiliyordu. Zaman tabanlı terim sabitin
+ * yanında anlamsız kalıyordu.
+ *
+ * Artık hız OYUNCUNUN GERÇEKTEN SAHİP OLDUĞU şeye bağlı: 1 pompalı hesap milyon
+ * iddia edemez. Ölçüm: en gelişmiş istasyon aktif oyunda ~267 ₺/sn kazanıyor;
+ * SAFETY=4 ile tavan ~1.070 ₺/sn olur — meşru oyuncu asla değmez, hile 200 kat kısılır.
+ */
+
+/** HİLE DENETİM KAYDI — bellekte son 200 olay; /api/metrics ile görülebilir.
+ *  Kalıcı tablo AÇMIYOR (oyuncu kaydına dokunmama kuralı). Amaç: kırpmanın
+ *  sessiz kalmaması; hangi hesapta ne sıklıkla tavan zorlanıyor görülebilsin. */
+const cheatLog = []
+function auditCheat(email, kind, info) {
+  cheatLog.push({ at: new Date().toISOString(), email, kind, ...info })
+  if (cheatLog.length > 200) cheatLog.shift()
+  console.warn(`[hile-freni] ${kind} ${email}`, info)
+}
+
+function maxIncomeRate(s) {
+  if (!s) return 20
+  const n = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
+  const fac = (n(s.marketLevel) > 0 ? n(s.marketLevel) : 0)
+    + (s.hasCoffee ? 1 : 0) + (s.hasRestaurant ? 1 : 0) + (s.hasWash ? 1 : 0)
+    + (s.hasOil ? 1 : 0) + (s.hasTruckPark ? 1 : 0) + n(s.selfWashCount)
+    + n(s.airWaterCount) * 0.5 + (s.hasSMR ? 2 : 0)
+  // MARİNA: tekne başı ciro yüksek ama frekans 10x düşük → bağlama/tesis başına pay
+  const marina = (Array.isArray(s.marinaFacs) ? s.marinaFacs.length : 0) * 2
+    + (s.berths && typeof s.berths === 'object'
+        ? Object.values(s.berths).reduce((a, v) => a + n(v), 0) * 1.5 : 0)
+  const base = 1 + n(s.pumps) * 1.2 + n(s.evChargers) * 0.8 + fac * 0.6 + marina * 0.6
+  const stars = Math.max(0, Math.min(40, n(s.brandStars)))
+  // base*8 = aktif oyunda meşru tepe kazanç (ölçüm: gelişmiş istasyon ~267 ₺/sn).
+  // starMult oyunun KENDİ prestij çarpanıyla aynı (state.ts prestigeMult = 1+0.25*yıldız).
+  // SAFETY=3 yanlış alarm payı: bu repoda aşırı sıkı guard'lar "param gitti" şikâyeti
+  // üretmişti, o yüzden meşru tepenin 3 katından aşağı inilmiyor.
+  const SAFETY = 3
+  return Math.max(20, base * 8 * SAFETY * (1 + 0.25 * stars))
+}
+
+/** Jeton kovası tavanı: tek seferlik meşru sıçramayı (gün dönüşü + sözleşme ödemesi) karşılar */
+const ALLOW_BURST = 260_000
+
 function marinaValue(s) {
   let v = 0
   if (Array.isArray(s.marinaFacs)) for (const f of s.marinaFacs) v += MARINA_FAC_COST[f] || 0
@@ -411,6 +459,12 @@ function sanitizeSave(save) {
   if ('wear' in s) s.wear = clamp(s.wear, 0, 1, 0)                           // ekipman yaşlanması
   clampMarina(s)                                                            // marina alanları (additive)
   clampRival(s)                                                             // AI rakip durumu
+  // _ab (jeton kovası) SUNUCU-SAHİPLİ: istemci ne yazarsa yazsın sınırlanır.
+  if ('_ab' in s) {
+    const a = s._ab
+    s._ab = (a && typeof a === 'object' && !Array.isArray(a))
+      ? { t: clamp(a.t, 0, 4e12, 0), b: clamp(a.b, 0, 260000, 0) } : null
+  }
   if ('licenseDueDay' in s) s.licenseDueDay = clamp(s.licenseDueDay, 0, 100000, 30)
   if ('insurance' in s) s.insurance = !!s.insurance
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
@@ -707,6 +761,14 @@ async function handleApi(req, res, url) {
           toplamOyuncu: r.rows.length,
           ilerleme: progression,
           doygunlukAraligi: sat ? sat.gun : null,
+          // HİLE FRENİ: son kırpma/enjeksiyon olayları (bellekte, kalıcı tablo yok)
+          hileFreni: {
+            olay: cheatLog.length,
+            son: cheatLog.slice(-15),
+            hesapBasina: Object.entries(cheatLog.reduce((a, x) => {
+              a[x.email] = (a[x.email] || 0) + 1; return a
+            }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10),
+          },
           tutulma: {
             D1: eligible1 ? Number((d1 / eligible1).toFixed(3)) : null,
             D7: eligible7 ? Number((d7 / eligible7).toFixed(3)) : null,
@@ -974,7 +1036,20 @@ async function handleApi(req, res, url) {
         // handoverCount de yıldızla tutarlı olmalı (kurcalanmış save ile eşik atlanmasın)
         if (typeof clean.s.handoverCount === 'number') clean.s.handoverCount = Math.min(clean.s.handoverCount, clean.s.brandStars)
         const starMult = 1 + 0.25 * stars
-        const allowance = (firstSave ? (60_000 + gameDays * 40_000) : (100_000 + elapsed * 2500)) * starMult
+        // JETON KOVASI: allowance artık push BAŞINA değil ZAMAN başına birikiyor.
+        // Kova save içinde taşınır (_ab, sunucu-sahipli alan); istemci kurcalarsa
+        // aşağıda clamp'lenir. Böylece hızlı push spam'i bedava para getirmez —
+        // 40 push/dakika ile 1 push/dakika aynı toplam allowance'ı verir.
+        const rate = maxIncomeRate(clean.s)
+        const prevAb = (prevSave && prevSave.s && prevSave.s._ab) || null
+        const abT = prevAb && typeof prevAb.t === 'number' ? prevAb.t : 0
+        const abB = prevAb && typeof prevAb.b === 'number' ? clamp(prevAb.b, 0, ALLOW_BURST, 0) : ALLOW_BURST
+        const nowMs = Date.now()
+        const refillSec = abT > 0 ? Math.max(0, (nowMs - abT) / 1000) : elapsed
+        let bucket = Math.min(ALLOW_BURST, abB + refillSec * rate)
+        const allowance = firstSave
+          ? (60_000 + gameDays * 40_000) * starMult   // misafirden taşınan ilk save: serbest
+          : bucket
         const prevWealth = (prevSave && prevSave.s)
           ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) + snapshotsValue(prevSave.s)
           : START_MONEY
@@ -1003,16 +1078,27 @@ async function handleApi(req, res, url) {
             return json(res, 409, { conflict: true, save: prevSave, updatedAt: prev.rows[0]?.updated_at || null })
           }
         }
+        let clamped = 0
         if (money + bval > prevWealth + allowance) {
           // fazlalığı önce paradan düş (para enjeksiyonu / hızlı kazanç freni)
           const excess = (money + bval) - (prevWealth + allowance)
+          clamped = excess
           money = Math.max(0, money - excess)
           clean.s.money = Math.round(money)
           // bina değeri tek başına tavanı aşıyorsa = bina/seviye ENJEKSİYONU → reddet, öncekini koru.
           if (money + bval > prevWealth + allowance + 250_000) {
+            auditCheat(email, 'inject', { excess: Math.round(excess), rate: Math.round(rate) })
             return json(res, 409, { conflict: true, save: prevSave || null, updatedAt: prev.rows[0]?.updated_at || null })
           }
         }
+        if (!firstSave) {
+          // HARCANAN JETON: kabul edilen servet artışı kovadan düşülür. Kova bittiğinde
+          // oyuncu ancak zamanla dolduğu kadar kazanabilir (push sıklığı işe yaramaz).
+          const gain = Math.max(0, (money + bval) - prevWealth)
+          bucket = Math.max(0, bucket - gain)
+          if (clamped > 5000) auditCheat(email, 'clamp', { clamped: Math.round(clamped), rate: Math.round(rate) })
+        }
+        clean.s._ab = { t: nowMs, b: Math.round(bucket) }
         // day (ilerleme) hız freni: gün ~160sn/oyun-günü hızında ilerler. İlk save'de misafir eşiğine (5+tampon) izin.
         if (typeof clean.s.day === 'number') {
           const prevDay = (prevSave && prevSave.s && typeof prevSave.s.day === 'number') ? prevSave.s.day : 1
