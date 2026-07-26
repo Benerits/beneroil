@@ -1,3 +1,4 @@
+import { t } from './i18n'
 /**
  * BenelOil — "1000 istasyon" tanıtım sahnesi (video çekimi için).
  * Gerçek oyuncu save'lerinden (public/promo-stations.json) her istasyon kendi
@@ -83,7 +84,7 @@ async function boot() {
   if (real > 0) while (stations.length < 1000) stations.push(stations[stations.length % real])
   const N = stations.length
   document.getElementById('t-count')!.textContent = N.toLocaleString('tr-TR')
-  document.getElementById('t-sub')!.textContent = 'OYUNCUYA ULAŞTIK 🎉'
+  document.getElementById('t-sub')!.textContent = t('OYUNCUYA ULAŞTIK 🎉')
 
   // phyllotaxis (ayçiçeği) yerleşimi: rank0=merkez, dışa doğru dairesel
   const SP = 6.6 // istasyonlar arası sıkışıklık

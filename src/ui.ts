@@ -582,7 +582,7 @@ export class UI {
     this.setText(this.money, Math.round(state.money).toLocaleString('tr-TR'))
     this.setText(this.day, `${state.day}`)
     this.setText(this.rep, state.reputation.toFixed(1))
-    this.setText(el<HTMLSpanElement>('quest'), state.dailyDone ? 'TAMAM' : `${state.dailyServed}/15`)
+    this.setText(el<HTMLSpanElement>('quest'), state.dailyDone ? t('TAMAM') : `${state.dailyServed}/15`)
     if (this.activeCar) this.refreshPanel()
     const ts = this.tankerStatus()
     const tpanel = el<HTMLDivElement>('tankerpanel')
@@ -614,7 +614,7 @@ export class UI {
         this.setText(btn, t('Dolu'))
         btn.disabled = true
       } else {
-        this.setText(info, `${Math.round(state.tanks[f])} / ${cap}L · +${need}L sipariş`)
+        this.setText(info, t('{0} / {1}L · +{2}L sipariş', Math.round(state.tanks[f]), cap, need))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }

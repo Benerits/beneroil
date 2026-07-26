@@ -165,7 +165,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
             const P = cap.Plugins!
             if (P.SocialLogin) { await initSocial(P); const r = await P.SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } }); await oauthSubmit('google', r?.result?.idToken ?? r?.idToken) }
             else if (P.GoogleAuth) { const u = await P.GoogleAuth.signIn(); await oauthSubmit('google', u?.authentication?.idToken) }
-            else gErr.textContent = 'Google plugin bulunamadı.'
+            else gErr.textContent = t('Google eklentisi bulunamadı.')
           } catch (e) { gErr.textContent = (e as Error)?.message || t('Giriş başarısız.') }
         }
         document.getElementById('gbtn-google')!.appendChild(btn); any = true
@@ -209,7 +209,7 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
               await oauthSubmit('apple', tok)
             }
             else if (P.SignInWithApple) { const r = await P.SignInWithApple.authorize({ scopes: 'email name' }); await oauthSubmit('apple', r?.response?.identityToken) }
-            else gErr.textContent = 'Apple plugin bulunamadı.'
+            else gErr.textContent = t('Apple eklentisi bulunamadı.')
           } catch (e) {
             // İPTAL sessizdir (kullanıcı sheet'i kapattı — iOS'un ham 1001 metni ekrana BASILMAZ);
             // gerçek hatalarda TR mesaj.
@@ -2817,7 +2817,7 @@ ui.onSell = id => {
 function buyToast(id: string) {
   audio.build()
   switch (id) {
-    case 'pump': ui.toast(`⛽ Pompa #${state.pumps} kuruldu!`, 'good'); break
+    case 'pump': ui.toast(t('⛽ Pompa #{0} kuruldu!', state.pumps), 'good'); break
     case 'sign': ui.toast('🪧 Tabela büyüdü — daha çok müşteri gelecek!', 'good'); break
     case 'widegate': ui.toast(t('🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!'), 'good'); break
     case 'tank': ui.toast(t('🛢️ Tank kapasitesi: {0}L', state.tankCapacity), 'good'); break

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>BenelOil — Petrol İstasyonu Oyunu</title>
+  <title data-i18n="BenelOil — Petrol İstasyonu Oyunu">BenelOil — Petrol İstasyonu Oyunu</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -626,7 +626,7 @@
     <div class="chip" id="repchip" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
     <div class="chip" id="questchip" style="min-width:104px"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
     <div class="spacer"></div>
-    <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span>Reklam İzle: Müşteri Patlaması</span></button>
+    <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Reklam İzle: Müşteri Patlaması">Reklam İzle: Müşteri Patlaması</span></button>
     <button id="editbtn" class="btn" title="Düzenleme modu" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-move"/></svg></button>
     <button id="anglebtn" class="btn" title="Kamera açısı" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-angle"/></svg></button>
     <button id="closebtn" class="btn" style="width:118px; justify-content:center"><svg class="ic"><use href="#i-power"/></svg><span id="closelabel" data-i18n="Açık">Açık</span></button>
@@ -684,7 +684,7 @@
       </div>
       <!-- dijital pompa ekranı: dolarken litre (yeşil) + tutar (amber) canlı artar -->
       <div class="pumpdisp" id="pumpdisp">
-        <div class="pd-cell"><span class="pd-lbl">LİTRE</span><span class="pd-val lit" id="pd-liters">0.0</span></div>
+        <div class="pd-cell"><span class="pd-lbl" data-i18n="LİTRE">LİTRE</span><span class="pd-val lit" id="pd-liters">0.0</span></div>
         <div class="pd-sep"></div>
         <div class="pd-cell"><span class="pd-lbl">TUTAR ₺</span><span class="pd-val amt" id="pd-total">0</span></div>
       </div>
@@ -745,7 +745,7 @@
   <div class="backdrop" id="fuelwrap">
     <div class="modal" style="height:auto; max-height:84vh">
       <div class="mhead">
-        <h3>Yakıt Siparişi</h3>
+        <h3 data-i18n="Yakıt Siparişi">Yakıt Siparişi</h3>
         <button class="mclose" data-close="fuelwrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="mbody">
@@ -858,7 +858,7 @@
   <div class="backdrop" id="accwrap">
     <div class="modal" style="height:auto; max-height:84vh">
       <div class="mhead">
-        <h3>Hesabım</h3>
+        <h3 data-i18n="Hesabım">Hesabım</h3>
         <button class="mclose" data-close="accwrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="mbody">
@@ -1001,8 +1001,8 @@
         </div>
         <div style="margin-top:12px; font-size:11px; color:#8a94a0; line-height:1.5; text-align:center">
           Kayıt olarak
-          <a href="/terms" target="_blank" style="color:#6b7684">Kullanım Şartları</a> ve
-          <a href="/privacy" target="_blank" style="color:#6b7684">Gizlilik Politikası</a>'nı
+          <a href="/terms" target="_blank" style="color:#6b7684" data-i18n="Kullanım Şartları">Kullanım Şartları</a> ve
+          <a href="/privacy" target="_blank" style="color:#6b7684" data-i18n="Gizlilik Politikası">Gizlilik Politikası</a>'nı
           kabul etmiş olursun.<br>BenelOil bir <b style="color:#6b7684">Benerits</b> oyunudur · Hopsule Inc. Delaware, ABD
         </div>
       </div>
@@ -1064,7 +1064,7 @@ Sorun / Öneri Bildir
   <div id="boom">
     <svg class="big"><use href="#i-reactor"/></svg>
     <div>REAKTÖR PATLADI!</div>
-    <div class="sub">Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...</div>
+    <div class="sub" data-i18n="Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...">Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...</div>
   </div>
 
   <!-- Onboarding: ilk oturum adım rehberi -->
