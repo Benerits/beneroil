@@ -627,7 +627,7 @@ function openOfficePanel() {
       + `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')
       // fiyat-akış bağı GÖRÜNÜR: +/- bastıkça bu satır canlı değişir ("fiyat bir şey değiştirmiyor" hissinin ilacı)
       + `<div class="sd" style="text-align:center; padding:7px 4px 3px; font-weight:800; color:${flow >= 100 ? 'var(--green-dark)' : flow >= 70 ? 'var(--orange-dark)' : 'var(--red)'}">`
-      + `🚗 ${t('Bu fiyatlarla müşteri akışı')}: %${flow}</div>`
+      + `<svg class="ic" style="vertical-align:-3px"><use href="#i-user"/></svg> ${t('Bu fiyatlarla müşteri akışı')}: %${flow}</div>`
   }
 
   // 3) Müşteri & itibar
@@ -658,21 +658,33 @@ function openOfficePanel() {
   }
 
   // 3y) SIRALAMA + SEZON (Katman 4c)
+  // Sezon (Fiyat sekmesi): piyasa kararlarının bağlamı
+  const sel = document.getElementById('of-season')
+  if (sel) {
+    const se = state.season()
+    sel.innerHTML = row(t('Sezon'), `${se.name} (${se.dayInSeason}/${se.length})`, se.traffic >= 1.1 ? 'good' : se.traffic < 0.9 ? 'bad' : '')
+      + row(t('Sezon trafiği'), `×${se.traffic.toFixed(2)}`, se.traffic >= 1.1 ? 'good' : se.traffic < 0.9 ? 'bad' : '')
+  }
+
+  // SIRALAMA — TAMAMEN ANONİM (KVKK): sunucu isim döndürmüyor, satırlar "Oyuncu #N".
+  // Yalnız KENDİ satırın `me` işaretiyle geliyor ve "SEN" olarak vurgulanıyor.
   const lb = document.getElementById('of-leaderboard')
   if (lb) {
-    const se = state.season()
-    lb.innerHTML = row(t('Sezon'), `${se.name} (${se.dayInSeason}/${se.length})`, se.traffic >= 1.1 ? 'good' : se.traffic < 0.9 ? 'bad' : '')
-      + row(t('Sezon trafiği'), `×${se.traffic.toFixed(2)}`, se.traffic >= 1.1 ? 'good' : se.traffic < 0.9 ? 'bad' : '')
-      + `<div id="lb-rows" class="sd" style="padding:4px">${t('Sıralama yükleniyor…')}</div>`
+    lb.innerHTML = `<div class="sd" style="padding:4px">${t('Sıralama yükleniyor…')}</div>`
+      + `<div id="lb-rows"></div>`
+      + `<div class="acc-note">${t('Sıralama anonimdir — kimsenin istasyon adı gösterilmez.')}</div>`
     if (!lbLoading) {
       lbLoading = true
-      fetch('/api/leaderboard').then(r => r.json()).then(d => {
+      fetch('/api/leaderboard', { headers: { 'x-auth': localStorage.getItem('benzinlik-token') ?? '' } })
+        .then(r => r.json()).then(d => {
         const el = document.getElementById('lb-rows')
         if (!el || !Array.isArray(d.top)) return
-        const me = (auth.currentEmail() || '').length > 0 ? world.stationName : null
-        el.innerHTML = d.top.slice(0, 10).map((x: { rank: number; name: string; money: number; day: number; stars: number }) =>
-          `<div class="stat"><span class="k">${x.rank}. ${x.name}${x.stars > 0 ? ' ' + '★'.repeat(Math.min(5, x.stars)) : ''}</span>`
-          + `<span class="v ${me && x.name === me ? 'good' : ''}">₺${Math.round(x.money).toLocaleString('tr-TR')} · G${x.day}</span></div>`).join('')
+        el.previousElementSibling?.remove()
+        el.innerHTML = d.top.slice(0, 10).map((x: { rank: number; money: number; day: number; stars: number; me?: boolean }) =>
+          `<div class="stat"><span class="k${x.me ? ' lb-me' : ''}">${x.rank}. `
+          + `${x.me ? t('SEN') : t('Oyuncu #{0}', String(x.rank))}`
+          + `${x.stars > 0 ? ` <span class="lb-star">${'★'.repeat(Math.min(5, x.stars))}</span>` : ''}</span>`
+          + `<span class="v ${x.me ? 'good' : ''}">₺${Math.round(x.money).toLocaleString('tr-TR')} · ${t('G{0}', String(x.day))}</span></div>`).join('')
       }).catch(() => {
         const el = document.getElementById('lb-rows'); if (el) el.textContent = t('Sıralama alınamadı.')
       }).finally(() => { lbLoading = false })
@@ -687,7 +699,7 @@ function openOfficePanel() {
       const th = THEMES[id]
       const open = state.unlockedLocs.includes(id)
       const active = state.activeLoc === id
-      if (active) return row(`📍 ${th.name}`, t('AKTİF'), 'good')
+      if (active) return row(`<svg class="ic" style="vertical-align:-3px"><use href="#i-map"/></svg> ${th.name}`, t('AKTİF'), 'good')
       if (open) return `<div class="prow"><span class="pl">${th.name}</span>`
         + `<button class="btn sbuy" data-goloc="${id}">${t('Şubeye Git')}</button></div>`
       const c = state.canUnlockLoc(id)
@@ -703,23 +715,34 @@ function openOfficePanel() {
   const pel = document.getElementById('of-prestige')
   if (pel) {
     const pv = state.handoverPreview()
-    const stars = '★'.repeat(Math.min(10, state.brandStars)) || '—'
-    let html = row(t('Marka yıldızı'), `${stars} (${state.brandStars})`, state.brandStars > 0 ? 'good' : '')
-      + row(t('Gelir çarpanı'), `×${pv.multNow.toFixed(2)}`, state.brandStars > 0 ? 'good' : '')
+    // MARKA YILDIZI NEDİR? Oyuncular "yıldız" görüyor ama ne işe yaradığını anlamıyordu.
+    // Artık üç soruyu da panel cevaplıyor: ne verir · nasıl kazanılır · ne kadar kaldı.
+    const eq = state.equipmentValue(), thr = state.handoverThreshold()
+    const pct = Math.max(0, Math.min(100, Math.round(eq / Math.max(1, thr) * 100)))
+    let html = `<div class="pz-card">`
+      + `<div class="pz-top"><span class="pz-stars">${state.brandStars > 0 ? '★'.repeat(Math.min(10, state.brandStars)) : '☆'}</span>`
+      + `<span class="pz-count">${t('{0} marka yıldızı', String(state.brandStars))}</span></div>`
+      + `<div class="pz-what">${t('Marka yıldızı KALICI gelir çarpanıdır. İstasyonunu devrettiğinde bir yıldız kazanırsın; yıldızlar hiç kaybolmaz ve sonraki bütün istasyonlarında geçerlidir.')}</div>`
+      + `<div class="pz-now">${t('Şu anki kazancın')}: <b>×${pv.multNow.toFixed(2)}</b>`
+      + (state.brandStars > 0 ? ` <span class="pz-gain">${t('(+%{0} her satıştan)', String(Math.round((pv.multNow - 1) * 100)))}</span>` : '')
+      + `</div></div>`
       + (state.handoverCount > 0 ? row(t('Devredilen istasyon'), `${state.handoverCount}`) : '')
+
     if (state.canHandover()) {
-      html += `<div class="sd" style="padding:6px 4px;line-height:1.5">`
-        + t('Devredersen: kasana <b>+₺{0}</b> eklenir, <b>{1}. yıldız</b> kazanırsın → gelir çarpanı ×{2} → <b>×{3}</b>. Ekipman satılır (bedelin %60’ı), ARSALARIN VE BETONUN KALIR.',
+      html += `<div class="pz-ready">`
+        + t('Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.',
             tl(pv.cash), pv.starsAfter, pv.multNow.toFixed(2), pv.multAfter.toFixed(2))
-        + `</div><button class="btn warn" id="of-handover" style="width:100%;justify-content:center;margin-top:4px">`
+        + `<br><span class="pz-fine">${t('Ekipman bedelinin %60\'ı kasana yazılır. ARSALARIN VE BETONUN SENDE KALIR — sıfırdan başlamazsın.')}</span>`
+        + `</div><button class="btn warn" id="of-handover" style="width:100%;justify-content:center;margin-top:8px">`
         + (handoverArmed() ? t('EMİN MİSİN? Devretmek için tekrar bas') : t('İstasyonu Devret')) + `</button>`
+    } else if (state.loan.active || state.partner.active) {
+      html += `<div class="pz-lock">${t('Devir için önce kredi/ortaklık kapatılmalı.')}</div>`
     } else {
-      html += `<div class="sd" style="padding:6px 4px">`
-        + (state.loan.active || state.partner.active
-          ? t('Devir için önce kredi/ortaklık kapatılmalı.')
-          : t('Devir, ₺{0} kurulu ekipmanla açılır (şu an ₺{1}). Her devirde eşik ikiye katlanır.',
-              tl(state.handoverThreshold()), tl(state.equipmentValue())))
-        + `</div>`
+      // İLERLEME ÇUBUĞU: "ne kadar kaldı" sorusunun görsel cevabı
+      html += `<div class="pz-prog-head"><span>${t('Sonraki yıldıza')}</span>`
+        + `<span class="pz-prog-num">₺${tl(eq)} / ₺${tl(thr)}</span></div>`
+        + `<div class="pz-bar"><div class="pz-fill" style="width:${pct}%"></div></div>`
+        + `<div class="pz-fine">${t('Kurulu ekipmanın ₺{0} değerine ulaşınca devir açılır. Her devirde eşik ikiye katlanır.', tl(thr))}</div>`
     }
     pel.innerHTML = html
   }
@@ -775,6 +798,16 @@ function openOfficePanel() {
   document.getElementById('officewrap')?.classList.add('show')
 }
 document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
+
+// Ofis sekmeleri: panel tek uzun liste olarak taşacak kadar büyüdü, işe göre gruplandı.
+for (const tab of document.querySelectorAll<HTMLButtonElement>('.oftab')) {
+  tab.addEventListener('click', () => {
+    const id = tab.dataset.oftab
+    for (const t2 of document.querySelectorAll('.oftab')) t2.classList.toggle('is-on', t2 === tab)
+    for (const p of document.querySelectorAll<HTMLElement>('.ofpane')) p.classList.toggle('is-on', p.dataset.ofpane === id)
+    document.querySelector('#officewrap .mbody')?.scrollTo({ top: 0 })
+  })
+}
 
 // Profil kartı: hero (istasyon+hesap) + istatistik/hesap bölümleri (ofis kartıyla aynı dil)
 function renderProfile() {

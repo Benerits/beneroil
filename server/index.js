@@ -619,11 +619,16 @@ async function handleApi(req, res, url) {
     }
     // LEADERBOARD (Katman 4c): read-only sıralama — istasyon adı + servet + gün.
     // Mevcut save verisinden okunur (yeni tablo yok). 60 sn önbellek.
+    // ---- SIRALAMA — TAMAMEN ANONİM (KVKK) ----
+    // İstasyon adı oyuncunun yazdığı SERBEST METİN: isim, telefon, e-posta içerebilir.
+    // Bu yüzden sunucu ADI HİÇ DÖNDÜRMEZ — dışarı yalnız sıra, tutar ve yıldız çıkar.
+    // Oyuncu kendi sırasını görebilsin diye, geçerli oturum jetonu gönderirse O SATIR
+    // `me:true` ile işaretlenir; kimse başkasının kim olduğunu öğrenemez.
     if (url === '/api/leaderboard' && req.method === 'GET') {
       const now = Date.now()
       if (!lbCache.data || now - lbCache.at > 60_000) {
         const r = await pool.query(`
-          SELECT COALESCE(NULLIF(save->'s'->>'stationName',''), 'BENELOIL') AS name,
+          SELECT email,
                  COALESCE((save->'s'->>'money')::numeric, 0) AS money,
                  COALESCE((save->'s'->>'day')::int, 1) AS day,
                  COALESCE((save->'s'->>'brandStars')::int, 0) AS stars
@@ -632,13 +637,22 @@ async function handleApi(req, res, url) {
           ORDER BY (COALESCE((save->'s'->>'money')::numeric, 0)
                     + COALESCE((save->'s'->>'brandStars')::int, 0) * 250000) DESC
           LIMIT 20`)
+        // e-posta YALNIZ "bu satır sensin" eşlemesi için tutulur; asla yanıta yazılmaz.
         lbCache = { data: r.rows.map((x, i) => ({
-          rank: i + 1, name: String(x.name).slice(0, 14), money: Math.round(Number(x.money)),
-          day: x.day, stars: x.stars,
+          rank: i + 1, money: Math.round(Number(x.money)), day: x.day, stars: x.stars,
+          _e: String(x.email || '').toLowerCase(),
         })), at: now }
       }
-      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=45' })
-      return res.end(JSON.stringify({ top: lbCache.data }))
+      const me = verifyToken(String(req.headers['x-auth'] || req.headers['authorization'] || '').replace(/^Bearer /, ''))
+      const meLc = String(me || '').toLowerCase()
+      const top = lbCache.data.map(x => {
+        const row = { rank: x.rank, money: x.money, day: x.day, stars: x.stars }
+        if (meLc && x._e === meLc) row.me = true
+        return row
+      })
+      // oturum bazlı olduğu için ORTAK ÖNBELLEĞE alınamaz (başkasının "me" işareti sızmasın)
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+      return res.end(JSON.stringify({ top }))
     }
     // ---- §9 ÖLÇÜM PLANI (lategame raporu) ----
     // Raporun sorduğu üç soru: (1) oyuncu kaçıncı günde DOYUYOR (para birikmeye başlıyor,

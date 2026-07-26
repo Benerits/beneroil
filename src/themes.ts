@@ -68,10 +68,10 @@ export interface LocationTheme {
   }
 }
 
-/** Lokasyon 1 — Anadolu Kasabası (MEVCUT sahne; değerler bugünkü davranışla birebir) */
+/** Lokasyon 1 — Kasaba (MEVCUT sahne; değerler bugünkü davranışla birebir) */
 export const KASABA: LocationTheme = {
   id: 'kasaba',
-  name: 'Anadolu Kasabası',
+  name: 'Kasaba',
   ground: {
     grass: '/gen/ground_grass.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
     grassTint: '#86b06a', concreteTint: '#9aa1a9', roadTint: '#4a5058',
@@ -87,10 +87,10 @@ export const KASABA: LocationTheme = {
   features: { regulars: { repFloor: 4.0, share: 0.28, tip: 1.6 } },
 }
 
-/** Lokasyon 2 — Şehir Çevre Yolu (henüz sahnesi yok; kısıtları burada tanımlı) */
+/** Lokasyon 2 — Çevre Yolu */
 export const CEVREYOLU: LocationTheme = {
   id: 'cevreyolu',
-  name: 'Şehir Çevre Yolu',
+  name: 'Çevre Yolu',
   ground: {
     grass: '/gen/ground_concrete.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
     grassTint: '#8d949c', concreteTint: '#9aa1a9', roadTint: '#41474e',
@@ -111,10 +111,10 @@ export const CEVREYOLU: LocationTheme = {
   },
 }
 
-/** Lokasyon 3 — Otoyol Dinlenme Tesisi (ramp/merge topolojisi; trafik grafiği hazır) */
+/** Lokasyon 3 — Otoyol (ramp/merge topolojisi) */
 export const OTOYOL: LocationTheme = {
   id: 'otoyol',
-  name: 'Otoyol Dinlenme Tesisi',
+  name: 'Otoyol',
   ground: {
     grass: '/gen/ground_concrete.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
     grassTint: '#9b9384', concreteTint: '#a5aab0', roadTint: '#3f454c',

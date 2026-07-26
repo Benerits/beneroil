@@ -225,7 +225,7 @@ const EN: Record<string, string> = {
   'Yol haritası yakında!': 'Roadmap coming soon!',
   'Kamera açısı': 'Camera angle',
   'Sunucu hatası.': 'Server error.',
-  'Mağaza': '💎 Store',
+  'Mağaza': 'Store',
   'Hesap': 'Account',
   '🏗️ Ofisi Taşı': '🏗️ Move Office',
   'Teklif güncellendi — yeni listeye bak.': 'That offer changed — check the new list.',
@@ -575,7 +575,7 @@ const EN: Record<string, string> = {
   '{0} teslimatı gecikti — yakıt yine de teslim edildi.': '{0} delivery delayed — fuel delivered anyway.',
   '{0} tankeri zaten yolda — teslimatı bekle.': '{0} tanker already on the way — wait for delivery.',
   'Bahşiş: +₺{0}': 'Tip: +₺{0}', 'Taşan yakıt cezası: -₺{0}': 'Spill penalty: -₺{0}',
-  '🧼 Camları Temizle': '🧼 Clean Windows', '✨ Camlar Temiz': '✨ Windows Clean',
+  'Camları Temizle': 'Clean Windows', '✨ Camlar Temiz': '✨ Windows Clean',
   'Ön cam pırıl pırıl — bahşiş şansı arttı! ✨': 'Windshield sparkling — bigger tip chance! ✨',
   'Temiz camlara bahşiş: +₺{0}': 'Clean-windows tip: +₺{0}',
   'Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000 🎁': 'Welcome back, boss! Comeback gift: +₺1,000 🎁',
@@ -763,6 +763,179 @@ const EN: Record<string, string> = {
   'Şube sistemi: çevre yolu ve otoyol istasyonları açıldı.': 'Branch system: ring-road and motorway stations unlocked.',
   'Kurumsal sözleşmeler, marka devri ve müdür otomasyonu eklendi.':
     'Corporate contracts, brand handover and manager automation added.',
+
+  // --- Marina: tekne segmentleri (marina.ts) ---
+  'Jet ski / şişme bot': 'Jet ski / inflatable boat',
+  'Sürat teknesi': 'Speedboat',
+  'Balıkçı teknesi': 'Fishing boat',
+  'Balıkçı Teknesi': 'Fishing Boat',
+  'Yelkenli': 'Sailboat',
+  'Gulet': 'Gulet',
+  'Motor yat': 'Motor yacht',
+  'Süperyat': 'Superyacht',
+
+  // --- Marina: tesisler (marina.ts + state.ts mağaza açıklamaları) ---
+  'Yakıt İskelesi': 'Fuel Dock',
+  'Denizci Malzemecisi': 'Chandlery',
+  'Duş & Çamaşırhane': 'Showers & Laundry',
+  'Yat Kulübü / Sahil Restoranı': 'Yacht Club / Waterfront Restaurant',
+  'Buz & Yem Satışı': 'Ice & Bait',
+  'Travel Lift (Tekne Asansörü)': 'Travel Lift (Boat Hoist)',
+  'Atık Su Tahliyesi': 'Pump-Out Station',
+  'Atık Yağ Toplama': 'Waste Oil Collection',
+  'Yakıt Sızıntı Bariyeri': 'Fuel Spill Boom',
+  'Çekirdek döngü: tekneler buraya yanaşıp yakıt alır. Marinanın kalbi — bu olmadan hiç tekne gelmez.':
+    'The core loop: boats pull alongside here to refuel. The heart of the marina — without it no boat comes at all.',
+  'Halat, can yeleği, olta, harita. Marketin deniz muadili — sepet tutarı 3 katı.':
+    'Rope, life jackets, fishing rods, charts. The marine version of your market — baskets are 3× bigger.',
+  'Duş & çamaşırhane. Gulet mürettebatı için ZORUNLU — yoksa gulet uğramaz.':
+    'Showers & laundry. MANDATORY for gulet crews — without them no gulet stops by.',
+  'Yat kulübü / sahil restoranı. Akşam saatlerinde zirve yapar.':
+    'Yacht club / waterfront restaurant. Peaks in the evening hours.',
+  'Buz & yem. Sabah balıkçı akınında talep patlar.':
+    'Ice & bait. Demand explodes during the morning fishing rush.',
+  'Tekne asansörü. Karaya çekme-indirme ve KARADA KIŞLAMA gelirinin kilidi.':
+    'Boat hoist. Unlocks hauling out, launching and WINTER STORAGE ON LAND income.',
+  'Atık su tahliyesi. Kurmazsan tekneler denize basar, ceza SANA yazılır.':
+    'Pump-out station. Without it boats dump into the sea and YOU take the fine.',
+  'Atık yağ toplama. Çevre denetiminde aranır.':
+    'Waste oil collection. Checked during environmental inspections.',
+  'Yakıt sızıntı bariyeri. Sızıntı olayını TAMAMEN önler.':
+    'Fuel spill boom. Prevents the spill event COMPLETELY.',
+
+  // --- Marina: bağlama yerleri, kışlama, mağaza satırları ---
+  'Şamandıra': 'Mooring Buoy',
+  'Parmak İskele 8m': 'Finger Pontoon 8m',
+  'Parmak İskele 12m': 'Finger Pontoon 12m',
+  'Parmak İskele 18m': 'Finger Pontoon 18m',
+  'Süperyat Mevkisi': 'Superyacht Berth',
+  'KURULU': 'INSTALLED',
+  'Önce Yakıt İskelesi kur': 'Build the Fuel Dock first',
+  '{0} ({1})': '{0} ({1})',
+  '+₺{0}/gün': '+₺{0}/day',
+  'Bağlama yeri kirala — tekne boyuna göre yer, mevsimlik doluluk.':
+    'Rent out a berth — sized by boat length, occupancy swings with the season.',
+  'Karada Kışlama ({0})': 'Winter Storage on Land ({0})',
+  'Karada Kışlama': 'Winter Storage on Land',
+  '+₺900/gün (kışın)': '+₺900/day (in winter)',
+  'Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.':
+    'Haul the boat out so it can winter ashore — your biggest earner in the cold months.',
+  'Önce Travel Lift kur': 'Build the Travel Lift first',
+  '⚓ Bağlama ₺{0} + kışlama ₺{1} tahsil edildi': '⚓ Berthing ₺{0} + winter storage ₺{1} collected',
+  '⚓ Bağlama geliri: +₺{0}': '⚓ Berthing income: +₺{0}',
+
+  // --- Marina: Mavi Bayrak ---
+  'Eksik çevre hizmeti: {0}': 'Missing environmental service: {0}',
+  'Çevre ihlali kaydın var — bayrak askıda': 'You have environmental violations on record — flag suspended',
+  'Mavi Bayrak geçerli': 'Blue Flag valid',
+  'Mavi Bayrak şartı': 'Blue Flag requirement',
+  'Mavi Bayrak gerekli': 'Blue Flag required',
+  '🏳️ Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.':
+    '🏳️ Blue Flag suspended — clear your record and you get it back.',
+  '🏳️ Sicilin temizlendi — Mavi Bayrak geri alındı!': '🏳️ Your record is clear — Blue Flag restored!',
+
+  // --- Marina: risk olayları ---
+  'Yakıt sızıntısı': 'Fuel spill',
+  '🛢️ Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.':
+    '🛢️ Fuel spill! No boom in place, it spread across the water — you were fined.',
+  'Lodos / fırtına': 'Southwesterly gale / storm',
+  '🌊 Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.':
+    '🌊 A southwesterly gale hit — poorly moored boats were damaged and you paid compensation.',
+  'Sürüklenen tekne': 'Dragging boat',
+  '⚓ Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.':
+    '⚓ A boat dragged its mooring and hit another — chain-reaction damage.',
+  'Denetim': 'Inspection',
+  '🚫 Denetim geldi — belgelerin düzgündü, sorunsuz geçti.':
+    '🚫 An inspection came round — your paperwork was in order, no trouble.',
+  'Deniz kirliliği': 'Sea pollution',
+  '🦑 Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.':
+    '🦑 A mucilage (sea snot) bloom hit — tourist boat traffic stays low for 20 days.',
+
+  // --- ÖTV'siz Yakıt Alım Defteri (logbook-ui.ts + marina.ts) ---
+  'Yakıt Alım Defteri': 'Fuel Purchase Logbook',
+  'İstek': 'Request',
+  "ÖTV'siz motorin": 'duty-free marine diesel',
+  'Fiyat farkı': 'Price difference',
+  'Kota': 'Quota',
+  'Vize': 'Endorsement',
+  'geçerli': 'valid',
+  'SÜRESİ DOLMUŞ': 'EXPIRED',
+  'İmza': 'Signature',
+  'UYUŞMUYOR': 'MISMATCH',
+  'Tarih': 'Dates',
+  'tutarlı': 'consistent',
+  'TUTARSIZ': 'INCONSISTENT',
+  'Defterde kusur bulunamadı': 'No defect found in the logbook',
+  'Defter ibraz edildi': 'Logbook presented',
+  'incelenmedi': 'not inspected',
+  'Doğru onay düşük marjla yüksek hacim getirir. Sahte deftere onay verirsen denetimde ağır ceza yersin. Geçerli defteri reddedersen o ticari müşteri bir daha gelmez.':
+    'A correct approval brings high volume at a low margin. Approve a forged logbook and the next inspection hits you with a heavy fine. Reject a valid one and that commercial customer never comes back.',
+  'İNCELE': 'INSPECT',
+  'ONAYLA': 'APPROVE',
+  'REDDET': 'REJECT',
+  '💡 İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.':
+    '💡 Tip: INSPECT before you decide — a faulty logbook always leaves a visible tell.',
+  'Kota yetersiz: {0}/{1} L kullanılmış, {2} L isteniyor':
+    'Quota too low: {0}/{1} L already used, {2} L requested',
+  'Vize süresi dolmuş': 'The endorsement has expired',
+  'İmza uyuşmuyor': 'The signature does not match',
+  'Tarih tutarsızlığı var': 'The dates do not add up',
+  "📄 Defter onaylandı — ÖTV'siz satış yapıldı (+₺{0} marj)":
+    '📄 Logbook approved — duty-free sale completed (+₺{0} margin)',
+  '🚫 Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!':
+    '🚫 You approved a forged logbook — the inspection fined you ₺{0}!',
+  '✅ Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.':
+    '✅ You rejected a faulty logbook — the customer is furious but you are safe.',
+  '❌ Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.':
+    '❌ You rejected a valid logbook — this commercial customer will never come back.',
+
+  // --- AI rakip istasyon (rival.ts) — marka adları çevrilmez ---
+  'ŞİMŞEK PETROL': 'ŞİMŞEK PETROL',
+  'ANADOLU ENERJİ': 'ANADOLU ENERJİ',
+  'Pazar payın': 'Your market share',
+  ' · kampanyada': ' · on promotion',
+  '⚔️ {0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!':
+    '⚔️ {0} slashed its price: ₺{1}/L — it is trying to win market share back!',
+  '📣 {0} kampanya başlattı — 5 gün boyunca daha çekici olacak.':
+    '📣 {0} launched a promotion — it will be more tempting for 5 days.',
+  '💰 {0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!':
+    '💰 {0} got comfortable and raised its price: ₺{1}/L — your opening!',
+  'Pazara HÂKİMSİN (%{0})': 'You OWN the market ({0}%)',
+  'Öndesin (%{0})': 'You are ahead ({0}%)',
+  'Başa baş (%{0})': 'Neck and neck ({0}%)',
+  'Geridesin (%{0})': 'You are behind ({0}%)',
+  '🏁 Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.':
+    '🏁 {0} just opened across the road — pricing is a NEGOTIATION now. Track your market share from the Office.',
+
+  // --- Marka yıldızı / devir kartı (prestij) ---
+  '{0} marka yıldızı': '{0} brand stars',
+  'Marka yıldızı KALICI gelir çarpanıdır. İstasyonunu devrettiğinde bir yıldız kazanırsın; yıldızlar hiç kaybolmaz ve sonraki bütün istasyonlarında geçerlidir.':
+    'A brand star is a PERMANENT income multiplier. You earn one every time you hand over a station; stars are never lost and apply to every station that follows.',
+  'Şu anki kazancın': 'Your bonus right now',
+  '(+%{0} her satıştan)': '(+{0}% on every sale)',
+  'Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.':
+    'You are READY to hand over. <b>+₺{0}</b> lands in your cash and you earn <b>star #{1}</b>: income multiplier ×{2} → <b>×{3}</b>.',
+  "Ekipman bedelinin %60'ı kasana yazılır. ARSALARIN VE BETONUN SENDE KALIR — sıfırdan başlamazsın.":
+    '60% of your equipment value is credited to your cash. YOUR LAND AND PAVING STAY YOURS — you never start from scratch.',
+  'Sonraki yıldıza': 'To the next star',
+  'Kurulu ekipmanın ₺{0} değerine ulaşınca devir açılır. Her devirde eşik ikiye katlanır.':
+    'Handover unlocks once your installed equipment reaches ₺{0}. The threshold doubles with each handover.',
+
+  // --- Anonim sıralama tablosu ---
+  'Sıralama': 'Leaderboard',
+  'Sıralama anonimdir — kimsenin istasyon adı gösterilmez.':
+    'The leaderboard is anonymous — nobody’s station name is shown.',
+  'SEN': 'YOU',
+  'Oyuncu #{0}': 'Player #{0}',
+  'G{0}': 'D{0}',
+
+  // --- Ofis sekmeleri ---
+  'Özet': 'Summary',
+  'Fiyat': 'Pricing',
+  'Muhasebe': 'Accounting',
+  'İhaleler': 'Contracts',
+  'Büyüme': 'Growth',
+  'Ofisi Taşı': 'Move Office',
 }
 
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
@@ -995,7 +1168,7 @@ const FR: Record<string, string> = {
   'Yol haritası yakında!': 'Feuille de route bientôt disponible !',
   'Kamera açısı': 'Angle de caméra',
   'Sunucu hatası.': 'Erreur serveur.',
-  'Mağaza': '💎 Boutique',
+  'Mağaza': 'Boutique',
   'Hesap': 'Compte',
   '🏗️ Ofisi Taşı': '🏗️ Déplacer le bureau',
   'Teklif güncellendi — yeni listeye bak.': 'Cette offre a changé — regarde la nouvelle liste.',
@@ -1458,7 +1631,7 @@ const FR: Record<string, string> = {
   '{0} tankeri zaten yolda — teslimatı bekle.': 'Un camion-citerne de {0} est déjà en route — attends la livraison.',
   'Bahşiş: +₺{0}': 'Pourboire : +₺{0}',
   'Taşan yakıt cezası: -₺{0}': 'Amende pour débordement : -₺{0}',
-  '🧼 Camları Temizle': '🧼 Nettoyer les vitres',
+  'Camları Temizle': 'Nettoyer les vitres',
   '✨ Camlar Temiz': '✨ Vitres propres',
   'Ön cam pırıl pırıl — bahşiş şansı arttı! ✨': 'Pare-brise étincelant — plus de chances de pourboire ! ✨',
   'Temiz camlara bahşiş: +₺{0}': 'Pourboire vitres propres : +₺{0}',
@@ -1777,6 +1950,181 @@ const FR: Record<string, string> = {
     'Système de succursales : stations de rocade et d’autoroute débloquées.',
   'Kurumsal sözleşmeler, marka devri ve müdür otomasyonu eklendi.':
     'Contrats entreprises, cession de marque et automatisation par un gérant ajoutés.',
+
+  // --- Marina: tekne segmentleri (marina.ts) ---
+  'Jet ski / şişme bot': 'Jet-ski / bateau pneumatique',
+  'Sürat teknesi': 'Vedette rapide',
+  'Balıkçı teknesi': 'Bateau de pêche',
+  'Balıkçı Teknesi': 'Bateau de pêche',
+  'Yelkenli': 'Voilier',
+  'Gulet': 'Gulet',
+  'Motor yat': 'Yacht à moteur',
+  'Süperyat': 'Superyacht',
+
+  // --- Marina: tesisler (marina.ts + state.ts mağaza açıklamaları) ---
+  'Yakıt İskelesi': 'Poste d’avitaillement',
+  'Denizci Malzemecisi': 'Shipchandler',
+  'Duş & Çamaşırhane': 'Douches & Laverie',
+  'Yat Kulübü / Sahil Restoranı': 'Yacht-club / Restaurant du port',
+  'Buz & Yem Satışı': 'Glace & Appâts',
+  'Travel Lift (Tekne Asansörü)': 'Travel lift (élévateur à bateaux)',
+  'Atık Su Tahliyesi': 'Station de pompage des eaux usées',
+  'Atık Yağ Toplama': 'Collecte des huiles usagées',
+  'Yakıt Sızıntı Bariyeri': 'Barrage anti-pollution',
+  'Çekirdek döngü: tekneler buraya yanaşıp yakıt alır. Marinanın kalbi — bu olmadan hiç tekne gelmez.':
+    'La boucle centrale : les bateaux viennent s’y ravitailler. Le cœur de la marina — sans lui, aucun bateau ne vient.',
+  'Halat, can yeleği, olta, harita. Marketin deniz muadili — sepet tutarı 3 katı.':
+    'Cordages, gilets de sauvetage, cannes à pêche, cartes marines. L’équivalent marin de ton magasin — panier 3× plus élevé.',
+  'Duş & çamaşırhane. Gulet mürettebatı için ZORUNLU — yoksa gulet uğramaz.':
+    'Douches & laverie. OBLIGATOIRE pour les équipages de gulets — sans elles, aucun gulet ne s’arrête.',
+  'Yat kulübü / sahil restoranı. Akşam saatlerinde zirve yapar.':
+    'Yacht-club / restaurant du port. Le pic se fait en soirée.',
+  'Buz & yem. Sabah balıkçı akınında talep patlar.':
+    'Glace & appâts. La demande explose lors de la ruée des pêcheurs au petit matin.',
+  'Tekne asansörü. Karaya çekme-indirme ve KARADA KIŞLAMA gelirinin kilidi.':
+    'Élévateur à bateaux. Débloque la mise à sec, la mise à l’eau et les revenus de l’HIVERNAGE À TERRE.',
+  'Atık su tahliyesi. Kurmazsan tekneler denize basar, ceza SANA yazılır.':
+    'Station de pompage des eaux usées. Sans elle, les bateaux vidangent en mer et l’amende est POUR TOI.',
+  'Atık yağ toplama. Çevre denetiminde aranır.':
+    'Collecte des huiles usagées. Vérifiée lors des contrôles environnementaux.',
+  'Yakıt sızıntı bariyeri. Sızıntı olayını TAMAMEN önler.':
+    'Barrage anti-pollution. Empêche TOTALEMENT l’incident de déversement.',
+
+  // --- Marina: bağlama yerleri, kışlama, mağaza satırları ---
+  'Şamandıra': 'Bouée d’amarrage',
+  'Parmak İskele 8m': 'Catway 8 m',
+  'Parmak İskele 12m': 'Catway 12 m',
+  'Parmak İskele 18m': 'Catway 18 m',
+  'Süperyat Mevkisi': 'Poste superyacht',
+  'KURULU': 'INSTALLÉ',
+  'Önce Yakıt İskelesi kur': 'Construis d’abord le poste d’avitaillement',
+  '{0} ({1})': '{0} ({1})',
+  '+₺{0}/gün': '+₺{0}/jour',
+  'Bağlama yeri kirala — tekne boyuna göre yer, mevsimlik doluluk.':
+    'Loue un poste d’amarrage — dimensionné selon la longueur du bateau, occupation saisonnière.',
+  'Karada Kışlama ({0})': 'Hivernage à terre ({0})',
+  'Karada Kışlama': 'Hivernage à terre',
+  '+₺900/gün (kışın)': '+₺900/jour (en hiver)',
+  'Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.':
+    'Sors le bateau de l’eau pour qu’il passe l’hiver à terre — ton plus gros poste de revenus en hiver.',
+  'Önce Travel Lift kur': 'Construis d’abord le travel lift',
+  '⚓ Bağlama ₺{0} + kışlama ₺{1} tahsil edildi': '⚓ Amarrage ₺{0} + hivernage ₺{1} encaissés',
+  '⚓ Bağlama geliri: +₺{0}': '⚓ Revenus d’amarrage : +₺{0}',
+
+  // --- Marina: Mavi Bayrak ---
+  'Eksik çevre hizmeti: {0}': 'Service environnemental manquant : {0}',
+  'Çevre ihlali kaydın var — bayrak askıda':
+    'Des infractions environnementales figurent à ton dossier — pavillon suspendu',
+  'Mavi Bayrak geçerli': 'Pavillon Bleu valide',
+  'Mavi Bayrak şartı': 'Exigence Pavillon Bleu',
+  'Mavi Bayrak gerekli': 'Pavillon Bleu requis',
+  '🏳️ Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.':
+    '🏳️ Pavillon Bleu suspendu — nettoie ton dossier et tu le récupéreras.',
+  '🏳️ Sicilin temizlendi — Mavi Bayrak geri alındı!':
+    '🏳️ Ton dossier est propre — Pavillon Bleu récupéré !',
+
+  // --- Marina: risk olayları ---
+  'Yakıt sızıntısı': 'Déversement de carburant',
+  '🛢️ Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.':
+    '🛢️ Déversement de carburant ! Sans barrage, la nappe s’est étendue en mer — amende infligée.',
+  'Lodos / fırtına': 'Vent du sud / tempête',
+  '🌊 Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.':
+    '🌊 Un coup de vent du sud a frappé — les bateaux mal amarrés ont été endommagés, indemnités payées.',
+  'Sürüklenen tekne': 'Bateau à la dérive',
+  '⚓ Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.':
+    '⚓ Un bateau a chassé sur son mouillage et en a percuté un autre — dégâts en chaîne.',
+  'Denetim': 'Contrôle',
+  '🚫 Denetim geldi — belgelerin düzgündü, sorunsuz geçti.':
+    '🚫 Un contrôle est passé — tes papiers étaient en règle, aucun souci.',
+  'Deniz kirliliği': 'Pollution marine',
+  '🦑 Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.':
+    '🦑 Invasion de mucilage — le trafic des bateaux de tourisme restera faible pendant 20 jours.',
+
+  // --- ÖTV'siz Yakıt Alım Defteri (logbook-ui.ts + marina.ts) ---
+  'Yakıt Alım Defteri': 'Carnet d’achat de carburant',
+  'İstek': 'Demande',
+  "ÖTV'siz motorin": 'de gazole marine détaxé',
+  'Fiyat farkı': 'Écart de prix',
+  'Kota': 'Quota',
+  'Vize': 'Visa',
+  'geçerli': 'valide',
+  'SÜRESİ DOLMUŞ': 'EXPIRÉ',
+  'İmza': 'Signature',
+  'UYUŞMUYOR': 'NE CORRESPOND PAS',
+  'Tarih': 'Dates',
+  'tutarlı': 'cohérentes',
+  'TUTARSIZ': 'INCOHÉRENTES',
+  'Defterde kusur bulunamadı': 'Aucun défaut trouvé dans le carnet',
+  'Defter ibraz edildi': 'Carnet présenté',
+  'incelenmedi': 'non inspecté',
+  'Doğru onay düşük marjla yüksek hacim getirir. Sahte deftere onay verirsen denetimde ağır ceza yersin. Geçerli defteri reddedersen o ticari müşteri bir daha gelmez.':
+    'Une approbation correcte apporte un gros volume à faible marge. Si tu approuves un carnet falsifié, le prochain contrôle t’inflige une lourde amende. Si tu refuses un carnet valide, ce client professionnel ne revient jamais.',
+  'İNCELE': 'INSPECTER',
+  'ONAYLA': 'APPROUVER',
+  'REDDET': 'REFUSER',
+  '💡 İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.':
+    '💡 Astuce : INSPECTE avant de décider — un carnet défectueux laisse toujours un indice visible.',
+  'Kota yetersiz: {0}/{1} L kullanılmış, {2} L isteniyor':
+    'Quota insuffisant : {0}/{1} L déjà utilisés, {2} L demandés',
+  'Vize süresi dolmuş': 'Le visa a expiré',
+  'İmza uyuşmuyor': 'La signature ne correspond pas',
+  'Tarih tutarsızlığı var': 'Les dates ne concordent pas',
+  "📄 Defter onaylandı — ÖTV'siz satış yapıldı (+₺{0} marj)":
+    '📄 Carnet approuvé — vente détaxée effectuée (+₺{0} de marge)',
+  '🚫 Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!':
+    '🚫 Tu as approuvé un carnet falsifié — le contrôle t’a infligé ₺{0} d’amende !',
+  '✅ Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.':
+    '✅ Tu as refusé un carnet défectueux — le client est furieux mais tu es tranquille.',
+  '❌ Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.':
+    '❌ Tu as refusé un carnet valide — ce client professionnel ne reviendra plus.',
+
+  // --- AI rakip istasyon (rival.ts) — marka adları çevrilmez ---
+  'ŞİMŞEK PETROL': 'ŞİMŞEK PETROL',
+  'ANADOLU ENERJİ': 'ANADOLU ENERJİ',
+  'Pazar payın': 'Ta part de marché',
+  ' · kampanyada': ' · en promotion',
+  '⚔️ {0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!':
+    '⚔️ {0} a cassé ses prix : ₺{1}/L — ils tentent de reprendre des parts de marché !',
+  '📣 {0} kampanya başlattı — 5 gün boyunca daha çekici olacak.':
+    '📣 {0} a lancé une promotion — plus attractif pendant 5 jours.',
+  '💰 {0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!':
+    '💰 {0} se relâche et augmente ses prix : ₺{1}/L — c’est ta chance !',
+  'Pazara HÂKİMSİN (%{0})': 'Tu DOMINES le marché ({0} %)',
+  'Öndesin (%{0})': 'Tu es en tête ({0} %)',
+  'Başa baş (%{0})': 'Au coude à coude ({0} %)',
+  'Geridesin (%{0})': 'Tu es distancé ({0} %)',
+  '🏁 Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.':
+    '🏁 {0} vient d’ouvrir en face — le prix devient une NÉGOCIATION. Suis ta part de marché depuis le bureau.',
+
+  // --- Marka yıldızı / devir kartı (prestij) ---
+  '{0} marka yıldızı': '{0} étoiles de marque',
+  'Marka yıldızı KALICI gelir çarpanıdır. İstasyonunu devrettiğinde bir yıldız kazanırsın; yıldızlar hiç kaybolmaz ve sonraki bütün istasyonlarında geçerlidir.':
+    'Une étoile de marque est un multiplicateur de revenus PERMANENT. Tu en gagnes une à chaque station cédée ; les étoiles ne se perdent jamais et s’appliquent à toutes tes stations suivantes.',
+  'Şu anki kazancın': 'Ton bonus actuel',
+  '(+%{0} her satıştan)': '(+{0} % sur chaque vente)',
+  'Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.':
+    'Tu es PRÊT à céder. <b>+₺{0}</b> arrivent dans ta caisse et tu gagnes <b>l’étoile n°{1}</b> : ton multiplicateur de revenus ×{2} → <b>×{3}</b>.',
+  "Ekipman bedelinin %60'ı kasana yazılır. ARSALARIN VE BETONUN SENDE KALIR — sıfırdan başlamazsın.":
+    '60 % de la valeur de ton matériel est versée à ta caisse. TES TERRAINS ET TON BÉTON TE RESTENT — tu ne repars jamais de zéro.',
+  'Sonraki yıldıza': 'Prochaine étoile',
+  'Kurulu ekipmanın ₺{0} değerine ulaşınca devir açılır. Her devirde eşik ikiye katlanır.':
+    'La cession se débloque quand ton matériel installé atteint ₺{0}. Le seuil double à chaque cession.',
+
+  // --- Anonim sıralama tablosu ---
+  'Sıralama': 'Classement',
+  'Sıralama anonimdir — kimsenin istasyon adı gösterilmez.':
+    'Le classement est anonyme — aucun nom de station n’est affiché.',
+  'SEN': 'TOI',
+  'Oyuncu #{0}': 'Joueur #{0}',
+  'G{0}': 'J{0}',
+
+  // --- Ofis sekmeleri ---
+  'Özet': 'Résumé',
+  'Fiyat': 'Prix',
+  'Muhasebe': 'Comptabilité',
+  'İhaleler': 'Contrats',
+  'Büyüme': 'Croissance',
+  'Ofisi Taşı': 'Déplacer le bureau',
 }
 
 /** Aktif dilin sözlüğü. TR kaynak dil olduğu için sözlüğü yoktur (anahtarın kendisi metindir). */

@@ -353,6 +353,26 @@
     .acc-cols > span:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
     .acc-cols.acc-head { border-top: 0; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 800; }
     .acc-plabel { font-weight: 800; color: var(--ink); }
+    /* anonim sıralama: kendi satırın vurgulanır, kimsenin adı gösterilmez (KVKK) */
+    .lb-me { font-weight: 900; color: var(--green-dark, #2f7d4f); }
+    .lb-star { color: #d9a521; letter-spacing: -.05em; }
+    /* marka yıldızı kartı: ne verir · nasıl kazanılır · ne kadar kaldı */
+    .pz-card { background: var(--surface-2, #f6f4ec); border: 1.5px solid var(--edge, #e5ddc8);
+               border-radius: 13px; padding: 12px 13px; margin: 4px 0 8px; }
+    .pz-top { display: flex; align-items: baseline; gap: 9px; }
+    .pz-stars { font-size: 19px; color: #d9a521; letter-spacing: -.04em; line-height: 1; }
+    .pz-count { font-size: 12.5px; font-weight: 800; color: var(--ink); }
+    .pz-what { font-size: 12px; font-weight: 650; line-height: 1.5; color: var(--muted); margin-top: 7px; }
+    .pz-now { font-size: 13px; font-weight: 750; color: var(--ink); margin-top: 8px; }
+    .pz-gain { color: var(--green-dark, #2f7d4f); font-weight: 800; }
+    .pz-ready { font-size: 12.5px; font-weight: 650; line-height: 1.55; padding: 4px 2px; color: var(--ink); }
+    .pz-lock, .pz-fine { font-size: 11.5px; font-weight: 650; line-height: 1.5; color: var(--muted); padding: 3px 2px; }
+    .pz-prog-head { display: flex; justify-content: space-between; align-items: baseline;
+                    font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+                    color: var(--muted); margin-top: 6px; }
+    .pz-prog-num { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+    .pz-bar { height: 8px; border-radius: 99px; background: var(--line, #e2ded2); overflow: hidden; margin: 5px 0 4px; }
+    .pz-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #e8c256, #d9a521); transition: width .35s ease; }
     /* ofis: alt başlık + açıklama satırı (7 günlük grafik, yaka dağılımı) */
     .acc-sub { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
                color: var(--muted); margin: 12px 0 5px; }
@@ -368,6 +388,18 @@
     .pchart-na  { background: var(--line); }
     .pchart-day { font-size: 9px; font-weight: 800; color: var(--muted); margin-top: 3px;
                   overflow: hidden; text-overflow: ellipsis; }
+    /* ofis sekmeleri */
+    .oftabs { display: flex; gap: 4px; padding: 0 14px 10px; border-bottom: 1.5px solid var(--line); overflow-x: auto; }
+    .oftab { flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; gap: 3px;
+             padding: 8px 10px; border: 0; background: transparent; cursor: pointer; border-radius: 10px;
+             font: inherit; font-size: 10.5px; font-weight: 800; letter-spacing: .02em;
+             color: var(--muted); transition: background .15s, color .15s; }
+    .oftab .ic { width: 17px; height: 17px; }
+    .oftab:hover { background: rgba(127,127,127,.09); }
+    .oftab.is-on { color: var(--ink); background: rgba(127,127,127,.13); }
+    .oftab:focus-visible { outline: 2px solid var(--green-dark, #2f7d4f); outline-offset: 1px; }
+    .ofpane { display: none; }
+    .ofpane.is-on { display: block; }
     .ofsec { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted);
              text-transform: uppercase; margin: 13px 0 3px; }
     /* profil kartı: hero (avatar + istasyon adı + hesap) */
@@ -676,7 +708,7 @@
       <div id="evnote"></div>
     </div>
     <div class="row" id="cleanrow">
-      <button id="cleanbtn" class="btn" style="flex:1; justify-content:center" data-i18n="🧼 Camları Temizle">🧼 Camları Temizle</button>
+      <button id="cleanbtn" class="btn" style="flex:1; justify-content:center"><svg class="ic"><use href="#i-clean"/></svg><span data-i18n="Camları Temizle">Camları Temizle</span></button>
     </div>
     <div class="row">
       <button id="dismissbtn" class="btn" style="flex:1; justify-content:center; opacity:.85" data-i18n="Müşteriyi Gönder">Müşteriyi Gönder</button>
@@ -753,41 +785,59 @@
   </div>
 
   <div class="backdrop" id="officewrap">
-    <div class="modal" style="height:auto; max-height:84vh">
+    <div class="modal" style="height:auto; max-height:86vh">
       <div class="mhead">
         <h3 data-i18n="Ofis">Ofis</h3>
         <button class="mclose" data-close="officewrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
+      <!-- Sekmeler: ofis paneli tek uzun liste olarak taşamayacak kadar büyüdü.
+           Gruplama işe göre: durum · fiyat · muhasebe · ihale · büyüme. -->
+      <div class="oftabs" role="tablist">
+        <button class="oftab is-on" role="tab" data-oftab="ozet"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Özet">Özet</span></button>
+        <button class="oftab" role="tab" data-oftab="fiyat"><svg class="ic"><use href="#i-fuel"/></svg><span data-i18n="Fiyat">Fiyat</span></button>
+        <button class="oftab" role="tab" data-oftab="muhasebe"><svg class="ic"><use href="#i-coin"/></svg><span data-i18n="Muhasebe">Muhasebe</span></button>
+        <button class="oftab" role="tab" data-oftab="ihale"><svg class="ic"><use href="#i-truck"/></svg><span data-i18n="İhaleler">İhaleler</span></button>
+        <button class="oftab" role="tab" data-oftab="buyume"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Büyüme">Büyüme</span></button>
+      </div>
       <div class="mbody">
-        <!-- 1) Finansal durum: aktif / net işletme sermayesi / kasa -->
-        <div class="ofsec" data-i18n="Finansal Durum">Finansal Durum</div>
-        <div id="of-financial"></div>
-        <!-- 2) Yakıt satış fiyatları (+/-) -->
-        <div class="ofsec" data-i18n="Yakıt Satış Fiyatları">Yakıt Satış Fiyatları</div>
-        <div id="of-prices"></div>
-        <!-- 3) Müşteri & itibar -->
-        <div class="ofsec" data-i18n="Müşteri & İtibar">Müşteri & İtibar</div>
-        <div id="of-customer"></div>
-        <!-- 3y) Sıralama + sezon -->
-        <div class="ofsec" data-i18n="Sıralama & Sezon">Sıralama & Sezon</div>
-        <div id="of-leaderboard"></div>
-        <!-- 3z) Şubeler: aktif şube, açık şubeler, yeni şube açma -->
-        <div class="ofsec" data-i18n="Şubeler">Şubeler</div>
-        <div id="of-locations"></div>
-        <!-- 3a) Prestij: İstasyonu Devret (marka yıldızı) -->
-        <div class="ofsec" data-i18n="Marka & Devir">Marka & Devir</div>
-        <div id="of-prestige"></div>
-        <!-- 3b) B2B sözleşmeleri: aktif taahhüt + teklifler -->
-        <div class="ofsec" data-i18n="Kurumsal Sözleşmeler">Kurumsal Sözleşmeler</div>
-        <div id="of-contracts"></div>
-        <!-- 4) Dönemsel satış & faaliyet kârı -->
-        <div class="ofsec" data-i18n="Satış & Faaliyet Kârı">Satış & Faaliyet Kârı</div>
-        <div id="of-sales"></div>
-        <!-- 5) Yakıt alım geçmişi -->
-        <div id="of-history"></div>
-        <button class="btn" id="of-bank" style="width:100%; justify-content:center; margin-top:12px; background:#1fa8bc; border-color:#178595; color:#fff"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5v19M16.5 7c0-1.9-2-3-4.5-3S7.5 5.1 7.5 7s2 2.7 4.5 3 4.5 1.1 4.5 3-2 3-4.5 3-4.5-1.1-4.5-3"/></svg><span data-i18n="Banka / Kredi Çek">Banka / Kredi Çek</span></button>
-        <button class="btn" id="of-move" style="width:100%; justify-content:center; margin-top:8px"><span data-i18n="🏗️ Ofisi Taşı">🏗️ Ofisi Taşı</span></button>
-        <button class="btn primary" id="of-toggle" style="width:100%; justify-content:center; margin-top:8px"><svg class="ic"><use href="#i-power"/></svg><span data-i18n="İstasyonu Aç/Kapa">İstasyonu Aç/Kapa</span></button>
+
+        <div class="ofpane is-on" data-ofpane="ozet">
+          <div class="ofsec" data-i18n="Finansal Durum">Finansal Durum</div>
+          <div id="of-financial"></div>
+          <div class="ofsec" data-i18n="Müşteri & İtibar">Müşteri &amp; İtibar</div>
+          <div id="of-customer"></div>
+          <button class="btn primary" id="of-toggle" style="width:100%; justify-content:center; margin-top:14px"><svg class="ic"><use href="#i-power"/></svg><span data-i18n="İstasyonu Aç/Kapa">İstasyonu Aç/Kapa</span></button>
+          <button class="btn" id="of-move" style="width:100%; justify-content:center; margin-top:8px"><svg class="ic"><use href="#i-move"/></svg><span data-i18n="Ofisi Taşı">Ofisi Taşı</span></button>
+        </div>
+
+        <div class="ofpane" data-ofpane="fiyat">
+          <div class="ofsec" data-i18n="Yakıt Satış Fiyatları">Yakıt Satış Fiyatları</div>
+          <div id="of-prices"></div>
+          <div class="ofsec" data-i18n="Sezon">Sezon</div>
+          <div id="of-season"></div>
+        </div>
+
+        <div class="ofpane" data-ofpane="muhasebe">
+          <div class="ofsec" data-i18n="Satış & Faaliyet Kârı">Satış &amp; Faaliyet Kârı</div>
+          <div id="of-sales"></div>
+          <div id="of-history"></div>
+          <button class="btn" id="of-bank" style="width:100%; justify-content:center; margin-top:12px; background:#1fa8bc; border-color:#178595; color:#fff"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5v19M16.5 7c0-1.9-2-3-4.5-3S7.5 5.1 7.5 7s2 2.7 4.5 3 4.5 1.1 4.5 3-2 3-4.5 3-4.5-1.1-4.5-3"/></svg><span data-i18n="Banka / Kredi Çek">Banka / Kredi Çek</span></button>
+        </div>
+
+        <div class="ofpane" data-ofpane="ihale">
+          <div class="ofsec" data-i18n="Kurumsal Sözleşmeler">Kurumsal Sözleşmeler</div>
+          <div id="of-contracts"></div>
+        </div>
+
+        <div class="ofpane" data-ofpane="buyume">
+          <div class="ofsec" data-i18n="Şubeler">Şubeler</div>
+          <div id="of-locations"></div>
+          <div class="ofsec" data-i18n="Marka & Devir">Marka &amp; Devir</div>
+          <div id="of-prestige"></div>
+          <div class="ofsec" data-i18n="Sıralama">Sıralama</div>
+          <div id="of-leaderboard"></div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -796,7 +846,7 @@
   <div class="backdrop" id="storewrap">
     <div class="modal" style="height:auto; max-height:84vh">
       <div class="mhead">
-        <h3 data-i18n="Mağaza">💎 Mağaza</h3>
+        <h3 data-i18n="Mağaza">Mağaza</h3>
         <button class="mclose" data-close="storewrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="mbody" id="store-body"></div>
@@ -807,7 +857,7 @@
   <div class="backdrop" id="bankwrap">
     <div class="modal" style="height:auto; max-height:84vh">
       <div class="mhead">
-        <h3 data-i18n="Banka — Kredi">🏦 Banka — Kredi</h3>
+        <h3 data-i18n="Banka — Kredi">Banka — Kredi</h3>
         <button class="mclose" data-close="bankwrap"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="mbody" id="bank-body"></div>
@@ -1005,7 +1055,7 @@ Sorun / Öneri Bildir
     align-items:center; gap:8px; padding:8px 14px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:14px;
     color:#fff; background:linear-gradient(135deg,#e0903d,#d64545); border:0; border-bottom:3px solid #a93636;
     border-radius:var(--r-md); box-shadow:var(--shadow); animation:rushpulse 1s ease-in-out infinite">
-    ⚡ <span id="rushlabel">MÜŞTERİ PATLAMASI</span> · <span id="rushsec">90</span>s
+    <svg class="ic" style="vertical-align:-3px"><use href="#i-bolt"/></svg> <span id="rushlabel">MÜŞTERİ PATLAMASI</span> · <span id="rushsec">90</span>s
   </div>
   <style>@keyframes rushpulse { 0%,100% { transform:scale(1) } 50% { transform:scale(1.045) } }</style>
 
@@ -1049,7 +1099,7 @@ Sorun / Öneri Bildir
       <span></span><button class="mvbtn" data-nudge="down">↓</button><span></span>
     </div>
     <div style="display:flex; gap:6px; justify-content:center;">
-      <button class="mvbtn mvok" id="mv-ok" data-i18n="Yerleştir">Yerleştir ✓</button>
+      <button class="mvbtn mvok" id="mv-ok" data-i18n="Yerleştir">Yerleştir</button>
       <button class="mvbtn mvcancel" id="mv-cancel">✕</button>
     </div>
   </div>

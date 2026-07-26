@@ -79,9 +79,9 @@ export function openLogbook(
             + `<div class="lb-line"><span>${t('İmza')}</span><span>${lb.signatureOk ? '✓' : t('UYUŞMUYOR')}</span></div>`
             + `<div class="lb-line"><span>${t('Tarih')}</span><span>${lb.dateConsistent ? t('tutarlı') : t('TUTARSIZ')}</span></div>`
             + (flags.length
-                ? flags.map(f => `<div class="lb-flag">⚠️ ${esc(f)}</div>`).join('')
-                : `<div class="lb-clean">✓ ${t('Defterde kusur bulunamadı')}</div>`)
-          : `<div class="lb-line"><span>📄 ${t('Defter ibraz edildi')}</span><span>${t('incelenmedi')}</span></div>`)
+                ? flags.map(f => `<div class="lb-flag">${esc(f)}</div>`).join('')
+                : `<div class="lb-clean">${t('Defterde kusur bulunamadı')}</div>`)
+          : `<div class="lb-line"><span>${t('Defter ibraz edildi')}</span><span>${t('incelenmedi')}</span></div>`)
       + `</div>`
       + `<div class="lb-hint">${t('Doğru onay düşük marjla yüksek hacim getirir. Sahte deftere onay verirsen denetimde ağır ceza yersin. Geçerli defteri reddedersen o ticari müşteri bir daha gelmez.')}</div>`
       + `<div class="lb-btns">`
