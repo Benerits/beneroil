@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
+import { TrafficGraph, StationGeom, RESERVE_LOOKAHEAD } from './traffic-graph'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
@@ -283,6 +284,10 @@ export class Car {
   watchT = 0
   watchPos = new THREE.Vector3()
   hardStuckT = 0
+  /** rezervasyon bekliyor (kurallı bekleme — sıkışma DEĞİL, buharlaşma sayacı işlemez) */
+  waitingForToken = false
+  /** şeride katılmak için yol verme süresi — uzarsa araç zorla katılır (açlık önleme) */
+  yieldT = 0
   prevFramePos = new THREE.Vector3(NaN, 0, 0)
   /** sıkışma kurtarma penceresi: bu süre boyunca hold yok sayılır */
   overrideT = 0
@@ -741,6 +746,8 @@ export interface CarManagerOpts {
   trafficPull?: () => number
   /** açık müşteri segmentleri (₺/müşteri ekseni) — kilitliyse null/boş, davranış klasik kalır */
   segments?: () => CarSegment[]
+  /** rezervasyon grafiği açık mı (test A/B + acil valf; verilmezse ?nograph=1 kuralı) */
+  graphEnabled?: () => boolean
   /** karşı istasyon kapı y'leri (far araç güneye gittiği için giriş +y / çıkış -y) */
   farGateInY?: () => number
   farGateOutY?: () => number
@@ -754,6 +761,16 @@ export interface CarManagerOpts {
   onCarLost: (car: Car) => void
 }
 
+/** Rezervasyon grafiği açık mı — ?nograph=1 veya NOGRAPH env ile kapatılabilir (A/B ölçümü
+ *  ve acil kapatma valfi: bölge listesi boş olunca tüm tryAcquire true döner, eski davranış). */
+const graphOn = (() => {
+  try {
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('nograph')) return false
+  } catch { /* node ortamı */ }
+  try { if (typeof process !== 'undefined' && process.env?.NOGRAPH) return false } catch { /* tarayıcı */ }
+  return true
+})()
+
 export class CarManager {
   cars: Car[] = []
   private nearTimer = 1
@@ -763,6 +780,11 @@ export class CarManager {
   // B4: otopark işgali KARARLI KİMLİKLE (Map) — pozisyon indeksi bina taşınınca/yıkılınca
   // kayıyordu ("sadece bir otopark kullanılıyor", "araçlar üst üste biniyor", 38 kayıt)
   private parkOcc = new Map<string, Car>()
+  /** REZERVASYON ÇEKİRDEĞİ (trafik raporu §5): kapı ağzı ve iç koridor çakışma bölgeleri.
+   *  Araç bölgeye girmeden token alır; alamazsa bölge dışında bekler → çakışma OLUŞMAZ. */
+  graph = new TrafficGraph()
+  private graphKey = ''
+  private graphOnLast = true
   private waitOcc: (Car | null)[] = [null, null, null, null]
   private waitOccFar: (Car | null)[] = [null, null, null, null]
 
@@ -814,6 +836,24 @@ export class CarManager {
   }
 
   update(dt: number) {
+    // ---- Rezervasyon grafiği: geometri değişince (kapı taşındı / karşı istasyon açıldı)
+    // bölgeler geom()'dan YENİDEN TÜRETİLİR. Aynalama elle yazılmadığı için B1-B6 sınıfı
+    // "near'da doğru, far'da bozuk" hatası imkânsız.
+    const stationsNow: StationGeom[] = ['near', 'far']
+      .filter(st => st === 'near' || (this.opts.farActive?.() ?? false))
+      .map(st => {
+        const G = this.geom(st as 'near' | 'far')
+        return { station: st, gateX: G.gateX, lane: G.lane, gateInY: G.gateInY, gateOutY: G.gateOutY,
+          sideSign: G.sideSign, dirY: G.dirY, wide: this.opts.wideGates() }
+      })
+    const key = stationsNow.map(g => `${g.station}:${g.gateX}:${g.gateInY}:${g.gateOutY}:${g.wide}`).join('|')
+    const useGraph = this.opts.graphEnabled?.() ?? graphOn
+    if (key !== this.graphKey || this.graphOnLast !== useGraph) {
+      this.graphKey = key; this.graphOnLast = useGraph
+      this.graph.rebuild(useGraph ? stationsNow : [])
+    }
+    this.graph.sweep(this.cars, c => (c as Car).group.position)
+
     // yoldan geçen trafik
     this.nearTimer -= dt
     this.farTimer -= dt
@@ -896,7 +936,12 @@ export class CarManager {
         if (o.phase === 'leaving' && merged && ahead) return true
         return false
       })
-      if (laneBusy) c.hold = true
+      if (laneBusy) {
+        c.yieldT += dt
+        // 3.5 sn'den fazla yol veremediyse ZORLA katıl: yoğun trafikte çıkış ağzı tıkanıp
+        // araçlar buharlaşıyordu (yük testi: gate-out'ta 19 araç birikmesi).
+        if (c.yieldT < 3.5) { c.hold = true; c.waitingForToken = true }
+      } else c.yieldT = 0
     }
 
     // karşılıklı kilitlenme çözümü — BİLİMSEL AYRIM:
@@ -935,6 +980,46 @@ export class CarManager {
         for (const x of cycle) resolved.add(x)
       }
     }
+    // ---- NAZİK ŞERİT: çıkışa boşluk açma ----
+    for (const c of this.cars) {
+      if (c.phase !== 'transit' || c.hold) continue
+      const G = this.geom(c.station)
+      const dy = (G.gateOutY - c.group.position.y) * G.dirY // >0 → çıkış ağzı İLERİDE
+      if (dy <= 0 || dy > 16) continue
+      const waiting = this.cars.some(o => o !== c && o.phase === 'leaving' && o.station === c.station && o.yieldT > 0.7)
+      if (waiting) c.speedScale = Math.min(c.speedScale, 0.5)
+    }
+
+    // ---- REZERVASYON KAPISI (trafik raporu §5): çakışma bölgesine (kapı ağzı / iç koridor)
+    // girmeden ÖNCE token alınır. Alamayan araç bölge DIŞINDA bekler → kapı ağzında üç
+    // akımın (giriş kuyruğu × çıkış × şerit trafiği) kilitlenmesi baştan oluşmaz.
+    for (const c of this.cars) {
+      c.waitingForToken = false
+      // DURAN araç bölge TUTMAZ: pompada/otoparkta bekleyen araç kapı ağzını kilitlemesin.
+      // (Oyuncu pompayı kapının önüne taşıyabiliyor; bölge dikdörtgeni çakışınca pompadaki
+      //  araç kapıyı sonsuza dek dolu gösteriyor, çıkanlar birikip buharlaşıyordu — yük
+      //  testinde T1'de 95 buharlaşma. Fiziksel engel zaten Car.solids ile ayrı yönetiliyor.)
+      if (c.phase === 'gone' || c.phase === 'parked' || c.phase === 'atPump') { this.graph.release(c); continue }
+      const p = c.group.position
+      const here = this.graph.zoneAt(p.x, p.y)
+      if (here) {
+        // bölge İÇİNDEYSE token şart (girmişse zaten var; kurtarma/ışınma ile içeri düşmüşse alır)
+        // bölge İÇİNDE: token'ı koşulsuz al, BEKLETME. Tahkim girişte yapıldı; içeride
+        // tutmak deadlock üretir (araç geri çekilemez → sıkışır → buharlaşır).
+        this.graph.forceAcquire(here.id, c)
+        continue
+      }
+      if (c.hold) continue // zaten duruyor (kuyruğu şişirmeden bekler)
+      // ilerideki bölgeye yaklaşıyor muyuz? (hareket yönünde RESERVE_LOOKAHEAD kadar bak)
+      const dir = c.headingDir()
+      if (!dir) continue
+      const ahead = this.graph.zoneAt(p.x + dir.x * 1.2, p.y + dir.y * 1.2)
+        ?? this.graph.zoneAt(p.x + dir.x * RESERVE_LOOKAHEAD, p.y + dir.y * RESERVE_LOOKAHEAD)
+      if (!ahead) continue
+      // hold olsa da sırayı koru: token alamayan araç KURALLI BEKLEME olarak işaretlenir
+      if (!this.graph.tryAcquire(ahead.id, c)) { c.hold = true; c.waitingForToken = true }
+    }
+
     // uzun süre sıkışan araç kendini kurtarır (gridlock sigortası):
     // 5 sn beklerse 1.4 sn'lik gerçek bir kurtulma penceresi açılır
     for (const c of this.cars) {
@@ -1013,7 +1098,12 @@ export class CarManager {
         || car.phase === 'leaving' || car.phase === 'toPark'
       if (movingPhase) {
         const d2 = isNaN(car.prevFramePos.x) ? 1 : car.group.position.distanceToSquared(car.prevFramePos)
-        if (d2 < 0.0006) car.hardStuckT += dt
+        // REZERVASYON BEKLEMESİ SIKIŞMA DEĞİL: token sırasında duran araç buharlaşmaz.
+        // Diğer kurallı beklemelerde (öndeki araç, yol verme) sayaç 4× YAVAŞ birikir —
+        // kuyruk buharlaşmaz ama gerçek deadlock hâlâ temizlenir (sigorta korunur).
+        // Kademeli sigorta: kurallı bekleme (token/yol verme) sayacı 10× yavaş işler →
+        // kuyruk buharlaşmaz ama GERÇEK deadlock ~90 sn sonra yine temizlenir.
+        if (d2 < 0.0006) car.hardStuckT += car.waitingForToken ? dt * 0.1 : car.hold ? dt * 0.25 : dt
         else car.hardStuckT = Math.max(0, car.hardStuckT - dt * 3)
         // giriş rampasında/manevrada tıkanan araç yolu tıkamasın: hızlı çekilir; genelde 9 sn.
         // Eşik DERİNLİK cinsinden (3.2 fixi): eski x>2.5 near sabiti karşı yakada HEP doğruydu —
@@ -1409,6 +1499,7 @@ export class CarManager {
 
   /** son çare: aracı sahneden sil, tuttuğu her yeri boşalt — hiçbir şey sonsuza dek tıkalı kalamaz */
   private evaporate(car: Car) {
+    this.graph.release(car) // rezervasyonları bırak — bölge sonsuza dek kilitli kalmasın
     this.evapStats.total++
     if (car.station === 'far') this.evapStats.far++
     else this.evapStats.near++
@@ -1468,6 +1559,8 @@ export class CarManager {
   }
 
   releaseCar(car: Car) {
+    // çıkış rotası yeni bölgelerden geçecek: eski token'ları bırak (giriş ağzı serbest kalsın)
+    this.graph.release(car)
     if (car.waitIndex >= 0) {
       this.waitOccFor(car.station)[car.waitIndex] = null
       car.waitIndex = -1
