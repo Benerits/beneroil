@@ -188,8 +188,11 @@ async function sendEmail(to, subject, html) {
 }
 function reqLang(req, body) {
   const l = String((body && body.lang) || '').toLowerCase()
+  // FR oyuncusu için mail şablonu henüz yok; İngilizceye düşürmek Türkçeden doğru olur.
+  if (l === 'fr') return 'en'
   if (l === 'en' || l === 'tr') return l
   const al = String(req.headers['accept-language'] || '').toLowerCase()
+  if (al.startsWith('fr')) return 'en'
   return al.startsWith('en') ? 'en' : 'tr' // varsayılan TR
 }
 function mailTemplate(kind, lang, url) {

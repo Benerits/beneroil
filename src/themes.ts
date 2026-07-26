@@ -56,6 +56,11 @@ export interface LocationTheme {
     walkIns?: { everySec: number; min: number; max: number }
     /** görsel: orta refüj bandı + kaldırım + kentsel siluet */
     urban?: boolean
+    /** KASABA İMZASI (rapor §6.2): MÜDAVİM MÜŞTERİ. Küçük yerde herkes birbirini tanır;
+     *  itibarını yükselten oyuncu, fiyattan BAĞIMSIZ sadık bir taban kazanır.
+     *  repFloor: müdavimlerin oluşmaya başladığı itibar · share: 5.0 itibarda akışın kaç
+     *  katı sadık taban · tip: müdavim bahşiş çarpanı (tanıdık esnafa cömert davranılır) */
+    regulars?: { repFloor: number; share: number; tip: number }
   }
 }
 
@@ -72,6 +77,10 @@ export const KASABA: LocationTheme = {
   lane: { kind: 'road', count: 1, median: false, barrier: false, rampLength: 0, speed: 1 },
   econ: { entryBase: 0.32, priceElasticity: 1, repWeight: 1, signWeight: 1, tipRate: 0.1 },
   unlock: { cash: 0, stars: 0 },
+  // Kasabanın kendine has kaldıracı: müdavim. 4.0 itibarın ÜSTÜNDE sadık taban oluşur ve
+  // bu taban fiyat zammından etkilenmez — kasabada "itibar biriktir, fiyatı sonra düşün"
+  // stratejisi anlamlı olur. 5.0 itibarda akışın %28'i müdavimdir.
+  features: { regulars: { repFloor: 4.0, share: 0.28, tip: 1.6 } },
 }
 
 /** Lokasyon 2 — Şehir Çevre Yolu (henüz sahnesi yok; kısıtları burada tanımlı) */

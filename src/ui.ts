@@ -470,7 +470,7 @@ export class UI {
     el<HTMLDivElement>('binfo-stats').innerHTML = card.stats.map(([k, v, cls]) =>
       `<div class="stat"><span class="k">${stripEmoji(k)}</span><span class="v ${cls ?? ''}">${stripEmoji(v)}</span></div>`).join('')
     el<HTMLDivElement>('binfo-prices').innerHTML = (card.priceRows ?? []).map(r =>
-      `<div class="prow"><span class="pl">${r.label}</span><span class="pc">${typeof r.cost === 'number' ? `alış ₺${r.cost}` : r.cost}</span>` +
+      `<div class="prow"><span class="pl">${t(r.label)}</span><span class="pc">${typeof r.cost === 'number' ? t('alış ₺{0}', String(r.cost)) : t(r.cost)}</span>` +
       `<button class="btn pbtn" data-pf="${r.f}" data-pd="-0.5" ${r.canDown ? '' : 'disabled'}>−</button>` +
       `<span class="pv">₺${r.price.toFixed(1)}</span>` +
       `<button class="btn pbtn" data-pf="${r.f}" data-pd="0.5" ${r.canUp ? '' : 'disabled'}>+</button></div>`).join('')

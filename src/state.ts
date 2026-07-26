@@ -601,7 +601,8 @@ export class GameState {
     if (this.closed) return 0
     // ışık çarpanı: kırmızıda sıkışan sürücü istasyona giriyor (çevre yolu/metropol imzası)
     // sezon çarpanı (Katman 4c): yaz tatili trafiği, kış düşüşü — tekrarlanabilir döngü
-    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor() * this.lightBoost() * this.season().traffic
+    const priceF = this.priceDemandFactor()
+    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * priceF * this.lightBoost() * this.season().traffic
     // Şube kısıtları temadan: taban çekicilik, tabela ve itibar AĞIRLIĞI şubeye göre değişir
     // (kasabada itibar belirleyici, otoyolda tabela; kasaba değerleri 1.0 → denge değişmez).
     const th = this.theme()
@@ -621,7 +622,28 @@ export class GameState {
     // HER yatırımı trafiğe ölü kılıyordu ("yaptım ama bir şey değişmedi"). 0.80'e kadar
     // birebir; üstü azalan verimle 0.95'e asimptotik — geç yatırımlar hâlâ hissedilir.
     const ent = raw <= 0.80 ? raw : 0.80 + 0.15 * (1 - Math.exp(-(raw - 0.80) / 0.25))
-    return Math.max(0.05, ent)
+
+    // MÜDAVİM MÜŞTERİ (rapor §6.2 — KASABA İMZASI)
+    // Müdavim, akışa EKLENEN müşteri DEĞİLDİR; akışın FİYATA DUYARSIZ payıdır.
+    // (Eklemeli modellenince kasabada trafik bir anda ~%30 şişiyordu: hem mevcut dengeyi
+    //  bozar hem trafik sistemini kapasite sınırına iterdi — yük testinde ölçüldü.)
+    // Varsayılan fiyatta priceF = 1 olduğu için toplam AYNI kalır; asıl etki fiyat
+    // yükseldiğinde görülür: sadık taban kaçmaz. Kasabada "itibar biriktir, fiyatı
+    // sonra rahat kullan" stratejisi böyle anlam kazanır.
+    const sh = this.regularsShare()
+    if (sh <= 0) return Math.max(0.05, ent)
+    const noPrice = priceF > 0.0001 ? ent / priceF : ent  // fiyat cezası uygulanmamış hâli
+    return Math.max(0.05, ent * (1 - sh) + Math.min(0.98, noPrice) * sh)
+  }
+
+  /** Müşterilerin ne kadarı müdavim (0..share). Yalnız teması izin veren şubede (kasaba). */
+  regularsShare(): number {
+    const r = this.theme().features?.regulars
+    if (!r || this.closed) return 0
+    const rep = this.reputation + this.decorRep()
+    if (rep <= r.repFloor) return 0
+    // itibarın tavana ne kadar yaklaştığı (repFloor→5.0 arası 0→1)
+    return r.share * Math.min(1, (rep - r.repFloor) / (5 - r.repFloor))
   }
 
   // ---- ÇOKLU ŞUBE (lategame raporu §3a: ORTAK ŞİRKET KASASI + şube bazlı P&L) ----
@@ -1028,6 +1050,16 @@ export class GameState {
   /** personel eğitimi etkileri (rapor §7 #7): dolum hızı, bahşiş, hata riski */
   staffFillMult(): number { return 1 + 0.12 * (this.staffLevel - 1) }   // Sv.4 → +%36 hız
   staffTipBonus(): number { return 0.05 * (this.staffLevel - 1) }        // bahşiş oranına eklenir
+
+  /** MÜDAVİM BAHŞİŞİ (§6.2): kasabada tanıdık esnafa cömert davranılır. Müşterilerin
+   *  müdavim payı kadar, o şubenin `tip` çarpanı bahşişe yansır — beklenen değer olarak
+   *  uygulanır (araç bazında "müdavim mi" durumu tutmaya gerek kalmaz, save'e alan eklenmez). */
+  regularsTipMult(): number {
+    const r = this.theme().features?.regulars
+    if (!r) return 1
+    const sh = this.regularsShare()
+    return 1 + (r.tip - 1) * sh
+  }
   staffErrorMult(): number { return Math.max(0.25, 1 - 0.25 * (this.staffLevel - 1)) } // arıza/hata riski
 
   /** MÜDÜR TURU: seviyeye göre kumbara toplar, panel temizler, arıza tamir eder.

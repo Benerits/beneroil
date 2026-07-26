@@ -1602,6 +1602,8 @@ export class CarManager {
   /** buharlaşma telemetrisi (3.1): trafik sağlığının tek objektif metriği.
    *  Hedef: 10 dk tam yüklü oturumda total = 0. Testler ve debug için public. */
   evapStats = { total: 0, near: 0, far: 0 }
+  /** hata ayıklama katmanı (?traffic=1) için salt-okuma erişimi */
+  get graphRef() { return this.graph }
 
   /** son çare: aracı sahneden sil, tuttuğu her yeri boşalt — hiçbir şey sonsuza dek tıkalı kalamaz */
   private evaporate(car: Car) {

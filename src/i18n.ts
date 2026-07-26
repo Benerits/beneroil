@@ -24,6 +24,14 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  'Müdavim müşteri': 'Regular customers',
+  // --- fiyat kartı / araç sayacı (kod içi literaller) ---
+  'Elektrik (kWh)': 'Electricity (kWh)',
+  'santralden': 'from plant',
+  'alış ₺{0}': 'cost ₺{0}',
+  'MOLADA · GÖNDER →': 'ON BREAK · SEND →',
+  '🛢️ Tank kapasitesi: {0}L': '🛢️ Tank capacity: {0}L',
+
   // --- Giriş ekranı ---
   'BENELOIL': 'BENELOIL',
   'İstasyonunu kur, imparatorluğunu büyüt. İlerlemen hesabında güvende.':
@@ -755,8 +763,17 @@ const EN: Record<string, string> = {
     'Corporate contracts, brand handover and manager automation added.',
 }
 
-/** TR metin → FR karşılığı. Anahtar seti EN ile birebir aynı (bkz. tools/i18n diff). */
+// TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
+// metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  'Müdavim müşteri': 'Clients fidèles',
+  // --- fiyat kartı / araç sayacı (kod içi literaller) ---
+  'Elektrik (kWh)': 'Électricité (kWh)',
+  'santralden': 'de la centrale',
+  'alış ₺{0}': 'achat ₺{0}',
+  'MOLADA · GÖNDER →': 'EN PAUSE · ENVOYER →',
+  '🛢️ Tank kapasitesi: {0}L': '🛢️ Capacité du réservoir : {0} L',
+
   // --- Giriş ekranı ---
   'BENELOIL': 'BENELOIL',
   'İstasyonunu kur, imparatorluğunu büyüt. İlerlemen hesabında güvende.':

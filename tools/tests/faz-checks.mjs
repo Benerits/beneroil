@@ -1019,5 +1019,47 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
   else check('devir eşiği tutmadı (atlandı)', true)
 }
 
+// ---- §26: KASABA MÜDAVİM MÜŞTERİ (lategame raporu §6.2) ----
+{
+  console.log('\n== 26) Kasaba imzası: müdavim müşteri ==')
+  const k = new GameState()          // kasaba
+  k.reputation = 3.0
+  check('düşük itibarda müdavim YOK', k.regularsShare() === 0)
+  k.reputation = 4.0
+  check('eşik itibarda (4.0) henüz müdavim yok', k.regularsShare() === 0)
+  k.reputation = 4.5
+  const half = k.regularsShare()
+  check(`itibar 4.5'te müdavim oluşmaya başlar (%${(half * 100).toFixed(0)})`, half > 0.1 && half < 0.2)
+  k.reputation = 5.0
+  check(`itibar 5.0'da müdavim payı %28`, Math.abs(k.regularsShare() - 0.28) < 0.001)
+
+  // ASIL ETKİ: müdavim akış EKLEMEZ, fiyat baskısına karşı KORUR
+  const a = new GameState(); a.reputation = 5.0   // müdavimli
+  const b = new GameState(); b.reputation = 5.0
+  b.theme = () => ({ ...a.theme(), features: {} })  // müdavimsiz kopya
+  check(`varsayılan fiyatta trafik AYNI (denge bozulmaz: ${a.entryChance().toFixed(4)} ≈ ${b.entryChance().toFixed(4)})`,
+    Math.abs(a.entryChance() - b.entryChance()) < 0.002)
+  // fiyatı tavana çek
+  for (const f of ['benzin', 'dizel', 'lpg']) { a.prices[f] = priceBounds(f)[1]; b.prices[f] = priceBounds(f)[1] }
+  const dropA = 1 - a.entryChance() / new GameState().entryChance()
+  const dropB = 1 - b.entryChance() / new GameState().entryChance()
+  check(`tavan fiyatta müdavimli istasyon DAHA AZ kaybeder (%${(dropA * 100).toFixed(0)} vs %${(dropB * 100).toFixed(0)})`,
+    dropA < dropB - 0.05)
+  check('müdavim yine de fiyat zammını bedava yapmaz', dropA > 0.1)
+
+  // müdavim bahşişi
+  const t1 = new GameState(); t1.reputation = 3.0
+  const t2 = new GameState(); t2.reputation = 5.0
+  check('düşük itibarda bahşiş çarpanı 1.0', Math.abs(t1.regularsTipMult() - 1) < 0.001)
+  check(`5.0 itibarda bahşiş çarpanı ${t2.regularsTipMult().toFixed(2)}× (müdavim cömertliği)`,
+    t2.regularsTipMult() > 1.15 && t2.regularsTipMult() < 1.2)
+
+  // OTOYOLDA müdavim YOK (kimse aynı dinlenme tesisine ikinci kez uğramaz)
+  const o = new GameState(); o.unlockedLocs.push('otoyol')
+  o.switchLoc('otoyol', { placedPos: {}, placedRot: {}, placedRects: [] })
+  o.reputation = 5.0
+  check('otoyolda müdavim mekaniği KAPALI (tema kısıtı)', o.regularsShare() === 0 && o.regularsTipMult() === 1)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

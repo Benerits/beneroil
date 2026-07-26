@@ -3,6 +3,7 @@ import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } fro
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
+import { TrafficDebug, trafficDebugOn } from './traffic-debug'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
@@ -634,7 +635,13 @@ function openOfficePanel() {
     cust.innerHTML =
       row(t('Yakıt müşteri etkisi'), `${fx >= 0 ? '+' : ''}${fx}%`, fx >= 0 ? 'good' : 'bad')
       + (state.evChargers > 0 ? row(t('EV müşteri etkisi'), `${evx >= 0 ? '+' : ''}${evx}%`, evx >= 0 ? 'good' : 'bad') : '')
-      + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`)
+      + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`
+          + (state.repTrend > 0 ? ' ▲' : state.repTrend < 0 ? ' ▼' : ''),
+          state.repTrend > 0 ? 'good' : state.repTrend < 0 ? 'bad' : '')
+      // §6.2 kasaba imzası: müdavim payı yalnız mekaniğin açık olduğu şubede görünür
+      + (state.regularsShare() > 0
+          ? row(t('Müdavim müşteri'), `%${Math.round(state.regularsShare() * 100)}`, 'good')
+          : '')
       + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
       + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
   }
@@ -1537,7 +1544,8 @@ function finishSale(car: Car) {
     score += 0.6 // pompacı düzgün doldurur ama bahşiş ona kalır
   } else if (car.filledValue >= car.demandAmount - 10) {
     // temiz camlar bahşişi ikiye katlar ve memnuniyeti artırır
-    const tip = Math.round(revenue0 * ((car.windowsCleaned ? 0.2 : 0.1) + state.staffTipBonus())) // eğitimli personel daha çok bahşiş alır
+    // eğitimli personel daha çok bahşiş alır; kasabada müdavim payı kadar ek cömertlik (§6.2)
+    const tip = Math.round(revenue0 * ((car.windowsCleaned ? 0.2 : 0.1) + state.staffTipBonus()) * state.regularsTipMult())
     revenue += tip
     score += car.windowsCleaned ? 1.1 : 0.8
     ui.toast(t('Bahşiş: +₺{0}', tip), 'good')
@@ -1668,7 +1676,7 @@ function tickEvCharging(dt: number) {
         // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
         c.squatting = true
         c.beingServed = true
-        c.setCounter('MOLADA · GÖNDER →')
+        c.setCounter(t('MOLADA · GÖNDER →'))
         const visits = facilityVisits(c)
         spawnWalkerFor(c, { visits, score, squat: true })
         ui.toast(t('⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆'), 'bad')
@@ -2725,7 +2733,7 @@ function buyToast(id: string) {
     case 'pump': ui.toast(`⛽ Pompa #${state.pumps} kuruldu!`, 'good'); break
     case 'sign': ui.toast('🪧 Tabela büyüdü — daha çok müşteri gelecek!', 'good'); break
     case 'widegate': ui.toast(t('🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!'), 'good'); break
-    case 'tank': ui.toast(`🛢️ Tank kapasitesi: ${state.tankCapacity}L`, 'good'); break
+    case 'tank': ui.toast(t('🛢️ Tank kapasitesi: {0}L', state.tankCapacity), 'good'); break
     case 'market': ui.toast('🛒 Market açıldı!', 'good'); break
     case 'market2': ui.toast(t('🛒 Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!'), 'good'); break
     case 'toilet': ui.toast('🚻 Tuvalet hizmete girdi!', 'good'); break
@@ -4284,8 +4292,17 @@ function frame() {
   syncHoses()
   updateCamera()
   ui.update(state, dt)
+  if (trafficDbg) trafficDbg.update({
+    zones: cars.graphRef.zones,
+    snapshot: () => cars.graphRef.snapshot(),
+    cars: cars.cars,
+    evap: cars.evapStats,
+    reserve: cars.graphRef.stats,
+  }, dt)
   composer!.render()
 }
+// §6.1 trafik hata ayıklama katmanı — YALNIZ ?traffic=1 ile kurulur (normal oyunda kod çalışmaz)
+const trafficDbg = trafficDebugOn ? new TrafficDebug(world.scene) : null
 mountNewsButtons()  // Ayarlar'a "Yenilikler" + "Bildirim Geçmişi" düğmeleri
 maybeShowNews()     // sürüm değiştiyse notları bir kez göster (#465)
 frame()
