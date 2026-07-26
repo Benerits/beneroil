@@ -816,6 +816,9 @@ export interface CarManagerOpts {
   segments?: () => CarSegment[]
   /** MARİNA: gelen tekne türleri (paylarıyla). Boş dizi = kara şubesi, tekne doğmaz. */
   boats?: () => { id: string; share: number }[]
+  /** 4 ŞERİTLİ YOL: istasyona girecek araçların kullandığı servis şeridi x'i.
+   *  undefined = tek şeritli yol (mevcut davranış). */
+  serviceLane?: () => { near: number; far: number } | undefined
   /** rezervasyon grafiği açık mı (test A/B + acil valf; verilmezse ?nograph=1 kuralı) */
   graphEnabled?: () => boolean
   /** trafik ışığı durumu (çevre yolu/metropol): kırmızıda ışık hattında kuyruk oluşur */
@@ -877,13 +880,18 @@ export class CarManager {
   // Her yol {gateX, lane, dirY (seyir yönü), sideSign (istasyon yönü)} ile sistematik aynalanır.
   // Karşı pompa/şarj yoksa hiçbir far kod yolu tetiklenmez → near davranışı BİREBİR korunur.
   private geom(st: 'near' | 'far') {
+    // 4 ŞERİTLİ YOL: istasyon trafiğinin şeridi SERVİS şerididir — giriş yolu, çıkış
+    // birleşmesi ve yol verme hesabı hep bu şeride göre kurulur. Geçiş trafiği kendi
+    // (iç) şeridinde akar ve kapılarla hiç etkileşmez. Servis şeridi yoksa tek şeritli
+    // yol: değerler eskisiyle BİREBİR aynı kalır.
+    const svc = this.opts.serviceLane?.()
     if (st === 'far') return {
-      gateX: FAR_GATE_X, lane: LANE_FAR, dirY: -1, sideSign: 1,
+      gateX: FAR_GATE_X, lane: svc?.far ?? LANE_FAR, dirY: -1, sideSign: 1,
       gateInY: this.opts.farGateInY?.() ?? APRON_OUT_Y,
       gateOutY: this.opts.farGateOutY?.() ?? APRON_IN_Y,
     }
     return {
-      gateX: this.gateX, lane: this.serveLane, dirY: 1, sideSign: -1,
+      gateX: this.gateX, lane: svc?.near ?? this.serveLane, dirY: 1, sideSign: -1,
       gateInY: this.opts.gateInY(), gateOutY: this.opts.gateOutY(),
     }
   }
@@ -1339,22 +1347,24 @@ export class CarManager {
     const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), this.opts.segments?.() ?? null, boat)
     car.lane = lane
     car.phase = 'transit'
+    // 4 ŞERİTLİ YOL (çevre yolu): giriş kararı şerit seçiminden ÖNCE verilir, çünkü
+    // girecek araç SERVİS şeridinde (istasyona yakın olan) doğar, geçiş trafiği içeride
+    // akar. Servis şeridi tanımlı değilse tek şerit — kasaba/otoyol davranışı BİREBİR aynı.
+    const svc = this.opts.serviceLane?.()
     if (lane === 'near') {
       car.station = 'near'
-      car.group.position.set(LANE_NEAR, -40, 0)
-      car.group.rotation.z = Math.PI / 2
-      car.setPath([new THREE.Vector3(LANE_NEAR, 44, 0)])
       // OTOYOL: sürücü tesisi 40+ birim öncesinden görüp karar verir — doluluğu BİLEMEZ.
       // Bu yüzden kalabalık frenini yumuşat; asıl kısıt YAVAŞLAMA ŞERİDİ kapasitesidir
       // (dolu ise araç karar noktasında otobana döner = kaçan müşteri, rapor §6.4 kural 2).
       const crowd = this.stationCrowdFactor(isEv, 'near')
       car.wantsEnter = Math.random() < this.opts.entryChance() * (this.opts.highway?.() ? Math.max(0.75, crowd) : crowd)
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
+      const lx = svc && car.wantsEnter ? svc.near : LANE_NEAR
+      car.group.position.set(lx, -40, 0)
+      car.group.rotation.z = Math.PI / 2
+      car.setPath([new THREE.Vector3(lx, 44, 0)])
     } else {
       car.station = 'far'
-      car.group.position.set(LANE_FAR, 40, 0)
-      car.group.rotation.z = -Math.PI / 2
-      car.setPath([new THREE.Vector3(LANE_FAR, -44, 0)])
       // karşı istasyon açık VE bu ARAÇ TİPİNE uygun karşı ekipman varsa girilir (tır parkı karşıda yok).
       // (Eski hali tipe bakmıyordu: yalnız şarj olan karşı istasyona benzinli araçlar girip
       //  bekleme noktasında sonsuza dek kalıyor, sabır bitince itibar yakıyordu.)
@@ -1362,6 +1372,10 @@ export class CarManager {
         car.wantsEnter = Math.random() < this.opts.entryChance() * this.stationCrowdFactor(isEv, 'far')
         car.wantsTruckPark = car.isTruck && Math.random() < 0.4 // B6: karşı yakada da tır parkı
       }
+      const lx = svc && car.wantsEnter ? svc.far : LANE_FAR
+      car.group.position.set(lx, 40, 0)
+      car.group.rotation.z = -Math.PI / 2
+      car.setPath([new THREE.Vector3(lx, -44, 0)])
     }
     this.cars.push(car)
   }

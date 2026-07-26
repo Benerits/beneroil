@@ -29,6 +29,10 @@ export interface LocationTheme {
     barrier: boolean       // fiziksel bariyer → karşı istasyon AYRI yatırım
     rampLength: number     // 0 = doğrudan sapma; >0 = yavaşlama/hızlanma şeridi
     speed: number          // taban hız çarpanı
+    /** ÇOK ŞERİTLİ YOL (çevre yolu): istasyona girecek araçların kullandığı SERVİS şeridi.
+     *  Geçiş trafiği bugünkü şeritlerinde kalır (LANE_NEAR/LANE_FAR); servis şeridi
+     *  hedefe daha yakın olan dış şerittir. Tanımsızsa yol tek şeritlidir (mevcut davranış). */
+    service?: { near: number; far: number }
   }
 
   /** ekonomik kısıt: hangi kaldıraç işe yarar (raporun "kısıt seti" ilkesi) */
@@ -97,7 +101,10 @@ export const CEVREYOLU: LocationTheme = {
   },
   sky: { day: 0xb9c6d4, night: 0x151d29 },
   palette: { line: 0xf0f0ec, accent: 0x2f6fed, vegetation: 0x5f8f57 },
-  lane: { kind: 'road', count: 2, median: true, barrier: false, rampLength: 0, speed: 1.1 },
+  // 2×2 ŞERİT: geçiş trafiği içteki (median'a yakın) şeritte, istasyona girenler dışta.
+  // Servis şeridi hedefe daha yakın → giren araç geçiş trafiğini kesmez.
+  lane: { kind: 'road', count: 2, median: true, barrier: false, rampLength: 0, speed: 1.1,
+          service: { near: 5.58, far: 10.23 } },
   // şehirde market/kafe cirosu baskın: fiyat esnekliği yüksek (alternatif çok), tabela zayıf
   econ: { entryBase: 0.30, priceElasticity: 1.35, repWeight: 0.8, signWeight: 0.6, tipRate: 0.12 },
   unlock: { cash: 500_000, stars: 2 },

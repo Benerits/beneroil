@@ -1092,5 +1092,37 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
     th.features.walkIns.everySec < cy.theme().features.walkIns.everySec)
 }
 
+// ---- §28: ÇEVRE YOLU 4 ŞERİT ----
+{
+  console.log('\n== 28) Çevre yolu: 4 şerit geometrisi ==')
+  const cy = new GameState(); cy.unlockedLocs.push('cevreyolu')
+  cy.switchLoc('cevreyolu', { placedPos: {}, placedRot: {}, placedRects: [] })
+  const svc = cy.theme().lane.service
+  check('çevre yolunda servis şeridi TANIMLI', !!svc)
+  check('kasabada servis şeridi YOK (tek şerit, denge korunur)', !new GameState().theme().lane.service)
+  const oto = new GameState(); oto.unlockedLocs.push('otoyol')
+  oto.switchLoc('otoyol', { placedPos: {}, placedRot: {}, placedRects: [] })
+  check('otoyolda servis şeridi YOK (kendi ramp mekaniği var)', !oto.theme().lane.service)
+
+  // geometri: 4 şerit asfalta sığmalı, refüje binmemeli, birbirine girmemeli
+  const ROAD_X = 7.9, LANE_NEAR = 6.95, LANE_FAR = 8.85, CARW = 1.2
+  const roadW = 6.0, medW = 0.6
+  const aL = ROAD_X - roadW / 2, aR = ROAD_X + roadW / 2
+  const mL = ROAD_X - medW / 2, mR = ROAD_X + medW / 2
+  const lanes = [svc.near, LANE_NEAR, LANE_FAR, svc.far]
+  check('4 şeridin hepsi asfalt içinde',
+    lanes.every(x => x - CARW / 2 >= aL && x + CARW / 2 <= aR))
+  check('hiçbir şerit refüje binmiyor',
+    lanes.every(x => x + CARW / 2 <= mL || x - CARW / 2 >= mR))
+  const sorted = [...lanes].sort((a, b) => a - b)
+  check('şeritler birbirine girmiyor (araç genişliği kadar aralık)',
+    sorted.every((x, i) => i === 0 || x - sorted[i - 1] >= CARW))
+  check(`asfalt ana arsayı yemiyor (sol kenar ${aL})`, aL >= 4.8)
+  check(`asfalt karşı parsele girmiyor (sağ kenar ${aR} ≤ 10.9)`, aR <= 10.9)
+  // servis şeridi hedefe DAHA YAKIN olmalı (yoksa mekaniğin anlamı yok)
+  check('near servis şeridi istasyona geçiş şeridinden YAKIN', svc.near < LANE_NEAR)
+  check('far servis şeridi karşı istasyona geçiş şeridinden YAKIN', svc.far > LANE_FAR)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

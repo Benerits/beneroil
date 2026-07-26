@@ -473,16 +473,21 @@ export class World {
     // yol (arada yeşil bant kalır) + şerit çizgileri
     // gidiş-geliş yol: çift sarı orta çizgi + şerit içi beyaz kesikler + kenar çizgileri
     // yol uzatıldı (100→220): zoom-out yapınca yolun bittiği görünmesin
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 220), roadMat)
+    // 4 ŞERİTLİ YOL: servis şeridi tanımlıysa koridor genişler (x 4.9..10.9).
+    // Bir yanda çim bandı, diğer yanda karşı parsel (10.9) sınır — bu 6.0 birim,
+    // 0.6 refüjle birlikte yön başına iki adet 1.35'lik şerit demek.
+    const roadW = th.lane.service ? 6.0 : 4.6
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 220), roadMat)
     road.position.set(ROAD_X, 0, 0.01)
     road.receiveShadow = true
     s.add(road)
     if (th.lane.median) {
       // ---- KENTSEL YOL (çevre yolu/metropol): orta REFÜJ + şerit çizgileri (rapor §6.3) ----
       // Refüj: yeşil bant + bordür; karşıya geçiş görsel olarak da ayrılır.
-      const median = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 220), lam(th.palette.vegetation))
+      const medW = th.lane.service ? 0.6 : 0.9
+      const median = new THREE.Mesh(new THREE.PlaneGeometry(medW, 220), lam(th.palette.vegetation))
       median.position.set(ROAD_X, 0, 0.022); s.add(median)
-      for (const off of [-0.5, 0.5]) {
+      for (const off of [-(medW / 2 + 0.05), medW / 2 + 0.05]) {
         const kerb = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 220), lam(0xd8d4c8))
         kerb.position.set(ROAD_X + off, 0, 0.024); s.add(kerb)
       }
@@ -502,11 +507,15 @@ export class World {
       mkInst(new THREE.SphereGeometry(0.62, 8, 6), lam(th.palette.vegetation), treeN, (m, i) => {
         m.makeTranslation(ROAD_X, -96 + i * 12, 1.5)
       })
+      // ŞERİT AYIRICI KESİKLER: 4 şeritli yolda her yönün İKİ şeridi arasına, tek
+      // şeritlide eski konumlarına. Konum temadan türer, elle sabit yok.
       const dashPerLane = 44
-      mkInst(new THREE.PlaneGeometry(0.08, 2.4), lam(0xe8e4d8), dashPerLane * 2, (m, i) => {
-        const lane = i < dashPerLane ? -1.15 : 1.15
+      const dashOff = th.lane.service
+        ? [ROAD_X - 2.32, ROAD_X + 2.32]   // 4 şerit: yön başına iki şeridin arası
+        : [ROAD_X - 1.15, ROAD_X + 1.15]   // tek şerit (mevcut görünüm)
+      mkInst(new THREE.PlaneGeometry(0.08, 2.4), lam(0xe8e4d8), dashPerLane * dashOff.length, (m, i) => {
         const k = i % dashPerLane
-        m.makeTranslation(ROAD_X + lane, -107 + k * 5, 0.021)
+        m.makeTranslation(dashOff[Math.floor(i / dashPerLane)], -107 + k * 5, 0.021)
       })
       // ---- METROPOL SİLUETİ (rapor §6.6): çevre yolundan görsel olarak AYRIŞSIN ----
       // Çevre yolu alçak kentsel doku; metropol gökdelen duvarı. Determinist yükseklikler
@@ -538,16 +547,22 @@ export class World {
         s.add(center)
       }
     }
-    for (const off of [-2.16, 2.16]) {
+    // kenar çizgileri asfalt kenarına oturur (yol genişleyince onlar da kayar)
+    const edgeOff = (th.lane.service ? 6.0 : 4.6) / 2 - 0.14
+    for (const off of [-edgeOff, edgeOff]) {
       const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 220), lam(0xe8e4d8))
       edgeLine.position.set(ROAD_X + off, 0, 0.02)
       s.add(edgeLine)
     }
-    for (let y = -108; y < 109; y += 5) {
-      for (const off of [-1.1, 1.1]) {
-        const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 1.5), lam(0xd9d5c9))
-        dash.position.set(ROAD_X + off, y, 0.02)
-        s.add(dash)
+    // Şerit içi kesikler — YALNIZ refüjsüz (kasaba) yolda. Refüjlü yollar kendi
+    // instanced kesiklerini yukarıda çiziyor; ikisi birden çizilirse çizgiler çakışır.
+    if (!th.lane.median) {
+      for (let y = -108; y < 109; y += 5) {
+        for (const off of [-1.1, 1.1]) {
+          const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 1.5), lam(0xd9d5c9))
+          dash.position.set(ROAD_X + off, y, 0.02)
+          s.add(dash)
+        }
       }
     }
 
