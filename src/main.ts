@@ -7,9 +7,11 @@ import {
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
+  LocId,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { isNativePlatform } from './platform'
+import { THEMES } from './themes'
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
 import * as auth from './auth'
@@ -454,7 +456,11 @@ document.addEventListener('visibilitychange', () => {
 // Kenney modelleri (yüklenemezse prosedürele düşer)
 const [modelLib, staticLib] = await Promise.all([loadModels(), loadStatics()])
 
-const world = new World(staticLib)
+// Sahne, save YÜKLENMEDEN kurulduğu için aktif şube ipucu localStorage'dan okunur
+// (save otoriter kalır; uyuşmazlıkta aşağıda bir kez sessiz reload ile düzelir).
+const LOC_HINT_KEY = 'beneloil-loc'
+const locHint = (localStorage.getItem(LOC_HINT_KEY) as LocId | null) ?? 'kasaba'
+const world = new World(staticLib, locHint)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
 let parkInfoShown = 0
@@ -578,6 +584,26 @@ function openOfficePanel() {
       + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
   }
 
+  // 3z) ŞUBELER: aktif şube + açık şubeler arası geçiş + yeni şube açma (büyük SINK)
+  const lel = document.getElementById('of-locations')
+  if (lel) {
+    const order: LocId[] = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+    lel.innerHTML = order.map(id => {
+      const th = THEMES[id]
+      const open = state.unlockedLocs.includes(id)
+      const active = state.activeLoc === id
+      if (active) return row(`📍 ${th.name}`, t('AKTİF'), 'good')
+      if (open) return `<div class="prow"><span class="pl">${th.name}</span>`
+        + `<button class="btn sbuy" data-goloc="${id}">${t('Şubeye Git')}</button></div>`
+      const c = state.canUnlockLoc(id)
+      const note = c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', c.stars) : `₺${tl(c.cash)}`
+      return `<div class="prow"><span class="pl" style="color:var(--muted)">${th.name}</span>`
+        + `<span class="pc">${note}</span>`
+        + (c.ok ? `<button class="btn sbuy good" data-unlockloc="${id}">${t('Şube Aç')}</button>`
+                : `<button class="btn sbuy" disabled>${t('Kilitli')}</button>`) + `</div>`
+    }).join('')
+  }
+
   // 3a) PRESTİJ: marka yıldızı durumu + devir önizlemesi (rapor: önizleme ZORUNLU)
   const pel = document.getElementById('of-prestige')
   if (pel) {
@@ -681,6 +707,37 @@ document.getElementById('of-prices')?.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
   if (btn) ui.onPriceChange(btn.dataset.pf as FuelType | 'elec', Number(btn.dataset.pd))
 })
+// ŞUBE: geçiş ve açma
+document.getElementById('of-locations')?.addEventListener('click', e => {
+  const go = (e.target as HTMLElement).closest('button[data-goloc]') as HTMLButtonElement | null
+  const un = (e.target as HTMLElement).closest('button[data-unlockloc]') as HTMLButtonElement | null
+  if (un) {
+    const id = un.dataset.unlockloc as LocId
+    if (!state.unlockLoc(id)) { ui.toast(t('Şube açma şartları sağlanmıyor.'), 'bad'); return }
+    ui.toast(t('🏗️ {0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.', THEMES[id].name), 'good', true)
+    audio.achieve(); openOfficePanel(); persist()
+    return
+  }
+  if (!go) return
+  const id = go.dataset.goloc as LocId
+  // Şube değişimi: mevcut şubenin ekipmanı + YERLEŞİMİ saklanır, hedefin yüklenir.
+  // Para/gün/itibar/prestij/kredi ŞİRKETTE kalır (tek kasa — rapor §3a kararı).
+  const next = state.switchLoc(id, { placedPos, placedRot, placedRects })
+  if (!next) { ui.toast(t('Şube değiştirilemedi.'), 'bad'); return }
+  for (const k of Object.keys(placedPos)) delete placedPos[k]
+  for (const k of Object.keys(placedRot)) delete placedRot[k]
+  placedRects.length = 0
+  Object.assign(placedPos, next.placedPos)
+  Object.assign(placedRot, next.placedRot)
+  placedRects.push(...(next.placedRects as typeof placedRects))
+  localStorage.setItem(LOC_HINT_KEY, id) // reload'da sahne doğru temayla kurulsun
+  ui.toast(t('📍 {0} şubesine geçildi — sahne yükleniyor…', THEMES[id].name), 'good', true)
+  lastRemotePush = 0 // throttle'ı atla: şube değişimi reload'dan ÖNCE buluta yazılmalı
+  persist()
+  Car.solids = hardRects()
+  setTimeout(() => location.reload(), 1600) // sahne temadan yeniden kurulsun
+})
+
 // PRESTİJ: İstasyonu Devret — iki aşamalı onay (geri dönüşü yok, gönüllü)
 let handoverArmedAt = 0
 const handoverArmed = () => Date.now() - handoverArmedAt < 6000
@@ -2568,6 +2625,12 @@ if (cloudBlocked) await new Promise(() => {}) // oyun motoru burada durur, hiç 
 if (!isFullMode && !isPromoMode && auth.needsVerify()) {
   showVerifyGate()
   await new Promise(() => {}) // doğrulanana dek motor durur
+}
+// Şube ipucu ile bulut kaydı uyuşmuyorsa (başka cihazda şube değişmiş) bir kez düzelt
+if (saveLoaded && state.activeLoc !== locHint && !sessionStorage.getItem('beneloil-loc-fixed')) {
+  sessionStorage.setItem('beneloil-loc-fixed', '1') // yalnız BİR kez → sonsuz reload döngüsü yok
+  localStorage.setItem(LOC_HINT_KEY, state.activeLoc)
+  location.reload()
 }
 if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)

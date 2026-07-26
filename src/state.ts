@@ -1,8 +1,39 @@
 import { t } from './i18n'
+import { THEMES, LocationTheme } from './themes'
 export type FuelType = 'benzin' | 'dizel' | 'lpg'
 
 export const FUELS: FuelType[] = ['benzin', 'dizel', 'lpg']
 export const FUEL_PRICE: Record<FuelType, number> = { benzin: 10, dizel: 9, lpg: 6 }
+export type LocId = 'kasaba' | 'cevreyolu' | 'otoyol' | 'marina' | 'metropol'
+
+/** Şubeye AİT (lokasyon-bazlı) alanlar. Bunun dışındaki her şey şirket seviyesidir:
+ *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
+export const LOC_FIELDS = [
+  'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'gridLevel',
+  'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
+  'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
+  'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
+  'uraniumPending', 'uraniumEta', 'closed', 'wideGates',
+] as const
+
+/** Şube anlık görüntüsü: ekipman alanları + tank/parsel/kumbara/otomasyon kümeleri */
+export interface LocSnapshot {
+  f: Record<string, unknown>
+  tanks: Record<string, number>
+  tankCounts: Record<string, number>
+  prices: Record<string, number>
+  pendingCash: Record<string, number>
+  ownedParcels: string[]
+  pavedParcels: string[]
+  autoPumps: number[]
+  autoChargers: number[]
+  brokenPumps: number[]
+  brokenChargers: number[]
+  placedPos: Record<string, [number, number]>
+  placedRot: Record<string, number>
+  placedRects: unknown[]
+}
+
 /** B2B sözleşmesi (lategame raporu Katman 4a): taahhüt edilen günlük hacim, piyasa altı
  *  fiyat, tamamlama bonusu, eksik teslimde ceza. Mevcut tank/tanker sistemini anlamlı kılar. */
 export interface Contract {
@@ -168,6 +199,13 @@ export class GameState {
   contract: Contract | null = null
   contractsDone = 0 // tamamlanan sözleşme sayısı (ADDITIVE)
   contractsFailed = 0
+  /** Aktif şube ve açılmış şubeler — ADDITIVE alanlar (eski save: yalnız kasaba). */
+  activeLoc: LocId = 'kasaba'
+  unlockedLocs: LocId[] = ['kasaba']
+  /** Pasif şubelerin EKİPMAN anlık görüntüleri (şube değişince buraya yazılır/okunur).
+   *  Para, gün, itibar, prestij, kredi, sözleşme ŞİRKET seviyesinde kalır (tek kasa). */
+  locSnapshots: Partial<Record<LocId, LocSnapshot>> = {}
+
   /** MARKA YILDIZI (prestij): kalıcı gelir çarpanı verir. 'reset' değil 'DEVRET' —
    *  save silinme travması tazeyken reset kelimesi kullanılmaz (rapor uyarısı). ADDITIVE. */
   brandStars = 0
@@ -438,14 +476,24 @@ export class GameState {
     // ESNEKLİK (feedback: 'fiyatı tavana çektim müşteri aynı'): eski eğri tavanda talebi
     // yalnız %6 düşürüyordu — hissedilmiyordu. Yeni: varsayılanda 1.0 (denge değişmez),
     // tavan fiyatta ~%32 daha az müşteri, taban fiyatta %35 daha çok (ucuzcu istasyon stratejisi).
-    const demand = factor <= 1 ? 1 + 0.35 * (1 - factor) : 1 - 1.6 * (factor - 1)
-    return Math.min(1.35, Math.max(0.35, demand))
+    // Fiyat esnekliği ŞUBEYE göre: otoyolda alternatif yok (0.25 → fiyat serbest),
+    // metropolde alternatif bol (1.6 → fiyat kritik). Kasaba 1.0: mevcut denge korunur.
+    const el = this.theme().econ.priceElasticity
+    const demand = factor <= 1 ? 1 + 0.35 * el * (1 - factor) : 1 - 1.6 * el * (factor - 1)
+    // Taban/tavan da şubeye göre: kasabada (el=1) 0.35/1.35 → MEVCUT DENGE BİREBİR korunur.
+    // Otoyolda taban yüksek (fiyat esnek değil), metropolde düşük (alternatif bol).
+    const floor = Math.min(0.9, Math.max(0.15, 0.35 / el))
+    return Math.min(1 + 0.35 * el, Math.max(floor, demand))
   }
 
   entryChance() {
     if (this.closed) return 0
     const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor()
-    const c = 0.32 + 0.1 * this.signLevel + 0.05 * (this.reputation - 3)
+    // Şube kısıtları temadan: taban çekicilik, tabela ve itibar AĞIRLIĞI şubeye göre değişir
+    // (kasabada itibar belirleyici, otoyolda tabela; kasaba değerleri 1.0 → denge değişmez).
+    const th = this.theme()
+    const c = th.econ.entryBase + 0.1 * th.econ.signWeight * this.signLevel
+      + 0.05 * th.econ.repWeight * (this.reputation - 3)
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
       + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
       + (this.hasCoffee ? 0.02 : 0) + (this.hasRestaurant ? 0.03 : 0)
@@ -462,6 +510,76 @@ export class GameState {
     const ent = raw <= 0.80 ? raw : 0.80 + 0.15 * (1 - Math.exp(-(raw - 0.80) / 0.25))
     return Math.max(0.05, ent)
   }
+
+  // ---- ÇOKLU ŞUBE (lategame raporu §3a: ORTAK ŞİRKET KASASI + şube bazlı P&L) ----
+  /** Aktif şubenin ekipmanını anlık görüntüye çevir (yerleşim tabloları main.ts'ten gelir) */
+  captureLoc(layout: { placedPos: Record<string, [number, number]>; placedRot: Record<string, number>; placedRects: unknown[] }): LocSnapshot {
+    const f: Record<string, unknown> = {}
+    for (const k of LOC_FIELDS) f[k] = (this as any)[k]
+    return {
+      f,
+      tanks: { ...this.tanks }, tankCounts: { ...this.tankCounts }, prices: { ...this.prices },
+      pendingCash: { ...this.pendingCash },
+      ownedParcels: [...this.ownedParcels], pavedParcels: [...this.pavedParcels],
+      autoPumps: [...this.autoPumps], autoChargers: [...this.autoChargers],
+      brokenPumps: [...this.brokenPumps], brokenChargers: [...this.brokenChargers],
+      placedPos: JSON.parse(JSON.stringify(layout?.placedPos ?? {})),
+      placedRot: { ...(layout?.placedRot ?? {}) },
+      placedRects: JSON.parse(JSON.stringify(layout?.placedRects ?? [])),
+    }
+  }
+  /** Anlık görüntüyü aktif şube olarak yükle; yerleşim tablolarını döndürür (main.ts uygular) */
+  applyLoc(sn: LocSnapshot | null): { placedPos: Record<string, [number, number]>; placedRot: Record<string, number>; placedRects: unknown[] } {
+    const fresh = new GameState()
+    const src = sn?.f ?? {}
+    for (const k of LOC_FIELDS) (this as any)[k] = (k in src) ? (src as any)[k] : (fresh as any)[k]
+    const copyRec = (dst: Record<string, number>, from: Record<string, number> | undefined, def: Record<string, number>) => {
+      for (const k of Object.keys(dst)) dst[k] = Number(from?.[k] ?? def[k]) || 0
+    }
+    copyRec(this.tanks as unknown as Record<string, number>, sn?.tanks, fresh.tanks as unknown as Record<string, number>)
+    copyRec(this.tankCounts as unknown as Record<string, number>, sn?.tankCounts, fresh.tankCounts as unknown as Record<string, number>)
+    copyRec(this.prices as unknown as Record<string, number>, sn?.prices, fresh.prices as unknown as Record<string, number>)
+    this.pendingCash = { ...(sn?.pendingCash ?? {}) }
+    this.ownedParcels = new Set(sn?.ownedParcels ?? fresh.ownedParcels)
+    this.pavedParcels = new Set(sn?.pavedParcels ?? fresh.pavedParcels)
+    this.autoPumps = new Set(sn?.autoPumps ?? [])
+    this.autoChargers = new Set(sn?.autoChargers ?? [])
+    this.brokenPumps = new Set(sn?.brokenPumps ?? [])
+    this.brokenChargers = new Set(sn?.brokenChargers ?? [])
+    return {
+      placedPos: sn?.placedPos ? JSON.parse(JSON.stringify(sn.placedPos)) : {},
+      placedRot: sn?.placedRot ? { ...sn.placedRot } : {},
+      placedRects: sn?.placedRects ? JSON.parse(JSON.stringify(sn.placedRects)) : [],
+    }
+  }
+  /** Şube değiştir: mevcut şube saklanır, hedef şube yüklenir. Para/gün/prestij ŞİRKETTE kalır. */
+  switchLoc(to: LocId, layout: { placedPos: Record<string, [number, number]>; placedRot: Record<string, number>; placedRects: unknown[] }) {
+    if (to === this.activeLoc || !this.unlockedLocs.includes(to)) return null
+    this.locSnapshots[this.activeLoc] = this.captureLoc(layout)
+    const next = this.applyLoc(this.locSnapshots[to] ?? null)
+    delete this.locSnapshots[to] // aktif şube snapshot'ta DURMAZ (çift sayım = anti-cheat 409)
+    this.activeLoc = to
+    return next
+  }
+  /** Şube açma bedeli/şartı temadan gelir (nakit + marka yıldızı) */
+  canUnlockLoc(id: LocId): { ok: boolean; cash: number; stars: number; reason: string } {
+    const th = THEMES[id]
+    if (!th) return { ok: false, cash: 0, stars: 0, reason: 'yok' }
+    if (this.unlockedLocs.includes(id)) return { ok: false, cash: th.unlock.cash, stars: th.unlock.stars, reason: 'acik' }
+    if (this.brandStars < th.unlock.stars) return { ok: false, cash: th.unlock.cash, stars: th.unlock.stars, reason: 'yildiz' }
+    if (this.money < th.unlock.cash) return { ok: false, cash: th.unlock.cash, stars: th.unlock.stars, reason: 'para' }
+    return { ok: true, cash: th.unlock.cash, stars: th.unlock.stars, reason: '' }
+  }
+  /** Şubeyi aç (bedeli kasadan düşer — büyük bir SINK) */
+  unlockLoc(id: LocId): boolean {
+    const c = this.canUnlockLoc(id)
+    if (!c.ok) return false
+    this.money -= c.cash
+    this.unlockedLocs.push(id)
+    return true
+  }
+  /** Aktif şubenin teması — ekonomik kısıtlar buradan okunur */
+  theme(): LocationTheme { return THEMES[this.activeLoc] ?? THEMES.kasaba }
 
   // ---- PRESTİJ: İSTASYONU DEVRET (lategame raporu §3b) ----
   /** Marka yıldızı geliri kalıcı çarpar (satış + kumbara). 4 yıldız = 2× gelir. */
@@ -1087,6 +1205,11 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
   out.loan = { ...s.loan, collateral: [...s.loan.collateral] } // kredi durumu kayda girsin
   out.contract = s.contract ? { ...s.contract } : null // aktif B2B sözleşmesi (ADDITIVE)
+  // ÇOKLU ŞUBE (ADDITIVE): aktif şube + açık şubeler + pasif şube anlık görüntüleri.
+  // Eski istemci bu alanları yok sayar; eski save'de alan yoksa tek şube (kasaba) davranışı.
+  out.activeLoc = s.activeLoc
+  out.unlockedLocs = [...s.unlockedLocs]
+  out.locSnapshots = JSON.parse(JSON.stringify(s.locSnapshots))
   out.partner = { ...s.partner } // banka ortaklığı durumu
   out.pendingCash = { ...s.pendingCash }
   out.ownedParcels = [...s.ownedParcels]
@@ -1172,6 +1295,24 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       missedDays: Math.max(0, Math.round(Number(ct.missedDays) || 0)),
     }
   } else s.contract = null
+  // ÇOKLU ŞUBE: bilinmeyen/bozuk id'ler atılır, aktif şube her zaman AÇIK listede olur
+  const VALID: LocId[] = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+  if (Array.isArray(data.unlockedLocs)) {
+    const list = (data.unlockedLocs as string[]).filter(x => VALID.includes(x as LocId)) as LocId[]
+    s.unlockedLocs = list.includes('kasaba') ? list : ['kasaba', ...list]
+  }
+  if (typeof data.activeLoc === 'string' && VALID.includes(data.activeLoc as LocId)) {
+    s.activeLoc = s.unlockedLocs.includes(data.activeLoc as LocId) ? data.activeLoc as LocId : 'kasaba'
+  }
+  if (data.locSnapshots && typeof data.locSnapshots === 'object' && !Array.isArray(data.locSnapshots)) {
+    const out: Partial<Record<LocId, LocSnapshot>> = {}
+    for (const [k, v] of Object.entries(data.locSnapshots as Record<string, LocSnapshot>)) {
+      if (VALID.includes(k as LocId) && v && typeof v === 'object') out[k as LocId] = v
+    }
+    s.locSnapshots = out
+  }
+  // güvenlik: aktif şube snapshot'ta DURAMAZ (çift sayım → sunucu servet hesabı şişer)
+  delete s.locSnapshots[s.activeLoc]
   // prestij alanları: bozuk save NaN/negatif getirirse tüm ekonomi NaN olur, '★'.repeat crash
   s.brandStars = Math.max(0, Math.min(40, Math.round(Number(s.brandStars) || 0)))
   s.handoverCount = Math.max(0, Math.min(40, Math.round(Number(s.handoverCount) || 0)))

@@ -10,7 +10,9 @@
     "assets": "node tools/gen-assets.mjs",
     "test:faz": "tsx tools/tests/faz-checks.mjs",
     "test:traffic": "tsx tools/tests/traffic-load.mjs",
-    "test:sim": "tsx tools/tests/sim-smoke.mjs"
+    "test:sim": "tsx tools/tests/sim-smoke.mjs",
+    "test:wealth": "tsx tools/tests/wealth-check.mjs",
+    "test:all": "npm run test:faz && npm run test:wealth && npm run test:sim && npm run test:traffic"
   },
   "dependencies": {
     "pg": "^8.22.0",

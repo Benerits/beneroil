@@ -302,6 +302,18 @@ function buildingValue(s) {
   if (Array.isArray(s.pavedParcels)) v += s.pavedParcels.length * 2000
   return v
 }
+/** ÇOKLU ŞUBE: pasif şubelerin ekipmanı da servete girer — yoksa şube değişimi
+ *  "servet çöktü/zıpladı" sanılıp regresyon/hile guard'ını tetikler (409). */
+function snapshotsValue(s) {
+  if (!s || typeof s.locSnapshots !== 'object' || !s.locSnapshots) return 0
+  let v = 0
+  for (const sn of Object.values(s.locSnapshots)) {
+    if (!sn || typeof sn !== 'object' || !sn.f || typeof sn.f !== 'object') continue
+    const flat = { ...sn.f, tankCounts: sn.tankCounts, ownedParcels: sn.ownedParcels, pavedParcels: sn.pavedParcels }
+    v += buildingValue(flat)
+  }
+  return v
+}
 function sanitizeSave(save) {
   if (save === null) return null
   if (typeof save !== 'object' || Array.isArray(save)) return undefined
@@ -394,6 +406,61 @@ function sanitizeSave(save) {
   if (Array.isArray(s.pavedParcels)) s.pavedParcels = s.pavedParcels.filter(validParcelKey)
   if (Array.isArray(s.ownedParcels) && s.ownedParcels.length > 18) s.ownedParcels = s.ownedParcels.slice(0, 18)
   if (Array.isArray(s.achievements) && s.achievements.length > 32) s.achievements = s.achievements.slice(0, 32)
+  // ---- ÇOKLU ŞUBE (additive) ----
+  const VALID_LOC = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+  if ('activeLoc' in s && !VALID_LOC.includes(s.activeLoc)) s.activeLoc = 'kasaba'
+  if ('unlockedLocs' in s) {
+    s.unlockedLocs = Array.isArray(s.unlockedLocs)
+      ? [...new Set(s.unlockedLocs.filter(x => VALID_LOC.includes(x)))].slice(0, 5)
+      : ['kasaba']
+    if (!s.unlockedLocs.includes('kasaba')) s.unlockedLocs.unshift('kasaba')
+    if (s.activeLoc && !s.unlockedLocs.includes(s.activeLoc)) s.activeLoc = 'kasaba'
+  }
+  if (s.locSnapshots && typeof s.locSnapshots === 'object' && !Array.isArray(s.locSnapshots)) {
+    const out = {}
+    for (const [k, sn] of Object.entries(s.locSnapshots)) {
+      if (!VALID_LOC.includes(k) || !sn || typeof sn !== 'object' || !sn.f) continue
+      // snapshot ekipmanına AKTİF şubeyle AYNI clamp'ler uygulanır (hile enjeksiyonu yok)
+      const f = sn.f
+      f.pumps = clamp(f.pumps, 1, 14, 1)
+      f.evChargers = clamp(f.evChargers, 0, 12, 0)
+      f.signLevel = clamp(f.signLevel, 0, 3, 0)
+      f.tankLevel = clamp(f.tankLevel, 0, 3, 0)
+      f.marketLevel = clamp(f.marketLevel, 0, 3, 0)
+      if ('market2Level' in f) f.market2Level = clamp(f.market2Level, 0, 3, 0)
+      f.toiletLevel = clamp(f.toiletLevel, 0, 2, 0)
+      f.gridLevel = clamp(f.gridLevel, 0, 2, 0)
+      f.batteryLevel = clamp(f.batteryLevel, 0, 3, 0)
+      f.battery = clamp(f.battery, 0, 600, 0)
+      f.uranium = clamp(f.uranium, 0, 100, 0)
+      for (const key of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount']) {
+        if (key in f) f[key] = clamp(f[key], 0, 200, 0)
+      }
+      if (sn.tankCounts && typeof sn.tankCounts === 'object') {
+        for (const fu of ['benzin', 'dizel', 'lpg']) sn.tankCounts[fu] = clamp(sn.tankCounts[fu], 1, 4, 1)
+      }
+      const TANK_CAP2 = [800, 1500, 3000, 5000]
+      if (sn.tanks && typeof sn.tanks === 'object') {
+        for (const fu of ['benzin', 'dizel', 'lpg']) {
+          const cnt = clamp(sn.tankCounts?.[fu], 1, 4, 1)
+          sn.tanks[fu] = clamp(sn.tanks[fu], 0, TANK_CAP2[f.tankLevel || 0] * cnt, 0)
+        }
+      }
+      if (sn.pendingCash && typeof sn.pendingCash === 'object') {
+        for (const key of Object.keys(sn.pendingCash)) sn.pendingCash[key] = clamp(sn.pendingCash[key], 0, 2500, 0)
+      }
+      for (const arr of ['ownedParcels', 'pavedParcels']) {
+        if (Array.isArray(sn[arr])) sn[arr] = sn[arr].filter(k2 => {
+          const pp = String(k2).split(','); if (pp.length !== 2) return false
+          const c2 = Number(pp[0]), r2 = Number(pp[1])
+          return Number.isInteger(c2) && Number.isInteger(r2) && c2 >= 0 && c2 < 6 && r2 >= 0 && r2 < 3
+        }).slice(0, 18)
+      }
+      if (Array.isArray(sn.placedRects) && sn.placedRects.length > 512) sn.placedRects = sn.placedRects.slice(0, 512)
+      out[k] = sn
+    }
+    s.locSnapshots = out
+  }
   return save
 }
 
@@ -720,8 +787,10 @@ async function handleApi(req, res, url) {
         if (typeof clean.s.handoverCount === 'number') clean.s.handoverCount = Math.min(clean.s.handoverCount, clean.s.brandStars)
         const starMult = 1 + 0.25 * stars
         const allowance = (firstSave ? (60_000 + gameDays * 40_000) : (100_000 + elapsed * 2500)) * starMult
-        const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
-        const bval = buildingValue(clean.s)
+        const prevWealth = (prevSave && prevSave.s)
+          ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) + snapshotsValue(prevSave.s)
+          : START_MONEY
+        const bval = buildingValue(clean.s) + snapshotsValue(clean.s)
         let money = Number(clean.s.money) || 0
         // REGRESYON GUARD'ı: İLERLEMİŞ kaydın üstüne "taze başlangıç" save'i YAZILAMAZ.
         // (Misafir Gün-1 state'i taşıyan istemci login sonrası bulut kaydını eziyordu —

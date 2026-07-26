@@ -259,9 +259,10 @@ export class World {
   private grid: THREE.GridHelper
   private batteryPos = new THREE.Vector2(-2.5, 8.2)
 
-  constructor(private statics: StaticLib | null) {
+  constructor(private statics: StaticLib | null, themeId: LocationTheme['id'] = 'kasaba') {
+    this.theme = activeTheme(themeId) // sahne kurulumu TEMADAN (şube değişince farklı zemin/gök)
     const s = this.scene
-    s.background = new THREE.Color(0xbfe0ee)
+    s.background = new THREE.Color(this.theme.sky.day)
 
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.1)
     s.add(this.hemi)

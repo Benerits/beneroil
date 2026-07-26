@@ -492,5 +492,71 @@ console.log('== 16) LocationTheme altyapısı (lategame §6.1) ==')
   check('yıldız eşikleri artan sırada', order.every((v, i) => i === 0 || v > order[i - 1]))
 }
 
+console.log('== 17) Çoklu şube veri katmanı (lategame §3a) ==')
+{
+  const layout = () => ({ placedPos: { market: [1, 2] }, placedRot: { market: 1 }, placedRects: [{ id: 'market', cx: 1, cy: 2, w: 6, d: 7 }] })
+  const s17 = new GameState()
+  check('varsayılan: tek şube (kasaba) aktif', s17.activeLoc === 'kasaba' && s17.unlockedLocs.length === 1)
+  check('şube teması kasaba (denge birebir)', s17.theme().id === 'kasaba')
+
+  // unlock şartları
+  let c = s17.canUnlockLoc('cevreyolu')
+  check('yıldızsız şube açılamaz', c.ok === false && c.reason === 'yildiz')
+  s17.brandStars = 2
+  c = s17.canUnlockLoc('cevreyolu')
+  check('yıldız var ama para yok → kapalı', c.ok === false && c.reason === 'para')
+  s17.money = 600_000
+  check('yıldız + para → açılabilir', s17.canUnlockLoc('cevreyolu').ok === true)
+  const before = s17.money
+  check('şube açıldı', s17.unlockLoc('cevreyolu') === true)
+  check('açma bedeli kasadan düştü (BÜYÜK SINK)', s17.money === before - 500_000)
+  check('şube listesine eklendi', s17.unlockedLocs.includes('cevreyolu'))
+  check('aynı şube ikinci kez açılamaz', s17.unlockLoc('cevreyolu') === false)
+
+  // şube geçişi: ekipman şubede, PARA şirkette kalır
+  s17.pumps = 6; s17.marketLevel = 3; s17.hasSMR = true; s17.tanks.benzin = 900; s17.tankLevel = 2
+  s17.ownedParcels = new Set(['0,0', '1,1']); s17.money = 123_456; s17.day = 77; s17.brandStars = 2
+  const lay = layout()
+  const next = s17.switchLoc('cevreyolu', lay)
+  check('geçiş yapıldı', s17.activeLoc === 'cevreyolu' && !!next)
+  check('YENİ şube taze ekipmanla başlar', s17.pumps === 1 && s17.marketLevel === 0 && s17.hasSMR === false)
+  check('yeni şubede yerleşim boş', Object.keys(next.placedPos).length === 0 && next.placedRects.length === 0)
+  check('PARA ŞİRKETTE kaldı (ortak kasa)', s17.money === 123_456)
+  check('gün/prestij şirkette kaldı', s17.day === 77 && s17.brandStars === 2)
+  check('şube teması değişti (kısıtlar farklı)', s17.theme().id === 'cevreyolu' && s17.theme().econ.priceElasticity !== 1)
+
+  // geri dön: eski ekipman AYNEN gelir
+  const back = s17.switchLoc('kasaba', { placedPos: {}, placedRot: {}, placedRects: [] })
+  check('kasabaya dönüldü', s17.activeLoc === 'kasaba')
+  check('eski ekipman geri geldi', s17.pumps === 6 && s17.marketLevel === 3 && s17.hasSMR === true && s17.tankLevel === 2)
+  check('eski tank stoğu geri geldi', s17.tanks.benzin === 900)
+  check('eski parseller geri geldi', s17.ownedParcels.has('1,1'))
+  check('eski YERLEŞİM geri geldi', back.placedRects.length === 1 && back.placedPos.market[0] === 1)
+
+  // save round-trip
+  const ser = serializeState(s17)
+  const d17 = new GameState(); hydrateState(d17, ser)
+  check('şube alanları save round-trip', d17.activeLoc === 'kasaba' && d17.unlockedLocs.includes('cevreyolu')
+    && !!d17.locSnapshots.cevreyolu)
+  // bozuk/kurcalanmış şube verisi
+  const bad = new GameState()
+  hydrateState(bad, { activeLoc: 'atlantis', unlockedLocs: ['atlantis', 'otoyol'], locSnapshots: { atlantis: { f: {} } } })
+  check('bilinmeyen şube id atılır', bad.activeLoc === 'kasaba' && !bad.unlockedLocs.includes('atlantis'))
+  check('kasaba her zaman açık listede', bad.unlockedLocs.includes('kasaba'))
+  check('bilinmeyen snapshot atılır', !('atlantis' in bad.locSnapshots))
+  const bad2 = new GameState()
+  hydrateState(bad2, { activeLoc: 'otoyol', unlockedLocs: ['kasaba'] }) // açık olmayan şube aktif olamaz
+  check('açık olmayan şube aktif olamaz', bad2.activeLoc === 'kasaba')
+
+  // şube kısıtları gerçekten farklı davranıyor mu (rapor §6.0)
+  const k = new GameState(); k.signLevel = 3
+  const kc = k.entryChance()
+  k.unlockedLocs.push('otoyol'); k.switchLoc('otoyol', { placedPos: {}, placedRot: {}, placedRects: [] })
+  k.signLevel = 3
+  check('otoyolda TABELA daha etkili (aynı tabela, farklı akış)', Math.abs(k.entryChance() - kc) > 0.05)
+  for (const f of ['benzin', 'dizel', 'lpg']) k.prices[f] = priceBounds(f)[1]
+  check('otoyolda fiyat esnekliği DÜŞÜK (tavan fiyatta talep yüksek kalır)', k.priceDemandFactor() >= 0.7)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)
