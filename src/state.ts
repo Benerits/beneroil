@@ -98,7 +98,11 @@ export const TANK_CAPACITY = [800, 1500, 3000, 5000]
 export const ORDER_STEP = 200
 export const MAX_PUMPS = 14
 export const MAX_EV = 12
-export const BATTERY_CAP = [0, 100, 250, 600] // kWh
+// Batarya deposu kademeleri. Sv.3 (600 kWh) geç oyunda yetmiyordu: 12 şarj ünitesi
+// dolu kapasiteyi dakikalar içinde boşaltıyor, güneş/reaktör üretimi biriktiremiyordu.
+// Üç kademe eklendi; artış hızlanıyor ama fiyat daha hızlı artıyor (kWh başına maliyet
+// her kademede yükselir → sınırsız depo sömürüsü yok).
+export const BATTERY_CAP = [0, 100, 250, 600, 1200, 2400, 4500] // kWh
 export const EV_PRICE_PER_KWH = 8
 export const GRID_COST_PER_KWH = 3.5 // şebekeden çekilen her kWh faturalanır
 export const DIESEL_GEN_FUEL_PER_S = 0.25 // jeneratör çalışırken tanktaki mazot tüketimi (L/sn)
@@ -132,7 +136,7 @@ const MARKET_COSTS = [7000, 12000, 20000] // 3 seviye: kur → Sv.2 → Sv.3 (ye
 const TOILET_COSTS = [2500, 5000]
 const LAND_COST = 6000
 const GRID_COSTS = [8000, 15000]
-const BATTERY_COSTS = [5000, 9000, 16000]
+const BATTERY_COSTS = [5000, 9000, 16000, 34000, 72000, 155000]
 const EV_COSTS = [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000]
 const SOLAR_COST = 9000
 const DIESELGEN_COST = 4000
@@ -1615,10 +1619,14 @@ export function getShopItems(s: GameState): ShopRow[] {
     s.gridLevel === 0 ? t('temel') : t('+%30 üretim'),
     s.gridLevel === 0 ? t('Şarj ve enerji yapılarının önünü açar') : t('Tüm üretimi güçlendirir, yeni yapılar açılır'),
     s.gridLevel >= 2 ? null : GRID_COSTS[s.gridLevel], null)
-  row('battery', 'i-batt', t('Batarya Deposu Sv.{0}', Math.min(s.batteryLevel + 1, 3)),
-    `${BATTERY_CAP[Math.min(s.batteryLevel + 1, 3)]} kWh`,
-    t('Üretilen elektriği biriktirir, araçlar buradan anında şarj olur'),
-    s.batteryLevel >= 3 ? null : BATTERY_COSTS[s.batteryLevel],
+  const battMax = BATTERY_CAP.length - 1
+  const battNext = Math.min(s.batteryLevel + 1, battMax)
+  row('battery', 'i-batt', t('Batarya Deposu Sv.{0}', battNext),
+    `${BATTERY_CAP[battNext].toLocaleString('tr-TR')} kWh`,
+    s.batteryLevel >= 3
+      ? t('Yüksek kapasite: çok sayıda şarj ünitesini aynı anda besler')
+      : t('Üretilen elektriği biriktirir, araçlar buradan anında şarj olur'),
+    s.batteryLevel >= battMax ? null : BATTERY_COSTS[s.batteryLevel],
     s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
   row('evcharger', 'i-charger', t('DC Şarj Ünitesi #{0}', Math.min(s.evChargers + 1, MAX_EV)), t('+1 ünite'),
     t('Elektrikli araç müşterileri gelmeye başlar; ünite arttıkça EV trafiği artar'),

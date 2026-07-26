@@ -276,7 +276,7 @@ const COST = {
   pump: [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000, 40000, 50000, 62000, 76000, 92000, 110000],
   sign: [1500, 4000, 9000], tank: [3000, 7000, 15000], tankAdd: [0, 6000, 12000, 20000],
   market: [7000, 12000, 20000], toilet: [2500, 5000], grid: [8000, 15000],
-  battery: [5000, 9000, 16000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000],
+  battery: [5000, 9000, 16000, 34000, 72000, 155000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000],
 }
 const MANAGER_COSTS = [18000, 34000, 60000]      // istemci state.ts ile BİREBİR
 const DECOR_COSTS = [15000, 40000, 90000]
@@ -439,8 +439,8 @@ function sanitizeSave(save) {
   if ('opexStart' in s) s.opexStart = clamp(s.opexStart, 0, 100000, 0) // OPEX rampa başlangıç günü (additive)
   s.toiletLevel = clamp(s.toiletLevel, 0, 2, 0)
   s.gridLevel = clamp(s.gridLevel, 0, 2, 0)
-  s.batteryLevel = clamp(s.batteryLevel, 0, 3, 0)
-  s.battery = clamp(s.battery, 0, 600, 0)
+  s.batteryLevel = clamp(s.batteryLevel, 0, 6, 0)   // state.ts BATTERY_CAP = 7 kademe
+  s.battery = clamp(s.battery, 0, 4500, 0)          // en yüksek kademe kapasitesi
   s.uranium = clamp(s.uranium, 0, 100, 0)
   s.loginStreak = clamp(s.loginStreak, 0, 3650, 0)
   s.dailyServed = clamp(s.dailyServed, 0, 10000, 0)
@@ -514,8 +514,8 @@ function sanitizeSave(save) {
       if ('wear' in f) f.wear = clamp(f.wear, 0, 1, 0)
       f.toiletLevel = clamp(f.toiletLevel, 0, 2, 0)
       f.gridLevel = clamp(f.gridLevel, 0, 2, 0)
-      f.batteryLevel = clamp(f.batteryLevel, 0, 3, 0)
-      f.battery = clamp(f.battery, 0, 600, 0)
+      f.batteryLevel = clamp(f.batteryLevel, 0, 6, 0)
+      f.battery = clamp(f.battery, 0, 4500, 0)
       f.uranium = clamp(f.uranium, 0, 100, 0)
       for (const key of ['parkingCount', 'solarCount', 'selfWashCount', 'airWaterCount', 'lampCount']) {
         if (key in f) f[key] = clamp(f[key], 0, 200, 0)

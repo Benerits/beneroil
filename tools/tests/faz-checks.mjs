@@ -1124,5 +1124,29 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
   check('far servis şeridi karşı istasyona geçiş şeridinden YAKIN', svc.far > LANE_FAR)
 }
 
+// ---- §29: BATARYA KADEMELERİ (600 kWh yetmiyordu) ----
+{
+  console.log('\n== 29) Batarya: geç oyun kapasitesi ==')
+  const { BATTERY_CAP } = await import('../../src/state.ts')
+  const g = new GameState(); g.money = 1e9; g.gridLevel = 2
+  check(`eski tavan 600 kWh AŞILDI (yeni tavan ${BATTERY_CAP.at(-1)} kWh)`, BATTERY_CAP.at(-1) > 600)
+  check('kapasite her kademede ARTIYOR', BATTERY_CAP.every((v, i) => i === 0 || v > BATTERY_CAP[i - 1]))
+  // satın alma zinciri sonuna kadar çalışmalı
+  let lvl = 0
+  while (buyItem(g, 'battery')) lvl++
+  check(`tüm kademeler satın alınabiliyor (Sv.${lvl})`, lvl === BATTERY_CAP.length - 1)
+  check(`son kademede kapasite ${BATTERY_CAP.at(-1)} kWh`, g.batteryCapacity === BATTERY_CAP.at(-1))
+  check('son kademeden sonra satın alınamıyor', !buyItem(g, 'battery'))
+  // elektrik altyapısı olmadan alınamamalı (kilit korunuyor mu)
+  const h = new GameState(); h.money = 1e9
+  check('elektrik altyapısı yokken batarya KİLİTLİ', !buyItem(h, 'battery'))
+  // depo dolabilmeli (tick kapasiteyi aşmamalı)
+  const f = new GameState(); f.money = 1e9; f.gridLevel = 2
+  while (buyItem(f, 'battery')) { /* sonuna kadar */ }
+  f.solarCount = 9; f.battery = f.batteryCapacity
+  f.tick(1)
+  check('depo kapasiteyi AŞMIYOR', f.battery <= f.batteryCapacity + 0.001)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)

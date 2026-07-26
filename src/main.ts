@@ -1730,7 +1730,9 @@ ui.onCleanWindows = car => {
 }
 
 /** batarya deposu seviyesine göre araca akış hızı (kWh/sn) */
-const DISCHARGE_RATE = [0, 15, 25, 40]
+// Depodan araca akış hızı (kWh/sn) — kademeyle büyür. Yoksa 4500 kWh'lik depo
+// 40 kWh/sn ile boşalır ve büyük yatırım hissedilmez.
+const DISCHARGE_RATE = [0, 15, 25, 40, 60, 85, 120]
 
 function startCharging(car: Car, auto = false) {
   if (car.phase !== 'atPump' || car.charging || car.squatting) return

@@ -112,5 +112,38 @@ console.log('\n-- Marina istemci/sunucu senkronu --')
   check('dönünce tesisler AYNEN duruyor', m.marinaFacs.length === 6 && m.berths.finger12 === 8 && m.winterSlots === 24)
 }
 
+// ---- BATARYA: istemci/sunucu maliyet senkronu (ayrışma = 409) ----
+console.log('\n-- Batarya kademeleri --')
+{
+  const { BATTERY_CAP } = await import('../../src/state.ts')
+  // sunucu COST tablosunu kaynaktan çıkar
+  const srvCost = JSON.parse('[' + (src.match(/battery:\s*\[([^\]]+)\]/) || [])[1] + ']')
+  const cliCost = JSON.parse('[' + (fs.readFileSync(new URL('../../src/state.ts', import.meta.url), 'utf8')
+    .match(/const BATTERY_COSTS = \[([^\]]+)\]/) || [])[1] + ']')
+  check(`istemci ve sunucu batarya maliyetleri AYNI (${cliCost.length} kademe)`,
+    JSON.stringify(cliCost) === JSON.stringify(srvCost), `istemci ${cliCost} · sunucu ${srvCost}`)
+  check('her kademenin bir kapasitesi var', BATTERY_CAP.length === cliCost.length + 1)
+  // sunucu clamp'i en yüksek kademeyi ve kapasiteyi KABUL etmeli
+  const maxLvl = cliCost.length
+  const lvlClamp = +(src.match(/s\.batteryLevel = clamp\(s\.batteryLevel, 0, (\d+)/) || [])[1]
+  const capClamp = +(src.match(/s\.battery = clamp\(s\.battery, 0, (\d+)/) || [])[1]
+  check(`sunucu clamp'i en yüksek kademeyi kesmiyor (${lvlClamp} ≥ ${maxLvl})`, lvlClamp >= maxLvl)
+  check(`sunucu clamp'i en yüksek kapasiteyi kesmiyor (${capClamp} ≥ ${BATTERY_CAP[maxLvl]})`,
+    capClamp >= BATTERY_CAP[maxLvl])
+  // şube anlık görüntüsünde de aynı sınırlar olmalı (yoksa şube değişince depo kırpılır)
+  check('şube anlık görüntüsünde de aynı clamp',
+    /f\.batteryLevel = clamp\(f\.batteryLevel, 0, 6/.test(src) && /f\.battery = clamp\(f\.battery, 0, 4500/.test(src))
+  // kWh başına maliyet ARTMALI — yoksa sonsuz depo sömürüsü olur
+  const perKwh = cliCost.map((c, i) => c / (BATTERY_CAP[i + 1] - BATTERY_CAP[i]))
+  check(`en üst kademe kWh başına EN PAHALI (${perKwh[0].toFixed(0)} → ${perKwh.at(-1).toFixed(0)} ₺/kWh)`,
+    perKwh.at(-1) > perKwh[0])
+  // ekipman değeri: istemci ve sunucu aynı serveti görmeli
+  const g = new GameState(); g.money = 1e9; g.gridLevel = 2
+  g.batteryLevel = maxLvl
+  const ser = serializeState(g)
+  const cliVal = g.equipmentValue()
+  check('en yüksek batarya SUNUCU servetine de giriyor', buildingValue(ser) > 0 && cliVal > 0)
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)
