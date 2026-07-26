@@ -712,8 +712,12 @@ async function handleApi(req, res, url) {
         //  • yıldız, önceki save'in yıldızından en fazla +1 olabilir (devir tek tek yapılır)
         const prevStars = Math.max(0, Math.min(40, Number(prevSave?.s?.brandStars) || 0))
         let stars = Math.max(0, Math.min(40, Number(clean.s.brandStars) || 0))
-        if (firstSave) stars = 0
+        // KAYDEDİLEN DEĞER de düzeltilir — yalnız allowance'ı düzeltmek yetmiyordu: ilk save
+        // 40 yıldızı SQL'e yazınca sonraki save'lerde prevStars=40 olup doğrulama anlamsızlaşıyordu.
+        if (firstSave) { stars = 0; clean.s.brandStars = 0 }
         else if (stars > prevStars + 1) { stars = prevStars; clean.s.brandStars = prevStars }
+        // handoverCount de yıldızla tutarlı olmalı (kurcalanmış save ile eşik atlanmasın)
+        if (typeof clean.s.handoverCount === 'number') clean.s.handoverCount = Math.min(clean.s.handoverCount, clean.s.brandStars)
         const starMult = 1 + 0.25 * stars
         const allowance = (firstSave ? (60_000 + gameDays * 40_000) : (100_000 + elapsed * 2500)) * starMult
         const prevWealth = (prevSave && prevSave.s) ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) : START_MONEY
