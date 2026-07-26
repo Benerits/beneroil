@@ -854,6 +854,42 @@ export class CarManager {
     return false
   }
 
+  // ---- 3.3 Uniform grid (çarpışma taraması O(n²) → O(n)) ----
+  // Hücre boyu, tarama menzilinden (ileri 3.6) büyük seçilir ki 3×3 komşuluk yetsin.
+  private static readonly CELL = 4.0
+  private carGrid = new Map<number, Car[]>()
+  private static cellKey(x: number, y: number): number {
+    // dünya ±48 birim → hücre indisi ±12; 512 taban çakışmasız tamsayı anahtar verir
+    const gx = Math.floor(x / CarManager.CELL) + 256
+    const gy = Math.floor(y / CarManager.CELL) + 256
+    return gx * 512 + gy
+  }
+  private rebuildCarGrid() {
+    for (const list of this.carGrid.values()) list.length = 0 // dizileri yeniden kullan (çöp üretme)
+    for (const c of this.cars) {
+      if (c.phase === 'gone') continue
+      const k = CarManager.cellKey(c.group.position.x, c.group.position.y)
+      let list = this.carGrid.get(k)
+      if (!list) { list = []; this.carGrid.set(k, list) }
+      list.push(c)
+    }
+  }
+  private neighborBuf: Car[] = []
+  /** (x,y) çevresindeki 3×3 hücrede bulunan araçlar — dönen dizi YENİDEN KULLANILIR
+   *  (çağıran, sonucu saklamadan aynı karede tüketmeli) */
+  private neighbors(x: number, y: number): Car[] {
+    const out = this.neighborBuf
+    out.length = 0
+    const gx = Math.floor(x / CarManager.CELL), gy = Math.floor(y / CarManager.CELL)
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        const list = this.carGrid.get((gx + i + 256) * 512 + (gy + j + 256))
+        if (list) for (const c of list) out.push(c)
+      }
+    }
+    return out
+  }
+
   update(dt: number) {
     // ---- Rezervasyon grafiği: geometri değişince (kapı taşındı / karşı istasyon açıldı)
     // bölgeler geom()'dan YENİDEN TÜRETİLİR. Aynalama elle yazılmadığı için B1-B6 sınıfı
@@ -901,26 +937,34 @@ export class CarManager {
     // Önümdeki koridorda (2.8 birim ileri, 1.25 yana) araç varsa dururum.
     const blockers = new Map<Car, Car>()
     for (const c of this.cars) { c.hold = false; c.speedScale = 1 }
+    // 3.3 UNIFORM GRID: eskiden her araç HER araca bakıyordu (O(n²)) ve iç döngüde kare
+    // başına yüzlerce THREE.Vector3 ayrılıyordu → GC baskısı, mobilde ısınma (#113/#117/#511).
+    // Artık araçlar ızgaraya yazılır, yalnız 3×3 komşu hücre taranır ve vektör matematiği
+    // ayırmasız skalerle yapılır. Tek davranış farkı: engelleyici olarak listede ilk denk
+    // gelen değil EN YAKIN araç seçilir — fiziksel doğrusu ve iterasyon sırasından bağımsız.
+    this.rebuildCarGrid()
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked' || c.phase === 'waiting') continue
       const dir = c.headingDir()
       if (!dir) continue
-      for (const o of this.cars) {
+      const cp = c.group.position
+      let nearest: Car | null = null, nearestF = Infinity
+      for (const o of this.neighbors(cp.x, cp.y)) {
         if (o === c || o.phase === 'gone') continue
         // otopark içi: park etmiş komşu araçlar engel sayılmaz (dar aralıkta kilitlenme olmasın)
         if (o.phase === 'parked' && (c.phase === 'toPark' || c.phase === 'leaving')) continue
-        const rel = new THREE.Vector3().subVectors(o.group.position, c.group.position)
-        rel.z = 0
-        const forward = rel.dot(dir)
+        const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
+        const forward = dx * dir.x + dy * dir.y
         if (forward < 0.4 || forward > 3.6) continue
-        const lateral = rel.addScaledVector(dir, -forward).length()
-        if (lateral < 1.25) {
+        const lx = dx - dir.x * forward, ly = dy - dir.y * forward
+        if (lx * lx + ly * ly < 1.25 * 1.25) {
           // iki kademe: 1.5 birime kadar orantılı YAVAŞLA, altında DUR.
           // (eski binary dur/kalk şok dalgaları yaratıyordu — kuyruk artık akordeon gibi esner)
-          if (forward < 1.5) { c.hold = true; blockers.set(c, o); break }
-          c.speedScale = Math.min(c.speedScale, 0.3 + 0.7 * ((forward - 1.5) / 2.1))
+          if (forward < 1.5) { if (forward < nearestF) { nearestF = forward; nearest = o } }
+          else c.speedScale = Math.min(c.speedScale, 0.3 + 0.7 * ((forward - 1.5) / 2.1))
         }
       }
+      if (nearest) { c.hold = true; blockers.set(c, nearest) }
       if (!c.hold) {
         for (const ob of this.opts.extraObstacles()) {
           const rel = new THREE.Vector3().subVectors(ob, c.group.position)

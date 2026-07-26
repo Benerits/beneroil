@@ -1,18 +1,23 @@
 /**
- * Basit i18n: TR anahtar → EN değer. Varsayılan TR; EN eksikse TR'ye düşer (asla boş kalmaz).
+ * Basit i18n: TR anahtar → EN/FR değer. Varsayılan TR; çeviri eksikse TR'ye düşer (asla boş kalmaz).
  * Dil: localStorage > tarayıcı dili. Değişince reload (tüm metinler tazelenir).
  */
 const LANG_KEY = 'beneloil-lang'
 
-function detect(): 'tr' | 'en' {
+export type Lang = 'tr' | 'en' | 'fr'
+
+function detect(): Lang {
   const saved = localStorage.getItem(LANG_KEY)
-  if (saved === 'tr' || saved === 'en') return saved
-  return (navigator.language || '').toLowerCase().startsWith('tr') ? 'tr' : 'en'
+  if (saved === 'tr' || saved === 'en' || saved === 'fr') return saved
+  const nav = (navigator.language || '').toLowerCase()
+  if (nav.startsWith('tr')) return 'tr'
+  if (nav.startsWith('fr')) return 'fr'
+  return 'en'
 }
 
-export let lang: 'tr' | 'en' = detect()
+export let lang: Lang = detect()
 
-export function setLang(l: 'tr' | 'en') {
+export function setLang(l: Lang) {
   localStorage.setItem(LANG_KEY, l)
   location.reload()
 }
@@ -750,21 +755,1032 @@ const EN: Record<string, string> = {
     'Corporate contracts, brand handover and manager automation added.',
 }
 
+/** TR metin → FR karşılığı. Anahtar seti EN ile birebir aynı (bkz. tools/i18n diff). */
+const FR: Record<string, string> = {
+  // --- Giriş ekranı ---
+  'BENELOIL': 'BENELOIL',
+  'İstasyonunu kur, imparatorluğunu büyüt. İlerlemen hesabında güvende.':
+    'Monte ta station, bâtis ton empire. Ta progression est liée à ton compte.',
+  'oyuncu istasyonunu kurdu': 'joueurs ont monté leur station',
+  'şu an oyunda': 'en jeu maintenant',
+  'e-posta': 'e-mail',
+  'şifre': 'mot de passe',
+  'Giriş Yap': 'Se connecter',
+  'Kayıt Ol': 'S’inscrire',
+  'Kayıt olarak': 'En t’inscrivant, tu acceptes nos',
+  'Kullanım Şartları': 'Conditions d’utilisation',
+  've': 'et',
+  "Gizlilik Politikası'nı kabul etmiş olursun.": 'la Politique de confidentialité.',
+  'Sunucuya ulaşılamadı.': 'Impossible de joindre le serveur.',
+  'veya': 'ou',
+  'Apple ile devam et': 'Continuer avec Apple',
+  'Google ile devam et': 'Continuer avec Google',
+  'Giriş başarısız.': 'Échec de la connexion.',
+  'Misafir olarak oyna': 'Jouer en invité',
+  'Misafir olarak devam et': 'Continuer en invité',
+  'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
+    'Tu as atteint le Jour {0} ! Inscris-toi (ou continue avec Google/Apple) pour poursuivre — ta progression passe dans le cloud, avec un bonus de ₺2.500 et des récompenses de série quotidienne.',
+  '🎁 Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
+    '🎁 Bonus d’inscription : +₺2.500 dans ta caisse — bienvenue, patron !',
+  '🔒 Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!':
+    '🔒 Le bonus de connexion quotidien (+₺500, jusqu’à ₺2.000 avec la série) est réservé aux joueurs inscrits — inscris-toi et lance ta série !',
+  '💾 {0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.':
+    '💾 {0} jours de progression uniquement sur cet appareil ! Inscris-toi : sauvegarde cloud + bonus ₺2.500 + série quotidienne.',
+  '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
+    '🎉 Tu as gagné tes premiers ₺10.000 ! Cette progression n’existe que sur cet appareil — inscris-toi : sauvegarde cloud, bonus de ₺2.500 et série quotidienne.',
+  'İPTAL': 'ANNULER',
+  'Sıralama & Sezon': 'Classement & Saison',
+  'Sezon': 'Saison',
+  'Sezon trafiği': 'Trafic de la saison',
+  'Sıralama yükleniyor…': 'Chargement du classement…',
+  'Sıralama alınamadı.': 'Impossible de charger le classement.',
+  'Yaz': 'Été',
+  'Sonbahar': 'Automne',
+  'Kış': 'Hiver',
+  'İlkbahar': 'Printemps',
+  'Sigorta Yaptır': 'Souscrire une assurance',
+  'Sigorta: AKTİF': 'Assurance : ACTIVE',
+  'hasar yarı': 'dégâts divisés par 2',
+  'günlük prim': 'prime journalière',
+  'Arıza, patlama ve ceza maliyetleri YARIYA iner. Günlük primi varlığınla ölçeklenir.':
+    'Les coûts de panne, d’explosion et d’amende sont DIVISÉS PAR DEUX. La prime journalière suit la valeur de ton patrimoine.',
+  'Peyzaj & Dekorasyon': 'Paysage & Décoration',
+  'Dekorasyon Sv.{0}': 'Déco niv.{0}',
+  '+{0} itibar': '+{0} réputation',
+  'Çiçeklik, aydınlatma, marka renkleri — gelir etkisi yok ama itibar ve görüntü kazandırır.':
+    'Jardinières, éclairage, couleurs de marque — aucun effet sur les revenus, mais la réputation et le look grimpent.',
+  'Ekipman Yenileme (yıpranma %{0})': 'Rénovation du matériel (usure {0} %)',
+  'verim +%{0}': '+{0} % de rendement',
+  'Yıpranan ünitelerin verimi düşer. Yenileme yıpranmayı sıfırlar.':
+    'Le matériel usé perd en rendement. La rénovation remet l’usure à zéro.',
+  '📜 İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)': '📜 Licence d’exploitation renouvelée : -₺{0} (valable 30 jours)',
+  '📜 Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!':
+    '📜 Renouvellement impossible (₺{0} requis) — sanction de l’inspection : réputation en baisse !',
+  'Müdür Tut': 'Embaucher un gérant',
+  'Müdür Sv.{0}': 'Gérant niv.{0}',
+  'kumbara toplar': 'vide les tirelires',
+  '+ panel temizliği': '+ nettoyage des panneaux',
+  '+ arıza tamiri': '+ réparation des pannes',
+  'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. Yovmiyesi vardır.':
+    'Le gérant fait une ronde toutes les 45 s : niv.1 vide toutes les tirelires, niv.2 nettoie les panneaux solaires, niv.3 répare les pannes. Il touche un salaire journalier.',
+  'Önce gelir getiren tesisler kur': 'Construis d’abord des installations rentables',
+  'Personel Eğitimi Sv.{0}': 'Formation du personnel niv.{0}',
+  '+%12 hız, +bahşiş': '+12 % de vitesse, +pourboires',
+  'Pompacı/şarjcı kademesi: dolum hızı, bahşiş şansı ve hata direnci artar — ama yovmiye de artar.':
+    'Niveaux des pompistes/agents de charge : vitesse de service, chance de pourboire et résistance aux erreurs augmentent — mais les salaires aussi.',
+  'Önce pompacı/şarjcı tut': 'Embauche d’abord un pompiste',
+  'Müdür turu': 'Ronde du gérant',
+  'kumbaralar +₺{0}': 'tirelires +₺{0}',
+  'paneller temizlendi': 'panneaux nettoyés',
+  '{0} arıza tamir edildi': '{0} pannes réparées',
+  'Karşı Tuvalet': 'Toilettes d’en face',
+  'Karşı Tuvalet Sv.2': 'Toilettes d’en face niv.2',
+  'Karşı Tuvalet Sv.{0}': 'Toilettes d’en face niv.{0}',
+  'Karşı Oto Yıkama': 'Lavage auto d’en face',
+  'Karşı Yağ Değişimi': 'Vidange d’en face',
+  'Karşı Kahveci': 'Café d’en face',
+  'Karşı Restoran': 'Restaurant d’en face',
+  'Önce bu yakadaki tesisi kur': 'Construis d’abord l’installation de ce côté',
+  'Yol karşısı istasyon için tuvalet — karşı yakanın müşterileri kullanır.':
+    'Toilettes pour la station d’en face — utilisées par les clients de l’autre côté.',
+  'Karşı yakadaki müşteriler araç yıkatır.': 'Les clients d’en face y font laver leur voiture.',
+  'Karşı yakada yağ değişimi hizmeti.': 'Service de vidange de l’autre côté de la route.',
+  'Karşı yakadaki yolcular kahve molası verir.': 'Les voyageurs d’en face font une pause café.',
+  'Karşı yakada yemek molası.': 'Pause repas de l’autre côté de la route.',
+  'Yol karşısı istasyonun tuvaleti — karşı yakanın müşterileri kullanır.':
+    'Les toilettes de la station d’en face — utilisées par les clients de l’autre côté.',
+  'IŞIK': 'FEU',
+  'KIRMIZI {0}s · akın!': 'ROUGE {0}s · affluence !',
+  'yeşil {0}s': 'vert {0}s',
+  'Yaya müşteri': 'Client à pied',
+  '🚶 Yaya müşteri alışveriş yaptı (yol karşısından geldi)': '🚶 Un client à pied a fait ses courses (venu d’en face)',
+  'Şubeler': 'Succursales',
+  'AKTİF': 'ACTIVE',
+  'Şubeye Git': 'Aller à la succursale',
+  'Şube Aç': 'Ouvrir une succursale',
+  'Kilitli': 'Verrouillé',
+  '{0} marka yıldızı gerekir': 'Nécessite {0} étoiles de marque',
+  'Şube açma şartları sağlanmıyor.': 'Les conditions d’ouverture ne sont pas réunies.',
+  '🏗️ {0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.':
+    '🏗️ Succursale {0} ouverte ! Bascule dessus depuis la section Succursales.',
+  'Şube değiştirilemedi.': 'Impossible de changer de succursale.',
+  '📍 {0} şubesine geçildi — sahne yükleniyor…': '📍 Bascule vers {0} — chargement de la scène…',
+  'Marka & Devir': 'Marque & Cession',
+  'Marka yıldızı': 'Étoiles de marque',
+  'Gelir çarpanı': 'Multiplicateur de revenus',
+  'Devredilen istasyon': 'Stations cédées',
+  'Devredersen: kasana <b>+₺{0}</b> eklenir, <b>{1}. yıldız</b> kazanırsın → gelir çarpanı ×{2} → <b>×{3}</b>. Ekipman satılır (bedelin %60’ı), ARSALARIN VE BETONUN KALIR.':
+    'Si tu cèdes : <b>+₺{0}</b> arrivent dans ta caisse et tu gagnes l’<b>étoile n°{1}</b> → multiplicateur de revenus ×{2} → <b>×{3}</b>. Le matériel est vendu (60 % de sa valeur), TES TERRAINS ET TON BÉTON RESTENT.',
+  'Devir, ₺{0} kurulu ekipmanla açılır (şu an ₺{1}). Her devirde eşik ikiye katlanır.':
+    'La cession se débloque à ₺{0} de matériel installé (actuellement ₺{1}). Le seuil double à chaque cession.',
+  'İstasyonu Devret': 'Céder la station',
+  'EMİN MİSİN? Devretmek için tekrar bas': 'TU ES SÛR ? Appuie encore pour céder',
+  'Devir için önce kredi/ortaklık kapatılmalı.': 'Solde ton crédit/partenariat avant de céder.',
+  'Devir, ₺250.000 üzeri kurulu ekipmanla açılır (şu an ₺{0}).':
+    'La cession se débloque au-delà de ₺250.000 de matériel installé (actuellement ₺{0}).',
+  'Devir şartları sağlanmıyor.': 'Les conditions de cession ne sont pas réunies.',
+  '🤝 İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})':
+    '🤝 Station cédée ! Caisse : ₺{0} · tu as gagné l’Étoile de marque n°{1} (revenus ×{2})',
+  'Kurumsal Sözleşmeler': 'Contrats entreprises',
+  'Premium yakıt müşterisi': 'Client carburant premium',
+  'Filo aracı': 'Véhicule de flotte',
+  'Servis / otobüs': 'Navette / autocar',
+  '⭐ Premium müşteri primi: +₺{0}': '⭐ Prime client premium : +₺{0}',
+  'Kargo Filosu': 'Flotte de fret',
+  'Belediye Otobüs Filosu': 'Flotte de bus municipaux',
+  'Taksi Durağı': 'Station de taxis',
+  'İnşaat Şantiyesi': 'Chantier de construction',
+  'Tarım Kooperatifi': 'Coopérative agricole',
+  'Günlük taahhüt': 'Engagement journalier',
+  'Sözleşme fiyatı': 'Prix du contrat',
+  'Kalan gün': 'Jours restants',
+  'Kaçırılan gün': 'Jours manqués',
+  'Tamamlama primi': 'Prime de fin de contrat',
+  'Eksik gün cezası': 'Pénalité de manquement',
+  'İmzala': 'Signer',
+  '{0} gün · günde {1}L · ₺{2}/L · prim ₺{3} · ceza ₺{4}': '{0} jours · {1} L/jour · ₺{2}/L · prime ₺{3} · pénalité ₺{4}',
+  'Henüz sözleşme teklifi yok — ilgili yakıtın deposunu büyüt (taahhüdün 2 katı kapasite şart).':
+    'Aucune offre de contrat pour l’instant — agrandis la cuve du carburant concerné (il faut 2× l’engagement journalier).',
+  '📋 {0} sözleşmesi imzalandı — günde {1}L {2} teslim et!': '📋 Contrat {0} signé — livre {1} L de {2} par jour !',
+  'Zaten aktif bir sözleşmen var.': 'Tu as déjà un contrat en cours.',
+  '📋 {0}: günlük taahhüt teslim edildi (+₺{1})': '📋 {0} : engagement journalier livré (+₺{1})',
+  '📋 {0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)': '📋 {0} : engagement NON TENU — pénalité appliquée ({1}₺)',
+  '🏆 {0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3': '🏆 Contrat {0} TERMINÉ ! Prime : +₺{1} · réputation +0,3',
+  '❌ {0} sözleşmesi ihlalden feshedildi — prim yok.': '❌ Contrat {0} résilié pour manquement — pas de prime.',
+  'Reklam (günlük)': 'Publicité (journalier)',
+  'trafik ×{0}': 'trafic ×{0}',
+  '🏛️ İşletme gideri (bakım+vergi): -₺{0}': '🏛️ Frais d’exploitation (entretien + taxes) : -₺{0}',
+  '📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})': '📣 Campagne publicitaire en cours : -₺{0} (trafic ×{1})',
+  '📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.': '📣 Budget pub insuffisant — campagne réduite aujourd’hui.',
+  '🏛️ YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.':
+    '🏛️ NOUVEAU : les frais d’exploitation arrivent (entretien + taxes, indexés sur ton patrimoine) — mis en place progressivement sur 10 jours. Suis-les depuis le Bureau.',
+  'Günlük gider (yovmiye+OPEX+reklam)': 'Dépenses journalières (salaires + OPEX + pub)',
+  '⛽ Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!':
+    '⛽ Tes pompistes ont vendu ~{0} L de carburant pendant ton absence (+₺{1}) — vérifie tes cuves !',
+  '⛽ Tankların bitmek üzere — sipariş verme vakti!': '⛽ Tes cuves sont presque vides — il est temps de commander !',
+  'Misafir oynayabilirsin — ama kaydolursan:': 'Tu peux jouer en invité — mais si tu t’inscris :',
+  '+₺2.500 başlangıç bonusu': '+₺2.500 de bonus de départ',
+  'Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)':
+    'Série de connexions quotidiennes — bonus croissant chaque jour (₺500 → ₺2.000)',
+  'İlerlemen bulutta — cihaz değişse de kaybolmaz': 'Progression dans le cloud — elle survit au changement d’appareil',
+  'Sıradaki Benerits oyununun kapalı BETA’sına erken erişim': 'Accès anticipé à la BÊTA fermée du prochain jeu Benerits',
+  'Kayıt Ol (10 saniye)': 'S’inscrire (10 secondes)',
+  'Yine de misafir devam et': 'Continuer quand même en invité',
+  'Bu fiyatlarla müşteri akışı': 'Flux de clients à ces prix',
+  '🟠 Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.':
+    '🟠 Les zones orange sont des voies de circulation/réservées — impossible d’y construire.',
+  'Karşı Market': 'Boutique d’en face',
+  'Karşı Market Sv.{0}': 'Boutique d’en face niv.{0}',
+  'Yol karşısındaki istasyonun müşterileri için ikinci market — karşı yakaya kurulur, yerinde yükselir.':
+    'Une seconde boutique pour les clients de ta station d’en face — construite de l’autre côté, s’améliore sur place.',
+  'Yol karşısı istasyonun müşterileri buradan alışveriş yapar — karşı yakaya ekstra gelir.':
+    'Les clients d’en face achètent ici — revenus supplémentaires pour l’autre côté.',
+  'Önce ana marketi kur': 'Construis d’abord la boutique principale',
+  'Karşıda betonlu arsa gerekli': 'Il faut un terrain bétonné en face',
+  '🛒 Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!':
+    '🛒 La boutique d’en face est ouverte — les clients de l’autre côté vont commencer à acheter !',
+  '🚧 Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.':
+    '🚧 Ton terrain d’en face est prêt ! Pose une pompe ou une borne — les entrées/sorties arrivent AUTOMATIQUEMENT.',
+  '🚧 Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.':
+    '🚧 Bétonne d’abord ton terrain d’en face, puis pose une pompe/borne — les accès arrivent AUTOMATIQUEMENT.',
+  'Parsele dokun…': 'Touche une parcelle…',
+  'Arsana dokun…': 'Touche ton terrain…',
+  '+₺{0} toplandı! ({1} ünitenin ortak kumbarası — gelir ×{1})': '+₺{0} récoltés ! (tirelire commune de {1} unités — revenus ×{1})',
+  'Hava-Su Ünitesi (×{0} — ortak kumbara)': 'Air & Eau (×{0} — tirelire commune)',
+  'Self Yıkama (×{0} — ortak kumbara)': 'Lavage self (×{0} — tirelire commune)',
+  'Lastik havası ve su. Küçük gelir ama müşteri çeker. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
+    'Air pour les pneus et eau. Petits revenus, mais ça attire les clients. Les unités partagent une tirelire ; les revenus montent avec le nombre.',
+  'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
+    'Les voitures se lavent seules dans les box ; mousse et eau se vendent automatiquement. Les unités partagent une tirelire ; les revenus montent avec le nombre.',
+  'Müşteri paneli (kapalıyken yalnız araca tıklayınca açılır)':
+    'Panneau client (désactivé, il ne s’ouvre qu’en touchant une voiture)',
+  'Otomatik açıl: Açık': 'Ouverture auto : activée',
+  'Otomatik açıl: Kapalı': 'Ouverture auto : désactivée',
+  'Müşteri paneli araç gelince otomatik açılacak.': 'Le panneau client s’ouvrira tout seul à l’arrivée d’une voiture.',
+  'Panel artık yalnız araca tıklayınca açılır.': 'Le panneau ne s’ouvre plus qu’en touchant une voiture.',
+  'Şimdi Kayıt Ol': 'S’inscrire maintenant',
+  'Hemen dene — kaydını tutmak için sonra kaydolabilirsin.':
+    'Lance-toi — tu pourras t’inscrire plus tard pour conserver ta progression.',
+  'Varsayılan sipariş tankı FULL doldurur — −/+ ile azaltıp artırabilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.':
+    'Par défaut, la commande remplit la cuve à FOND — ajuste avec −/+. Chaque carburant a son propre camion-citerne.',
+  // --- Alt navbar + Ofis paneli ---
+  'Ofis': 'Bureau',
+  'Yol Har.': 'Feuille de route',
+  'Profil': 'Profil',
+  'Kasa': 'Caisse',
+  'Toplam gelir': 'Revenus totaux',
+  'Servis edilen müşteri': 'Clients servis',
+  'İstasyonu Aç/Kapa': 'Ouvrir/Fermer la station',
+  'Yol haritası yakında!': 'Feuille de route bientôt disponible !',
+  'Kamera açısı': 'Angle de caméra',
+  'Sunucu hatası.': 'Erreur serveur.',
+  'Mağaza': '💎 Boutique',
+  'Hesap': 'Compte',
+  '🏗️ Ofisi Taşı': '🏗️ Déplacer le bureau',
+  'Teklif güncellendi — yeni listeye bak.': 'Cette offre a changé — regarde la nouvelle liste.',
+  // 7 günlük kâr grafiği + yaka dağılımı (ofis raporu)
+  'Grafik için en az 2 günlük veri gerekli.': 'Le graphique a besoin d’au moins 2 jours de données.',
+  'Gün {0}: veri yok': 'Jour {0} : pas de données',
+  'Gün {0}: ₺{1}': 'Jour {0} : ₺{1}',
+  'Son 7 günün kârı': 'Bénéfice — 7 derniers jours',
+  'En iyi ₺{0} · en kötü ₺{1}': 'Meilleur ₺{0} · pire ₺{1}',
+  'Bugünkü ciro — yaka dağılımı': 'Chiffre d’affaires du jour — par côté de la route',
+  'Ana yaka': 'Côté principal',
+  'Karşı yaka': 'Côté opposé',
+  // --- HUD ---
+  'GÜN': 'JOUR',
+  'KASA': 'CAISSE',
+  'BENZİN': 'ESSENCE',
+  'DİZEL': 'DIESEL',
+  'LPG': 'GPL',
+  'BATARYA': 'BATTERIE',
+  'İTİBAR': 'NOTE',
+  'GÜNLÜK GÖREV': 'QUÊTE DU JOUR',
+  'OYUNDA': 'EN LIGNE',
+  'SAAT': 'HEURE',
+  'MÜŞTERİ PATLAMASI': 'AFFLUENCE CLIENTS',
+  'YAKIT İNDİRİMİ %50': 'CARBURANT -50 %',
+  'Açık': 'Ouverte',
+  'KAPALI': 'FERMÉE',
+  'Yakıt Siparişi': 'Commander du carburant',
+  'İnşaat': 'Construire',
+  'Düzenleme modu': 'Mode édition',
+  'Hesabım': 'Mon compte',
+  'Ayarlar': 'Réglages',
+  'Sorun Bildir': 'Signaler un problème',
+  'Sorun / Öneri Bildir': 'Signaler un problème / une suggestion',
+  // --- Servis paneli ---
+  'MÜŞTERİ İSTEĞİ': 'DEMANDE DU CLIENT',
+  'Benzin': 'Essence',
+  'Dizel': 'Diesel',
+  'FULLE': 'LE PLEIN',
+  'BAŞLAT': 'DÉMARRER',
+  'HIZLI ŞARJ': 'CHARGE RAPIDE',
+  'ŞARJ BAŞLAT': 'LANCER LA CHARGE',
+  'Müşteriyi Gönder': 'Congédier le client',
+  'Tabanca seç; tutar gir ya da FULLE': 'Choisis un pistolet ; saisis un montant ou fais LE PLEIN',
+  '₺ tutar gir': '₺ saisis un montant',
+  // --- Sipariş modalı ---
+  'Yolda': 'En route',
+  'Dolu': 'Pleine',
+  'Tank dolu': 'Cuve pleine',
+  'Sipariş': 'Commander',
+  'Tanker istasyona yaklaşıyor…': 'Le camion-citerne approche de la station…',
+  // --- İnşaat / genel butonlar ---
+  'İnşaat & Yatırım': 'Construire & Investir',
+  'İstasyon': 'Station',
+  'Tesisler': 'Installations',
+  'Enerji': 'Énergie',
+  'Arsa': 'Terrain',
+  'Bakım': 'Entretien',
+  'Taşı': 'Déplacer',
+  'Yükselt': 'Améliorer',
+  'Satın Al': 'Acheter',
+  'Kapat': 'Fermer',
+  'Gönder': 'Envoyer',
+  // --- Ayarlar ---
+  'Dil': 'Langue',
+  'Türkçe': 'Turc',
+  'İngilizce': 'Anglais',
+  'Kaydı Sil ve Baştan Başla': 'Effacer la sauvegarde et recommencer',
+  'Hesap (kaydın bulutta saklanır)': 'Compte (ta sauvegarde est conservée dans le cloud)',
+  'Giriş yapılmadı.': 'Non connecté.',
+  'Çıkış Yap': 'Se déconnecter',
+  'Bug mu buldun, önerin mi var? Yaz gönder — hepsini okuyoruz.': 'Un bug ou une idée ? Écris-nous — on lit tout.',
+  'Örn: girişte araçlar sıkışıyor / şu özellik olsa süper olur...':
+    'ex. : les voitures bouchonnent à l’entrée / cette fonctionnalité serait top...',
+  'Bildirimin alındı — teşekkürler, okuyoruz!': 'Message bien reçu — merci, on le lit !',
+  'Mesaj çok kısa — biraz detay ver.': 'Message trop court — donne un peu plus de détails.',
+  // --- Sık toast'lar ---
+  'Taşındı!': 'Déplacé !',
+  '💸 Para yetmiyor!': '💸 Pas les moyens !',
+  'Sıfırdan başlıyorsun — hayırlı olsun patron!': 'On repart de zéro — bonne chance, patron !',
+  'İstasyon tekrar AÇIK — bekleriz!': 'La station est de nouveau OUVERTE — bienvenue !',
+  'Müşteri beklemekten sıkıldı ve gitti!': 'Le client en a eu assez d’attendre et il est parti !',
+  'Çıkış yapıldı.': 'Déconnecté.',
+  'Pompa arızalandı — dolum yarıda kaldı, tamir gerekli.': 'Panne de pompe — plein interrompu, réparation nécessaire.',
+  'Şarj ünitesi arızalandı — şarj durdu, tamir gerekli.': 'Panne de borne — charge interrompue, réparation nécessaire.',
+  '🚿 OTO YIKAMA': '🚿 LAVAGE AUTO',
+  '☕ KAHVE': '☕ CAFÉ',
+  '🍽️ RESTORAN': '🍽️ RESTAURANT',
+  '🚛 TIR PARKI': '🚛 RELAIS ROUTIER',
+  '🧽 SELF YIKAMA': '🧽 LAVAGE SELF',
+  'HAVA · SU': 'AIR · EAU',
+  '{0} L/sn': '{0} L/s',
+  '+3 kWh/sn': '+3 kWh/s',
+  '+7 kWh/sn': '+7 kWh/s',
+  '+15 kWh/sn': '+15 kWh/s',
+  'Müzik: Açık': 'Musique : activée',
+  'Müzik: Kapalı': 'Musique : coupée',
+  'Efektler: Kapalı': 'Effets : coupés',
+  'Bildirimler: Engelli': 'Notifications : bloquées',
+  'Oyun kaydı otomatik tutulur (her 5 sn)': 'Sauvegarde automatique (toutes les 5 s)',
+  '★ 7/24 AÇIK ★': '★ OUVERT 24/7 ★',
+  'ŞİMDİ OYNA': 'JOUER',
+  'Ses': 'Son',
+  'Kaydet': 'Enregistrer',
+  'Çıkış': 'Se déconnecter',
+  'İstasyon adı (tabelada görünür)': 'Nom de la station (affiché sur l’enseigne)',
+  'Bildirimler (sekme kapalıyken tanker/kumbara haberi)': 'Notifications (citerne/tirelire quand l’onglet est en arrière-plan)',
+  'Efektler: Açık': 'Effets : activés',
+  '🚨 {0} isteyen araca {1} bastın! -{2} ₺': '🚨 Tu as mis du {1} dans une voiture qui voulait du {0} ! -{2} ₺',
+  'Sen yokken tesislerin çalıştı: kumbaralarda ~₺{0} birikti — topla!':
+    'Tes installations ont tourné pendant ton absence : ~₺{0} dans les tirelires — récolte !',
+  'İstasyon KAPALI — yeni müşteri girmez, itibar etkilenmez. Bakım için rahatsın.':
+    'Station FERMÉE — aucun nouveau client, la note n’est pas touchée. Tu peux faire l’entretien tranquillement.',
+  'Beton iadesi: {0} arsa söküldü, +₺{1} iade edildi.': 'Remboursement du béton : {0} parcelles retirées, +₺{1} remboursés.',
+  'Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.':
+    'Pleins d’essence et de diesel. C’est toi qui choisis le carburant et le montant — le mauvais pistolet est sanctionné.',
+  'Santrallerin ürettiği elektriği biriktirir. Elektrikli araçlar buradan anında şarj alır.':
+    'Stocke l’électricité produite par tes centrales. Les véhicules électriques se rechargent ici instantanément.',
+  'FULLE {0}': 'LE PLEIN {0}',
+  '🚨 {0} isteyen araca {1} verildi — CEZA!': '🚨 Du {1} servi à une voiture qui voulait du {0} — SANCTION !',
+  '🏞️ Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.': '🏞️ Terrain acheté (-₺{0}) — bétonne-le pour construire.',
+  'Bulut kaydı yüklendi — Gün {0} ({1})': 'Sauvegarde cloud chargée — Jour {0} ({1})',
+  'Sen yokken tesislerin çalıştı: kumbaralarda ~₺{0} birikti — toplamayı unutma!':
+    'Tes installations ont tourné pendant ton absence : ~₺{0} dans les tirelires — récolte !',
+  'Beton iadesi: {0} arsa söküldü, +₺{1}': 'Remboursement du béton : {0} parcelles retirées, +₺{1}',
+  '+{0} kWh/sn (şebeke dahil)': '+{0} kWh/s (réseau inclus)',
+  '🟢 Uranyum Sipariş Et — ₺{0}': '🟢 Commander de l’uranium — ₺{0}',
+  '📅 Gün {0} bitti — {1}: ₺{2}': '📅 Fin du jour {0} — {1} : ₺{2}',
+  'kâr': 'bénéfice',
+  'zarar': 'perte',
+  'Otomatik Şarj: {0} — değiştir': 'Charge auto : {0} — changer',
+  '🧨 Yık — +₺{0}': '🧨 Démolir — +₺{0}',
+  '🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}': '🧨 Démoli — la moitié de ton investissement récupérée : +₺{0}',
+  // --- Pompacı ---
+  'Pompacı': 'Pompiste',
+  'ÇALIŞIYOR (gelirin tamamı senin)': 'EN POSTE (tous les revenus sont pour toi)',
+  'YOK': 'AUCUN',
+  '🧑‍🔧 Pompacı Çalıştır — ₺{0}': '🧑‍🔧 Embaucher un pompiste — ₺{0}',
+  '🧑‍🔧 Pompacıyı işten çıkar': '🧑‍🔧 Licencier le pompiste',
+  'Pompa #{0}: pompacı işten çıktı — dolum yine sende.': 'Pompe n°{0} : pompiste licencié — les pleins te reviennent.',
+  '💸 Para yetmiyor — pompacı işe alma ₺{0}.': '💸 Pas assez d’argent — l’embauche coûte ₺{0}.',
+  '🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.':
+    '🧑‍🔧 Pompe n°{0} : pompiste embauché — il sert le bon carburant tout seul, la vente entière te revient. Seul le pourboire est pour lui.',
+  '🧑‍🔧 Pompacı sattı: +₺{0}': '🧑‍🔧 Vente du pompiste : +₺{0}',
+  // --- Geniş giriş/çıkış ---
+  'Geniş Giriş-Çıkış': 'Entrée-sortie élargie',
+  '2 şerit': '2 voies',
+  'Kapı ağızları genişler: araçlar ikili sıra girip çıkar, kuyruk yola taşmaz':
+    'Les accès s’élargissent : les voitures entrent et sortent sur deux files, la file d’attente ne déborde plus sur la route',
+  'Önce 2. pompayı al': 'Achète d’abord la 2e pompe',
+  '🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!':
+    '🛣️ Entrée-sortie élargie — les voitures circulent sur deux files !',
+  'Ücreti Değiştir ({0} → {1})': 'Changer le tarif ({0} → {1})',
+  'Müzik: {0}': 'Musique : {0}',
+  'Efektler: {0}': 'Effets : {0}',
+  'ELEKTRİK': 'ÉLECTRIQUE',
+  'ŞARJ OLUYOR — {0}/{1} kWh': 'EN CHARGE — {0}/{1} kWh',
+  'ŞARJ BAŞLAT ({0} kWh)': 'LANCER LA CHARGE ({0} kWh)',
+  'Bataryada enerji yok ({0} kWh) — dolmasını bekle.': 'Batterie vide ({0} kWh) — attends qu’elle se remplisse.',
+  'Depoda {0} kWh hazır — şarjı başlat.': '{0} kWh disponibles dans le dépôt — lance la charge.',
+  'Giriş yapıldı: {0} — kaydın buluta senkronlanıyor.': 'Connecté : {0} — synchronisation de ta sauvegarde vers le cloud.',
+  'Her şey yolunda': 'Tout va bien',
+  'KİLİTLİ': 'VERROUILLÉ',
+  'Giriş serisi: {0} gün · Oyun günü: {1}': 'Série de connexions : {0} jours · Jour de jeu : {1}',
+  'Başarımlar: {0}/8 · Görev: {1}': 'Succès : {0}/8 · Quête : {1}',
+  '{0} · boşaltıyor': '{0} · déchargement',
+  'Tır park etti: ₺{0} kumbarada': 'Camion garé : ₺{0} dans la tirelire',
+  '🛒 Market alışverişi: +₺{0}': '🛒 Achat en boutique : +₺{0}',
+  '🚻 Tuvalet ücreti: +₺{0}': '🚻 Tarif toilettes : +₺{0}',
+  '☕ Kahve satışı: +₺{0}': '☕ Vente de café : +₺{0}',
+  '🍽️ Restoran hesabı: +₺{0}': '🍽️ Addition du restaurant : +₺{0}',
+  'Araç yıkandı: ₺{0} kumbarada': 'Voiture lavée : ₺{0} dans la tirelire',
+  '🔧 Yağ değişimi yapıldı: +₺{0}': '🔧 Vidange effectuée : +₺{0}',
+  'Günlük görev: {0}/15 müşteri': 'Quête du jour : {0}/15 clients',
+  '⚡ {0} kWh şarj tamamlandı: +₺{1}': '⚡ {0} kWh chargés : +₺{1}',
+  '⚡ Elektrik altyapısı Sv.{0} kuruldu!': '⚡ Réseau électrique niv.{0} construit !',
+  'Günlük giriş bonusu: +₺{0} (seri: {1} gün)': 'Bonus de connexion quotidien : +₺{0} (série : {1} jours)',
+  'DC Şarj #{0}: otomatik şarj AÇIK — EV sormadan şarj alır.':
+    'Borne DC n°{0} : charge auto ACTIVÉE — les VE se rechargent sans demander.',
+  'DC Şarj #{0}: otomatik şarj kapalı.': 'Borne DC n°{0} : charge auto désactivée.',
+  'Tabela güncellendi: {0}': 'Enseigne mise à jour : {0}',
+  '+₺{0} toplandı!': '+₺{0} récoltés !',
+  '{0} tankı boş kaldı! Satış yarım kaldı — sipariş ver.': 'La cuve de {0} est vide ! Vente interrompue — passe commande.',
+  'DC Şarj #{0}': 'Borne DC n°{0}',
+  '🔧 Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.':
+    '🔧 Panne de la pompe n°{0} ! Clique dessus et répare depuis la fiche.',
+  '🔌 Şarj ünitesi #{0} arızalandı!': '🔌 Panne de la borne n°{0} !',
+  '{0} kumbarası doldu — üstüne tıklayıp topla!': 'La tirelire {0} est pleine — clique pour récolter !',
+  'Güneş Santrali ({0})': 'Centrale solaire ({0})',
+  'Panel Temizliği (kir %{0})': 'Nettoyage des panneaux (saleté {0} %)',
+  'Reaktör Bakımı (yıpranma %{0})': 'Entretien du réacteur (usure {0} %)',
+  'Uranyum Siparişi (%{0} kaldı)': 'Commander de l’uranium ({0} % restants)',
+  'Şarj #{0} Tamiri': 'Réparation de la borne n°{0}',
+  '🏆 Başarım: {0}': '🏆 Succès : {0}',
+  'Pompa #{0} Tamiri': 'Réparation de la pompe n°{0}',
+  'Tır parkı': 'Relais routier',
+  'Oto yıkama': 'Lavage auto',
+  'Self yıkama': 'Lavage self',
+  'Taşıma modu: yeni yeri seç · R ile döndür · sağ tık/ESC iptal':
+    'Mode déplacement : choisis un emplacement · R pour pivoter · clic droit/ÉCHAP pour annuler',
+  'Yerleştirme modu: kareye tıkla · R ile döndür · sağ tık/ESC iptal':
+    'Mode placement : clique sur une case · R pour pivoter · clic droit/ÉCHAP pour annuler',
+  '🏞️ Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal':
+    '🏞️ Terrain : clique sur une parcelle voisine (₺6-14 k) · ÉCHAP pour annuler',
+  '🧱 Zemin seçimi: betonlanacak arsana tıkla · ESC iptal': '🧱 Béton : clique sur la parcelle à bétonner · ÉCHAP pour annuler',
+  'İstasyon KAPALI — yeni müşteri girmez, itibar etkilenmez. Bakım için rahatsız olmadan çalış.':
+    'Station FERMÉE — aucun nouveau client, la note n’est pas touchée. Fais l’entretien en toute tranquillité.',
+  'BENZİNLİK': 'BENELOIL',
+  'Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca ceza, doğrusu bahşiş.':
+    'Pleins d’essence et de diesel. C’est toi qui choisis le carburant et le montant — mauvais pistolet : sanction, bon pistolet : pourboire.',
+  'Dolum hızı': 'Débit de remplissage',
+  'Elektrikli araçlar batarya deposundan anında şarj olur. Depoda yeterli kWh yoksa müşteri bekler.':
+    'Les véhicules électriques se rechargent instantanément depuis le dépôt de batteries. S’il manque des kWh, le client attend.',
+  'AÇIK': 'OUVERTE',
+  'Ofis — Fiyat Yönetimi': 'Bureau — Tarifs',
+  'Alış fiyatı sabittir; satış fiyatını sen belirlersin. Marjı açtıkça litre başı kazanç artar ama müşteri kaçar.':
+    'Le prix d’achat est fixe ; c’est toi qui fixes le prix de vente. Plus la marge est large, plus tu gagnes au litre — mais tu perds des clients.',
+  'Toplam müşteri': 'Total clients',
+  'Kaçan müşteri': 'Clients perdus',
+  'Benzin satışı': 'Essence vendue',
+  'Dizel satışı': 'Diesel vendu',
+  'LPG satışı': 'GPL vendu',
+  'Elektrik satışı': 'Électricité vendue',
+  'Giriş Kapısı': 'Portail d’entrée',
+  'Çıkış Kapısı': 'Portail de sortie',
+  'Müşteriler ve tankerler istasyona buradan girer. Taşı butonuyla yol kenarında istediğin yere al — trafik akışı kendini uyarlar.':
+    'Clients et camions-citernes entrent par ici. Avec Déplacer, place-le où tu veux le long de la route — le trafic s’adapte.',
+  'Çıkışla arası en az 5 birim': 'À 5 unités minimum de la sortie',
+  'Araçlar istasyondan buradan çıkıp yola karışır. Taşı butonuyla yerini belirle.':
+    'Les voitures quittent la station ici et rejoignent la route. Utilise Déplacer pour la positionner.',
+  'Girişle arası en az 5 birim': 'À 5 unités minimum de l’entrée',
+  'Sattığın benzin ve dizel buradan çıkar. Bitirmeden tanker siparişi vermeyi unutma.':
+    'L’essence et le diesel que tu vends sortent d’ici. Commande un camion-citerne avant la panne sèche.',
+  'Santrallerin ürettiği elektriği biriktirir. Elektrikli araçlar buradan anında şarj olur.':
+    'Stocke l’électricité produite par tes centrales. Les véhicules électriques se rechargent ici instantanément.',
+  'Müşterilerin bir kısmı içeri girip alışveriş yapar — ekstra gelir ve memnuniyet.':
+    'Une partie des clients entre et fait ses courses — revenus et satisfaction en plus.',
+  'Müşteri harcaması': 'Dépense par client',
+  'Uğrama oranı': 'Taux de passage',
+  'Yol yorgunları için. Ücret koyarsan gelir gelir ama memnuniyet biraz düşer.':
+    'Pour les voyageurs fatigués. Faire payer rapporte, mais fait un peu baisser la satisfaction.',
+  'Bedava elektrik üretir ama paneller kirlendikçe verim düşer. Ara sıra temizlik yaptır.':
+    'Produit de l’électricité gratuite, mais le rendement chute à mesure que les panneaux se salissent. Fais-les nettoyer de temps en temps.',
+  'Tanktan mazot yakarak elektrik üretir. Çalışırken gürültüsü şarjdaki müşterileri rahatsız eder.':
+    'Brûle le gazole de la cuve pour produire de l’électricité. Son bruit dérange les clients en charge.',
+  'Yakıt tüketimi': 'Consommation',
+  'ÇALIŞIYOR 🔊': 'EN MARCHE 🔊',
+  'Yakıt alan müşterilerin bir kısmı çıkışta aracını yıkatır.':
+    'Une partie des clients qui font le plein lave sa voiture en repartant.',
+  'Hizmet ücreti': 'Prix du service',
+  'Kullanım oranı': 'Taux d’utilisation',
+  'Park eden müşteriler kahve molası verir.': 'Les clients garés font une pause café.',
+  'Uzun yol müşterisi park edip yemek yer — yüksek hesap öder.':
+    'Les clients longue distance se garent et dînent — grosse addition.',
+  'Tırcılar konaklar; sen hiçbir şey yapmadan düzenli gelir akar.':
+    'Les routiers passent la nuit ; revenus réguliers sans rien faire.',
+  'Lastik havası ve su. Küçük gelir ama müşteri çeker.': 'Air pour les pneus et eau. Petits revenus, mais ça attire les clients.',
+  'Kullanım': 'Utilisation',
+  'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır.':
+    'Les voitures entrent dans les box et se lavent seules ; mousse et eau se vendent automatiquement.',
+  'Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.':
+    'Les clients servis se garent ici pour faire un tour à la boutique, aux toilettes, au café et au restaurant.',
+  '4 araç': '4 voitures',
+  '{0} araç': '{0} voitures',
+  'Bakım vakti gelen araçlar burada yağ değiştirir — en kârlı yan hizmet.':
+    'Les voitures dues pour l’entretien font leur vidange ici — le service annexe le plus rentable.',
+  'YÜKSEK ☠️': 'ÉLEVÉ ☠️',
+  'Düşük': 'Faible',
+  '☢️ Bakım Yap — ₺1.500': '☢️ Entretenir — ₺1.500',
+  'En güçlü enerji kaynağı. Uranyumla çalışır, yıprandıkça patlama riski artar — bakımı ASLA aksatma.':
+    'La source d’énergie la plus puissante. Fonctionne à l’uranium ; le risque d’explosion grimpe avec l’usure — ne saute JAMAIS l’entretien.',
+  'Yıpranma': 'Usure',
+  'Düzenleme modu AÇIK: taşımak istediğin binaya tıkla (pompa, şarj ve tank sabittir)':
+    'Mode édition ACTIF : clique sur un bâtiment pour le déplacer (pompes, bornes et cuve sont fixes)',
+  'Düzenleme modu kapandı.': 'Mode édition désactivé.',
+  'Bir parsele tıkla.': 'Clique sur une parcelle.',
+  'Bitişik değil — önce aradaki arsayı almalısın.': 'Pas adjacente — achète d’abord la parcelle intermédiaire.',
+  'Bu arsa senin değil — önce satın al.': 'Cette parcelle n’est pas à toi — achète-la d’abord.',
+  'Başarım': 'Succès',
+  'KRİTİK': 'CRITIQUE',
+  '🔧 ARIZA · TAMİR ₺800': '🔧 EN PANNE · RÉPARER ₺800',
+  '🔧 ARIZA · TAMİR ₺1.000': '🔧 EN PANNE · RÉPARER ₺1.000',
+  '🧽 TEMİZLİK ₺300': '🧽 NETTOYER ₺300',
+  '🚨 BAKIM ŞART ₺1.500': '🚨 ENTRETIEN URGENT ₺1.500',
+  '🚨 URANYUM BİTTİ · ₺2.500': '🚨 PLUS D’URANIUM · ₺2.500',
+  'KENDİ BENZİNLİĞİNİ KUR': 'MONTE TA PROPRE STATION',
+  'YAKIT SATMAYA BAŞLA': 'COMMENCE À VENDRE DU CARBURANT',
+  'BÜYÜ VE GELİŞ': 'GRANDIS ET DÉVELOPPE-TOI',
+  'MARKETİNİ AÇ, MÜŞTERİYİ TUT': 'OUVRE UNE BOUTIQUE, GARDE TES CLIENTS',
+  'ELEKTRİĞE GEÇ': 'PASSE À L’ÉLECTRIQUE',
+  'GÜNEŞ PANELLERİNİ KUR': 'INSTALLE DES PANNEAUX SOLAIRES',
+  'NÜKLEER ÇAĞA ADIM AT': 'ENTRE DANS L’ÈRE NUCLÉAIRE',
+  'KENDİ PETROL İSTASYONUNU İŞLET': 'GÈRE TA PROPRE STATION-SERVICE',
+  'Gönderilemedi, tekrar dene.': 'Envoi impossible, réessaie.',
+  'Tüm ilerleme silinecek. Emin misin?': 'Toute la progression sera effacée. Tu es sûr ?',
+  'Kapalı': 'Fermé',
+  'Bildirimler: Açık': 'Notifications : activées',
+  'Bildirimlere İzin Ver': 'Autoriser les notifications',
+  'MOLADA — ünite işgal altında': 'EN PAUSE — borne occupée',
+  'Şarj bitti ama müşteri tesislerde geziyor — MÜŞTERİYİ GÖNDER ile uğurla, yoksa yeni EV müşterileri kaçar!':
+    'Charge terminée, mais le client traîne dans les installations — CONGÉDIE-LE, sinon les nouveaux clients VE s’en vont !',
+  'Depodan araca enerji akıyor... depo seviyesi akış hızını belirler.':
+    'L’énergie file du dépôt vers la voiture... le niveau du dépôt fixe le débit.',
+  'Müşteri FULLE istiyor — tabancayı seç, FULLE bas': 'Le client veut LE PLEIN — choisis le pistolet, appuie sur LE PLEIN',
+  'Giriş gerekli — oturum kapandı, sayfayı yenile.': 'Connexion requise — la session a expiré, actualise la page.',
+  'tamamlandı': 'terminée',
+  '🧽 Güneş panelleri iyice kirlendi, üretim düşüyor!': '🧽 Les panneaux solaires sont bien sales, la production baisse !',
+  '☢️ Uranyum teslim edildi — reaktör tam güçte!': '☢️ Uranium livré — réacteur à pleine puissance !',
+  '☢️ Uranyum azalıyor! Yeni çubuk sipariş et.': '☢️ L’uranium s’épuise ! Commande une nouvelle barre.',
+  '🚨 Uranyum bitti — reaktör üretimi DURDU!': '🚨 Plus d’uranium — la production du réacteur est À L’ARRÊT !',
+  '☢️ Reaktör bakım istiyor!': '☢️ Le réacteur réclame un entretien !',
+  '🚨 REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!': '🚨 RÉACTEUR CRITIQUE ! Entretiens-le tout de suite ou il explose !',
+  'Yakıt indirimi sona erdi.': 'La remise carburant est terminée.',
+  'Müşteri patlaması sona erdi.': 'L’affluence de clients est terminée.',
+  'FIRSAT: 60 saniye boyunca yakıt siparişi YARI FİYAT!': 'OFFRE : commandes de carburant à MOITIÉ PRIX pendant 60 secondes !',
+  'FIRSAT: 60 saniye müşteri patlaması — pompalara koş!': 'OFFRE : 60 secondes d’affluence — file aux pompes !',
+  'Önce batarya deposu kur': 'Construis d’abord un dépôt de batteries',
+  'Altyapı Sv.2 gerekli': 'Réseau niv.2 requis',
+  'İlk ₺10.000 — Esnaf oldun!': 'Premiers ₺10.000 — te voilà commerçant !',
+  '5 yıldız itibar — Efsane istasyon!': 'Note de 5 étoiles — station de légende !',
+  'Elektrik çağı — İlk şarj ünitesi!': 'Ère électrique — première borne !',
+  'Atom karıncası — Reaktör kuruldu!': 'Fourmi atomique — réacteur construit !',
+  'Toprak ağası — 9 arsanın tamamı!': 'Gros propriétaire — les 9 parcelles !',
+  '7. gün — Bir haftadır ayaktasın!': 'Jour 7 — une semaine que tu tiens !',
+  'SAHİBİNDEN ALINDI': 'RACHETÉ',
+  'YAĞ DEĞİŞİMİ': 'VIDANGE',
+  // --- 3D bina etiketleri ---
+  'YAKIT TANKI': 'CUVE À CARBURANT',
+  'GİRİŞ': 'ENTRÉE',
+  'ÇIKIŞ': 'SORTIE',
+  'OFİS': 'BUREAU',
+  'MARKET': 'BOUTIQUE',
+  'TUVALET': 'TOILETTES',
+  'BATARYA DEPOSU': 'DÉPÔT BATTERIES',
+  'GÜNEŞ SANTRALİ': 'CENTRALE SOLAIRE',
+  'JENERATÖR': 'GÉNÉRATEUR',
+  'OTO YIKAMA': 'LAVAGE AUTO',
+  'KAHVECİ': 'CAFÉ',
+  'RESTORAN': 'RESTAURANT',
+  'TIR PARKI': 'RELAIS ROUTIER',
+  'SELF YIKAMA': 'LAVAGE SELF',
+  'OTOPARK': 'PARKING',
+  'HAVA-SU ÜNİTESİ': 'AIR & EAU',
+  'REAKTÖR': 'RÉACTEUR',
+  'TABELA': 'ENSEIGNE',
+  'SOKAK LAMBASI': 'LAMPADAIRE',
+  'POMPA #{0}': 'POMPE N°{0}',
+  'DC ŞARJ #{0}': 'BORNE DC N°{0}',
+  // --- İnşaat menüsü (shop) ---
+  'Arsa Satın Al ({0}/18)': 'Acheter un terrain ({0}/18)',
+  '2 blok 3×3': '2 blocs 3×3',
+  'Bitişik arsalardan birini seç — istasyon geliştikçe emlak fiyatları artar':
+    'Choisis une parcelle voisine — les prix montent à mesure que ta station grandit',
+  'Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — yakın arsalar ucuz, uzak/karşı arsalar pahalı; istasyon geliştikçe artar. Seçince o parselin gerçek fiyatı görünür.':
+    'Touche une parcelle voisine (tu peux aussi traverser la route). Le prix dépend de l’emplacement — les parcelles proches sont bon marché, celles au loin ou d’en face coûtent plus cher, et tout monte à mesure que ta station grandit. Touche une parcelle pour voir son prix exact.',
+  ' · yol karşısı': ' · de l’autre côté de la route',
+  'Zemin Betonu': 'Béton',
+  'arsa başı': 'par parcelle',
+  'Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)':
+    'Bétonne une parcelle en herbe (indispensable pour construire, sauf le solaire)',
+  'Betonsuz arsan yok': 'Aucune parcelle non bétonnée',
+  'Pompa #{0}': 'Pompe n°{0}',
+  '+1 pompa': '+1 pompe',
+  'Aynı anda bir müşteri daha alırsın': 'Tu sers un client de plus en même temps',
+  'Tabela Sv.{0}': 'Enseigne niv.{0}',
+  '+%10 trafik': '+10 % de trafic',
+  'Yoldan geçenlerin uğrama şansı artar': 'Plus de passants s’arrêtent',
+  'Yakıt Tankı': 'Cuve à carburant',
+  'Depo büyür, daha seyrek sipariş verirsin': 'Plus de stockage, moins de commandes à passer',
+  'Ek {0} Tankı ({1}/{2})': 'Cuve {0} supplémentaire ({1}/{2})',
+  'Yalnızca {0} deposunu {1}L büyütür — yer kaplamaz, daha seyrek sipariş.':
+    'Agrandit uniquement ton stock de {0} de {1} L — sans prendre de place, moins de commandes.',
+  'Hava-Su Ünitesi': 'Unité Air & Eau',
+  'Hava-Su Ünitesi ({0})': 'Unité Air & Eau ({0})',
+  'Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)':
+    'Air pour les pneus & eau — pas cher, mais ça attire les clients (illimité)',
+  'Otopark': 'Parking',
+  'Otopark ({0})': 'Parking ({0})',
+  '+4 araç': '+4 voitures',
+  'Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)':
+    'Places matérialisées — les clients se garent et profitent des installations (illimité)',
+  'Sokak Lambası': 'Lampadaire',
+  'Sokak Lambası ({0})': 'Lampadaire ({0})',
+  '+itibar': '+réputation',
+  'Gece aydınlatması — istasyon güvenli görünür (sınırsız kurulur, taşınır, satılır)':
+    'Éclairage nocturne — la station paraît sûre la nuit (illimité, déplaçable, revendable)',
+  'Market': 'Boutique',
+  'Market Sv.2': 'Boutique niv.2',
+  'Market Sv.{0}': 'Boutique niv.{0}',
+  'Müşteriler ekstra alışveriş yapar': 'Les clients achètent en plus',
+  'Müşteriler ekstra alışveriş yapar. Yerinde yükselir (aynı yer), gelir seviyeyle artar.':
+    'Les clients achètent en plus. S’améliore sur place (même emplacement) ; les revenus montent avec le niveau.',
+  'Tuvalet': 'Toilettes',
+  'Tuvalet Sv.2': 'Toilettes niv.2',
+  '+moral': '+moral',
+  'Müşteri memnuniyetini ve itibarı artırır': 'Améliore la satisfaction des clients et la note',
+  'Oto Yıkama': 'Lavage auto',
+  'Yağ Değişimi': 'Vidange',
+  'Self Yıkama': 'Lavage self',
+  'Self Yıkama ({0})': 'Lavage self ({0})',
+  'Araçlar kendisi yıkar; gelir kurulum sayısıyla artar (sınırsız)':
+    'Lavage en libre-service ; les revenus montent avec le nombre d’unités (illimité)',
+  'Kahveci': 'Café',
+  'Restoran': 'Restaurant',
+  'Tır Parkı': 'Relais routier',
+  'Yolcular kahve molası verir': 'Les voyageurs font une pause café',
+  'Uzun yol müşterisi yemek molası verir': 'Les clients longue distance font une pause repas',
+  'Tırcılar konaklar — düzenli pasif gelir': 'Les routiers passent la nuit — revenus passifs réguliers',
+  'Elektrik Altyapısı Sv.{0}': 'Réseau électrique niv.{0}',
+  'temel': 'de base',
+  '+%30 üretim': '+30 % de production',
+  'Şarj ve enerji yapılarının önünü açar': 'Débloque les bornes de charge et les bâtiments énergétiques',
+  'Tüm üretimi güçlendirir, yeni yapılar açılır': 'Booste toute la production, débloque de nouveaux bâtiments',
+  'Batarya Deposu Sv.{0}': 'Dépôt de batteries niv.{0}',
+  'Üretilen elektriği biriktirir, araçlar buradan anında şarj olur':
+    'Stocke l’électricité produite ; les voitures s’y rechargent instantanément',
+  'Elektrik altyapısı gerekli': 'Réseau électrique requis',
+  'DC Şarj Ünitesi #{0}': 'Borne DC n°{0}',
+  '+1 ünite': '+1 unité',
+  'Elektrikli araç müşterileri gelmeye başlar; ünite arttıkça EV trafiği artar':
+    'Les clients en véhicule électrique commencent à arriver ; plus de bornes, plus de trafic VE',
+  'Güneş Santrali': 'Centrale solaire',
+  'Dizel Jeneratör': 'Générateur diesel',
+  'Modüler Reaktör': 'Réacteur modulaire',
+  'Bedava üretim — ama kirlenir, düzenli temizlik ister (sınırsız kurulur)':
+    'Électricité gratuite — mais ça se salit, nettoyage régulier obligatoire (illimité)',
+  'Tanktan mazot yakar — gürültüsü şarjdaki müşterileri kaçırır':
+    'Brûle le gazole de la cuve — son bruit fait fuir les clients en charge',
+  'Dev üretim — bakımsız kalırsa PATLAR, her şey sıfırlanır':
+    'Production colossale — EXPLOSE si tu la négliges, et tout repart de zéro',
+  'MAKS': 'MAX',
+  // --- Bina kartları (genel) ---
+  'Çalışıyor': 'En marche',
+  'ARIZALI': 'EN PANNE',
+  'Durum': 'État',
+  'Seviye': 'Niveau',
+  'Üretim': 'Production',
+  'Anında': 'Immédiat',
+  'Şarj süresi': 'Temps de charge',
+  'Satış': 'Prix',
+  'Araca akış': 'Débit vers la voiture',
+  'Şebeke maliyeti': 'Coût réseau',
+  'Kirlilik': 'Saleté',
+  'Bugünkü ciro': 'Chiffre d’affaires du jour',
+  'İtibar': 'Note',
+  'Müşteri etkisi': 'Effet sur les clients',
+  'Kullanım ücreti': 'Tarif d’utilisation',
+  'Ücret': 'Tarif',
+  'ücretsiz': 'gratuit',
+  'Karşı Giriş Kapısı': 'Portail d’entrée d’en face',
+  'Karşı Çıkış Kapısı': 'Portail de sortie d’en face',
+  'Karşı (yol karşısı) istasyona müşteriler buradan girer. Taşı ile yol kenarında yerini ayarla.':
+    'Les clients entrent ici dans la station d’en face. Utilise Déplacer pour la placer le long de la route.',
+  'Karşı istasyondan araçlar buradan çıkıp yola karışır. Taşı ile yerini belirle.':
+    'Les voitures quittent la station d’en face ici et rejoignent la route. Utilise Déplacer pour la positionner.',
+  // --- Sık toast / bildirim ---
+  '{0} tankeri yola çıktı!': 'Le camion-citerne de {0} est en route !',
+  '{0} tankı dolduruldu!': 'Cuve de {0} remplie !',
+  '{0} teslimatı gecikti — yakıt yine de teslim edildi.': 'Livraison de {0} en retard — le carburant a quand même été livré.',
+  '{0} tankeri zaten yolda — teslimatı bekle.': 'Un camion-citerne de {0} est déjà en route — attends la livraison.',
+  'Bahşiş: +₺{0}': 'Pourboire : +₺{0}',
+  'Taşan yakıt cezası: -₺{0}': 'Amende pour débordement : -₺{0}',
+  '🧼 Camları Temizle': '🧼 Nettoyer les vitres',
+  '✨ Camlar Temiz': '✨ Vitres propres',
+  'Ön cam pırıl pırıl — bahşiş şansı arttı! ✨': 'Pare-brise étincelant — plus de chances de pourboire ! ✨',
+  'Temiz camlara bahşiş: +₺{0}': 'Pourboire vitres propres : +₺{0}',
+  'Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000 🎁': 'Content de te revoir, patron ! Cadeau de retour : +₺1.000 🎁',
+  'Bakiye güncellendi': 'Solde mis à jour',
+  'Kayıt güncellendi ✓': 'Sauvegarde mise à jour ✓',
+  'Güncelleme uygulanıyor…': 'Mise à jour en cours…',
+  'Hesabın askıya alındı': 'Ton compte est suspendu',
+  'Kurallar ihlal edildi.': 'Violation des conditions d’utilisation.',
+  'Tamam': 'OK',
+  'E-postanı doğrula': 'Vérifie ton e-mail',
+  'adresine doğrulama bağlantısı gönderdik. Mailindeki linke tıkla, sonra Kontrol Et’e bas.':
+    'nous avons envoyé un lien de vérification. Clique sur le lien reçu, puis appuie sur Vérifier.',
+  'Doğruladım — Kontrol Et': 'C’est vérifié — Vérifier',
+  'Doğrulama mailini tekrar gönder': 'Renvoyer l’e-mail de vérification',
+  'Yanlış e-posta mı? Değiştir:': 'Mauvaise adresse ? Modifie-la :',
+  'E-postayı değiştir & yeniden gönder': 'Changer l’e-mail & renvoyer',
+  'Çıkış yap': 'Se déconnecter',
+  'Gönderiliyor...': 'Envoi...',
+  'Değiştiriliyor...': 'Modification...',
+  'Mail gönderildi ✓ Gelen kutunu kontrol et.': 'E-mail envoyé ✓ Vérifie ta boîte de réception.',
+  'Gönderilemedi, biraz sonra dene.': 'Envoi impossible, réessaie dans un instant.',
+  'E-posta değişti ✓ Yeni adrese doğrulama gönderildi.': 'E-mail modifié ✓ Vérification envoyée à la nouvelle adresse.',
+  'Şifremi unuttum': 'Mot de passe oublié',
+  'Önce e-postanı yaz, sonra Şifremi unuttum’a bas.': 'Saisis d’abord ton e-mail, puis appuie sur Mot de passe oublié.',
+  'Şifre sıfırlama bağlantısı gönderildi (kayıtlıysa). Mailini kontrol et.':
+    'Lien de réinitialisation envoyé (si le compte existe). Vérifie ta boîte mail.',
+  'Gönderilemedi, sonra tekrar dene.': 'Envoi impossible, réessaie plus tard.',
+  'Yerleştir': 'Placer',
+  'Buraya yerleştirilemez — kırmızıysa başka yere taşı.': 'Impossible de placer ici — si c’est rouge, choisis un autre endroit.',
+  '👋 Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.':
+    '👋 Bienvenue, patron ! Ton premier client est là — regarde le panneau et prends <b>le pistolet de la bonne couleur</b>.',
+  'Tabanca seçildi ✓ Şimdi <b>tutar gir</b> ya da <b>FULLE</b> bas, sonra <b>BAŞLAT</b>.':
+    'Pistolet sélectionné ✓ Maintenant <b>saisis un montant</b> ou appuie sur <b>LE PLEIN</b>, puis <b>DÉMARRER</b>.',
+  '🎉 İlk satışın! İpucu: <b>🧼 cam temizle</b> = daha çok bahşiş. Büyümek için <b>🛒 mağazadan</b> pompa/tesis al, <b>🏢 ofisten</b> fiyatı ayarla.':
+    '🎉 Ta première vente ! Astuce : <b>🧼 nettoyer les vitres</b> = plus de pourboires. Pour grandir, achète pompes et installations dans la <b>🛒 boutique</b> et règle tes prix depuis le <b>🏢 bureau</b>.',
+  'Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!':
+    'Tes installations ont tourné pendant ton absence : ~₺{0} gagnés — vide les tirelires !',
+  'Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir': 'Mode déplacement : flèches ou toucher · ⟳ pivoter · ✓ placer',
+  'Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir':
+    'Mode placement : flèches ou toucher · ⟳ pivoter · ✓ placer',
+  'Buluta bağlanılamadı': 'Connexion au cloud impossible',
+  'Yenile': 'Actualiser',
+  'İlerlemeni korumak için oyun durduruldu. Kaydın güvende — hiçbir şey silinmedi. Bağlantı gelince yenile.':
+    'Le jeu est en pause pour protéger ta progression. Ta sauvegarde est intacte — rien n’a été supprimé. Actualise dès que la connexion revient.',
+  'MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!':
+    'AFFLUENCE DE CLIENTS ! 90 secondes de trafic intense — file aux pompes !',
+  '🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.': '🅿️ Le client s’est garé pour profiter des installations.',
+  'Tuvalet artık ücretsiz.': 'Les toilettes sont désormais gratuites.',
+  'Tuvalet ücreti: ₺{0}': 'Tarif toilettes : ₺{0}',
+  'Ücretsiz': 'Gratuit',
+  'GÜNLÜK GÖREV TAMAM: 15 müşteri — ödül +₺1.000!': 'QUÊTE DU JOUR RÉUSSIE : 15 clients — récompense +₺1.000 !',
+  'İstasyon bakıma alındı — itibar düşmez.': 'Station en entretien — la note ne baisse pas.',
+  '🛣️ Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.':
+    '🛣️ La voie de décélération est saturée — un client est reparti sur l’autoroute ! Augmente ta capacité.',
+  'EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!':
+    'Un client en véhicule électrique a vu une borne occupée par une voiture qui ne chargeait pas et il EST REPARTI — la note baisse !',
+  '🚻 Müşteri tuvalet arıyordu, bulamadı!': '🚻 Un client cherchait des toilettes et n’en a pas trouvé !',
+  '🔧 Yağ değişimi: +₺{0} kumbarada': '🔧 Vidange : +₺{0} dans la tirelire',
+  '🔊 Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
+    '🔊 Gêné par le bruit du générateur — il ne demandera que la moitié de la charge !',
+  'Depo şu an boş — üretim geldikçe şarj yavaş akacak.':
+    'Le dépôt est vide pour l’instant — la charge arrivera au compte-gouttes à mesure que l’électricité est produite.',
+  '🔧 Şarj ünitesi arızalandı — tamir gerekli!': '🔧 Panne de borne — réparation nécessaire !',
+  '🔧 Pompa arızalandı — tamir gerekli!': '🔧 Panne de pompe — réparation nécessaire !',
+  '⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆':
+    '⚡ Un traînard monopolise la borne — touche la voiture pour le congédier 👆',
+  '⚠️ Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!':
+    '⚠️ La sauvegarde cloud échoue — vérifie ta connexion, ta progression n’est PAS enregistrée !',
+  '🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…':
+    '🔄 Partie jouée sur un autre appareil — synchronisation vers ta progression la plus récente…',
+  '⭐ İtibar yükseldi: {0} (bekleyen müşteri kaybın az)': '⭐ Note en hausse : {0} (tu n’as presque perdu personne à l’attente)',
+  '⭐ İtibar düştü: {0} — müşteriler beklemekten gidiyor!': '⭐ Note en baisse : {0} — les clients partent à force d’attendre !',
+  '✏️ Düzenleme AÇIK — binaya dokun ve taşı': '✏️ Mode édition ACTIF — touche un bâtiment pour le déplacer',
+  '{0} kumbarası doldu — tıklayıp topla, yoksa ciro erimeye başlar!':
+    'La tirelire {0} est pleine — touche-la pour récolter, sinon ta recette part en fumée !',
+  '⚠️ {0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!':
+    '⚠️ La tirelire {0} est ARCHICOMBLE — la recette qui arrive est perdue !',
+  '🧪 FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!':
+    '🧪 MODE COMPLET : tout est construit — fais glisser pour te déplacer, molette pour zoomer !',
+  // --- Batch: eksik EN çevirileri (v2 güncelleme) ---
+  'Finansal Durum': 'Situation financière',
+  'Yakıt Satış Fiyatları': 'Prix de vente des carburants',
+  'Müşteri & İtibar': 'Clients & Réputation',
+  'Satış & Faaliyet Kârı': 'Ventes & Résultat d’exploitation',
+  'Banka / Kredi Çek': 'Banque / Faire un crédit',
+  'Banka — Kredi': 'Banque — Crédit',
+  'İstatistikler': 'Statistiques',
+  'Müzik': 'Musique',
+  'Geri bildirim': 'Retour d’expérience',
+  'Hesabını ve tüm verilerini kalıcı olarak siler — geri alınamaz.':
+    'Supprime définitivement ton compte et toutes tes données — c’est irréversible.',
+  'Hesabımı Sil': 'Supprimer mon compte',
+  'LİTRE': 'LITRES',
+  'Tamir': 'Réparer',
+  'Reklam İzle: Müşteri Patlaması': 'Regarder une pub : affluence de clients',
+  "−/+ ile miktarı ayarla (min 800L, full'e kadar). Her yakıtın tankeri ayrı gelir ve boşaltır.":
+    'Ajuste la quantité avec −/+ (min 800 L, jusqu’au plein). Le camion-citerne de chaque carburant arrive et décharge séparément.',
+  'Örn: girişte araçlar sıkışıyor / şu özellik olsa süper olur.':
+    'Ex. : les voitures s’entassent à l’entrée / cette fonctionnalité serait top.',
+  'Menü': 'Menu',
+  'Müzik sesi': 'Volume de la musique',
+  'Döndür': 'Pivoter',
+  'Gizlilik Politikası': 'Politique de confidentialité',
+  'REAKTÖR PATLADI!': 'LE RÉACTEUR A EXPLOSÉ !',
+  'Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...':
+    'Un réacteur nucléaire mal entretenu a détruit la station. Tout repart de zéro...',
+  // profil / ofis panel
+  'Yakıt alım geçmişi': 'Historique des achats de carburant',
+  'Henüz yakıt siparişi verilmedi.': 'Aucune commande de carburant pour l’instant.',
+  'Gün': 'Jour',
+  'Aktif (varlık)': 'Actif (patrimoine)',
+  'Net işletme sermayesi': 'Besoin en fonds de roulement',
+  'Yakıt müşteri etkisi': 'Effet clients carburant',
+  'EV müşteri etkisi': 'Effet clients VE',
+  'Dönem': 'Période',
+  'Faaliyet kârı': 'Résultat d’exploitation',
+  'Günlük': 'Journalier',
+  'Aylık': 'Mensuel',
+  'Yıllık': 'Annuel',
+  'Misafir': 'Invité',
+  'Oyun günü': 'Jour de jeu',
+  'Oynama süresi': 'Temps de jeu',
+  'Toplam ciro': 'Chiffre d’affaires total',
+  'Giriş serisi': 'Série de connexions',
+  'Başarımlar': 'Succès',
+  'Günlük görev': 'Quête du jour',
+  'tamamlandı ✓': 'terminée ✓',
+  'Kaydın buluta senkronlanıyor (10 sn)': 'Ta sauvegarde se synchronise vers le cloud (10 s)',
+  // banka / kredi
+  'Banka Ortaklığı': 'Partenariat bancaire',
+  'Kalan borç payı': 'Part de dette restante',
+  'Günlük kâr payı': 'Part journalière des bénéfices',
+  'Teminatsız borcunu ödeyemedin — banka istasyona ortak oldu. Her gün kârının bir kısmı borç bitene dek bankaya gider. Peşin kapatabilirsin:':
+    'Tu n’as pas pu rembourser ta dette non garantie — la banque est devenue associée. Chaque jour, une part de ton bénéfice lui revient jusqu’à extinction de la dette. Tu peux solder d’avance :',
+  'Ortaklığı Kapat — ₺{0}': 'Racheter la participation — ₺{0}',
+  'Anapara': 'Capital',
+  'Aylık taksit': 'Mensualité',
+  'Kalan taksit': 'Mensualités restantes',
+  'Gecikme': 'Retard',
+  'Teminatsız avans': 'Avance non garantie',
+  'Teminatların': 'Tes garanties',
+  'Ödenmezse banka istasyona ORTAK olur (kâr payından tahsil).':
+    'En cas de non-paiement, la banque devient ASSOCIÉE (prélèvement sur les bénéfices).',
+  'Ödenmezse teminatların haczedilir.': 'En cas de non-paiement, tes garanties sont saisies.',
+  'Erken Kapat — ₺{0}': 'Solder par anticipation — ₺{0}',
+  'Teminatsız Avans — asset gerekmez': 'Avance non garantie — aucun actif requis',
+  'Tutar': 'Montant',
+  'aylık %5 · 12 taksit · ödenmezse banka istasyona ortak olur':
+    '5 %/mois · 12 mensualités · en cas de non-paiement, la banque devient associée',
+  'Avans Al — +₺{0}': 'Prendre l’avance — +₺{0}',
+  'teminat': 'garantie',
+  'Teminatlı Kredi — değerin %50si': 'Crédit garanti — 50 % de la valeur',
+  'Kredi tutarı': 'Montant du crédit',
+  'Krediyi Al — +₺{0}': 'Prendre le crédit — +₺{0}',
+  'Satın almalar yalnızca iOS uygulamasında aktiftir (web önizleme).':
+    'Les achats ne fonctionnent que dans l’application iOS (aperçu web).',
+  'Sahipsin ✓': 'Acquis ✓',
+  'Satın Alımları Geri Yükle': 'Restaurer les achats',
+  'İşleniyor…': 'Traitement…',
+  'Satın alma tamamlanamadı.': 'L’achat n’a pas pu aboutir.',
+  'Satın alımlar geri yüklendi.': 'Achats restaurés.',
+  'Geri yüklenecek satın alma yok.': 'Aucun achat à restaurer.',
+  '🏦 Kredi onaylandı — +₺{0} kasana geçti!': '🏦 Crédit accordé — +₺{0} dans ta caisse !',
+  '🏦 Avans onaylandı — +₺{0} kasana geçti!': '🏦 Avance accordée — +₺{0} dans ta caisse !',
+  '🏦 Kredi kapatıldı — teminatların serbest!': '🏦 Crédit soldé — tes garanties sont libérées !',
+  '💸 Erken kapatmaya kasan yetmiyor.': '💸 Pas assez d’argent pour solder par anticipation.',
+  '🏦 Ortaklık kapatıldı — istasyon tamamen senin!': '🏦 Participation rachetée — la station est entièrement à toi !',
+  '💸 Ortaklığı kapatmaya kasan yetmiyor.': '💸 Pas assez d’argent pour racheter la participation.',
+  '🏦 Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!':
+    '🏦 Paiement impossible — tes garanties ont été SAISIES et retirées de la station !',
+  '🏦 Kredi tamamen ödendi — teminatların serbest! 🎉': '🏦 Crédit intégralement remboursé — tes garanties sont libérées ! 🎉',
+  '🏦 Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.':
+    '🏦 Mensualité de crédit en retard ! Renfloue ta caisse — 2 retards d’affilée déclenchent la saisie.',
+  '🏦 Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!':
+    '🏦 Dette impayée — la banque est devenue ASSOCIÉE à {0} %, prélevée sur les bénéfices !',
+  '🏦 Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin! 🎉':
+    '🏦 La banque a récupéré sa part — partenariat terminé, la station est entièrement à toi ! 🎉',
+  '🏦 Banka ortağı kâr payı aldı: -₺{0}': '🏦 L’associé bancaire a pris sa part des bénéfices : -₺{0}',
+  // pompacı / şarjcı / bina
+  'Tabela': 'Enseigne',
+  'Trafik etkisi': 'Effet sur le trafic',
+  'Genişlik': 'Largeur',
+  'Geniş · 2 şerit': 'Large · 2 voies',
+  'Tek şerit': 'Voie unique',
+  'Yoldan geçenlerin uğrama şansını artırır. Fiyatları buradan da ayarlayabilir, Taşı ile yerini değiştirebilirsin.':
+    'Augmente les chances que les passants s’arrêtent. Tu peux aussi régler les prix ici et la repositionner avec Déplacer.',
+  '🛣️ Geniş Giriş-Çıkış — ₺{0}': '🛣️ Entrée-sortie élargie — ₺{0}',
+  'ÇALIŞIYOR (gelir senin)': 'EN POSTE (les revenus sont pour toi)',
+  'Yovmiye': 'Salaire journalier',
+  '₺{0}/gün': '₺{0}/jour',
+  'Şarjcı': 'Agent de charge',
+  '🧑‍🔧 Pompacı Tut — ₺{0} + ₺{1}/gün': '🧑‍🔧 Embaucher un pompiste — ₺{0} + ₺{1}/jour',
+  '🧑‍🔧 Şarjcı Tut — ₺{0} + ₺{1}/gün': '🧑‍🔧 Embaucher un agent de charge — ₺{0} + ₺{1}/jour',
+  '🧑‍🔧 Şarjcıyı işten çıkar': '🧑‍🔧 Licencier l’agent de charge',
+  'Hava-Su': 'Air-Eau',
+  'Yağ değişimi': 'Vidange',
+  'DC Şarj #{0}: şarjcı işten çıktı — şarjı yine sen yaparsın.':
+    'Borne DC n°{0} : agent de charge licencié — les charges te reviennent.',
+  '💸 Para yetmiyor — şarjcı işe alma ₺{0}.': '💸 Pas assez d’argent — embaucher un agent de charge coûte ₺{0}.',
+  '⚡ DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!':
+    '⚡ Borne DC n°{0} : agent de charge embauché — les VE se rechargent tout seuls, tous les revenus sont pour toi !',
+  '🧑‍🔧 Pompacı bu aracı hallediyor.': '🧑‍🔧 Le pompiste s’occupe de cette voiture.',
+  '🧑‍🔧 Günlük yovmiye ödendi: -₺{0}': '🧑‍🔧 Salaires journaliers versés : -₺{0}',
+  '🛢️ Yakıt Siparişi Ver': '🛢️ Commander du carburant',
+  'Başka cihazda açıldı': 'Ouvert sur un autre appareil',
+  'Bu hesap başka bir cihazda açıldığı için burada duraklatıldı. İlerlemen güvende — hiçbir şey silinmedi. Buradan devam etmek için yenile.':
+    'Ce compte a été ouvert sur un autre appareil, la partie est donc en pause ici. Ta progression est intacte — rien n’a été supprimé. Actualise pour continuer ici.',
+  'Buradan devam et (Yenile)': 'Continuer ici (Actualiser)',
+  'Geçerli bir e-posta gir.': 'Saisis une adresse e-mail valide.',
+  'Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.':
+    'L’orientation de cette unité est fixe (accès des voitures) — tu ne peux choisir que son emplacement.',
+  '🚚 {0} tankeri istasyona ulaştı!': '🚚 Le camion-citerne de {0} est arrivé à la station !',
+  '✅ Reklamlar kaldırıldı — teşekkürler!': '✅ Publicités supprimées — merci !',
+  '✅ +₺{0} kasana eklendi!': '✅ +₺{0} ajoutés à ta caisse !',
+  '🎬 Reklam İzle: Günü 2x Yap (+₺{0})': '🎬 Regarder une pub : doubler le bénéfice du jour (+₺{0})',
+  '🎬 Reklam İzle: Müşteri Patlaması': '🎬 Regarder une pub : affluence de clients',
+  '🎬 Günün kârı 2 katına çıktı: +₺{0}!': '🎬 Bénéfice du jour doublé : +₺{0} !',
+  '· yol karşısı': '· de l’autre côté de la route',
+  'Beton': 'Béton',
+  // bina kurulum toast'ları (toast() artık t()'den geçiyor)
+  '🔧 Tamir edildi, tekrar hizmette!': '🔧 Réparé, de nouveau en service !',
+  '🔧 Tamir Et — ₺800': '🔧 Réparer — ₺800',
+  '🔧 Tamir Et — ₺1.000': '🔧 Réparer — ₺1.000',
+  '🧽 Temizle — ₺300': '🧽 Nettoyer — ₺300',
+  '🧽 Paneller tertemiz, üretim tam güçte!': '🧽 Panneaux nickel, production à pleine puissance !',
+  '☢️ Reaktör bakımı yapıldı, güvendesin.': '☢️ Réacteur entretenu, tu es tranquille.',
+  '☢️ Uranyum siparişi verildi — özel konvoy yolda!': '☢️ Uranium commandé — convoi spécial en route !',
+  '💸 Bunun için yeterli para yok!': '💸 Pas assez d’argent pour ça !',
+  'Pasif gelir': 'Revenus passifs',
+  '🚧 Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.':
+    '🚧 Station d’en face ouverte ! Entrée/sortie automatiques ajoutées — des clients arriveront de la voie opposée.',
+  '🏞️ Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.':
+    '🏞️ Parcelle d’en face achetée — bétonne-la, puis construis une pompe/borne ; la première pompe ajoute l’entrée-sortie automatique.',
+  '🧱 Zemin betonlandı — artık yapı kurabilirsin!': '🧱 Parcelle bétonnée — tu peux construire !',
+  '🪧 Tabela büyüdü — daha çok müşteri gelecek!': '🪧 Enseigne agrandie — plus de clients en vue !',
+  '🛒 Market açıldı!': '🛒 Boutique ouverte !',
+  '🚻 Tuvalet hizmete girdi!': '🚻 Les toilettes sont en service !',
+  '💡 Sokak lambası kuruldu — gece istasyon aydınlık!': '💡 Lampadaire installé — la station reste éclairée la nuit !',
+  '🔋 Batarya deposu kuruldu — üretim biriktikçe dolacak.':
+    '🔋 Dépôt de batteries construit — il se remplira au fil de la production.',
+  '🔌 DC şarj ünitesi kuruldu!': '🔌 Borne de charge DC construite !',
+  '☀️ Güneş santrali kuruldu. ⚠️ Paneller zamanla kirlenir!':
+    '☀️ Centrale solaire construite. ⚠️ Les panneaux se salissent avec le temps !',
+  '🛠️ Jeneratör kuruldu. ⚠️ Gürültüsü EV müşterilerini kaçırabilir!':
+    '🛠️ Générateur construit. ⚠️ Son bruit peut faire fuir les clients VE !',
+  '☢️ Reaktör devrede! ⚠️ BAKIMI ASLA AKSATMA — patlarsa her şey gider!':
+    '☢️ Réacteur en service ! ⚠️ NE SAUTE JAMAIS L’ENTRETIEN — s’il explose, tu perds tout !',
+  '🚿 Oto yıkama açıldı — müşteriler araç yıkatacak!': '🚿 Lavage auto ouvert — les clients vont faire laver leur voiture !',
+  '🔧 Yağ değişim istasyonu açıldı!': '🔧 Station de vidange ouverte !',
+  '☕ Kahveci açıldı!': '☕ Café ouvert !',
+  '🍽️ Restoran açıldı — yolcular yemek molası verecek!': '🍽️ Restaurant ouvert — les voyageurs feront une pause repas !',
+  '🚛 Tır parkı açıldı — düzenli konaklama geliri!': '🚛 Relais routier ouvert — revenus d’hébergement réguliers !',
+  '💨 Hava-su ünitesi kuruldu!': '💨 Unité air-eau construite !',
+  '🧽 Self yıkama açıldı — köpük ve su otomatik satılacak!': '🧽 Lavage self ouvert — mousse et eau vendues automatiquement !',
+  '🅿️ Otopark açıldı — müşteriler park edip tesisleri gezebilecek!':
+    '🅿️ Parking ouvert — les clients pourront se garer et visiter les installations !',
+  'Tekrar hoş geldin!': 'Content de te revoir !',
+  'Sipariş verilemedi (tank dolu ya da para yetmiyor).': 'Commande impossible (cuve pleine ou argent insuffisant).',
+  'Müşteri kibarca gönderildi.': 'Client congédié en douceur.',
+  'Molacı uğurlandı — şarj yeri boşaldı.': 'Traînard congédié — la place de charge est libre.',
+  'Otomatik şarj başladı.': 'Charge automatique lancée.',
+  '🚫 Buraya yerleştiremezsin — sahipli ve betonlu alana koy.':
+    '🚫 Impossible de placer ici — pose-le sur un terrain à toi et bétonné.',
+  'Bu arsa zaten senin.': 'Cette parcelle est déjà à toi.',
+  // state.ts (bina isim/açıklama + teminat)
+  'Batarya Deposu': 'Dépôt de batteries',
+  'Jeneratör': 'Générateur',
+  'Reaktör': 'Réacteur',
+  'DC Şarj': 'Borne DC',
+  'Depo büyür (tüm yakıtlar), daha seyrek sipariş verirsin': 'Plus de stockage (tous carburants), moins de commandes à passer',
+  "Müşterilerin ~%25'i araç yıkatır, ekstra gelir": '~25 % des clients font laver leur voiture — revenus en plus',
+  "Müşterilerin ~%12'si yağ değiştirtir, güçlü ek gelir": '~12 % des clients font une vidange — gros revenus en plus',
+  'Reklamları Kaldır': 'Supprimer les publicités',
+  'Gün sonu reklamları tamamen kapanır. Ödüllü fırsat reklamları (istersen) kalır.':
+    'Supprime toutes les pubs de fin de journée. Les pubs bonus facultatives restent.',
+  '5.000 ₺ Nakit': '₺5.000 en espèces',
+  'Kasana anında +5.000 ₺.': '+₺5.000 immédiatement dans ta caisse.',
+  '20.000 ₺ Nakit': '₺20.000 en espèces',
+  'Kasana anında +20.000 ₺.': '+₺20.000 immédiatement dans ta caisse.',
+  '75.000 ₺ Nakit': '₺75.000 en espèces',
+  'Kasana anında +75.000 ₺ — en avantajlı paket.': '+₺75.000 immédiatement — le pack le plus avantageux.',
+  'Hesabın ve TÜM verilerin kalıcı olarak silinecek. Bu işlem geri alınamaz. Emin misin?':
+    'Ton compte et TOUTES tes données seront définitivement supprimés. C’est irréversible. Tu es sûr ?',
+  'Silinemedi, tekrar dene.': 'Suppression impossible, réessaie.',
+  'doluyor… hedef FULL': 'remplissage… objectif PLEIN',
+  'doluyor… hedef ₺{0}': 'remplissage… objectif ₺{0}',
+  // --- Yenilikler & bildirim geçmişi (news.ts) ---
+  'Neler Yeni?': 'Quoi de neuf ?',
+  'Yenilikler': 'Nouveautés',
+  'Yenilikler & geçmiş': 'Nouveautés & historique',
+  'Sürüm {0}': 'Version {0}',
+  'yeni': 'nouveau',
+  'Bildirim Geçmişi': 'Historique des notifications',
+  'Gün {0}': 'Jour {0}',
+  'Henüz bildirim yok.': 'Aucune notification pour l’instant.',
+  // sürüm notu maddeleri (news.ts NEWS[].items — t() üzerinden geçer)
+  'Tesis kumbarası dolduğunda ciro artık kaybolmuyor — dolu kumbara üstüne gelen kazanç kısılarak da olsa birikiyor ve ne kadarının eridiği rapor ediliyor.':
+    'La recette ne disparaît plus quand la tirelire d’une installation est pleine — les gains qui arrivent par-dessus s’accumulent quand même (à un rythme réduit) et le rapport indique combien s’est évaporé.',
+  "İtibar 5,0'da donmuyor: her gün sonunda o günün hizmet kalitesine göre yükseliyor ya da düşüyor.":
+    'La note ne reste plus figée à 5,0 : elle monte ou descend à la fin de chaque journée selon la qualité du service.',
+  'Pompacı artık her araçta camı siliyor; şarj görevlisi de siliyor.':
+    'Le pompiste nettoie désormais le pare-brise de chaque voiture ; l’agent de charge aussi.',
+  'Sokak lambası satın alınabilir oldu — istediğin yere kur, taşı, sat. Yok ettiğin lambaları geri koyabilirsin.':
+    'Les lampadaires sont désormais achetables — pose-les où tu veux, déplace-les, revends-les. Tu peux aussi remettre ceux que tu avais démolis.',
+  'Ofiste son 7 günün kâr grafiği ve cironun yaka dağılımı var.':
+    'Le bureau affiche maintenant un graphique des bénéfices sur 7 jours et la répartition du chiffre d’affaires par côté de la route.',
+  'Haczedilen bina artık sahnede işlevsiz kalmıyor.': 'Les bâtiments saisis ne restent plus inutilisables sur le terrain.',
+  'Yakıt alış fiyatı günlük dalgalanıyor — ucuzken stoklamak kâr getiriyor.':
+    'Le prix d’achat du carburant fluctue chaque jour — faire des stocks quand c’est bon marché rapporte.',
+  'Sıralama tablosu ve mevsimler eklendi.': 'Ajout du classement et des saisons.',
+  'Kayıp save sorunu kapatıldı — oyundan çıkarken ilerleme garanti kaydediliyor.':
+    'Bug de sauvegarde perdue corrigé — ta progression est enregistrée à coup sûr quand tu quittes le jeu.',
+  'Satın alınan ürünün kaybolması sorunu giderildi.': 'Correction de la disparition des articles achetés.',
+  'Şube sistemi: çevre yolu ve otoyol istasyonları açıldı.':
+    'Système de succursales : stations de rocade et d’autoroute débloquées.',
+  'Kurumsal sözleşmeler, marka devri ve müdür otomasyonu eklendi.':
+    'Contrats entreprises, cession de marque et automatisation par un gérant ajoutés.',
+}
+
+/** Aktif dilin sözlüğü. TR kaynak dil olduğu için sözlüğü yoktur (anahtarın kendisi metindir). */
+function dict(): Record<string, string> | null {
+  return lang === 'en' ? EN : lang === 'fr' ? FR : null
+}
+
 export function t(tr: string, ...args: (string | number)[]): string {
-  let s = lang === 'tr' ? tr : (EN[tr] ?? tr)
+  const d = dict()
+  // zincir: seçili dil → TR kaynak metin (boş/eksik çeviri asla ekrana düşmez)
+  let s = (d && d[tr]) || tr
   args.forEach((a, idx) => { s = s.replace(`{${idx}}`, String(a)) })
   return s
 }
 
 /** data-i18n="TR metin" olan tüm elemanları çevir (index.html statik metinleri) */
 export function translateDom(root: ParentNode = document) {
-  if (lang === 'tr') return
+  const d = dict()
+  if (!d) return
   for (const el of root.querySelectorAll<HTMLElement>('[data-i18n]')) {
     const key = el.getAttribute('data-i18n') || ''
-    if (key && EN[key]) el.textContent = EN[key]
+    if (key && d[key]) el.textContent = d[key]
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-i18n-ph]')) {
     const key = el.getAttribute('data-i18n-ph') || ''
-    if (key && EN[key]) (el as HTMLInputElement).placeholder = EN[key]
+    if (key && d[key]) (el as HTMLInputElement).placeholder = d[key]
   }
 }

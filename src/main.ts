@@ -2812,8 +2812,10 @@ window.addEventListener('pagehide', () => {
 translateDom() // HUD + statik metinleri çevir
 ;(document.getElementById('lang-tr') as HTMLButtonElement).classList.toggle('good', lang === 'tr')
 ;(document.getElementById('lang-en') as HTMLButtonElement).classList.toggle('good', lang === 'en')
+;(document.getElementById('lang-fr') as HTMLButtonElement).classList.toggle('good', lang === 'fr')
 ;(document.getElementById('lang-tr') as HTMLButtonElement).addEventListener('click', () => setLang('tr'))
 ;(document.getElementById('lang-en') as HTMLButtonElement).addEventListener('click', () => setLang('en'))
+;(document.getElementById('lang-fr') as HTMLButtonElement).addEventListener('click', () => setLang('fr'))
 // müşteri paneli otomatik açılma tercihi (ayarlar)
 {
   const apBtn = document.getElementById('autopanelbtn') as HTMLButtonElement
