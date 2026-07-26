@@ -13,14 +13,15 @@
     "test:sim": "tsx tools/tests/sim-smoke.mjs",
     "test:wealth": "tsx tools/tests/wealth-check.mjs",
     "test:news": "tsx tools/tests/news-check.mjs",
-    "test:all": "npm run test:faz && npm run test:marina && npm run test:rival && npm run test:wealth && npm run test:news && npm run test:metrics && npm run test:ui && npm run test:kits && npm run test:i18n && npm run test:sim && npm run test:traffic",
+    "test:all": "npm run test:faz && npm run test:marina && npm run test:rival && npm run test:wealth && npm run test:news && npm run test:metrics && npm run test:ui && npm run test:kits && npm run test:scene && npm run test:i18n && npm run test:sim && npm run test:traffic",
     "bench:collision": "node tools/tests/collision-bench.mjs",
     "test:metrics": "node tools/tests/metrics-check.mjs",
     "test:marina": "tsx tools/tests/marina-check.mjs",
     "test:rival": "tsx tools/tests/rival-check.mjs",
     "test:ui": "node tools/tests/ui-check.mjs",
     "test:i18n": "node tools/tests/i18n-check.mjs",
-    "test:kits": "node tools/tests/kits-check.mjs"
+    "test:kits": "node tools/tests/kits-check.mjs",
+    "test:scene": "node tools/tests/scene-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

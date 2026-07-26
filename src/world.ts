@@ -360,13 +360,15 @@ export class World {
         poles.setMatrixAt(i, pm)
       }
       poles.instanceMatrix.needsUpdate = true; s.add(poles)
-      // gürültü bariyeri (karşı yakada duvar) + uzak dağ silüeti
+      // gürültü bariyeri (karşı yakada duvar)
       const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 220, 3.2), lam(0x9aa1a9))
       wall.position.set(ROAD_X + 7.4, 0, 1.6); s.add(wall)
+      this.buildIndustrialDistrict(s)
+      // uzak dağ silüeti (sanayinin de arkasında, en uzak katman)
       for (let i = 0; i < 5; i++) {
         const mt = new THREE.Mesh(new THREE.ConeGeometry(14 + i * 3, 10 + i * 2, 5), lam(0x8a94a0))
         mt.rotation.x = Math.PI / 2
-        mt.position.set(ROAD_X + 46 + i * 6, -70 + i * 34, 5); s.add(mt)
+        mt.position.set(ROAD_X + 78 + i * 7, -70 + i * 34, 5); s.add(mt)
       }
     }
 
@@ -517,29 +519,10 @@ export class World {
         const k = i % dashPerLane
         m.makeTranslation(dashOff[Math.floor(i / dashPerLane)], -107 + k * 5, 0.021)
       })
-      // ---- METROPOL SİLUETİ (rapor §6.6): çevre yolundan görsel olarak AYRIŞSIN ----
-      // Çevre yolu alçak kentsel doku; metropol gökdelen duvarı. Determinist yükseklikler
-      // (rastgele değil) — sahne her açılışta aynı görünür. Tek InstancedMesh = 1 draw call.
-      if (th.id === 'metropol') {
-        const TOWERS = 26
-        mkInst(new THREE.BoxGeometry(1, 1, 1), lam(0x6d7683), TOWERS, (m, i) => {
-          const side = i % 2 === 0 ? -1 : 1
-          const k = Math.floor(i / 2)
-          // yükseklik determinist ama tekdüze değil: iki farklı periyotlu sinüsün karışımı
-          const h = 16 + 11 * Math.abs(Math.sin(i * 1.7)) + 7 * Math.abs(Math.sin(i * 0.53))
-          const w = 5 + 2.4 * Math.abs(Math.sin(i * 2.3))
-          m.makeScale(w, w, h)
-          m.setPosition(ROAD_X + side * (34 + (k % 3) * 11), -84 + k * 13.5, h / 2)
-        })
-        // ikinci sıra: daha uzak, daha soluk (derinlik hissi)
-        mkInst(new THREE.BoxGeometry(1, 1, 1), lam(0x8b94a1), 18, (m, i) => {
-          const side = i % 2 === 0 ? -1 : 1
-          const k = Math.floor(i / 2)
-          const h = 24 + 15 * Math.abs(Math.sin(i * 1.13))
-          m.makeScale(7, 7, h)
-          m.setPosition(ROAD_X + side * (68 + (k % 2) * 14), -76 + k * 19, h / 2)
-        })
-      }
+      // ---- METROPOL: TİCARİ DOKU (rapor §6.6) ----
+      // Çevre yolu alçak kentsel doku; metropol ticaret merkezi. Kit varsa gerçek
+      // binalar, yoksa prosedürel kutu siluete düşülür (oyun her hâlde kurulur).
+      if (th.id === 'metropol') this.buildCommercialDistrict(s)
     } else {
       for (const off of [-0.1, 0.1]) {
         const center = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 220), lam(0xe0b13e))
@@ -1038,6 +1021,142 @@ export class World {
       this.nightLights = this.nightLights.filter(li => li !== l.light)
       return false
     })
+  }
+
+
+  /** OTOYOL ÇEVRESİ — SANAYİ BÖLGESİ (Kenney city-kit-industrial)
+   *
+   *  Otoyol dinlenme tesisinin çevresi boş çayır değil, organize sanayi olmalı: depolar,
+   *  bacalar, tanklar. Yerleşim DETERMİNİST (rastgele değil) — sahne her açılışta aynı
+   *  görünür, oyuncu "burası benim otoyolum" diye tanır.
+   *
+   *  Kit yoksa (indirilemedi/eski istemci) blok sessizce atlanır: sahne prosedürel
+   *  hâliyle kurulur, oyun durmaz.
+   */
+  private buildIndustrialDistrict(s: THREE.Scene) {
+    const K = this.kit
+    if (!K) return
+    const pick = (n: string) => K[n] ?? null
+    const BUILDINGS = ['building-a', 'building-c', 'building-e', 'building-f', 'building-h',
+                       'building-j', 'building-l', 'building-n', 'building-q', 'building-s']
+    const CHIMNEYS = ['chimney-large', 'chimney-medium', 'chimney-small']
+
+    // İki sıra: yola yakın (küçük depolar) ve arkada (büyük tesisler). Karşı yakada,
+    // gürültü bariyerinin ARDINDA — oyuncunun arsasını ve trafiği hiç kapatmaz.
+    let placed = 0
+    for (let row = 0; row < 2; row++) {
+      const x = ROAD_X + 13 + row * 15
+      const count = row === 0 ? 9 : 7
+      const span = 150
+      for (let i = 0; i < count; i++) {
+        // determinist seçim ve yerleşim: aynı i → aynı bina, aynı yer
+        const name = BUILDINGS[(i * 3 + row * 5) % BUILDINGS.length]
+        const proto = pick(name)
+        if (!proto) continue
+        const g = fitModel(proto, row === 0 ? 7 : 11, 'y')
+        const jitter = ((i * 37 + row * 11) % 9) - 4     // ±4 birim düzensizlik
+        g.position.set(x + jitter * 0.6, -span / 2 + (i + 0.5) * (span / count), 0)
+        g.rotation.z = ((i + row) % 2) * Math.PI / 2      // yarısı 90° dönük
+        s.add(g)
+        placed++
+      }
+    }
+    // Bacalar: sanayi siluetinin imzası, en arkada ve seyrek
+    for (let i = 0; i < 5; i++) {
+      const proto = pick(CHIMNEYS[i % CHIMNEYS.length])
+      if (!proto) continue
+      const g = fitModel(proto, 4 + (i % 3) * 2, 'y')
+      g.position.set(ROAD_X + 34 + (i % 2) * 7, -70 + i * 34, 0)
+      s.add(g)
+      placed++
+    }
+    // Depolama tankları: yola yakın, kümeler hâlinde (tek başına duran tank tuhaf durur)
+    const tank = pick('detail-tank')
+    if (tank) {
+      for (const [tx, ty] of [[10, -46], [10, -40], [13.5, -43], [10, 44], [13.5, 47]] as [number, number][]) {
+        const g = fitModel(tank, 3.4, 'y')
+        g.position.set(ROAD_X + tx, ty, 0)
+        s.add(g)
+        placed++
+      }
+    }
+    if (placed === 0) console.warn('[sahne] sanayi kiti boş geldi — otoyol prosedürel kaldı')
+  }
+
+
+  /** METROPOL — TİCARİ DOKU (Kenney city-kit-commercial)
+   *
+   *  Rapor §6.6'nın uyarısı: metropol bir "skin" değil kısıt seti. Görsel tarafta da
+   *  abartmamak gerekiyor — ön planda birkaç DETAYLI bina, arkada DÜŞÜK DETAYLI siluet.
+   *  Böylece derinlik hissi doğar ama draw call patlamaz.
+   *
+   *  Kit yoksa prosedürel kutu siluete düşülür (aşağıda).
+   */
+  private buildCommercialDistrict(s: THREE.Scene) {
+    const K = this.kit
+    if (!K) { this.buildBlockSkyline(s); return }
+    const FRONT = ['building-b', 'building-e', 'building-h', 'building-k', 'building-n']
+    const TOWER = ['building-skyscraper-a', 'building-skyscraper-c', 'building-skyscraper-e']
+    const BACK = ['low-detail-building-b', 'low-detail-building-f', 'low-detail-building-j',
+                  'low-detail-building-wide-a']
+    let placed = 0
+    // ÖN SIRA: yolun iki yanında, detaylı ticari binalar (az sayıda — kalabalık yapmaz)
+    for (let i = 0; i < 10; i++) {
+      const side = i % 2 === 0 ? -1 : 1
+      const k = Math.floor(i / 2)
+      const proto = this.kit?.[FRONT[i % FRONT.length]]
+      if (!proto) continue
+      const g = fitModel(proto, 8, 'y')
+      g.position.set(ROAD_X + side * (17 + (k % 2) * 4), -60 + k * 30, 0)
+      g.rotation.z = side < 0 ? 0 : Math.PI
+      s.add(g)
+      placed++
+    }
+    // GÖKDELENLER: seyrek ve uzak — şehir hissini onlar verir
+    for (let i = 0; i < 6; i++) {
+      const side = i % 2 === 0 ? -1 : 1
+      const k = Math.floor(i / 2)
+      const proto = this.kit?.[TOWER[i % TOWER.length]]
+      if (!proto) continue
+      const g = fitModel(proto, 11 + (i % 3) * 3, 'y')
+      g.position.set(ROAD_X + side * (33 + (k % 2) * 9), -50 + k * 46, 0)
+      s.add(g)
+      placed++
+    }
+    // ARKA SİLUET: düşük detaylı, kalabalık — derinlik için
+    for (let i = 0; i < 14; i++) {
+      const side = i % 2 === 0 ? -1 : 1
+      const k = Math.floor(i / 2)
+      const proto = this.kit?.[BACK[i % BACK.length]]
+      if (!proto) continue
+      const g = fitModel(proto, 9 + (i % 4) * 2, 'y')
+      g.position.set(ROAD_X + side * (52 + (k % 3) * 12), -84 + k * 25, 0)
+      s.add(g)
+      placed++
+    }
+    if (placed === 0) this.buildBlockSkyline(s)
+  }
+
+  /** Kit yokken kullanılan prosedürel kutu silueti (eski davranış — hiç boş sahne kalmaz) */
+  private buildBlockSkyline(s: THREE.Scene) {
+    const th = this.theme
+    const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, n: number, place: (m: THREE.Matrix4, i: number) => void) => {
+      const inst = new THREE.InstancedMesh(geo, mat, n)
+      const m4 = new THREE.Matrix4()
+      for (let i = 0; i < n; i++) { place(m4, i); inst.setMatrixAt(i, m4) }
+      inst.instanceMatrix.needsUpdate = true
+      s.add(inst)
+    }
+    const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
+    mk(new THREE.BoxGeometry(1, 1, 1), lam2(0x6d7683), 26, (m, i) => {
+      const side = i % 2 === 0 ? -1 : 1
+      const k = Math.floor(i / 2)
+      const h = 16 + 11 * Math.abs(Math.sin(i * 1.7)) + 7 * Math.abs(Math.sin(i * 0.53))
+      const w = 5 + 2.4 * Math.abs(Math.sin(i * 2.3))
+      m.makeScale(w, w, h)
+      m.setPosition(ROAD_X + side * (34 + (k % 3) * 11), -84 + k * 13.5, h / 2)
+    })
+    void th
   }
 
   private placePlanter(x: number, y: number) {
