@@ -3,6 +3,7 @@ import { t } from './i18n'
 import { StaticLib, fitModel } from './models'
 import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 import { LocationTheme, activeTheme } from './themes'
+import type { Kit } from './kits'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
 // Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
@@ -272,7 +273,10 @@ export class World {
   private grid: THREE.GridHelper
   private batteryPos = new THREE.Vector2(-2.5, 8.2)
 
-  constructor(private statics: StaticLib | null, themeId: LocationTheme['id'] = 'kasaba') {
+  /** Şubeye özgü model kiti (otoyol sanayi, metropol ticari, marina deniz).
+   *  null = bu şube ek paket istemiyor ya da indirilemedi → prosedürel sahneye düşülür. */
+  constructor(private statics: StaticLib | null, themeId: LocationTheme['id'] = 'kasaba',
+              private kit: Kit | null = null) {
     this.theme = activeTheme(themeId) // sahne kurulumu TEMADAN (şube değişince farklı zemin/gök)
     const s = this.scene
     s.background = new THREE.Color(this.theme.sky.day)

@@ -24,6 +24,7 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  '📦 {0} sahnesi indiriliyor ({1} model)…': '📦 Downloading the {0} scene ({1} models)…',
   'BenelOil — Petrol İstasyonu Oyunu': 'BenelOil — Gas Station Tycoon',
   // --- Faz 2: şablon dizelerinden kurtarılan metinler ---
   'Google eklentisi bulunamadı.': 'Google plugin not found.',
@@ -949,6 +950,7 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  '📦 {0} sahnesi indiriliyor ({1} model)…': '📦 Téléchargement de la scène {0} ({1} modèles)…',
   'BenelOil — Petrol İstasyonu Oyunu': 'BenelOil — Tycoon de station-service',
   // --- Faz 2: şablon dizelerinden kurtarılan metinler ---
   'Google eklentisi bulunamadı.': 'Extension Google introuvable.',

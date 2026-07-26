@@ -15,6 +15,7 @@ import {
   LocId,
 } from './state'
 import { loadModels, loadStatics } from './models'
+import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
 import { isNativePlatform } from './platform'
 import { THEMES } from './themes'
 import { t, lang, setLang, translateDom } from './i18n'
@@ -458,14 +459,17 @@ document.addEventListener('visibilitychange', () => {
   }
 })
 
-// Kenney modelleri (yüklenemezse prosedürele düşer)
-const [modelLib, staticLib] = await Promise.all([loadModels(), loadStatics()])
-
 // Sahne, save YÜKLENMEDEN kurulduğu için aktif şube ipucu localStorage'dan okunur
 // (save otoriter kalır; uyuşmazlıkta aşağıda bir kez sessiz reload ile düzelir).
 const LOC_HINT_KEY = 'beneloil-loc'
 const locHint = (localStorage.getItem(LOC_HINT_KEY) as LocId | null) ?? 'kasaba'
-const world = new World(staticLib, locHint)
+
+// Kenney modelleri (yüklenemezse prosedürele düşer) + AKTİF ŞUBENİN kiti.
+// Kit tembel: kasaba/çevre yolu oyuncusu tek bayt fazla indirmez (bkz. src/kits.ts).
+const [modelLib, staticLib, branchKit] = await Promise.all([
+  loadModels(), loadStatics(), loadKit(locHint),
+])
+const world = new World(staticLib, locHint, branchKit)
 const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
 let parkInfoShown = 0
@@ -871,7 +875,15 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   lastRemotePush = 0 // throttle'ı atla: şube değişimi reload'dan ÖNCE buluta yazılmalı
   persist()
   Car.solids = hardRects()
-  setTimeout(() => location.reload(), 1600) // sahne temadan yeniden kurulsun
+  // Hedef şubenin model kitini reload'dan ÖNCE indir: sayfa yenilenince tarayıcı
+  // önbellekten okur, oyuncu boş/prosedürel sahne görmez. İndirme başarısız olsa da
+  // reload yine yapılır (sahne prosedürele düşer, oyun durmaz).
+  const goReload = () => location.reload()
+  if (kitNeeded(id) && !kitReady(id)) {
+    ui.toast(t('📦 {0} sahnesi indiriliyor ({1} model)…', THEMES[id].name, String(kitSize(id))), '')
+    loadKit(id).catch(() => null).then(goReload)
+    setTimeout(goReload, 12000) // ağ takılırsa oyuncuyu bekletme
+  } else setTimeout(goReload, 1600) // sahne temadan yeniden kurulsun
 })
 
 // PRESTİJ: İstasyonu Devret — iki aşamalı onay (geri dönüşü yok, gönüllü)
