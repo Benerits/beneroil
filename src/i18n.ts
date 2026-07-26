@@ -51,6 +51,9 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  'Sıralama & Sezon': 'Leaderboard & Season', 'Sezon': 'Season', 'Sezon trafiği': 'Season traffic',
+  'Sıralama yükleniyor…': 'Loading leaderboard…', 'Sıralama alınamadı.': 'Could not load leaderboard.',
+  'Yaz': 'Summer', 'Sonbahar': 'Autumn', 'Kış': 'Winter', 'İlkbahar': 'Spring',
   'Sigorta Yaptır': 'Buy Insurance', 'Sigorta: AKTİF': 'Insurance: ACTIVE',
   'hasar yarı': 'half damage', 'günlük prim': 'daily premium',
   'Arıza, patlama ve ceza maliyetleri YARIYA iner. Günlük primi varlığınla ölçeklenir.':

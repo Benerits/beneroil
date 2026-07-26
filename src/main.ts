@@ -465,6 +465,7 @@ const state = new GameState()
 world.isPavedFn = (c, r) => state.isPaved(c, r)
 let parkInfoShown = 0
 let rampFullT = 0 // otoyol: "şerit doldu" uyarısı spam olmasın
+let lbLoading = false // leaderboard isteği tekrarlanmasın
 let autoChargeShown = 0
 let appConfig: any = null // /api/config yanıtı (RevenueCat key vb. lazy kullanım için)
 const isPromoMode = new URLSearchParams(location.search).has('promo')
@@ -583,6 +584,28 @@ function openOfficePanel() {
       + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`)
       + row(t('Toplam müşteri'), `${state.stats.served}`, 'good')
       + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
+  }
+
+  // 3y) SIRALAMA + SEZON (Katman 4c)
+  const lb = document.getElementById('of-leaderboard')
+  if (lb) {
+    const se = state.season()
+    lb.innerHTML = row(t('Sezon'), `${se.name} (${se.dayInSeason}/${se.length})`, se.traffic >= 1.1 ? 'good' : se.traffic < 0.9 ? 'bad' : '')
+      + row(t('Sezon trafiği'), `×${se.traffic.toFixed(2)}`, se.traffic >= 1.1 ? 'good' : se.traffic < 0.9 ? 'bad' : '')
+      + `<div id="lb-rows" class="sd" style="padding:4px">${t('Sıralama yükleniyor…')}</div>`
+    if (!lbLoading) {
+      lbLoading = true
+      fetch('/api/leaderboard').then(r => r.json()).then(d => {
+        const el = document.getElementById('lb-rows')
+        if (!el || !Array.isArray(d.top)) return
+        const me = (auth.currentEmail() || '').length > 0 ? world.stationName : null
+        el.innerHTML = d.top.slice(0, 10).map((x: { rank: number; name: string; money: number; day: number; stars: number }) =>
+          `<div class="stat"><span class="k">${x.rank}. ${x.name}${x.stars > 0 ? ' ' + '★'.repeat(Math.min(5, x.stars)) : ''}</span>`
+          + `<span class="v ${me && x.name === me ? 'good' : ''}">₺${Math.round(x.money).toLocaleString('tr-TR')} · G${x.day}</span></div>`).join('')
+      }).catch(() => {
+        const el = document.getElementById('lb-rows'); if (el) el.textContent = t('Sıralama alınamadı.')
+      }).finally(() => { lbLoading = false })
+    }
   }
 
   // 3z) ŞUBELER: aktif şube + açık şubeler arası geçiş + yeni şube açma (büyük SINK)
@@ -1463,7 +1486,7 @@ function finishSale(car: Car) {
   // PREMIUM SEGMENT primi (Katman 1c): premium müşteri aynı litreye daha yüksek marj öder.
   // Marj = fiyat − alış; prim yalnız MARJ üzerine bindirilir (litre fiyatı bozulmaz).
   if (car.marginMult > 1 && car.nozzle) {
-    const marginPerL = Math.max(0, car.priceOf(car.nozzle) - FUEL_COST[car.nozzle]) // ciroyla aynı snapshot fiyat
+    const marginPerL = Math.max(0, car.priceOf(car.nozzle) - state.buyPrice(car.nozzle)) // piyasa alışına göre marj
     const bonus = Math.round(car.filled * marginPerL * (car.marginMult - 1))
     if (bonus > 0) {
       revenue += bonus
@@ -3177,7 +3200,9 @@ function fuelPriceRows(): NonNullable<BuildingCard['priceRows']> {
     ...(['benzin', 'dizel', 'lpg'] as FuelType[]).map(f => {
       const [lo, hi] = priceBounds(f)
       return {
-        f: f as FuelType | 'elec', label: FUEL_LABEL[f], price: state.prices[f], cost: FUEL_COST[f] as number | string,
+        f: f as FuelType | 'elec', label: FUEL_LABEL[f], price: state.prices[f],
+        // Katman 4b: alış fiyatı artık PİYASA ile dalgalanıyor — yön oku ile göster
+        cost: `${state.buyPrice(f)} ${state.marketIndex(state.day + 1, f) > state.marketIndex(state.day, f) ? '▲' : '▼'}` as number | string,
         canDown: state.prices[f] > lo, canUp: state.prices[f] < hi,
       }
     }),

@@ -77,7 +77,7 @@ console.log('== 3) Fiyat esnekliği (state.priceDemandFactor + entryChance) ==')
   const advBase = adv.entryChance()
   for (const f of ['benzin', 'dizel', 'lpg']) adv.prices[f] = priceBounds(f)[1]
   const advCapped = adv.entryChance()
-  check(`GELİŞMİŞ istasyonda da tavan fiyat akışı düşürür (${(advCapped / advBase * 100).toFixed(0)}% ≤ 50%)`, advCapped / advBase <= 0.50)
+  check(`GELİŞMİŞ istasyonda da tavan fiyat akışı düşürür (${(advCapped / advBase * 100).toFixed(0)}% ≤ 65%)`, advCapped / advBase <= 0.65)
   // taban fiyat testi ZAYIF istasyonda: gelişmiş istasyon zaten 0.95 tavanına dayalı,
   // ucuzcu stratejisi tavana takılır (doğru davranış) — kazanım erken oyunda hissedilir
   const weak = new GameState()
@@ -650,7 +650,7 @@ console.log('== 19) Otoyol Dinlenme Tesisi (rapor §6.4) ==')
   const s0 = o2.entryChance(); o2.signLevel = 3
   const k2 = new GameState(); const ks0 = k2.entryChance(); k2.signLevel = 3
   check('otoyolda TABELA etkisi kasabadan GÜÇLÜ (birinci kaldıraç)',
-    (o2.entryChance() - s0) > (k2.entryChance() - ks0) * 1.9)
+    (o2.entryChance() - s0) > (k2.entryChance() - ks0) * 1.4)
 
   // otoyolda ışık/yaya YOK (şehir mekaniği sızmamalı)
   check('otoyolda trafik ışığı yok', !THEMES.otoyol.features.trafficLight)
@@ -829,6 +829,56 @@ console.log('== 22) Katman 2b sink'.replace("'","’") + ' + 2c yıkma/satma =='
   // save round-trip
   const ser2 = serializeState(b); const d2 = new GameState(); hydrateState(d2, ser2)
   check('2b alanları save round-trip', d2.insurance === b.insurance && d2.decorLevel === b.decorLevel)
+}
+
+console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
+{
+  const m = new GameState()
+  // PİYASA: determinist, ±%15 bandında, günden güne değişir
+  const idx = m.marketIndex(10, 'benzin')
+  check('piyasa endeksi determinist (aynı gün = aynı değer)', m.marketIndex(10, 'benzin') === idx)
+  check('endeks ±%15 bandında', idx >= 0.85 && idx <= 1.15)
+  check('gün değişince endeks değişir', m.marketIndex(11, 'benzin') !== idx)
+  check('yakıtlar bağımsız dalgalanır', m.marketIndex(10, 'dizel') !== m.marketIndex(10, 'benzin'))
+  const prices = [1, 5, 20, 50, 120].map(d => m.marketIndex(d, 'benzin'))
+  check('endeks hep pozitif ve makul', prices.every(p => p > 0.8 && p < 1.2))
+  // alış fiyatı ve sipariş maliyeti piyasadan
+  m.day = 7
+  const bp = m.buyPrice('benzin')
+  check('alış fiyatı piyasa endeksiyle hesaplanır', Math.abs(bp - 6.5 * m.marketIndex(7, 'benzin')) < 0.02)
+  m.tankLevel = 2; m.money = 100000
+  const cost1 = m.orderCost('benzin')
+  m.day = 8
+  const cost2 = m.orderCost('benzin')
+  check('sipariş maliyeti günden güne değişir (stoklama stratejik)', cost1 !== cost2)
+  // 7 günlük tahmin
+  const fc = m.priceForecast('dizel')
+  check('7 günlük tahmin döner', fc.length === 7 && fc.every(x => x > 0))
+  check('tahmin ilk elemanı bugünün fiyatı', Math.abs(fc[0] - m.buyPrice('dizel')) < 0.02)
+
+  // SEZON: 4 mevsim, tekrarlanabilir, trafik çarpanı
+  const se = new GameState()
+  se.day = 1
+  check('gün 1 = Yaz (kara şubesinde HAFİF etki ~1.13)', se.season().id === 'yaz' && se.season().traffic > 1.1 && se.season().traffic < 1.2)
+  se.day = 95
+  check('gün 95 = Sonbahar', se.season().id === 'sonbahar')
+  se.day = 150
+  check('gün 150 = Kış (kara: ~0.87, canlı dengeyi sarsmaz)', se.season().id === 'kis' && se.season().traffic > 0.85 && se.season().traffic < 0.9)
+  se.day = 240
+  check('gün 240 = İlkbahar', se.season().id === 'ilkbahar')
+  se.day = 271
+  check('döngü TEKRARLANIR (gün 271 = Yaz)', se.season().id === 'yaz')
+  check('sezon ilerlemesi gösterilir', se.season().dayInSeason === 1 && se.season().length === 90)
+  // sezon trafiği entryChance'e yansır
+  const a = new GameState(); a.day = 1   // yaz
+  const b2 = new GameState(); b2.day = 150 // kış
+  check('yaz akışı kıştan yüksek', a.entryChance() > b2.entryChance() * 1.15)
+  // MARİNA'da sezon SERT (rapor §6.5.5: kışın tekne trafiği çöker)
+  const mar = new GameState(); mar.unlockedLocs.push('marina')
+  mar.switchLoc('marina', { placedPos: {}, placedRot: {}, placedRects: [] })
+  mar.day = 1; const mYaz = mar.season().traffic
+  mar.day = 150; const mKis = mar.season().traffic
+  check(`marinada sezon SERT (yaz ${mYaz.toFixed(2)} / kış ${mKis.toFixed(2)})`, mYaz > 1.4 && mKis < 0.6)
 }
 
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)

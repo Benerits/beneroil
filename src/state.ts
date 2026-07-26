@@ -235,6 +235,43 @@ export class GameState {
   /** PERSONEL eğitimi seviyesi 1-4: dolum hızı, bahşiş şansı, yanlış yakıt riski. ADDITIVE */
   staffLevel = 1
   managerT = 0 // runtime: müdür tur sayacı
+  /** SEZON (Katman 4c): yaz 90 / sonbahar 45 / kış 90 / ilkbahar 45 gün — tekrarlanır.
+   *  Bitişli koleksiyon tuzağına düşmez; her yıl döner. */
+  season(): { id: 'yaz' | 'sonbahar' | 'kis' | 'ilkbahar'; name: string; traffic: number; dayInSeason: number; length: number } {
+    const cycle = 270
+    let d = ((this.day - 1) % cycle + cycle) % cycle
+    // Şiddet temadan: kara şubelerinde hafif (±%12 — mevcut denge bozulmaz), marinada sert.
+    const amp = this.theme().lane.kind === 'water' ? 1 : 0.28
+    const mix = (v: number) => 1 + (v - 1) * amp
+    const defs: [typeof this.seasonIdCache, string, number, number][] = [
+      ['yaz', t('Yaz'), mix(1.45), 90], ['sonbahar', t('Sonbahar'), mix(1.0), 45],
+      ['kis', t('Kış'), mix(0.55), 90], ['ilkbahar', t('İlkbahar'), mix(1.15), 45],
+    ]
+    for (const [id, name, traffic, length] of defs) {
+      if (d < length) return { id: id as 'yaz', name, traffic, dayInSeason: d + 1, length }
+      d -= length
+    }
+    return { id: 'yaz', name: t('Yaz'), traffic: 1, dayInSeason: 1, length: 90 }
+  }
+  private seasonIdCache: 'yaz' | 'sonbahar' | 'kis' | 'ilkbahar' = 'yaz'
+
+  /** PİYASA (Katman 4b): alış fiyatı günlük ±%15 dalgalanır. Determinist (gün-seed) →
+   *  panel açılıp kapandıkça zıplamaz, 7 günlük TAHMİN gösterilebilir. Stoklama strateji olur. */
+  marketIndex(day = this.day, f: FuelType = 'benzin'): number {
+    const k = { benzin: 0, dizel: 1, lpg: 2 }[f]
+    const x = Math.sin((day + 1) * 12.9898 + k * 78.233) * 43758.5453
+    const r = x - Math.floor(x)                    // 0..1 determinist
+    const slow = Math.sin(day / 9 + k)             // yavaş trend
+    return 1 + 0.15 * (0.6 * (r * 2 - 1) + 0.4 * slow)  // ~0.85..1.15
+  }
+  /** güncel alış fiyatı (piyasa dalgalanmalı) */
+  buyPrice(f: FuelType): number {
+    return Math.round(FUEL_COST[f] * this.marketIndex(this.day, f) * 100) / 100
+  }
+  /** 7 günlük tahmin (grafik/karar için) */
+  priceForecast(f: FuelType): number[] {
+    return Array.from({ length: 7 }, (_, i) => Math.round(FUEL_COST[f] * this.marketIndex(this.day + i, f) * 100) / 100)
+  }
   /** SİGORTA: primi ödenirse felaket/arıza maliyeti yarıya iner (ADDITIVE) */
   insurance = false
   /** RUHSAT: 30 günde bir yenilenir; ödenmezse itibar cezası (ADDITIVE) */
@@ -547,7 +584,8 @@ export class GameState {
   entryChance() {
     if (this.closed) return 0
     // ışık çarpanı: kırmızıda sıkışan sürücü istasyona giriyor (çevre yolu/metropol imzası)
-    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor() * this.lightBoost()
+    // sezon çarpanı (Katman 4c): yaz tatili trafiği, kış düşüşü — tekrarlanabilir döngü
+    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * this.priceDemandFactor() * this.lightBoost() * this.season().traffic
     // Şube kısıtları temadan: taban çekicilik, tabela ve itibar AĞIRLIĞI şubeye göre değişir
     // (kasabada itibar belirleyici, otoyolda tabela; kasaba değerleri 1.0 → denge değişmez).
     const th = this.theme()
@@ -887,12 +925,12 @@ export class GameState {
    *  büyük tanklı oyuncu 'tanker çağıramıyor' kalmaz (buton asla salt fiyat yüzünden kilitlenmez). */
   orderNeed(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
-    const affordable = Math.max(0, Math.floor(this.money / (FUEL_COST[f] * disc)) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
+    const affordable = Math.max(0, Math.floor(this.money / (this.buyPrice(f) * disc)) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
     return Math.floor(Math.max(0, Math.min(this.orderQty[f] * ORDER_STEP, this.fuelCapacity(f) - this.tanks[f], affordable)))
   }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
-    return Math.ceil(this.orderNeed(f) * FUEL_COST[f] * disc)
+    return Math.ceil(this.orderNeed(f) * this.buyPrice(f) * disc) // piyasa fiyatı (Katman 4b)
   }
 
   canOrder(f: FuelType) {

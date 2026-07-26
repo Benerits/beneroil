@@ -491,6 +491,7 @@ function sanitizeSave(save) {
 // ---- hız limitleri (bellek içi; tek konteyner için yeterli) ----
 const buckets = new Map() // key -> { n, resetAt }
 let statsCache = { data: null, at: 0 }
+let lbCache = { data: null, at: 0 } // leaderboard önbelleği (60 sn)
 async function bumpStat(kind) {
   if (!pool) return
   try {
@@ -552,6 +553,29 @@ async function handleApi(req, res, url) {
       const sid = String(gb.sid || '').slice(0, 64)
       if (sid) guestSeen.set(sid, Date.now())
       return json(res, 200, { ok: true })
+    }
+    // LEADERBOARD (Katman 4c): read-only sıralama — istasyon adı + servet + gün.
+    // Mevcut save verisinden okunur (yeni tablo yok). 60 sn önbellek.
+    if (url === '/api/leaderboard' && req.method === 'GET') {
+      const now = Date.now()
+      if (!lbCache.data || now - lbCache.at > 60_000) {
+        const r = await pool.query(`
+          SELECT COALESCE(NULLIF(save->'s'->>'stationName',''), 'BENELOIL') AS name,
+                 COALESCE((save->'s'->>'money')::numeric, 0) AS money,
+                 COALESCE((save->'s'->>'day')::int, 1) AS day,
+                 COALESCE((save->'s'->>'brandStars')::int, 0) AS stars
+          FROM benzinlik_player
+          WHERE save IS NOT NULL AND banned_at IS NULL
+          ORDER BY (COALESCE((save->'s'->>'money')::numeric, 0)
+                    + COALESCE((save->'s'->>'brandStars')::int, 0) * 250000) DESC
+          LIMIT 20`)
+        lbCache = { data: r.rows.map((x, i) => ({
+          rank: i + 1, name: String(x.name).slice(0, 14), money: Math.round(Number(x.money)),
+          day: x.day, stars: x.stars,
+        })), at: now }
+      }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=45' })
+      return res.end(JSON.stringify({ top: lbCache.data }))
     }
     if (url === '/api/stats' && req.method === 'GET') {
       const now = Date.now()
