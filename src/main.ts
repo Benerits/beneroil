@@ -1441,7 +1441,7 @@ function finishSale(car: Car) {
     score += 0.6 // pompacı düzgün doldurur ama bahşiş ona kalır
   } else if (car.filledValue >= car.demandAmount - 10) {
     // temiz camlar bahşişi ikiye katlar ve memnuniyeti artırır
-    const tip = Math.round(revenue0 * (car.windowsCleaned ? 0.2 : 0.1))
+    const tip = Math.round(revenue0 * ((car.windowsCleaned ? 0.2 : 0.1) + state.staffTipBonus())) // eğitimli personel daha çok bahşiş alır
     revenue += tip
     score += car.windowsCleaned ? 1.1 : 0.8
     ui.toast(t('Bahşiş: +₺{0}', tip), 'good')
@@ -3199,7 +3199,7 @@ function buildingCard(id: string): BuildingCard | null {
       desc: t('Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.'),
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
-        [t('Dolum hızı'), t('{0} L/sn', FILL_RATE)],
+        [t('Dolum hızı'), t('{0} L/sn', (FILL_RATE * state.staffFillMult()).toFixed(1))],
         [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelir senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
         [t('Yovmiye'), t('₺{0}/gün', POMPACI_WAGE), state.autoPumps.has(i) ? 'bad' : undefined],
         [t('Benzin'), `₺${state.prices.benzin}/L`],
@@ -4065,7 +4065,7 @@ function frame() {
       finishSale(c)
       continue
     }
-    const amount = Math.min(FILL_RATE * dt, state.tanks[c.nozzle])
+    const amount = Math.min(FILL_RATE * state.staffFillMult() * dt, state.tanks[c.nozzle]) // personel eğitimi hızı
     c.filled += amount
     state.tanks[c.nozzle] -= amount
     c.bubbleT -= dt // sayaç ~9/sn güncellensin (her frame değil) — okunur, çok hızlı akmaz
@@ -4110,6 +4110,17 @@ function frame() {
     if (chip && chip.style.display !== 'none') chip.style.display = 'none' // ışıksız şubede gizli
   }
   if (rampFullT > 0) rampFullT -= dt
+  // MÜDÜR TURU RAPORU: sessiz çalışmasın, oyuncu parasının nereye gittiğini görsün
+  if (state.managerResult) {
+    const mr = state.managerResult
+    state.managerResult = null
+    const parts: string[] = []
+    if (mr.collected > 0) parts.push(t('kumbaralar +₺{0}', mr.collected.toLocaleString('tr-TR')))
+    if (mr.cleaned) parts.push(t('paneller temizlendi'))
+    if (mr.fixed > 0) parts.push(t('{0} arıza tamir edildi', mr.fixed))
+    if (parts.length) ui.toast(`🧑‍💼 ${t('Müdür turu')}: ${parts.join(' · ')}`, 'good')
+    persist()
+  }
   audio.setDiesel(state.dieselRunning() && !state.closed)
   audio.setPump(cars.cars.some(c => c.filling && c.phase === 'atPump' && !c.wrongFuelHandled))
   Car.solids = hardRects()

@@ -51,6 +51,18 @@ const EN: Record<string, string> = {
   '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
     '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
+  'Müdür Tut': 'Hire Manager', 'Müdür Sv.{0}': 'Manager Lv.{0}',
+  'kumbara toplar': 'collects piggy banks', '+ panel temizliği': '+ panel cleaning', '+ arıza tamiri': '+ breakdown repairs',
+  'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. Yovmiyesi vardır.':
+    'The manager makes a round every 45s: Lv.1 collects all piggy banks, Lv.2 cleans solar panels, Lv.3 repairs breakdowns. Costs a daily wage.',
+  'Önce gelir getiren tesisler kur': 'Build income facilities first',
+  'Personel Eğitimi Sv.{0}': 'Staff Training Lv.{0}',
+  '+%12 hız, +bahşiş': '+12% speed, +tips',
+  'Pompacı/şarjcı kademesi: dolum hızı, bahşiş şansı ve hata direnci artar — ama yovmiye de artar.':
+    'Attendant tiers: fill speed, tip chance and error resistance improve — but wages rise too.',
+  'Önce pompacı/şarjcı tut': 'Hire an attendant first',
+  'Müdür turu': 'Manager round',
+  'kumbaralar +₺{0}': 'piggy banks +₺{0}', 'paneller temizlendi': 'panels cleaned', '{0} arıza tamir edildi': '{0} breakdowns repaired',
   'Karşı Tuvalet': 'Across Restroom', 'Karşı Tuvalet Sv.2': 'Across Restroom Lv.2', 'Karşı Tuvalet Sv.{0}': 'Across Restroom Lv.{0}',
   'Karşı Oto Yıkama': 'Across Car Wash', 'Karşı Yağ Değişimi': 'Across Oil Change',
   'Karşı Kahveci': 'Across Coffee Shop', 'Karşı Restoran': 'Across Restaurant',

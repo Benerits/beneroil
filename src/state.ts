@@ -9,7 +9,8 @@ export type LocId = 'kasaba' | 'cevreyolu' | 'otoyol' | 'marina' | 'metropol'
 /** Şubeye AİT (lokasyon-bazlı) alanlar. Bunun dışındaki her şey şirket seviyesidir:
  *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
 export const LOC_FIELDS = [
-  'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'gridLevel',
+  'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level',
+  'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'managerLevel', 'staffLevel', 'gridLevel',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
@@ -100,6 +101,12 @@ export const WIDEGATE_COST = 6000
  *  servis hâlâ bahşişle daha kârlı, ama pompacı yetişemediğin pompayı net kâra çevirir). */
 export const POMPACI_HIRE = 800
 export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) işe alma bedeli
+// MÜDÜR (rapor §7 #5): kademeli otomasyon — Sv.1 kumbara toplar, Sv.2 + panel temizler,
+// Sv.3 + arıza tamir eder. Yovmiyesi pasif geliri "aktifin %30'unu geçmesin" kuralına göre.
+export const MANAGER_COSTS = [18_000, 34_000, 60_000]   // Sv.1/2/3 kurulum
+export const MANAGER_WAGES = [0, 400, 750, 1_200]       // index = seviye, günlük yovmiye
+// PERSONEL EĞİTİMİ (rapor §7 #7): pompacı/şarjcı kademesi — hız, bahşiş, hata oranı
+export const STAFF_TRAIN_COSTS = [12_000, 26_000, 48_000] // Sv.1→2, 2→3, 3→4
 export const POMPACI_WAGE = 120       // pompacı GÜNLÜK yovmiyesi (her oyun günü kasadan)
 export const EV_ATTENDANT_WAGE = 150  // şarjcı günlük yovmiyesi
 const TANK_COSTS = [3000, 7000, 15000]
@@ -217,6 +224,12 @@ export class GameState {
    *  save silinme travması tazeyken reset kelimesi kullanılmaz (rapor uyarısı). ADDITIVE. */
   brandStars = 0
   handoverCount = 0 // kaç kez devredildi (ADDITIVE)
+  /** MÜDÜR seviyesi 0-3 (0 = yok). Kumbara toplama → bakım → tamir otomasyonu. ADDITIVE */
+  managerLevel = 0
+  /** PERSONEL eğitimi seviyesi 1-4: dolum hızı, bahşiş şansı, yanlış yakıt riski. ADDITIVE */
+  staffLevel = 1
+  managerT = 0 // runtime: müdür tur sayacı
+  managerResult: { collected: number; cleaned: boolean; fixed: number } | null = null
   toiletLevel = 0
 
   // elektrik
@@ -374,6 +387,7 @@ export class GameState {
         }
       }
     }
+    this.managerResult = this.managerTick(dt) // müdür otomasyonu (varsa)
     for (const f of FUELS) {
       const o = this.orders[f]
       if (o.pending) {
@@ -470,7 +484,8 @@ export class GameState {
 
     // rastgele arızalar — seyrek; para azken (Murphy) artar, bakım özeni yüksekken düşer
     const stress = this.graceActive ? 1 : this.money < 1000 ? 3 : this.money < 3000 ? 2 : 1
-    const care = 1 - 0.65 * this.maintCare
+    // eğitimli personel arıza riskini düşürür (rapor §7 #7: hata oranı iyileşir)
+    const care = (1 - 0.65 * this.maintCare) * this.staffErrorMult()
     const brokenCount = this.brokenPumps.size + this.brokenChargers.size
     if (brokenCount < 2) {
       for (let i = 0; i < this.pumps; i++) {
@@ -912,7 +927,43 @@ export class GameState {
     return out
   }
   /** günlük toplam yovmiye (pompacı + şarjcı) — her oyun günü kasadan çekilir */
-  dailyWages(): number { return this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE }
+  dailyWages(): number {
+    // eğitimli personel daha pahalı (her seviye +%35), müdür ayrı kalem
+    const staffMul = 1 + 0.35 * (this.staffLevel - 1)
+    return Math.round((this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE) * staffMul)
+      + MANAGER_WAGES[Math.min(3, this.managerLevel)]
+  }
+  /** personel eğitimi etkileri (rapor §7 #7): dolum hızı, bahşiş, hata riski */
+  staffFillMult(): number { return 1 + 0.12 * (this.staffLevel - 1) }   // Sv.4 → +%36 hız
+  staffTipBonus(): number { return 0.05 * (this.staffLevel - 1) }        // bahşiş oranına eklenir
+  staffErrorMult(): number { return Math.max(0.25, 1 - 0.25 * (this.staffLevel - 1)) } // arıza/hata riski
+
+  /** MÜDÜR TURU: seviyeye göre kumbara toplar, panel temizler, arıza tamir eder.
+   *  Dönen liste oyuncuya rapor edilir (toast). tick()'ten çağrılır. */
+  managerTick(dt: number): { collected: number; cleaned: boolean; fixed: number } | null {
+    if (this.managerLevel <= 0) return null
+    this.managerT += dt
+    if (this.managerT < 45) return null // 45 sn'de bir tur (gün ≈ 160 sn)
+    this.managerT = 0
+    let collected = 0
+    for (const id of Object.keys(this.pendingCash)) collected += this.collectPending(id)
+    let cleaned = false
+    if (this.managerLevel >= 2 && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
+      this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
+    }
+    let fixed = 0
+    if (this.managerLevel >= 3) {
+      for (const i of [...this.brokenPumps]) {
+        if (this.money < 800) break
+        this.money -= 800; this.brokenPumps.delete(i); fixed++
+      }
+      for (const i of [...this.brokenChargers]) {
+        if (this.money < 1000) break
+        this.money -= 1000; this.brokenChargers.delete(i); fixed++
+      }
+    }
+    return (collected > 0 || cleaned || fixed > 0) ? { collected, cleaned, fixed } : null
+  }
   loanMonthly(principal: number, rate = LOAN_RATE): number {
     const n = LOAN_TERMS
     return Math.ceil(principal * rate / (1 - Math.pow(1 + rate, -n)))
@@ -1029,6 +1080,24 @@ export class GameState {
   }
 
   // ---- Ofis muhasebe yardımcıları ----
+  /** kurulu tesislerin toplam kumbara kapasitesi — müdür kilidinin ölçütü */
+  pendingCapTotal(): number {
+    let v = 0
+    for (const id of ['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2',
+      'coffee', 'coffee2', 'restaurant', 'restaurant2', 'truckpark', 'selfwash', 'airwater', 'parking']) {
+      const has = (id === 'market' && this.marketLevel > 0) || (id === 'market2' && this.market2Level > 0)
+        || (id === 'toilet' && this.toiletLevel > 0) || (id === 'toilet2' && this.toilet2Level > 0)
+        || (id === 'wash' && this.hasWash) || (id === 'wash2' && this.hasWash2)
+        || (id === 'oil' && this.hasOil) || (id === 'oil2' && this.hasOil2)
+        || (id === 'coffee' && this.hasCoffee) || (id === 'coffee2' && this.hasCoffee2)
+        || (id === 'restaurant' && this.hasRestaurant) || (id === 'restaurant2' && this.hasRestaurant2)
+        || (id === 'truckpark' && this.hasTruckPark) || (id === 'selfwash' && this.selfWashCount > 0)
+        || (id === 'airwater' && this.airWaterCount > 0) || (id === 'parking' && this.parkingCount > 0)
+      if (has) v += this.pendingCap(id)
+    }
+    return v
+  }
+
   private pendingTotal(): number { return Object.values(this.pendingCash).reduce((a, v) => a + (v || 0), 0) }
   /** Aktif (toplam varlık): kasa + kumbaralar + satılabilir ekipman değeri */
   assets(): number { return this.money + this.pendingTotal() + this.eligibleCollateral().reduce((a, c) => a + c.value, 0) }
@@ -1156,6 +1225,19 @@ export function getShopItems(s: GameState): ShopRow[] {
       t('Karşı yakada yemek molası.'), s.hasRestaurant2 ? null : RESTAURANT_COST, s.hasRestaurant)
   }
 
+  // ---- MÜDÜR + PERSONEL EĞİTİMİ (geç oyun otomasyonu, raporun 5. ve 7. öncelikleri) ----
+  row('manager', 'i-gear',
+    s.managerLevel === 0 ? t('Müdür Tut') : t('Müdür Sv.{0}', Math.min(3, s.managerLevel + 1)),
+    s.managerLevel === 0 ? t('kumbara toplar') : s.managerLevel === 1 ? t('+ panel temizliği') : t('+ arıza tamiri'),
+    t('Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. Yovmiyesi vardır.'),
+    s.managerLevel >= 3 ? null : MANAGER_COSTS[s.managerLevel],
+    s.pendingCapTotal() >= 1200 || s.managerLevel > 0 ? null : t('Önce gelir getiren tesisler kur'))
+  row('train', 'i-star', t('Personel Eğitimi Sv.{0}', Math.min(4, s.staffLevel + 1)),
+    t('+%12 hız, +bahşiş'),
+    t('Pompacı/şarjcı kademesi: dolum hızı, bahşiş şansı ve hata direnci artar — ama yovmiye de artar.'),
+    s.staffLevel >= 4 ? null : STAFF_TRAIN_COSTS[s.staffLevel - 1],
+    s.autoPumps.size + s.autoChargers.size > 0 ? null : t('Önce pompacı/şarjcı tut'))
+
   row('grid', 'i-bolt', t('Elektrik Altyapısı Sv.{0}', Math.min(s.gridLevel + 1, 2)),
     s.gridLevel === 0 ? t('temel') : t('+%30 üretim'),
     s.gridLevel === 0 ? t('Şarj ve enerji yapılarının önünü açar') : t('Tüm üretimi güçlendirir, yeni yapılar açılır'),
@@ -1261,7 +1343,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount',
+  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -1425,6 +1507,8 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'widegate': s.wideGates = true; break
     case 'tank': s.tankLevel++; break
     case 'market': s.marketLevel++; break
+    case 'manager': s.managerLevel++; break
+    case 'train': s.staffLevel++; break
     case 'market2': s.market2Level++; break
     case 'toilet2': s.toilet2Level++; break
     case 'wash2': s.hasWash2 = true; break

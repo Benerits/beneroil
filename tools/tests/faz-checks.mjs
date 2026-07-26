@@ -698,5 +698,74 @@ console.log('== 20) B8: yaka başına tesis nüshaları + B5/B6 (trafik raporu) 
   }
 }
 
+console.log('== 21) Müdür + personel eğitimi (rapor §7 #5, #7) ==')
+{
+  const { getShopItems: shopM, buyItem: buyM } = await import('../../src/state.ts')
+  const m = new GameState()
+  check('başlangıçta müdür yok, personel Sv.1', m.managerLevel === 0 && m.staffLevel === 1)
+  check('müdür turu çalışmaz (müdür yok)', m.managerTick(60) === null)
+  let r = shopM(m).find(x => x.id === 'manager')
+  check('tesis yokken müdür KİLİTLİ', r.status === 'locked')
+  m.marketLevel = 3; m.hasTruckPark = true
+  r = shopM(m).find(x => x.id === 'manager')
+  check('gelir tesisi varken müdür açılır', r.status === 'buy' && r.cost === 18000)
+
+  m.money = 200000
+  check('müdür tutuldu', buyM(m, 'manager') === true && m.managerLevel === 1)
+  // Sv.1: yalnız kumbara toplar
+  m.addPending('market', 400, 'Market'); m.addPending('truckpark', 300, 'Tır')
+  m.solarDirt = 0.9; m.solarCount = 1; m.brokenPumps.add(0)
+  const money0 = m.money
+  let res = m.managerTick(50)
+  check('Sv.1 kumbaraları topladı', !!res && res.collected >= 700 && m.money > money0)
+  check('Sv.1 panel temizlemez', res.cleaned === false && m.solarDirt === 0.9)
+  check('Sv.1 arıza tamir etmez', res.fixed === 0 && m.brokenPumps.has(0))
+  check('tur sayacı sıfırlandı (45 sn'.replace("'", "’") + ' bekler)', m.managerTick(10) === null)
+
+  // Sv.2: panel temizliği
+  buyM(m, 'manager'); m.managerT = 0
+  res = m.managerTick(50)
+  check('Sv.2 panelleri temizledi', m.managerLevel === 2 && m.solarDirt === 0)
+  // Sv.3: arıza tamiri
+  buyM(m, 'manager'); m.managerT = 0; m.brokenChargers.add(1)
+  res = m.managerTick(50)
+  check('Sv.3 arızaları tamir etti', m.managerLevel === 3 && m.brokenPumps.size === 0 && m.brokenChargers.size === 0)
+  check('Sv.3 sonrası müdür MAKS', shopM(m).find(x => x.id === 'manager').status === 'maxed')
+  // parası yoksa tamir etmez (borca sokmaz)
+  const p2 = new GameState(); p2.managerLevel = 3; p2.money = 100; p2.brokenPumps.add(0)
+  p2.managerTick(50)
+  check('para yetmezse tamir edilmez (borç yok)', p2.brokenPumps.has(0) && p2.money === 100)
+
+  // YOVMİYE: müdür + eğitim yovmiyeyi artırır (pasif gelir bedava değil)
+  const w = new GameState()
+  w.autoPumps.add(0); w.autoPumps.add(1)
+  const wage0 = w.dailyWages()
+  w.managerLevel = 3
+  check('müdür yovmiyesi eklenir', w.dailyWages() === wage0 + 1200)
+  w.managerLevel = 0; w.staffLevel = 4
+  check('eğitimli personel daha pahalı (+%105)', w.dailyWages() > wage0 * 2)
+
+  // PERSONEL EĞİTİMİ etkileri
+  const st = new GameState()
+  check('Sv.1 dolum hızı çarpanı 1.0 (denge birebir)', st.staffFillMult() === 1)
+  check('Sv.1 bahşiş bonusu 0', st.staffTipBonus() === 0)
+  check('Sv.1 hata çarpanı 1.0', st.staffErrorMult() === 1)
+  st.staffLevel = 4
+  check('Sv.4 dolum +%36', Math.abs(st.staffFillMult() - 1.36) < 1e-9)
+  check('Sv.4 bahşiş +15 puan', Math.abs(st.staffTipBonus() - 0.15) < 1e-9)
+  check('Sv.4 hata riski %25e iner', Math.abs(st.staffErrorMult() - 0.25) < 1e-9)
+  const tr = new GameState(); tr.money = 200000; tr.autoPumps.add(0)
+  check('eğitim satın alınabilir', buyM(tr, 'train') === true && tr.staffLevel === 2)
+  tr.staffLevel = 4
+  check('Sv.4 sonrası eğitim MAKS', shopM(tr).find(x => x.id === 'train').status === 'maxed')
+
+  // save round-trip + şube snapshot
+  const ser = serializeState(m); const d = new GameState(); hydrateState(d, ser)
+  check('müdür/eğitim save round-trip', d.managerLevel === 3 && d.staffLevel === m.staffLevel)
+  const { LOC_FIELDS } = await import('../../src/state.ts')
+  check('müdür/eğitim ŞUBEYE ait (her şubenin kendi personeli)',
+    LOC_FIELDS.includes('managerLevel') && LOC_FIELDS.includes('staffLevel'))
+}
+
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail ? 1 : 0)
