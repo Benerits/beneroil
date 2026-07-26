@@ -392,6 +392,21 @@ export class UI {
       return
     }
     this.panel.classList.add('show')
+    // Hızlı tutar butonları TALEBE göre ölçeklenir: sabit 50-400 seti, segment müşterilerinin
+    // (₺600-2500) taleplerini karşılamıyordu — oyuncu her seferinde elle yazıyordu.
+    if (car.kind === 'fuel') {
+      const d = car.demandAmount
+      const set = d > 400
+        ? [0.25, 0.5, 0.75, 1].flatMap(r => [Math.round(d * r / 10) * 10]).concat([Math.round(d * 1.1 / 10) * 10])
+        : [50, 100, 150, 200, 250, 300, 350, 400]
+      const btns = document.querySelectorAll<HTMLButtonElement>('.quick')
+      btns.forEach((b, i) => {
+        const v = set[Math.min(i, set.length - 1)]
+        const show = i < set.length
+        b.style.display = show ? '' : 'none'
+        if (show) { b.dataset.amt = String(v); b.textContent = String(v) }
+      })
+    }
     el<HTMLButtonElement>('dismissbtn').disabled = car.filling || car.filled > 0
     // camlar temizlenince VEYA bu pompa/şarjda pompacı/şarjcı varsa cam-sil butonu gizlenir (artık onun işi)
     el<HTMLDivElement>('cleanrow').style.display = (car.windowsCleaned || this.attendantAt(car)) ? 'none' : 'flex'

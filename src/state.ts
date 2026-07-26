@@ -3,6 +3,34 @@ export type FuelType = 'benzin' | 'dizel' | 'lpg'
 
 export const FUELS: FuelType[] = ['benzin', 'dizel', 'lpg']
 export const FUEL_PRICE: Record<FuelType, number> = { benzin: 10, dizel: 9, lpg: 6 }
+/** B2B sözleşmesi (lategame raporu Katman 4a): taahhüt edilen günlük hacim, piyasa altı
+ *  fiyat, tamamlama bonusu, eksik teslimde ceza. Mevcut tank/tanker sistemini anlamlı kılar. */
+export interface Contract {
+  id: string
+  name: string
+  fuel: FuelType
+  daysTotal: number
+  daysLeft: number
+  dailyLiters: number   // günlük taahhüt (L)
+  pricePerL: number     // sözleşme fiyatı (piyasa altı)
+  bonus: number         // tamamlanınca
+  penalty: number       // eksik teslim edilen her gün için
+  deliveredToday: number
+  missedDays: number
+}
+
+/** Müşteri segmenti tanımı (lategame raporu Katman 1c) — activeSegments() üretir, Car kullanır. */
+export interface CarSegment {
+  id: string
+  share: number      // gelme olasılığı (toplam < 1 kalmalı; kalanı standart müşteri)
+  min: number        // talep ₺ alt sınır
+  max: number        // talep ₺ üst sınır
+  marginMult: number // satış marjı çarpanı (premium = daha yüksek kâr)
+  fuel?: FuelType    // segment belirli yakıt istiyorsa
+  truckOnly?: boolean
+  label: string
+}
+
 export const FUEL_LABEL: Record<FuelType, string> = { benzin: t('Benzin'), dizel: t('Dizel'), lpg: 'LPG' }
 export const FUEL_COST: Record<FuelType, number> = { benzin: 6.5, dizel: 6, lpg: 4 }
 /** her yeni hesabın açılış bakiyesi */
@@ -136,6 +164,10 @@ export class GameState {
   market2Level = 0 // karşı yaka marketi (yol karşısı istasyon için — save'e ADDITIVE alan)
   marketingBudget = 0 // günlük reklam bütçesi ₺ (0-8000) — trafik arz+talep sink'i (ADDITIVE)
   opexStart = 0 // OPEX rampasının başladığı oyun günü (ilk yüklemede atanır — ADDITIVE)
+  /** aktif B2B sözleşmesi (ADDITIVE alan; null = yok) — geç oyunun karar motoru */
+  contract: Contract | null = null
+  contractsDone = 0 // tamamlanan sözleşme sayısı (ADDITIVE)
+  contractsFailed = 0
   toiletLevel = 0
 
   // elektrik
@@ -425,6 +457,113 @@ export class GameState {
     // birebir; üstü azalan verimle 0.95'e asimptotik — geç yatırımlar hâlâ hissedilir.
     const ent = raw <= 0.80 ? raw : 0.80 + 0.15 * (1 - Math.exp(-(raw - 0.80) / 0.25))
     return Math.max(0.05, ent)
+  }
+
+  // ---- B2B SÖZLEŞMELERİ (lategame raporu Katman 4a) ----
+  /** Sözleşme teklifleri: gün + kapasiteye göre ölçeklenir. Şart: ilgili yakıt kapasitesi
+   *  taahhüdün en az 2 katı olmalı (yoksa oyuncu kendini batırır). Deterministik değil —
+   *  gün numarasından türetilir ki panel açılıp kapandıkça teklif zıplamasın. */
+  contractOffers(): Contract[] {
+    const out: Contract[] = []
+    const seedBase = this.day * 7919
+    const rnd = (i: number) => { const x = Math.sin(seedBase + i * 1.37) * 10000; return x - Math.floor(x) }
+    const TEMPLATES: { id: string; name: string; fuel: FuelType; days: number; lit: number; disc: number }[] = [
+      { id: 'kargo', name: t('Kargo Filosu'), fuel: 'dizel', days: 7, lit: 900, disc: 0.90 },
+      { id: 'belediye', name: t('Belediye Otobüs Filosu'), fuel: 'dizel', days: 15, lit: 1800, disc: 0.88 },
+      { id: 'taksi', name: t('Taksi Durağı'), fuel: 'benzin', days: 10, lit: 700, disc: 0.92 },
+      { id: 'santiye', name: t('İnşaat Şantiyesi'), fuel: 'lpg', days: 8, lit: 500, disc: 0.90 },
+      { id: 'kooperatif', name: t('Tarım Kooperatifi'), fuel: 'dizel', days: 12, lit: 1300, disc: 0.89 },
+    ]
+    for (let i = 0; i < TEMPLATES.length; i++) {
+      const tpl = TEMPLATES[i]
+      const cap = this.fuelCapacity(tpl.fuel)
+      const daily = Math.round(tpl.lit * (0.85 + rnd(i) * 0.4) / 50) * 50
+      if (cap < daily * 2) continue // kapasite şartı: taahhüdün 2 katı depo gerekir
+      const pricePerL = Math.round(this.prices[tpl.fuel] * tpl.disc * 10) / 10
+      const gross = daily * tpl.days * pricePerL
+      out.push({
+        id: `${tpl.id}-${this.day}`, name: tpl.name, fuel: tpl.fuel,
+        daysTotal: tpl.days, daysLeft: tpl.days, dailyLiters: daily, pricePerL,
+        bonus: Math.round(gross * 0.12 / 100) * 100,   // tamamlama primi ≈ cironun %12'si
+        penalty: Math.round(daily * pricePerL * 0.9 / 100) * 100, // eksik gün cezası ≈ günlük ciro
+        deliveredToday: 0, missedDays: 0,
+      })
+    }
+    return out
+  }
+  /** sözleşme taahhüdüne teslim ekle — TÜM satış yolları (aktif, pompacı, offline) buradan geçer */
+  addContractDelivery(f: FuelType, liters: number) {
+    if (this.contract && this.contract.fuel === f && liters > 0) this.contract.deliveredToday += liters
+  }
+  /** sözleşmeyi imzala (aktif sözleşme varken imzalanmaz) */
+  signContract(c: Contract): boolean {
+    if (this.contract) return false
+    this.contract = { ...c, daysLeft: c.daysTotal, deliveredToday: 0, missedDays: 0 }
+    return true
+  }
+  /** Gün dönümünde çağrılır: taahhüdü kapat, gelir/ceza uygula, süreyi işlet.
+   *  Döner: oyuncuya gösterilecek olay ('ok' | 'miss' | 'done' | 'fail') + tutar. */
+  processContractDay(): { kind: 'none' | 'ok' | 'miss' | 'done' | 'fail'; amount: number; name: string } {
+    const c = this.contract
+    if (!c) return { kind: 'none', amount: 0, name: '' }
+    const delivered = Math.min(c.deliveredToday, c.dailyLiters)
+    let amount = 0
+    let kind: 'ok' | 'miss' = 'ok'
+    if (delivered >= c.dailyLiters - 1) {
+      amount = Math.round(c.dailyLiters * c.pricePerL)
+      this.money += amount
+      this.stats.revenue += amount // ciro raporlarında görünsün (ofis: Satış & Faaliyet Kârı)
+      this.salesLog.push({ day: this.day, rev: amount })
+      if (this.salesLog.length > 370) this.salesLog.shift()
+    } else {
+      // eksik teslim: teslim edilen kadar ödeme + gün cezası
+      const paid = Math.round(delivered * c.pricePerL)
+      amount = paid - c.penalty
+      this.money = Math.max(0, this.money + amount)
+      if (paid > 0) {
+        this.stats.revenue += paid
+        this.salesLog.push({ day: this.day, rev: paid })
+        if (this.salesLog.length > 370) this.salesLog.shift()
+      }
+      c.missedDays++
+      kind = 'miss'
+    }
+    c.deliveredToday = 0
+    c.daysLeft--
+    if (c.daysLeft <= 0) {
+      // %25 (yukarı yuvarlı) gün kaçırıldıysa fesih. '>' + floor kombinasyonu kısa
+      // sözleşmelerde fesih'i İMKANSIZ kılıyordu (kurcalanmış save ile bedava prim).
+      const failed = c.missedDays >= Math.max(1, Math.ceil(c.daysTotal * 0.25))
+      const name = c.name
+      if (failed) { this.contractsFailed++; this.contract = null; return { kind: 'fail', amount: 0, name } }
+      this.money += c.bonus
+      this.stats.revenue += c.bonus
+      this.contractsDone++
+      this.addRep(0.3)
+      this.contract = null
+      return { kind: 'done', amount: c.bonus, name }
+    }
+    return { kind, amount, name: c.name }
+  }
+
+  /** AÇIK MÜŞTERİ SEGMENTLERİ (lategame raporu Katman 1c) — ₺/müşteri ekseni.
+   *  Kilitler istasyonun gelişmişliğine bağlı; hiçbiri açık değilse talep klasik kalır
+   *  (erken oyun dengesi HİÇ değişmez). Toplam pay < 1 olmalı (kalanı standart müşteri). */
+  activeSegments(): CarSegment[] {
+    const out: CarSegment[] = []
+    // Premium yakıt: dolu tank + iyi itibar → yüksek tutar, YÜKSEK MARJ
+    if (this.tankLevel >= 3 && this.reputation >= 4.3) {
+      out.push({ id: 'premium', share: 0.18, min: 300, max: 600, marginMult: 1.6, label: t('Premium yakıt müşterisi') })
+    }
+    // Filo/TIR: tır parkı + güçlü dizel kapasitesi → çok yüksek hacim, normal marj
+    if (this.hasTruckPark && this.tankCounts.dizel >= 2) {
+      out.push({ id: 'filo', share: 0.55, min: 800, max: 2000, marginMult: 1, fuel: 'dizel', truckOnly: true, label: t('Filo aracı') })
+    }
+    // Otobüs/servis: geniş kapı + 6+ pompa (akış planlaması gerektirir)
+    if (this.wideGates && this.pumps >= 6) {
+      out.push({ id: 'otobus', share: 0.10, min: 1200, max: 2500, marginMult: 1, fuel: 'dizel', truckOnly: true, label: t('Servis / otobüs') })
+    }
+    return out
   }
 
   /** Reklam bütçesi → 0..1 etki (azalan verim). Trafik ARZI ve talebe birlikte etkir
@@ -867,7 +1006,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart',
+  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -886,6 +1025,7 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.prices = { ...s.prices }
   out.orders = JSON.parse(JSON.stringify(s.orders)) // bekleyen tankerler F5'te kaybolmasın
   out.loan = { ...s.loan, collateral: [...s.loan.collateral] } // kredi durumu kayda girsin
+  out.contract = s.contract ? { ...s.contract } : null // aktif B2B sözleşmesi (ADDITIVE)
   out.partner = { ...s.partner } // banka ortaklığı durumu
   out.pendingCash = { ...s.pendingCash }
   out.ownedParcels = [...s.ownedParcels]
@@ -955,6 +1095,22 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
     }
   }
   if (data.pendingCash && typeof data.pendingCash === 'object') s.pendingCash = { ...(data.pendingCash as Record<string, number>) }
+  // aktif sözleşme: alanlar doğrulanır (bozuk/eski kayıt sözleşmeyi düşürür, oyun kilitlenmez)
+  const ct = data.contract as Contract | null | undefined
+  if (ct && typeof ct === 'object' && FUELS.includes(ct.fuel as FuelType)
+      && Number.isFinite(ct.dailyLiters) && Number.isFinite(ct.daysLeft) && ct.daysLeft > 0) {
+    s.contract = {
+      id: String(ct.id ?? 'c'), name: String(ct.name ?? '—'), fuel: ct.fuel as FuelType,
+      daysTotal: Math.max(1, Math.min(60, Math.round(Number(ct.daysTotal) || 7))),
+      daysLeft: Math.max(1, Math.min(Math.max(1, Math.min(60, Math.round(Number(ct.daysTotal) || 7))), Math.round(Number(ct.daysLeft)))),
+      dailyLiters: Math.max(50, Math.min(20000, Math.round(Number(ct.dailyLiters)))),
+      pricePerL: Math.max(1, Math.min(40, Number(ct.pricePerL) || 8)),
+      bonus: Math.max(0, Math.min(5_000_000, Math.round(Number(ct.bonus) || 0))),
+      penalty: Math.max(0, Math.min(500_000, Math.round(Number(ct.penalty) || 0))),
+      deliveredToday: Math.max(0, Number(ct.deliveredToday) || 0),
+      missedDays: Math.max(0, Math.round(Number(ct.missedDays) || 0)),
+    }
+  } else s.contract = null
   if (Array.isArray(data.ownedParcels)) s.ownedParcels = new Set(data.ownedParcels as string[])
   if (Array.isArray(data.pavedParcels)) s.pavedParcels = new Set(data.pavedParcels as string[])
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])

@@ -578,6 +578,34 @@ function openOfficePanel() {
       + row(t('Kaçan müşteri'), `${state.stats.lost}`, state.stats.lost > state.stats.served / 4 ? 'bad' : '')
   }
 
+  // 3b) B2B sözleşmeleri: aktif taahhüt durumu + imzalanabilir teklifler
+  const cel = document.getElementById('of-contracts')
+  if (cel) {
+    const c = state.contract
+    if (c) {
+      const pct = Math.min(100, Math.round(c.deliveredToday / c.dailyLiters * 100))
+      cel.innerHTML =
+        `<div class="sd" style="font-weight:800;color:var(--ink);padding:2px 4px 6px">📋 ${c.name} · ${FUEL_LABEL[c.fuel]}</div>`
+        + row(t('Günlük taahhüt'), `${Math.round(c.deliveredToday)} / ${c.dailyLiters} L (%${pct})`, pct >= 100 ? 'good' : 'bad')
+        + row(t('Sözleşme fiyatı'), `₺${c.pricePerL}/L`)
+        + row(t('Kalan gün'), `${c.daysLeft} / ${c.daysTotal}`)
+        + row(t('Kaçırılan gün'), `${c.missedDays}`, c.missedDays > 0 ? 'bad' : '')
+        + row(t('Tamamlama primi'), `₺${tl(c.bonus)}`, 'good')
+        + row(t('Eksik gün cezası'), `₺${tl(c.penalty)}`, 'bad')
+    } else {
+      const offers = state.contractOffers()
+      if (!offers.length) {
+        cel.innerHTML = `<div class="sd" style="padding:6px 4px">${t('Henüz sözleşme teklifi yok — ilgili yakıtın deposunu büyüt (taahhüdün 2 katı kapasite şart).')}</div>`
+      } else {
+        cel.innerHTML = offers.map(o =>
+          `<div class="prow" style="flex-wrap:wrap">`
+          + `<span class="pl" style="flex:1 1 100%;font-weight:800">${o.name} · ${FUEL_LABEL[o.fuel]}</span>`
+          + `<span class="pc" style="flex:1 1 100%">${t('{0} gün · günde {1}L · ₺{2}/L · prim ₺{3} · ceza ₺{4}', o.daysTotal, o.dailyLiters, o.pricePerL, tl(o.bonus), tl(o.penalty))}</span>`
+          + `<button class="btn sbuy good" data-sign="${o.id}" style="margin-top:4px">${t('İmzala')}</button></div>`).join('')
+      }
+    }
+  }
+
   // 4) Dönemsel satış & faaliyet kârı (gün / ay=30g / yıl=365g)
   const sales = document.getElementById('of-sales')
   if (sales) {
@@ -627,6 +655,18 @@ document.getElementById('accbtn')?.addEventListener('click', renderProfile)
 document.getElementById('of-prices')?.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
   if (btn) ui.onPriceChange(btn.dataset.pf as FuelType | 'elec', Number(btn.dataset.pd))
+})
+// B2B sözleşme imzalama
+document.getElementById('of-contracts')?.addEventListener('click', e => {
+  const btn = (e.target as HTMLElement).closest('button[data-sign]') as HTMLButtonElement | null
+  if (!btn) return
+  const offer = state.contractOffers().find(o => o.id === btn.dataset.sign)
+  if (!offer) { ui.toast(t('Teklif güncellendi — yeni listeye bak.'), 'bad'); openOfficePanel(); return }
+  if (state.signContract(offer)) {
+    ui.toast(t('📋 {0} sözleşmesi imzalandı — günde {1}L {2} teslim et!', offer.name, offer.dailyLiters, FUEL_LABEL[offer.fuel]), 'good', true)
+    openOfficePanel()
+    persist()
+  } else ui.toast(t('Zaten aktif bir sözleşmen var.'), 'bad')
 })
 const isMobileView = () => window.matchMedia('(max-width: 680px)').matches
 
@@ -876,6 +916,7 @@ const cars = new CarManager(world.scene, modelLib, {
   pumpAngle: i => world.pumpAngles[i] ?? 0,
   evAngle: i => world.evAngles[i] ?? 0,
   trafficPull: () => (guestPaused ? 1 : state.trafficPull()),
+  segments: () => state.activeSegments(),
   gateInY: () => world.gateIn.y,
   gateOutY: () => world.gateOut.y,
   farActive: () => world.farStationOn,
@@ -1277,9 +1318,21 @@ function finishSale(car: Car) {
   if (car.autoServed && revenue0 > 0) {
     ui.toast(t('🧑‍🔧 Pompacı sattı: +₺{0}', Math.round(revenue)), 'good', true)
   }
+  // PREMIUM SEGMENT primi (Katman 1c): premium müşteri aynı litreye daha yüksek marj öder.
+  // Marj = fiyat − alış; prim yalnız MARJ üzerine bindirilir (litre fiyatı bozulmaz).
+  if (car.marginMult > 1 && car.nozzle) {
+    const marginPerL = Math.max(0, car.priceOf(car.nozzle) - FUEL_COST[car.nozzle]) // ciroyla aynı snapshot fiyat
+    const bonus = Math.round(car.filled * marginPerL * (car.marginMult - 1))
+    if (bonus > 0) {
+      revenue += bonus
+      ui.toast(t('⭐ Premium müşteri primi: +₺{0}', bonus), 'good')
+    }
+  }
   state.money += revenue
   state.stats.served++
   state.stats.revenue += revenue
+  // aktif sözleşme: bu satışın litresi taahhüde sayılır (yalnız sözleşmenin yakıtı)
+  if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
   if (car.nozzle) state.stats.liters[car.nozzle] += car.filled
   car.filling = false
   concludeService(car, score)
@@ -2747,6 +2800,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
             const sell = Math.min(Math.max(0, state.tanks[f]), toSell * share)
             state.tanks[f] -= sell
             fuelCash += sell * state.prices[f]
+            state.addContractDelivery(f, sell) // offline satış da taahhüde sayılır (yoksa otomasyon sözleşmeyi sabote ediyordu)
           }
           fuelCash = Math.round(fuelCash)
           state.money += fuelCash
@@ -3636,6 +3690,14 @@ function frame() {
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
     const wages = state.dailyWages()
     if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
+    // B2B sözleşme günü: taahhüt kapanışı, gelir/ceza, tamamlama primi
+    const cres = state.processContractDay()
+    if (cres.kind === 'ok') ui.toast(t('📋 {0}: günlük taahhüt teslim edildi (+₺{1})', cres.name, cres.amount.toLocaleString('tr-TR')), 'good', true)
+    else if (cres.kind === 'miss') ui.toast(t('📋 {0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)', cres.name, cres.amount.toLocaleString('tr-TR')), 'bad', true)
+    else if (cres.kind === 'done') ui.toast(t('🏆 {0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3', cres.name, cres.amount.toLocaleString('tr-TR')), 'good', true)
+    else if (cres.kind === 'fail') ui.toast(t('❌ {0} sözleşmesi ihlalden feshedildi — prim yok.', cres.name), 'bad', true)
+    // panel açıkken gün döndüyse tazele: teklif id'leri güne bağlı, eski butonlar ölü kalırdı
+    if (document.getElementById('officewrap')?.classList.contains('show')) openOfficePanel()
     // İşletme gideri (OPEX): amortisman + emlak vergisi — geç oyunda birikimi düzleştiren sink.
     // 10 günlük rampayla devreye girer (enflasyon şoku yok); erken oyunda ~₺10, hissedilmez.
     const opex = state.dailyOpex()

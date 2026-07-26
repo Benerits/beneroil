@@ -7,7 +7,7 @@
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} }
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'tr' }, configurable: true })
 
-const { GameState, PARCEL_COLS, PARCEL_ROWS, FUEL_COST, FUEL_PRICE, priceBounds } =
+const { GameState, PARCEL_COLS, PARCEL_ROWS, FUEL_COST, FUEL_PRICE, priceBounds, serializeState, hydrateState } =
   await import('../../src/state.ts')
 
 // ---- SYNC bloğu: world.ts / main.ts kopyaları ----
@@ -181,6 +181,122 @@ console.log('== 10) B1 hayalet duvar matematiği (trafik raporu) ==')
   const unitRect = (b, ang, w, d) => { const sw = Math.abs(Math.sin(ang)) > 0.5; return { w: sw ? d : w, d: sw ? w : d } }
   check('rot0: 1.5×3.4', unitRect({}, 0, 1.5, 3.4).w === 1.5)
   check('rot90: 3.4×1.5 (takas)', unitRect({}, Math.PI / 2, 1.5, 3.4).w === 3.4)
+}
+
+console.log('== 11) Müşteri segmentleri (Katman 1c) ==')
+{
+  const s11 = new GameState()
+  check('başlangıç: segment YOK (erken denge birebir korunur)', s11.activeSegments().length === 0)
+  s11.tankLevel = 3; s11.reputation = 4.5
+  let segs = s11.activeSegments()
+  check('tank Sv.3 + itibar 4.5 → premium açılır', segs.some(x => x.id === 'premium'))
+  check('premium marj çarpanı 1.6', segs.find(x => x.id === 'premium').marginMult === 1.6)
+  s11.hasTruckPark = true; s11.tankCounts.dizel = 2
+  segs = s11.activeSegments()
+  const filo = segs.find(x => x.id === 'filo')
+  check('tır parkı + 2 dizel tankı → filo açılır (₺800-2000, truckOnly)', !!filo && filo.truckOnly && filo.min === 800)
+  s11.wideGates = true; s11.pumps = 6
+  segs = s11.activeSegments()
+  check('geniş kapı + 6 pompa → otobüs açılır (₺1200-2500)', segs.some(x => x.id === 'otobus'))
+  // pay toplamı: standart müşteri hâlâ çoğunluk olmalı (truckOnly hariç)
+  const nonTruck = segs.filter(x => !x.truckOnly).reduce((a, x) => a + x.share, 0)
+  check(`tır-dışı segment payı toplamı < 0.5 (standart müşteri korunur) = ${nonTruck.toFixed(2)}`, nonTruck < 0.5)
+  // ortalama ₺/müşteri artışı: raporun hedefi ₺233 → ₺700-900 bandına doğru
+  const avgStd = (100+150+200+250+300+400)/6
+  const avgSeg = segs.reduce((a,x) => a + x.share * (x.min+x.max)/2, 0) + (1 - segs.reduce((a,x)=>a+x.share,0)) * avgStd
+  check(`ortalama talep belirgin arttı (₺${avgStd.toFixed(0)} → ₺${avgSeg.toFixed(0)})`, avgSeg > avgStd * 1.8)
+}
+
+console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
+{
+  const s12 = new GameState()
+  check('küçük tankta teklif YOK (kapasite şartı)', s12.contractOffers().length === 0)
+  s12.tankLevel = 3; s12.tankCounts.dizel = 4; s12.tankCounts.benzin = 3; s12.tankCounts.lpg = 2
+  const offers = s12.contractOffers()
+  check(`büyük tankta teklif var (${offers.length} adet)`, offers.length >= 2)
+  for (const o of offers) {
+    check(`${o.name}: kapasite ≥ 2× taahhüt`, s12.fuelCapacity(o.fuel) >= o.dailyLiters * 2)
+    check(`${o.name}: fiyat piyasa ALTINDA`, o.pricePerL < s12.prices[o.fuel])
+  }
+  // determinizm: aynı gün, aynı teklifler (panel açılıp kapanınca zıplamaz)
+  const again = s12.contractOffers()
+  check('teklifler aynı gün DETERMİNİST', JSON.stringify(offers.map(o=>[o.id,o.dailyLiters])) === JSON.stringify(again.map(o=>[o.id,o.dailyLiters])))
+  s12.day = s12.day + 1
+  check('gün değişince teklifler yenilenir', JSON.stringify(s12.contractOffers().map(o=>o.dailyLiters)) !== JSON.stringify(offers.map(o=>o.dailyLiters)))
+
+  // imza + tam teslim akışı
+  const s13 = new GameState()
+  s13.tankLevel = 3; s13.tankCounts.dizel = 4; s13.tankCounts.benzin = 3; s13.tankCounts.lpg = 2
+  const off = s13.contractOffers()[0]
+  check('imza başarılı', s13.signContract(off) === true)
+  check('ikinci imza REDDEDİLİR (tek aktif sözleşme)', s13.signContract(off) === false)
+  const money0 = s13.money
+  s13.contract.deliveredToday = s13.contract.dailyLiters
+  let r = s13.processContractDay()
+  check('tam teslim → ödeme alınır', r.kind === 'ok' && s13.money > money0, `${r.kind} +${r.amount}`)
+  check('gün sayacı işledi', s13.contract.daysLeft === off.daysTotal - 1)
+  check('teslim sayacı sıfırlandı', s13.contract.deliveredToday === 0)
+  // eksik teslim → ceza
+  const m1 = s13.money
+  r = s13.processContractDay() // deliveredToday = 0
+  check('eksik teslim → ceza (kasa düşer, missedDays artar)', r.kind === 'miss' && s13.money < m1 && s13.contract.missedDays === 1)
+  // tamamlama: kalan günleri tam teslimle bitir
+  let guard = 0
+  while (s13.contract && guard++ < 80) { s13.contract.deliveredToday = s13.contract.dailyLiters; r = s13.processContractDay() }
+  check('sözleşme TAMAMLANDI (prim + itibar)', r.kind === 'done' && s13.contractsDone === 1, `son=${r.kind}`)
+  check('bitince aktif sözleşme temizlendi', s13.contract === null)
+
+  // ihlal senaryosu: hep eksik teslim → fesih
+  const s14 = new GameState()
+  s14.tankLevel = 3; s14.tankCounts.dizel = 4; s14.tankCounts.benzin = 3; s14.tankCounts.lpg = 2
+  s14.signContract(s14.contractOffers()[0])
+  let last = null; guard = 0
+  while (s14.contract && guard++ < 80) last = s14.processContractDay()
+  check('hep eksik → FESİH (prim yok)', last.kind === 'fail' && s14.contractsFailed === 1, `son=${last?.kind}`)
+  check('kasa asla eksiye düşmedi', s14.money >= 0)
+
+  // save round-trip: contract serialize/hydrate
+  const s15 = new GameState()
+  s15.tankLevel = 3; s15.tankCounts.dizel = 4
+  s15.signContract(s15.contractOffers()[0])
+  s15.contract.deliveredToday = 123
+  const ser = serializeState(s15)
+  const s16 = new GameState(); hydrateState(s16, ser)
+  check('sözleşme save round-trip', s16.contract && s16.contract.dailyLiters === s15.contract.dailyLiters && s16.contract.deliveredToday === 123)
+  const s17 = new GameState(); hydrateState(s17, { ...ser, contract: { fuel: 'bozuk', dailyLiters: 'x' } })
+  check('bozuk sözleşme kaydı düşürülür (oyun kilitlenmez)', s17.contract === null)
+}
+
+console.log('== 13) Reviewer bulgularının regresyon testleri ==')
+{
+  const mk = () => { const x = new GameState(); x.tankLevel = 3; x.tankCounts.dizel = 4; x.tankCounts.benzin = 3; x.tankCounts.lpg = 2; return x }
+  // (1) otobüs segmenti artık truckOnly (sedan'a 278L dizel talebi gitmez)
+  const a = new GameState(); a.wideGates = true; a.pumps = 6
+  check('otobüs segmenti truckOnly (tır-dışı araca düşmez)', a.activeSegments().find(x => x.id === 'otobus').truckOnly === true)
+  // (2) kısa/kurcalanmış sözleşmede fesih ARTIK mümkün (bedava prim exploit'i kapandı)
+  const b = mk()
+  b.contract = { id:'x', name:'hack', fuel:'dizel', daysTotal:1, daysLeft:1, dailyLiters:4000, pricePerL:20, bonus:120000, penalty:0, deliveredToday:0, missedDays:0 }
+  const m0 = b.money
+  const rb = b.processContractDay() // 0 teslim
+  check('daysTotal=1, 0 teslim → FESİH (prim YOK)', rb.kind === 'fail' && b.money <= m0, `${rb.kind} para=${b.money}`)
+  // (3) sözleşme geliri ciroya girer (raporlarda görünür)
+  const c = mk(); c.signContract(c.contractOffers()[0])
+  const rev0 = c.stats.revenue, sl0 = c.salesLog.length
+  c.contract.deliveredToday = c.contract.dailyLiters
+  const rc = c.processContractDay()
+  check('tam teslim ciroya yazılır (stats.revenue + salesLog)', c.stats.revenue === rev0 + rc.amount && c.salesLog.length === sl0 + 1)
+  // (4) addContractDelivery: offline/pompacı satışı da taahhüde sayılır
+  const d = mk(); d.signContract(d.contractOffers().find(o => o.fuel === 'dizel'))
+  d.addContractDelivery('dizel', 300); d.addContractDelivery('benzin', 999)
+  check('addContractDelivery yalnız sözleşme yakıtını sayar', d.contract.deliveredToday === 300)
+  // (6) daysLeft > daysTotal düzeltilir
+  const e = new GameState()
+  hydrateState(e, { contract: { id:'z', name:'n', fuel:'dizel', daysTotal:7, daysLeft:60, dailyLiters:500, pricePerL:8, bonus:0, penalty:0, deliveredToday:0, missedDays:0 } })
+  check('hydrate: daysLeft daysTotal ile sınırlanır', e.contract.daysLeft <= e.contract.daysTotal, `${e.contract?.daysLeft}/${e.contract?.daysTotal}`)
+  // fesih eşiği üretilen sözleşmelerde MAKUL kalmalı (1 kaçırma 7 günlük sözleşmeyi bitirmesin)
+  const f = mk(); f.signContract(f.contractOffers().find(o => o.daysTotal >= 7))
+  f.processContractDay() // 1 gün kaçır
+  check('7+ günlük sözleşmede 1 kaçırma fesih ETMEZ (adil)', f.contract !== null && f.contract.missedDays === 1)
 }
 
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)

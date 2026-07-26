@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { t } from './i18n'
-import { FuelType, FUEL_LABEL, FUEL_PRICE } from './state'
+import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
@@ -200,6 +200,9 @@ export class Car {
   demandType: FuelType
   demandAmount: number
   demandLiters: number
+  /** müşteri segmenti ('standart' = klasik) ve satış marjı çarpanı (premium yakıt) */
+  segment = 'standart'
+  marginMult = 1
   demandKwh: number
   maxPatience: number
   patience: number
@@ -302,8 +305,10 @@ export class Car {
   private windowFxT = 0
 
   private prices: Record<FuelType, number>
+  /** aracın spawn anındaki fiyat snapshot'ı (ciro ve prim aynı temeli kullansın) */
+  priceOf(f: FuelType): number { return this.prices[f] }
 
-  constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE) {
+  constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE, segments: CarSegment[] | null = null) {
     this.kind = kind
     this.prices = { ...prices }
     if (kind === 'ev') {
@@ -340,7 +345,29 @@ export class Car {
     this.demandType = this.isTruck && Math.random() < 0.85
       ? 'dizel'
       : fr < 0.4 ? 'benzin' : fr < 0.8 ? 'dizel' : 'lpg'
-    this.demandAmount = DEMAND_AMOUNTS[Math.floor(Math.random() * DEMAND_AMOUNTS.length)]
+    // ---- MÜŞTERİ SEGMENTLERİ (lategame raporu Katman 1c): geç oyun büyümesi ARAÇ SAYISIYLA
+    // değil ₺/MÜŞTERİ ile yapılır (mobil ısınma kısıtı). Segment kilitleri istasyonun
+    // gelişmişliğiyle açılır; kilitli oyuncu için davranış BİREBİR eskisi gibi kalır.
+    const seg = segments
+    let picked: CarSegment | null = null
+    if (seg && seg.length) {
+      const roll = Math.random()
+      let acc = 0
+      for (const s of seg) {
+        // TIR segmenti yalnız tır gövdeli araçta, otobüs de öyle (görsel tutarlılık)
+        if (s.truckOnly && !this.isTruck) continue
+        acc += s.share
+        if (roll < acc) { picked = s; break }
+      }
+    }
+    this.segment = picked?.id ?? 'standart'
+    this.marginMult = picked?.marginMult ?? 1
+    if (picked) {
+      this.demandAmount = Math.round((picked.min + Math.random() * (picked.max - picked.min)) / 10) * 10
+      if (picked.fuel) this.demandType = picked.fuel
+    } else {
+      this.demandAmount = DEMAND_AMOUNTS[Math.floor(Math.random() * DEMAND_AMOUNTS.length)]
+    }
     this.demandLiters = this.demandAmount / this.prices[this.demandType]
     this.demandKwh = 20 + Math.floor(Math.random() * 9) * 5 // 20..60
     this.wantsFull = kind === 'fuel' && Math.random() < 0.10
@@ -712,6 +739,8 @@ export interface CarManagerOpts {
   evAngle?: (i: number) => number
   /** trafik arz çarpanı (tabela+reklam; 1.0..~2.0) — spawn aralığını böler, transit cap'i büyütür */
   trafficPull?: () => number
+  /** açık müşteri segmentleri (₺/müşteri ekseni) — kilitliyse null/boş, davranış klasik kalır */
+  segments?: () => CarSegment[]
   /** karşı istasyon kapı y'leri (far araç güneye gittiği için giriş +y / çıkış -y) */
   farGateInY?: () => number
   farGateOutY?: () => number
@@ -1044,7 +1073,7 @@ export class CarManager {
 
   private spawnTransit(lane: 'near' | 'far') {
     const isEv = Math.random() < this.opts.evShare()
-    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices())
+    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), this.opts.segments?.() ?? null)
     car.lane = lane
     car.phase = 'transit'
     if (lane === 'near') {

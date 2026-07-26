@@ -323,6 +323,26 @@ function sanitizeSave(save) {
   s.marketLevel = clamp(s.marketLevel, 0, 3, 0) // market 3 seviye (istemci ile aynı) — 2'ye kırpınca Sv.3 senkronda geri düşüyordu
   if ('market2Level' in s) s.market2Level = clamp(s.market2Level, 0, 3, 0) // karşı market (additive alan — eski save'lerde yok)
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
+  if ('contractsDone' in s) s.contractsDone = clamp(s.contractsDone, 0, 100000, 0)
+  if ('contractsFailed' in s) s.contractsFailed = clamp(s.contractsFailed, 0, 100000, 0)
+  // aktif B2B sözleşmesi (additive): alanları makul sınırlara kırp, bozuksa düşür
+  if (s.contract && typeof s.contract === 'object' && !Array.isArray(s.contract)) {
+    const c = s.contract
+    if (!['benzin', 'dizel', 'lpg'].includes(c.fuel)) s.contract = null
+    else {
+      c.name = String(c.name || '-').slice(0, 40)
+      c.id = String(c.id || 'c').slice(0, 40)
+      // clamp'ler oyunun GERÇEK üretim aralığına yakın: kurcalanmış save ile bedava prim yok
+      c.daysTotal = clamp(c.daysTotal, 5, 20, 7)
+      c.daysLeft = Math.min(clamp(c.daysLeft, 1, 20, 1), c.daysTotal)
+      c.dailyLiters = clamp(c.dailyLiters, 50, 4000, 500)
+      c.pricePerL = clamp(c.pricePerL, 1, 20, 8)
+      c.bonus = clamp(c.bonus, 0, 120000, 0)
+      c.penalty = clamp(c.penalty, 0, 60000, 0)
+      c.deliveredToday = clamp(c.deliveredToday, 0, 100000, 0)
+      c.missedDays = clamp(c.missedDays, 0, 60, 0)
+    }
+  } else if ('contract' in s) s.contract = null
   if ('opexStart' in s) s.opexStart = clamp(s.opexStart, 0, 100000, 0) // OPEX rampa başlangıç günü (additive)
   s.toiletLevel = clamp(s.toiletLevel, 0, 2, 0)
   s.gridLevel = clamp(s.gridLevel, 0, 2, 0)
