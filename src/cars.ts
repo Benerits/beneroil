@@ -767,7 +767,9 @@ const graphOn = (() => {
   try {
     if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('nograph')) return false
   } catch { /* node ortamı */ }
-  try { if (typeof process !== 'undefined' && process.env?.NOGRAPH) return false } catch { /* tarayıcı */ }
+  // @types/node'a bağımlı olmadan env oku (CI build'inde `process` tipi yok — TS2580)
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+  if (env?.NOGRAPH) return false
   return true
 })()
 
