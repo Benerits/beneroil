@@ -169,7 +169,7 @@ export class UI {
 
   constructor() {
     const fuelWrap = el<HTMLDivElement>('fuelwrap')
-    this.orderBtn.addEventListener('click', () => fuelWrap.classList.add('show'))
+    this.orderBtn.addEventListener('click', () => { fuelWrap.classList.add('show'); this.defterT = 0 })
     fuelWrap.addEventListener('pointerdown', e => { if (e.target === fuelWrap) fuelWrap.classList.remove('show') })
     for (const f of FUELS) {
       el<HTMLButtonElement>(`fbtn-${f}`).addEventListener('click', () => this.onOrderFuel(f))
@@ -607,7 +607,36 @@ export class UI {
     }).join('') + '</div>'
   }
 
+  /** ALIM DEFTERİ (Oğuz): sipariş modalında son yakıt alımları — gün, litre, tutar, ₺/L */
+  private defterT = 0
+  private renderFuelLog(state: GameState) {
+    const list = el<HTMLDivElement>('fueldefter')
+    const sum = el<HTMLDivElement>('fueldefter-sum')
+    if (!list || !sum) return
+    if (state.fuelLog.length === 0) {
+      list.innerHTML = `<div class="sd" style="text-align:center; padding:8px 0">${t('Henüz yakıt alımı yok.')}</div>`
+      sum.textContent = ''
+      return
+    }
+    const NAME: Record<string, string> = { benzin: 'Benzin', dizel: 'Dizel', lpg: 'LPG' }
+    const CLR: Record<string, string> = { benzin: 'var(--green)', dizel: 'var(--orange)', lpg: 'var(--blue)' }
+    list.innerHTML = [...state.fuelLog].reverse().slice(0, 20).map(x =>
+      `<div class="sd" style="display:flex; gap:8px; align-items:baseline; padding:2px 0">
+        <span style="min-width:52px">${t('Gün {0}', String(x.day))}</span>
+        <span style="min-width:52px; font-weight:800; color:${CLR[x.f]}">${NAME[x.f]}</span>
+        <span style="min-width:64px; text-align:right">${Math.round(x.liters).toLocaleString('tr-TR')}L</span>
+        <span style="flex:1; text-align:right">₺${x.cost.toLocaleString('tr-TR')}</span>
+        <span style="min-width:58px; text-align:right; color:var(--muted)">₺${x.liters > 0 ? (x.cost / x.liters).toFixed(1) : '—'}/L</span>
+      </div>`).join('')
+    sum.textContent = t('Son 7 gün yakıt gideri: ₺{0}', state.fuelCostInPeriod(7).toLocaleString('tr-TR'))
+  }
+
   update(state: GameState, dt: number) {
+    // alım defteri: modal açıkken saniyede bir tazele (her frame DOM yazmak israf)
+    if (el<HTMLDivElement>('fuelwrap')?.classList.contains('show')) {
+      this.defterT -= dt
+      if (this.defterT <= 0) { this.defterT = 1; this.renderFuelLog(state) }
+    }
     this.setText(this.money, Math.round(state.money).toLocaleString('tr-TR'))
     this.setText(this.day, `${state.day}`)
     this.setText(this.rep, state.reputation.toFixed(1))
