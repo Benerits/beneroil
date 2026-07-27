@@ -700,13 +700,36 @@ function openOfficePanel() {
   const lel = document.getElementById('of-locations')
   if (lel) {
     const order: LocId[] = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
-    lel.innerHTML = order.map(id => {
+    const vaultTotal = state.branchVaultTotal()
+    let head = ''
+    if (vaultTotal > 0) {
+      head = `<div class="prow"><span class="pl"><b>${t('Şube kasalarında bekleyen')}</b></span>`
+        + `<span class="pc">₺${tl(Math.round(vaultTotal))}</span>`
+        + `<button class="btn sbuy good" id="of-collect-vaults">${t('Hepsini Topla')}</button></div>`
+    }
+    lel.innerHTML = head + order.map(id => {
       const th = THEMES[id]
       const open = state.unlockedLocs.includes(id)
       const active = state.activeLoc === id
-      if (active) return row(`<svg class="ic" style="vertical-align:-3px"><use href="#i-map"/></svg> ${th.name}`, t('AKTİF'), 'good')
-      if (open) return `<div class="prow"><span class="pl">${th.name}</span>`
-        + `<button class="btn sbuy" data-goloc="${id}">${t('Şubeye Git')}</button></div>`
+      if (active) {
+        // AKTİF ŞUBE: müdür burada zaten anlık çalışıyor, kasa biriktirmez
+        return row(`<svg class="ic" style="vertical-align:-3px"><use href="#i-map"/></svg> ${th.name}`, t('AKTİF'), 'good')
+      }
+      if (open) {
+        // PASİF ŞUBE: müdür var mı, günlük net ne, kasada ne birikti
+        const d = state.branchNetPerDay(id)
+        const vault = Math.round(state.branchVault[id] ?? 0)
+        const cap = Math.round(state.branchVaultCap(id))
+        const note = d.level > 0
+          ? t('Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}',
+              String(d.level), tl(d.net), tl(vault), tl(cap))
+          : t('Müdür YOK — şube kapalı duruyor. Şubeye git, mağazadan müdür tut.')
+        return `<div class="prow" style="flex-wrap:wrap"><span class="pl">${th.name}</span>`
+          + (vault > 0 ? `<button class="btn sbuy good" data-collectloc="${id}">${t('Topla ₺{0}', tl(vault))}</button>` : '')
+          + `<button class="btn sbuy" data-goloc="${id}">${t('Şubeye Git')}</button>`
+          + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${note}</div>`
+          + `</div>`
+      }
       const c = state.canUnlockLoc(id)
       const note = c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', c.stars) : `₺${tl(c.cash)}`
       return `<div class="prow"><span class="pl" style="color:var(--muted)">${th.name}</span>`
@@ -852,6 +875,18 @@ document.getElementById('of-prices')?.addEventListener('click', e => {
 document.getElementById('of-locations')?.addEventListener('click', e => {
   const go = (e.target as HTMLElement).closest('button[data-goloc]') as HTMLButtonElement | null
   const un = (e.target as HTMLElement).closest('button[data-unlockloc]') as HTMLButtonElement | null
+  // ŞUBE KASASI TOPLAMA — tek şube ya da hepsi
+  const col = (e.target as HTMLElement).closest('button[data-collectloc]') as HTMLButtonElement | null
+  const colAll = (e.target as HTMLElement).closest('#of-collect-vaults') as HTMLButtonElement | null
+  if (col || colAll) {
+    const got = state.collectBranchVaults(col ? (col.dataset.collectloc as LocId) : undefined)
+    if (got > 0) {
+      ui.toast(t('👔 Şube kasası toplandı: +₺{0}', got.toLocaleString('tr-TR')), 'good')
+      audio.achieve()
+    }
+    openOfficePanel(); persist()
+    return
+  }
   if (un) {
     const id = un.dataset.unlockloc as LocId
     if (!state.unlockLoc(id)) { ui.toast(t('Şube açma şartları sağlanmıyor.'), 'bad'); return }
@@ -4209,6 +4244,22 @@ function frame() {
         if (state.marinaViolations < 3 && state.blueFlag().ok) {
           ui.toast(t('🏳️ Sicilin temizlendi — Mavi Bayrak geri alındı!'), 'good')
         }
+      }
+    }
+    // ---- ŞUBE MÜDÜRLERİ: pasif şubelerin günlük net geliri kendi kasalarına yazılır ----
+    // Aktif şube dışarıda bırakılır (orada gelir anlık işliyor; iki kez sayılırsa
+    // sunucunun servet tavanı 409 verir). Kasa dolunca birikim durur ve oyuncu uyarılır —
+    // "geri dön" çağrısı bu; sessizce buharlaşan gelir YOK.
+    const vaults = state.accrueBranchVaults()
+    if (vaults.length) {
+      const added = vaults.reduce((a, v) => a + v.added, 0)
+      const full = vaults.filter(v => v.full)
+      if (added > 0) {
+        ui.toast(t('👔 Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla', added.toLocaleString('tr-TR')), 'good')
+      }
+      if (full.length) {
+        ui.toast(t('👔 {0} şubesinin kasası DOLDU — uğramazsan birikmez',
+          full.map(v => THEMES[v.loc].name).join(', ')), 'bad')
       }
     }
     // İTİBAR MUTABAKATI (#456): itibar günün hizmet kalitesine çekilir — 5.0'da donmaz

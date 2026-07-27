@@ -24,6 +24,16 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  // ŞUBE MÜDÜRÜ (pasif şube işletmesi)
+  'Şube kasalarında bekleyen': 'Waiting in branch tills',
+  'Hepsini Topla': 'Collect All',
+  'Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}': 'Manager Lv.{0} · ₺{1} net/day · till ₺{2}/{3}',
+  'Müdür YOK — şube kapalı duruyor. Şubeye git, mağazadan müdür tut.': 'NO manager — this branch is idle. Visit it and hire a manager from the shop.',
+  'Topla ₺{0}': 'Collect ₺{0}',
+  '👔 Şube kasası toplandı: +₺{0}': '👔 Branch till collected: +₺{0}',
+  '👔 Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla': '👔 Your branch managers earned +₺{0} — collect it in Office › Branches',
+  '👔 {0} şubesinin kasası DOLDU — uğramazsan birikmez': '👔 The {0} branch till is FULL — nothing accrues until you drop by',
+  'kumbara toplar + şubeyi işletir': 'empties piggy banks + runs the branch',
   'Yüksek kapasite: çok sayıda şarj ünitesini aynı anda besler': 'High capacity: powers many charge points at once',
   '⛽ {0} L yakıt satıldı — tank seviyelerine göz at.': '⛽ {0} L of fuel sold — check your tank levels.',
   '📦 {0} sahnesi indiriliyor ({1} model)…': '📦 Downloading the {0} scene ({1} models)…',
@@ -97,8 +107,8 @@ const EN: Record<string, string> = {
     '📜 Licence renewal failed (₺{0} needed) — inspection penalty: reputation dropped!',
   'Müdür Tut': 'Hire Manager', 'Müdür Sv.{0}': 'Manager Lv.{0}',
   'kumbara toplar': 'collects piggy banks', '+ panel temizliği': '+ panel cleaning', '+ arıza tamiri': '+ breakdown repairs',
-  'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. Yovmiyesi vardır.':
-    'The manager makes a round every 45s: Lv.1 collects all piggy banks, Lv.2 cleans solar panels, Lv.3 repairs breakdowns. Costs a daily wage.',
+  'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. AYRICA sen başka şubedeyken bu şubeyi İŞLETİR: günlük net geliri şube kasasına yazar (Sv.1 %45, Sv.2 %65, Sv.3 %85 verim; kasa dolunca birikme durur). Yovmiyesi vardır.':
+    'The manager makes a round every 45s: Lv.1 collects all piggy banks, Lv.2 cleans solar panels, Lv.3 repairs breakdowns. Costs a daily wage. It ALSO runs this branch while you are at another one: its daily net goes into the branch till (Lv.1 45%, Lv.2 65%, Lv.3 85% efficiency; accrual stops once the till is full).',
   'Önce gelir getiren tesisler kur': 'Build income facilities first',
   'Personel Eğitimi Sv.{0}': 'Staff Training Lv.{0}',
   '+%12 hız, +bahşiş': '+12% speed, +tips',
@@ -952,6 +962,16 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  // GÉRANT DE SUCCURSALE (exploitation passive)
+  'Şube kasalarında bekleyen': 'En attente dans les caisses',
+  'Hepsini Topla': 'Tout encaisser',
+  'Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}': 'Gérant niv.{0} · {1} ₺ net/jour · caisse {2}/{3} ₺',
+  'Müdür YOK — şube kapalı duruyor. Şubeye git, mağazadan müdür tut.': 'AUCUN gérant — cette succursale est à l\'arrêt. Rends-y visite et engage un gérant dans la boutique.',
+  'Topla ₺{0}': 'Encaisser {0} ₺',
+  '👔 Şube kasası toplandı: +₺{0}': '👔 Caisse de la succursale encaissée : +{0} ₺',
+  '👔 Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla': '👔 Tes gérants ont gagné +{0} ₺ — encaisse dans Bureau › Succursales',
+  '👔 {0} şubesinin kasası DOLDU — uğramazsan birikmez': '👔 La caisse de {0} est PLEINE — plus rien ne s\'accumule sans ta visite',
+  'kumbara toplar + şubeyi işletir': 'vide les tirelires + exploite la succursale',
   'Yüksek kapasite: çok sayıda şarj ünitesini aynı anda besler': 'Grande capacité : alimente plusieurs bornes à la fois',
   '⛽ {0} L yakıt satıldı — tank seviyelerine göz at.': '⛽ {0} L de carburant vendus — vérifiez vos niveaux de cuve.',
   '📦 {0} sahnesi indiriliyor ({1} model)…': '📦 Téléchargement de la scène {0} ({1} modèles)…',
@@ -1037,8 +1057,8 @@ const FR: Record<string, string> = {
   'kumbara toplar': 'vide les tirelires',
   '+ panel temizliği': '+ nettoyage des panneaux',
   '+ arıza tamiri': '+ réparation des pannes',
-  'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. Yovmiyesi vardır.':
-    'Le gérant fait une ronde toutes les 45 s : niv.1 vide toutes les tirelires, niv.2 nettoie les panneaux solaires, niv.3 répare les pannes. Il touche un salaire journalier.',
+  'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. AYRICA sen başka şubedeyken bu şubeyi İŞLETİR: günlük net geliri şube kasasına yazar (Sv.1 %45, Sv.2 %65, Sv.3 %85 verim; kasa dolunca birikme durur). Yovmiyesi vardır.':
+    'Le gérant fait une ronde toutes les 45 s : niv.1 vide toutes les tirelires, niv.2 nettoie les panneaux solaires, niv.3 répare les pannes. Il touche un salaire journalier. Il EXPLOITE aussi cette succursale quand tu es ailleurs : le net quotidien va dans la caisse (niv.1 45 %, niv.2 65 %, niv.3 85 % de rendement ; l\'accumulation s\'arrête quand la caisse est pleine).',
   'Önce gelir getiren tesisler kur': 'Construis d’abord des installations rentables',
   'Personel Eğitimi Sv.{0}': 'Formation du personnel niv.{0}',
   '+%12 hız, +bahşiş': '+12 % de vitesse, +pourboires',

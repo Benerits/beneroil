@@ -759,6 +759,127 @@ export class GameState {
   /** Aktif şubenin teması — ekonomik kısıtlar buradan okunur */
   theme(): LocationTheme { return THEMES[this.activeLoc] ?? THEMES.kasaba }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // ŞUBE MÜDÜRÜ — PASİF ŞUBE İŞLETMESİ
+  //
+  // SORUN: şube açmak ₺500.000–12.000.000 arası bir sink ama oyuncu bir şubeden
+  // ayrıldığı anda o şube TAMAMEN DONUYORDU. Beş şubesi olan oyuncu dördünü boşa
+  // yatırım olarak taşıyordu; "şubeye müdür atayabilmeliyim, gelir gider yakıt
+  // siparişine o baksın" isteği tam bu boşluğu tarif ediyor.
+  //
+  // ÇÖZÜM: `managerLevel` zaten ŞUBE BAZLI bir alan (LOC_FIELDS içinde). Artık
+  // pasif şubede de çalışıyor: gün dönüşünde müdürü olan her şube kendi net gelirini
+  // (ciro − yovmiye − yakıt) şube kasasına yazıyor. Oyuncu dönüp topluyor.
+  //
+  // NEDEN AKTİF OYNAMAKTAN KÖTÜ: verim en iyi seviyede %85. Aktif oynamak her zaman
+  // kârlı; müdür "gitme cezasını" kaldırır, oyunu oynamanın yerini almaz.
+  //
+  // NEDEN KASA TAVANLI: tavan dolunca birikim durur. Böylece (a) oyuncunun geri dönmesi
+  // için sebep kalır, (b) 200 gün uzakta kalıp tek seferde on milyon toplanamaz —
+  // bu aynı zamanda sunucunun jeton kovasını (ALLOW_BURST) patlatmayı da engeller.
+
+  /** seviye → verim (0 = müdür yok). Aktif oynamanın hep üstünde kalması BİLİNÇLİ. */
+  static readonly BRANCH_MANAGER_EFF = [0, 0.45, 0.65, 0.85]
+  /** seviye → şube kasası tavanı. Yüksek seviye daha uzun süre uzak kalmayı satar. */
+  static readonly BRANCH_VAULT_DAYS = [0, 2, 3, 5]
+  /** mutlak tavan: tek toplamada sunucunun izin verdiği sıçramanın (₺260.000) altında */
+  static readonly BRANCH_VAULT_HARD = 220_000
+
+  /** Şube kasaları: pasif şubelerin biriken net geliri (ADDITIVE save alanı). */
+  branchVault: Partial<Record<LocId, number>> = {}
+
+  /**
+   * Bir şube anlık görüntüsünün müdürlü GÜNLÜK NET geliri.
+   *
+   * Simülasyon YOK — ekipmandan türetilir. Sebep: pasif şubeyi gerçekten simüle etmek
+   * (trafik, kuyruk, fiyat) hem pahalı hem de sunucu tarafında doğrulanamaz. Ekipman
+   * tablosu ise save'de duruyor ve sunucu aynı tabloyla üst sınırı hesaplayabiliyor.
+   */
+  branchNetPerDay(loc: LocId): { gross: number; wage: number; net: number; level: number } {
+    const sn = this.locSnapshots[loc]
+    const f = (sn?.f ?? {}) as Record<string, unknown>
+    const num = (k: string) => { const v = f[k]; return typeof v === 'number' && isFinite(v) ? v : 0 }
+    const yes = (k: string) => f[k] === true
+    const level = Math.max(0, Math.min(3, Math.round(num('managerLevel'))))
+    if (level <= 0) return { gross: 0, wage: 0, net: 0, level: 0 }
+
+    // Birim başı günlük brüt (kara şubesi ölçümlerinden: pompa ~₺1.400/gün aktif oyunda)
+    let gross = num('pumps') * 1400 + num('evChargers') * 900
+      + num('marketLevel') * 500 + num('market2Level') * 500
+      + (yes('hasRestaurant') ? 1200 : 0) + (yes('hasRestaurant2') ? 1200 : 0)
+      + (yes('hasCoffee') ? 600 : 0) + (yes('hasCoffee2') ? 600 : 0)
+      + (yes('hasWash') ? 700 : 0) + (yes('hasWash2') ? 700 : 0)
+      + (yes('hasOil') ? 400 : 0) + (yes('hasOil2') ? 400 : 0)
+      + (yes('hasTruckPark') ? 900 : 0)
+      + num('selfWashCount') * 250 + num('airWaterCount') * 120 + num('parkingCount') * 90
+    // MARİNA: bağlama/kışlama pasif omurgadır, müdürsüz de mantıklı ama müdür tahsil eder
+    const berths = f['berths']
+    if (berths && typeof berths === 'object') {
+      gross += berthIncome(berths as Record<string, number>, this.season().id, false)
+    }
+    if (Array.isArray(f['marinaFacs'])) gross += (f['marinaFacs'] as string[]).length * 800
+
+    // şubenin kendi teması: otoyol hacimli, kasaba küçük (temanın entryBase'i ölçek verir)
+    const th = THEMES[loc]
+    const themeMult = th ? th.econ.entryBase / THEMES.kasaba.econ.entryBase : 1
+    gross = Math.round(gross * themeMult * GameState.BRANCH_MANAGER_EFF[level] * this.prestigeMult())
+    // Yovmiye: müdürün kendi maaşı + o şubede otomatiğe bağlı pompacı/şarjcı kadrosu.
+    // Pasif şubede kadro sayısı snapshot'ta küme olarak duruyor (autoPumps/autoChargers).
+    const staffMul = 1 + 0.35 * (Math.max(1, Math.round(num('staffLevel'))) - 1)
+    const crew = (sn?.autoPumps?.length ?? 0) * POMPACI_WAGE + (sn?.autoChargers?.length ?? 0) * EV_ATTENDANT_WAGE
+    const wage = MANAGER_WAGES[level] + Math.round(crew * staffMul)
+    return { gross, wage, net: Math.max(0, gross - wage), level }
+  }
+
+  /** Şube kasası tavanı (gün sayısı × günlük net, mutlak tavanla kırpılmış) */
+  branchVaultCap(loc: LocId): number {
+    const d = this.branchNetPerDay(loc)
+    if (d.level <= 0) return 0
+    return Math.min(GameState.BRANCH_VAULT_HARD, d.net * GameState.BRANCH_VAULT_DAYS[d.level])
+  }
+
+  /**
+   * Gün dönüşünde pasif şubelerin kasasını doldur. Aktif şube DAHİL DEĞİL
+   * (orada gelir zaten anlık işliyor; iki kez sayılırsa anti-cheat 409 verir).
+   */
+  accrueBranchVaults(): { loc: LocId; added: number; full: boolean }[] {
+    const out: { loc: LocId; added: number; full: boolean }[] = []
+    for (const loc of this.unlockedLocs) {
+      if (loc === this.activeLoc) continue
+      const d = this.branchNetPerDay(loc)
+      if (d.level <= 0 || d.net <= 0) continue
+      const cap = this.branchVaultCap(loc)
+      const cur = this.branchVault[loc] ?? 0
+      const next = Math.min(cap, cur + d.net)
+      const added = Math.round(next - cur)
+      this.branchVault[loc] = Math.round(next)
+      if (added > 0 || next >= cap) out.push({ loc, added, full: next >= cap - 1 })
+    }
+    return out
+  }
+
+  /** Şube kasalarını kasaya aktar. Toplanan tutarı döndürür. */
+  collectBranchVaults(only?: LocId): number {
+    let total = 0
+    for (const [k, v] of Object.entries(this.branchVault)) {
+      if (only && k !== only) continue
+      const amt = Math.max(0, Math.round(Number(v) || 0))
+      if (amt <= 0) continue
+      total += amt
+      this.branchVault[k as LocId] = 0
+    }
+    if (total > 0) {
+      this.money += total
+      this.stats.revenue += total
+    }
+    return total
+  }
+
+  /** Toplanmayı bekleyen toplam (HUD/ofis göstergesi) */
+  branchVaultTotal(): number {
+    return Object.values(this.branchVault).reduce((a, v) => a + (Number(v) || 0), 0)
+  }
+
   // ---- ÇEVRE YOLU İMZASI: trafik ışığı + yaya müşteri (rapor §6.3) ----
   /** ışık döngüsü içindeki saniye (runtime; kaydedilmez) */
   lightT = 0
@@ -1158,11 +1279,28 @@ export class GameState {
 
   /** Marinaya gelen tekne segmentleri — tesis kısıtlarına göre süzülür (rapor §6.5.4).
    *  Süperyat YALNIZ Mavi Bayrak varsa, gulet duş/çamaşırhane varsa gelir. */
+  /**
+   * Şu an gelebilecek tekne sınıfları.
+   *
+   * BUG DÜZELTMESİ (Oğuz: "hiç yanaşan tekne görmedim"): eskiden koşul
+   * `!hasMarinaFac('fueldock')` ise BOŞ liste dönüyordu. cars.ts tarafında
+   * `if (!boatSeg && waterOnly) return` olduğu için ₺5.000.000 ödeyip marinayı açan
+   * oyuncu, ₺180.000'lik yakıt iskelesini de kurana kadar TAMAMEN ÖLÜ bir şube
+   * görüyordu — hiçbir uyarı da yoktu.
+   *
+   * Yeni kural: küçük tekneler (jet ski / sürat / balıkçı) rıhtıma yan yanaşıp
+   * istasyonun kendi pompasından yakıt alır → şube ilk günden çalışır. Yakıt iskelesi
+   * artık "çalıştırma şartı" değil, BÜYÜK TEKNE KİLİDİ: yelkenli, gulet, motoryat ve
+   * süperyat yalnız iskele varken gelir. Yatırımın değeri korunuyor, ölü şube bitiyor.
+   */
   boatSegments(): BoatSegment[] {
-    if (!this.isMarina || !this.hasMarinaFac('fueldock')) return []
+    if (!this.isMarina) return []
+    const dock = this.hasMarinaFac('fueldock')
     const bf = this.blueFlag().ok
     return BOAT_SEGMENTS.filter(s =>
-      (!s.needsBlueFlag || bf) && (!s.needsShower || this.hasMarinaFac('shower')))
+      (!s.needsFuelDock || dock)
+      && (!s.needsBlueFlag || bf)
+      && (!s.needsShower || this.hasMarinaFac('shower')))
   }
 
   /** Tekne segmentlerini araç segmenti biçimine çevir — TUTAR buradan geçer.
@@ -1624,8 +1762,8 @@ export function getShopItems(s: GameState): ShopRow[] {
   // ---- MÜDÜR + PERSONEL EĞİTİMİ (geç oyun otomasyonu, raporun 5. ve 7. öncelikleri) ----
   row('manager', 'i-gear',
     s.managerLevel === 0 ? t('Müdür Tut') : t('Müdür Sv.{0}', Math.min(3, s.managerLevel + 1)),
-    s.managerLevel === 0 ? t('kumbara toplar') : s.managerLevel === 1 ? t('+ panel temizliği') : t('+ arıza tamiri'),
-    t('Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. Yovmiyesi vardır.'),
+    s.managerLevel === 0 ? t('kumbara toplar + şubeyi işletir') : s.managerLevel === 1 ? t('+ panel temizliği') : t('+ arıza tamiri'),
+    t('Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. AYRICA sen başka şubedeyken bu şubeyi İŞLETİR: günlük net geliri şube kasasına yazar (Sv.1 %45, Sv.2 %65, Sv.3 %85 verim; kasa dolunca birikme durur). Yovmiyesi vardır.'),
     s.managerLevel >= 3 ? null : MANAGER_COSTS[s.managerLevel],
     s.pendingCapTotal() >= 1200 || s.managerLevel > 0 ? null : t('Önce gelir getiren tesisler kur'))
   row('train', 'i-star', t('Personel Eğitimi Sv.{0}', Math.min(4, s.staffLevel + 1)),
@@ -1769,6 +1907,8 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.activeLoc = s.activeLoc
   out.unlockedLocs = [...s.unlockedLocs]
   out.locSnapshots = JSON.parse(JSON.stringify(s.locSnapshots))
+  // ŞUBE MÜDÜRÜ (ADDITIVE): pasif şubelerin biriken kasası. Eski istemci yok sayar.
+  out.branchVault = { ...s.branchVault }
   out.partner = { ...s.partner } // banka ortaklığı durumu
   out.pendingCash = { ...s.pendingCash }
   out.ownedParcels = [...s.ownedParcels]
@@ -1862,6 +2002,17 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   }
   if (typeof data.activeLoc === 'string' && VALID.includes(data.activeLoc as LocId)) {
     s.activeLoc = s.unlockedLocs.includes(data.activeLoc as LocId) ? data.activeLoc as LocId : 'kasaba'
+  }
+  // ŞUBE KASALARI (ADDITIVE): sayıya zorla + tavanla kırp (bozuk/kurcalanmış save koruması)
+  if (data.branchVault && typeof data.branchVault === 'object' && !Array.isArray(data.branchVault)) {
+    const bv: Partial<Record<LocId, number>> = {}
+    for (const [k, v] of Object.entries(data.branchVault as Record<string, unknown>)) {
+      if (!VALID.includes(k as LocId)) continue
+      const n = Number(v)
+      if (!isFinite(n) || n <= 0) continue
+      bv[k as LocId] = Math.min(GameState.BRANCH_VAULT_HARD, Math.round(n))
+    }
+    s.branchVault = bv
   }
   if (data.locSnapshots && typeof data.locSnapshots === 'object' && !Array.isArray(data.locSnapshots)) {
     const out: Partial<Record<LocId, LocSnapshot>> = {}

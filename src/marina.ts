@@ -25,6 +25,10 @@ export interface BoatSegment {
   needsBlueFlag?: boolean
   /** duş/çamaşırhane yoksa gelmez (gulet mürettebatı) */
   needsShower?: boolean
+  /** BÜYÜK TEKNE: rıhtıma yan yanaşamaz, gerçek yakıt iskelesi ister.
+   *  Küçük tekneler (jet ski / sürat / balıkçı) rıhtım babalarına bağlanıp
+   *  istasyonun kendi pompasından yakıt alır — bu yüzden şube ilk günden canlıdır. */
+  needsFuelDock?: boolean
   /** ÖTV'siz yakıt defteri ibraz eder — oyuncu ONAYLA/REDDET kararı verir */
   logbook?: boolean
 }
@@ -33,10 +37,10 @@ export const BOAT_SEGMENTS: BoatSegment[] = [
   { id: 'jetski', share: 0.24, min: 400, max: 800, margin: 0.35, serviceSec: 15, label: t('Jet ski / şişme bot') },
   { id: 'surat', share: 0.20, min: 1500, max: 3000, margin: 0.38, serviceSec: 25, label: t('Sürat teknesi') },
   { id: 'balikci', share: 0.20, min: 2000, max: 5000, margin: 0.12, serviceSec: 40, label: t('Balıkçı teknesi'), logbook: true },
-  { id: 'yelkenli', share: 0.14, min: 2500, max: 6000, margin: 0.30, serviceSec: 50, label: t('Yelkenli') },
-  { id: 'gulet', share: 0.10, min: 4000, max: 9000, margin: 0.28, serviceSec: 60, label: t('Gulet'), needsShower: true },
-  { id: 'motoryat', share: 0.09, min: 6000, max: 12000, margin: 0.32, serviceSec: 70, label: t('Motor yat') },
-  { id: 'superyat', share: 0.03, min: 25000, max: 60000, margin: 0.28, serviceSec: 150, label: t('Süperyat'), needsBlueFlag: true },
+  { id: 'yelkenli', share: 0.14, min: 2500, max: 6000, margin: 0.30, serviceSec: 50, label: t('Yelkenli'), needsFuelDock: true },
+  { id: 'gulet', share: 0.10, min: 4000, max: 9000, margin: 0.28, serviceSec: 60, label: t('Gulet'), needsShower: true, needsFuelDock: true },
+  { id: 'motoryat', share: 0.09, min: 6000, max: 12000, margin: 0.32, serviceSec: 70, label: t('Motor yat'), needsFuelDock: true },
+  { id: 'superyat', share: 0.03, min: 25000, max: 60000, margin: 0.28, serviceSec: 150, label: t('Süperyat'), needsBlueFlag: true, needsFuelDock: true },
 ]
 
 /** rapordaki "ortalama satış ≈ ₺4.500" iddiasının hesabı — testle kilitlenir */

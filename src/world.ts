@@ -4,6 +4,7 @@ import { StaticLib, fitModel } from './models'
 import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 import { LocationTheme, activeTheme } from './themes'
 import type { Kit } from './kits'
+import { SCENE_PLANS, type Placement } from './scenery'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
 // Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
@@ -248,6 +249,31 @@ function buildTreeProc(x: number, y: number, scale: number, parent: THREE.Object
   parent.add(g)
 }
 
+/**
+ * ÇAM/SERVİ — üç kademeli, gövdeli.
+ *
+ * Eskisi tek `ConeGeometry(0.5, 1.1, 5)` idi ve izometrik açıdan aşağı bakan bir OK
+ * gibi görünüyordu ("ters koni şeklindeki ağaçlar güzel değil" — haklı şikâyet).
+ * Üç azalan koni + görünür gövde silüeti ağaca çeviriyor; 5 kenarlı düşük poligon
+ * bütçesi korunuyor (kule başına 3 mesh, hepsi instanced çağıranda birleşiyor).
+ */
+function buildPineProc(scale: number, dark: number, light: number): THREE.Group {
+  const g = new THREE.Group()
+  cyl(0.075, 0.55, 0x6b4f34, 0, 0, 0.27, 'z', g)
+  const tier = (r: number, h: number, z: number, c: number) => {
+    const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), lam(c))
+    m.rotation.x = -Math.PI / 2
+    m.position.z = z
+    m.castShadow = true
+    g.add(m)
+  }
+  tier(0.62, 1.05, 0.95, dark)
+  tier(0.47, 0.90, 1.55, light)
+  tier(0.30, 0.70, 2.10, light)
+  g.scale.setScalar(scale)
+  return g
+}
+
 function buildLampProc(x: number, y: number, parent: THREE.Object3D) {
   const g = new THREE.Group()
   cyl(0.06, 3.0, 0x59616b, 0, 0, 1.5, 'z', g)
@@ -401,9 +427,16 @@ export class World {
         poles.setMatrixAt(i, pm)
       }
       poles.instanceMatrix.needsUpdate = true; s.add(poles)
-      // gürültü bariyeri (karşı yakada duvar)
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 220, 3.2), lam(0x9aa1a9))
-      wall.position.set(ROAD_X + 7.4, 0, 1.6); s.add(wall)
+      // GÜRÜLTÜ BARİYERİ — eskiden 220 birim uzunluğunda TEK gri kütleydi (0.4×220×3.2)
+      // ve karşı yakayı boydan boya kapatan bir duvar gibi okunuyordu. Şimdi panelli:
+      // 2.35 yükseklik (K2 sınırının altı), panel aralarında dikme, hafif renk kırılması.
+      // Otoyol imzası duruyor, manzara duvarı gitti.
+      const panelN = 44
+      const PANEL = [0xa6adb4, 0x9aa1a9, 0xb0b7bd]
+      this.instAt(s, new THREE.BoxGeometry(0.26, 4.6, 2.35), lam(0xffffff), panelN,
+        (m, i) => m.setPosition(ROAD_X + 7.4, -110 + i * 5, 1.18), PANEL)
+      this.instAt(s, new THREE.BoxGeometry(0.40, 0.30, 2.55), lam(0x767d85), panelN + 1,
+        (m, i) => m.setPosition(ROAD_X + 7.4, -112.5 + i * 5, 1.28))
       this.buildIndustrialDistrict(s)
       // uzak dağ silüeti (sanayinin de arkasında, en uzak katman)
       for (let i = 0; i < 5; i++) {
@@ -442,22 +475,15 @@ export class World {
         stripe.rotation.z = Math.PI / 2
         s.add(stripe)
       }
-      // ---- KALDIRIM + KENTSEL SİLUET (arka planda blok apartmanlar) ----
+      // ---- KALDIRIM ----
+      // KALDIRILDI: buraya 17 adet 5×7×20'lik düz gri kutu koyan "kentsel siluet"
+      // vardı. İki hatası birdendi: (1) x 20.9..25.9 aralığı oyuncunun satın
+      // alabileceği 3. ve 4. parsel kolonuydu — arsa görsel olarak kapalıydı;
+      // (2) karşı yaka kameraya YAKIN taraftır, 20 birimlik kütle ekranın yarısını
+      // yiyordu. Yerine `scenery.ts` planları geldi: karşı yaka alçak, yüksek kütle
+      // batıda. Kural artık `npm run test:framing` ile ölçülüyor.
       const kerb = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 220), lam(0xc9c5ba))
       kerb.position.set(ROAD_X - 3.1, 0, 0.018); s.add(kerb)
-      let seed = 7
-      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
-      const blockN = 17
-      const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x8d949c), blockN)
-      const m4 = new THREE.Matrix4()
-      for (let i = 0; i < blockN; i++) {
-        const h = 6 + rnd() * 14, w = 5 + rnd() * 4, d = 7 + rnd() * 3
-        m4.makeScale(w, d, h)
-        m4.setPosition(ROAD_X + 13 + rnd() * 5, -90 + i * 11, h / 2)
-        inst.setMatrixAt(i, m4)
-      }
-      inst.instanceMatrix.needsUpdate = true
-      s.add(inst)
     }
 
     const lot = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 20), this.concreteMat)
@@ -607,9 +633,142 @@ export class World {
       }
     }
 
-    if (!th.features?.urban && !isWater) this.buildCountryside()
+    // KIR DOLGUSU YALNIZ KASABAYA: tarla, bağ, saman balyası ve gölet otoyolun
+    // sanayi kuşağında yanlış okunuyordu (ekran görüntülerinde asfaltın yanında
+    // üzüm bağı görünüyordu). Otoyolun çevresi artık scenery.ts planından geliyor.
+    if (th.id === 'kasaba') this.buildCountryside()
+    this.dressForecourt()
     this.setSign(0)
     this.addPump(0)
+  }
+
+  /**
+   * ŞUBEYE ÖZEL ÖN SAHA (forecourt) DONANIMI
+   *
+   * Oğuz: "benzinlik yerleşimi bütün hepsinde aynı görünüyor... bu bir tema değişikliği
+   * değil, her birini tek tek değiştirmek gerek." Haklı: şubeler arasında YALNIZ zemin
+   * rengi ve çevre değişiyordu, istasyonun kendisi bire bir aynıydı.
+   *
+   * TASARIM KISITI: pompa yuvaları (x=1.8), apronlar (y=±8, −16) ve kapılar (x=4.2)
+   * ARAÇ ROTASIDIR. Buraya hacimli nesne konursa trafik kilitlenir. Bu yüzden kural:
+   *   · x ∈ [-0.5, 4.0] bandına YALNIZ z ≤ 0.035 yer boyası konur (çarpışma yok),
+   *   · hacimli donanım batı şeridine (x ≤ -5.6) ve yol-arsa yeşil bandına (x ≥ 5.1) gider.
+   * Böylece her şube görsel olarak ayrışıyor, trafik grafiği tek satır bile değişmiyor.
+   */
+  private dressForecourt() {
+    const s = this.scene
+    const id = this.theme.id
+    const paint = (w: number, d: number, x: number, y: number, c: number, rot = 0) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), lam(c))
+      m.position.set(x, y, 0.032); m.rotation.z = rot; s.add(m)
+    }
+    const prop = (g: THREE.Object3D, x: number, y: number) => {
+      g.position.set(x, y, g.position.z)
+      g.traverse(o => { o.castShadow = true })
+      s.add(g)
+      this.decor.push({ obj: g, x, y })
+    }
+    const crate = (w: number, d: number, h: number, c: number, x: number, y: number, z: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, d, h), lam(c))
+      m.position.set(x, y, z); m.castShadow = true
+      return m
+    }
+
+    if (id === 'otoyol') {
+      // TIR ÖLÇEĞİ: geniş manevra boyası, lastik istifi, varil paleti, yükseklik sınırı çubuğu
+      for (let i = 0; i < 7; i++) paint(2.6, 0.34, 3.10, -19.4 + i * 1.5, 0xe4c24a, Math.PI / 4)
+      paint(9.0, 0.16, -1.60, -12.20, 0xe8e4d8)
+      paint(0.16, 6.0, -5.90, -15.20, 0xe8e4d8)
+      const tyres = new THREE.Group()
+      for (let i = 0; i < 6; i++) {
+        const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.26, 10), lam(0x22262a))
+        tr.rotation.x = Math.PI / 2
+        tr.position.set((i % 2) * 0.95, 0, 0.14 + Math.floor(i / 2) * 0.27)
+        tyres.add(tr)
+      }
+      prop(tyres, -6.05, 3.40)
+      const pallet = new THREE.Group()
+      pallet.add(crate(1.5, 1.1, 0.14, 0xa8875c, 0, 0, 0.07))
+      for (let i = 0; i < 4; i++)
+        pallet.add(crate(0.34, 0.34, 0.52, i % 2 ? 0xd8a33a : 0x3f6f9e,
+          -0.42 + (i % 2) * 0.84, -0.28 + Math.floor(i / 2) * 0.56, 0.40))
+      prop(pallet, -6.10, -1.60)
+      // yükseklik sınırı çubuğu (otoyol istasyonlarının imzası)
+      const gantry = new THREE.Group()
+      gantry.add(crate(0.16, 0.16, 4.4, 0xd6d2c6, 0, -1.9, 2.2))
+      gantry.add(crate(0.16, 0.16, 4.4, 0xd6d2c6, 0, 1.9, 2.2))
+      gantry.add(crate(0.22, 4.0, 0.26, 0xd64545, 0, 0, 4.3))
+      prop(gantry, 5.35, -8.00)
+    } else if (id === 'cevreyolu') {
+      // ŞEHİR ÇEPERİ: boyalı park cepleri, çöp kovaları, alçak çit, bisiklet demiri
+      for (let i = 0; i < 6; i++) paint(2.3, 0.11, -5.05, 11.2 + i * 1.9, 0xe8e4d8)
+      paint(2.4, 11.6, -5.05, 15.9, 0x6f767d)
+      for (const [bx, by] of [[-6.15, 6.20], [-6.15, -4.60]] as [number, number][]) {
+        const bin = new THREE.Group()
+        bin.add(crate(0.46, 0.46, 0.82, 0x3d6b43, 0, 0, 0.41))
+        bin.add(crate(0.52, 0.52, 0.08, 0x2c4a30, 0, 0, 0.86))
+        prop(bin, bx, by)
+      }
+      this.instAt(s, new THREE.SphereGeometry(0.36, 7, 5), lam(0x5f8a52), 16,
+        (m, i) => m.setPosition(-6.95, -9.0 + i * 1.25, 0.3))
+      const rack = new THREE.Group()
+      for (let i = 0; i < 4; i++) {
+        const u = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 6, 12, Math.PI), lam(0x8f979e))
+        u.rotation.y = Math.PI / 2
+        u.position.set(0, -0.7 + i * 0.47, 0.28)
+        rack.add(u)
+      }
+      prop(rack, -5.85, 1.90)
+    } else if (id === 'metropol') {
+      // SIKIŞIK ŞEHİR: babalar, saksılar, EV yer işareti, arnavut şerit
+      this.instAt(s, new THREE.CylinderGeometry(0.09, 0.11, 0.7, 8), lam(0x3c4046), 18, (m, i) => {
+        m.makeRotationX(Math.PI / 2); m.setPosition(4.62, -12 + i * 1.5, 0.35)
+      })
+      for (const [px, py] of [[-6.10, 8.60], [-6.10, 4.20], [-6.10, -0.20], [-6.10, -4.60]] as [number, number][]) {
+        const pl = this.statics?.planter ? fitModel(this.statics.planter, 0.9, 'z') : null
+        if (pl) prop(pl, px, py)
+        else {
+          const g = new THREE.Group()
+          g.add(crate(0.8, 0.8, 0.36, 0xb9b3a4, 0, 0, 0.18))
+          g.add(crate(0.62, 0.62, 0.22, 0x4d7a52, 0, 0, 0.44))
+          prop(g, px, py)
+        }
+      }
+      paint(1.9, 1.9, 3.10, 6.30, 0x2f6f4a)     // EV park yeri boyası
+      paint(1.5, 0.22, 3.10, 6.30, 0xe8f2ea)
+      paint(0.22, 1.5, 3.10, 6.30, 0xe8f2ea)
+      paint(1.10, 22, -6.05, 0, 0x9aa1a9)       // arnavut kaldırım şeridi
+    } else if (this.theme.lane.kind === 'water') {
+      // MARİNA: ahşap güverte, koç boynuzu, cankurtaran, balık kasası — ASFALT DEĞİL
+      // AHŞAP GÜVERTE: yakıt apronunun tamamı. x=3.6'ya konulan ilk sürüm görünmedi —
+      // rıhtım kutusu (x 3.1..5.3, z 0.25) üstünü kapatıyordu; ölçüldü ve batıya alındı.
+      // Yalnız yer boyası (z=0.030) olduğu için araç/tekne rotasına dokunmuyor.
+      const deck = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 30), lam(0xa8875c))
+      deck.position.set(1.25, 0, 0.030); s.add(deck)
+      this.instAt(s, new THREE.PlaneGeometry(3.46, 0.07), lam(0x8d6f47), 30,
+        (m, i) => m.setPosition(1.25, -14.5 + i, 0.033))
+      // koç boynuzu (cleat) dizisi
+      this.instAt(s, new THREE.BoxGeometry(0.34, 0.12, 0.14), lam(0x2f3338), 10,
+        (m, i) => m.setPosition(4.42, -13.5 + i * 3, 0.10))
+      // cankurtaran halkası direkleri
+      for (const ry of [-9.0, 0.0, 9.0]) {
+        const g = new THREE.Group()
+        g.add(crate(0.10, 0.10, 1.3, 0xe8e4d8, 0, 0, 0.65))
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.075, 6, 14), lam(0xd64545))
+        ring.rotation.y = Math.PI / 2
+        ring.position.set(0.04, 0, 1.15)
+        g.add(ring)
+        prop(g, 5.30, ry)
+      }
+      // balık kasası istifi ve ağ yığını
+      const stack = new THREE.Group()
+      for (let i = 0; i < 5; i++)
+        stack.add(crate(0.7, 0.5, 0.24, i % 2 ? 0x3f8fa8 : 0xd9d5c9, 0, 0, 0.12 + i * 0.25))
+      prop(stack, -6.10, -5.20)
+      const net = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), lam(0x6f7a5c))
+      net.scale.set(1, 1, 0.45); net.position.z = 0.24
+      prop(net, -6.05, 6.40)
+    }
   }
 
   /** çevre dolgusu: tarlalar, bağ-bahçe, balyalar, çitler, gölet */
@@ -1134,20 +1293,22 @@ export class World {
       m.makeRotationX(Math.PI / 2); m.setPosition(5.05, -19 + i * 2, 0.25)
     })
 
-    // ---- 4) SEYİR KANALI ŞAMANDIRALARI: kırmızı iskele (10.40) / yeşil sancak (17.20) ----
+    // ---- 4) SEYİR KANALI ŞAMANDIRALARI: kırmızı iskele / yeşil sancak ----
+    // Eskiden 6+6 = 12 şamandıra vardı ve 1.4 birim boyla yarım araba büyüklüğündeydi;
+    // kanal şamandıra ormanına dönüşüyordu. Şimdi 4+4, 0.95 birim: kanalı işaretler,
+    // manzarayı kapatmaz.
     const buoyAt = (name: string, x: number, ys: number[], fallback: number) => {
       const proto = K?.[name]
       for (const y of ys) {
-        if (proto) { const g = fitModel(proto, 1.4, 'z'); g.position.set(x, y, 0); s.add(g) }
+        if (proto) { const g = fitModel(proto, 0.95, 'z'); g.position.set(x, y, 0); s.add(g) }
         else {
-          const c = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.2, 7), lam2(fallback))
-          c.rotation.x = -Math.PI / 2; c.position.set(x, y, 0.6); s.add(c)
+          const c = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.0, 7), lam2(fallback))
+          c.rotation.x = -Math.PI / 2; c.position.set(x, y, 0.5); s.add(c)
         }
       }
     }
-    const ys = [-22, -14, -6, 2, 10, 18]
-    buoyAt('buoy', 10.40, ys, 0xd44b4b)
-    buoyAt('buoy-flag', 17.20, ys.map(y => y + 4), 0x3fae5f)
+    buoyAt('buoy', 10.40, [-19, -6, 7, 20], 0xd44b4b)
+    buoyAt('buoy-flag', 17.20, [-14, -1, 12, 25], 0x3fae5f)
 
     // ---- 5) MİSAFİR PONTONLARI + ANA PONTON + DALGAKIRAN ----
     inst(new THREE.BoxGeometry(5.6, 1.1, 0.26), lam2(0xa8875c), 5,
@@ -1161,180 +1322,232 @@ export class World {
       l.rotation.x = Math.PI / 2; l.position.set(25.60, my, 2.4); s.add(l)
     }
 
-    // ---- 6) LİMAN DOKUSU: bağlı tekneler, römorkör, konteyner, rampa ----
-    const place = (name: string, len: number, x: number, y: number, rot = 0, axis: 'x' | 'y' | 'z' = 'x') => {
-      const proto = K?.[name]
-      if (!proto) return
-      const g = fitModel(proto, len, axis)
-      g.position.set(x, y, 0); g.rotation.z = rot
-      s.add(g)
-    }
-    place('boat-tug-a', 3.6, 20.6, -20.0, Math.PI / 2)     // römorkör, pontona bağlı
-    place('boat-row-large', 2.2, 20.2, -12.2, Math.PI / 2)
-    place('boat-row-large', 2.0, 20.2, 4.2, Math.PI / 2)
-    place('ramp', 2.4, 6.6, -21.5, 0, 'y')                 // denize indirme rampası
-    for (const [n, x, y] of [['cargo-container-a', 1.2, -19.4], ['cargo-container-b', 1.2, -17.0],
-                             ['cargo-pile-a', -1.6, -18.6]] as [string, number, number][])
-      place(n, 2.6, x, y, 0, 'y')
-    // arka planda geçen kargo gemisi — ölçek hissi (bant kenarı, bilerek)
-    place('ship-cargo-b', 13, 34, -30, Math.PI)
+    // ---- 6) LİMAN DOKUSU + ADA DEKORU (plan: scenery.ts MARINA_PLAN) ----
+    this.placePlan(SCENE_PLANS.marina, s)
+    // denize indirme rampası (kit modeli yoksa da olsun diye elle)
+    const slip = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.6, 0.10), lam2(0xb8b2a4))
+    slip.position.set(3.10, -21.60, 0.06); s.add(slip)
 
-    // ---- 7) DOĞAL KIYI: satın alınamayan şeritte çam ve kaya (ada kenarını yumuşatır) ----
-    inst(new THREE.ConeGeometry(0.9, 2.6, 6), lam2(0x4f7f52), 9, (m, i) => {
-      m.makeRotationX(-Math.PI / 2)
-      const t = i / 9 * Math.PI * 2
-      m.setPosition(-19.4 + Math.sin(t * 1.7) * 1.4, -22 + i * 5.4, 1.3)
+    // ---- 7) ADAYI YAŞATAN DETAY ----
+    // Ada 26×50 birimlik boş yeşil bir lekeydi. Oğuz'un kısıtı gereği ÜSTÜNE
+    // YERLEŞİLEBİLİR YAPI KONMUYOR; onun yerine peyzaj: sahil patikası, kayalık,
+    // çam kuşağı, güney burnunda fener. Hepsi dekor, hiçbiri parsel yemiyor.
+
+    // sahil patikası — adanın batı kavsini takip eden açık renkli şerit
+    const pathPts: THREE.Vector2[] = []
+    for (let i = 0; i <= 26; i++) {
+      const t = -1 + (i / 26) * 2               // -1..1
+      const yy = t * 21.5
+      const xx = -17.6 + 6.2 * (1 - t * t) * 0.55
+      pathPts.push(new THREE.Vector2(xx, yy))
+    }
+    const pathGeo = new THREE.BufferGeometry()
+    {
+      const verts: number[] = []
+      for (let i = 0; i < pathPts.length - 1; i++) {
+        const a0 = pathPts[i], a1 = pathPts[i + 1]
+        const dx = a1.x - a0.x, dy = a1.y - a0.y
+        const L = Math.hypot(dx, dy) || 1
+        const nx = (-dy / L) * 0.55, ny = (dx / L) * 0.55
+        verts.push(a0.x + nx, a0.y + ny, 0.016, a0.x - nx, a0.y - ny, 0.016, a1.x + nx, a1.y + ny, 0.016)
+        verts.push(a1.x + nx, a1.y + ny, 0.016, a0.x - nx, a0.y - ny, 0.016, a1.x - nx, a1.y - ny, 0.016)
+      }
+      pathGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
+      // NORMAL ZORUNLU: normalsiz geometri Lambert altında SİYAH çıkıyor ve ekranın
+      // yarısını yutuyordu (ilk denemede marina sahnesi kapkara oldu).
+      pathGeo.computeVertexNormals()
+    }
+    const pathMesh = new THREE.Mesh(pathGeo, lam2(0xd8cdb2))
+    s.add(pathMesh)
+
+    // kayalık kuşak — ada kenarını yumuşatır (satın alınamayan şeritte)
+    inst(new THREE.IcosahedronGeometry(0.55, 0), lam2(0x8e8878), 16, (m, i) => {
+      const t = (i / 16) * Math.PI * 2
+      const k = 0.7 + 0.5 * ((i * 7) % 3) / 2
+      m.makeScale(k, k, k * 0.65)
+      m.setPosition(-19.4 + Math.cos(t * 2.3) * 1.9, -23 + i * 2.95, 0.24 * k)
     })
-    inst(new THREE.IcosahedronGeometry(0.5, 0), lam2(0x8e8878), 12, (m, i) => {
-      const t = i / 12 * Math.PI * 2
-      m.setPosition(-20.2 + Math.cos(t * 2.3) * 1.6, -25 + i * 4.3, 0.25)
+
+    // ÇAM KUŞAĞI: adanın kuzey ve batı kavsinde, düzgün üç kademeli çam
+    const pines: [number, number, number][] = []
+    for (let i = 0; i < 11; i++) {
+      const t = i / 10
+      pines.push([-18.2 + Math.sin(t * 3.4) * 1.6, -20 + i * 4.0, 1.05 + (i % 3) * 0.14])
+    }
+    for (let i = 0; i < 5; i++) pines.push([-12.0 + i * 2.4, 22.4 - (i % 2) * 1.3, 0.95])
+    this.pineBelt(s, pines, 0x3c6b48, 0x4e8455)
+
+    // ada çalıları — çimin dokusunu kırar (tek instanced küre kümesi)
+    inst(new THREE.SphereGeometry(0.5, 7, 5), lam2(0x5e8a52), 18, (m, i) => {
+      const t = (i * 2.399)
+      m.setPosition(-14.5 + Math.cos(t) * 4.4, -16 + i * 1.85, 0.4)
     })
+
+    // GÜNEY BURNU FENERİ: adanın tek dikey aksanı (h 5.2 — istasyonu örtmez, K3 içi)
+    const twr = new THREE.Group()
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.86, 4.2, 10), lam2(0xf0ece2))
+    shaft.rotation.x = Math.PI / 2; shaft.position.z = 2.1; shaft.castShadow = true; twr.add(shaft)
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.72, 0.9, 10), lam2(0xd44b4b))
+    band.rotation.x = Math.PI / 2; band.position.z = 2.55; twr.add(band)
+    const lampMat = glow(0xfff3c4, 0.08)
+    const gallery = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.75, 10), lampMat)
+    gallery.rotation.x = Math.PI / 2; gallery.position.z = 4.6; twr.add(gallery)
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.56, 0.7, 10), lam2(0x3c4046))
+    cap.rotation.x = -Math.PI / 2; cap.position.z = 5.3; twr.add(cap)
+    // Konum ÖLÇÜLDÜ: (-14.6,-22.2) varsayılan zoom'da ekranın üstünde kalıyordu
+    // (sy ≈ 15 > 13). Kuzeybatı kıyısı hem görünür hem fener için doğru yer.
+    twr.position.set(-15.00, 17.00, 0)
+    s.add(twr)
+    this.nightMats.push({ mat: lampMat, day: 0.08, night: 1.6, owner: 'lighthouse' })
+    const fl = new THREE.PointLight(0xffe6b0, 0, 22, 1.6)
+    fl.position.set(-15.00, 17.00, 4.6); s.add(fl)
+    this.nightLights.push(fl)
   }
 
-  private buildIndustrialDistrict(s: THREE.Scene) {
+  /**
+   * PLANDAN YERLEŞTİRİCİ — üç kara şubesinin ortak omurgası.
+   *
+   * Yerleşim artık `scenery.ts` içinde VERİ. Buradaki iş yalnız o veriyi sahneye
+   * dökmek: modeli ölçekle, döndür, koy; `parcel: true` olanları `decor`'a kaydet ki
+   * oyuncu o arsayı betonlayınca bina gerçekten kalksın (kasabadaki ağaç/taş ile aynı
+   * mekanizma). Kit inmediyse hiçbir şey konmaz ama sahne yine kurulur.
+   *
+   * @returns yerleşen model sayısı (0 ise çağıran yedek siluete düşer)
+   */
+  private placePlan(plan: Placement[], s: THREE.Scene): number {
     const K = this.kit
-    const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
-    const put = (name: string, h: number, x: number, y: number, rot = 0) => {
-      const proto = K?.[name]
-      if (!proto) return false
-      const g = fitModel(proto, h, 'z')
-      g.position.set(x, y, 0)
-      g.rotation.z = rot
+    if (!K) return 0
+    let n = 0
+    for (const p of plan) {
+      const proto = K[p.model]
+      if (!proto) continue
+      const g = fitModel(proto, p.h, p.axis ?? 'z')
+      g.position.set(p.x, p.y, 0)
+      g.rotation.z = p.rot ?? 0
       s.add(g)
-      return true
+      if (p.parcel) this.decor.push({ obj: g, x: p.x, y: p.y })
+      n++
     }
-    // ---- Doğu: sanayi sitesi (gürültü bariyerinin ardı) ----
-    put('building-q', 4.5, 22.60, -20.60)        // güney çapası, en geniş hangar
-    put('building-s', 4.0, 19.50, -9.60)         // yola paralel uzun-alçak depo: sanayinin yol cephesi
-    put('chimney-large', 5.5, 18.80, -2.60)      // dikey silo
-    put('chimney-large', 5.5, 18.80, 0.90)       // ikiz silo → tank çiftliği okur
-    put('detail-tank', 2.2, 23.20, -3.60)        // yatık LPG tankı (araba boyunda detay)
-    put('building-l', 7.0, 24.00, 3.00)          // KAHRAMAN fabrika, istasyonun tam karşısı
-    put('chimney-medium', 13, 26.00, 9.00)       // sanayi imzası; y=+9 TAVAN (üstü istasyonu keser)
-    // ---- Batı: TIR garajı ve lojistik (ekranda istasyonun arkası) ----
-    put('building-s', 4.0, -12.90, -24.00, Math.PI / 2)
-    put('building-t', 4.5, -23.50, -21.00)
-    put('building-f', 9.0, -24.00, -7.00)        // batı ufkunun tek yüksek kütlesi
-    put('chimney-medium', 10, -20.00, -14.50)
-    // ---- Arka plan (yalnız uzaklaşınca görünür, sert tavan x ≤ 42) ----
-    put('chimney-medium', 15, 31.00, -16.00)
-    put('chimney-medium', 13, 33.00, 9.00)
-    put('building-c', 7.0, 33.50, -6.50)
-    put('chimney-medium', 11, 32.00, 16.00)
+    return n
+  }
 
-    // ---- TIR PARKI: InstancedMesh (GLB kopyalamak 20 draw call olurdu, bu 3) ----
-    const inst = (geo: THREE.BufferGeometry, mat: THREE.Material, n: number,
-                  place: (m: THREE.Matrix4, i: number) => void, colors?: number[]) => {
-      const im = new THREE.InstancedMesh(geo, mat, n)
-      const m4 = new THREE.Matrix4()
-      for (let i = 0; i < n; i++) {
-        place(m4, i); im.setMatrixAt(i, m4)
-        if (colors) im.setColorAt(i, new THREE.Color(colors[i % colors.length]))
-      }
+  /** instanced yardımcı — üç sahnede de aynı kalıp (draw call disiplini) */
+  private instAt(s: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material, n: number,
+                 place: (m: THREE.Matrix4, i: number) => void, colors?: number[]) {
+    if (n <= 0) return
+    const im = new THREE.InstancedMesh(geo, mat, n)
+    const m4 = new THREE.Matrix4()
+    for (let i = 0; i < n; i++) {
+      place(m4, i); im.setMatrixAt(i, m4)
+      if (colors) im.setColorAt(i, new THREE.Color(colors[i % colors.length]))
+    }
+    im.instanceMatrix.needsUpdate = true
+    if (im.instanceColor) im.instanceColor.needsUpdate = true
+    im.castShadow = true
+    s.add(im)
+  }
+
+  /**
+   * ÇAM KUŞAĞI — instanced. `buildPineProc` geometrisini bir kez üretip N kez basar.
+   * Ağaçlar parsel bandındaysa `decor`'a girmez (instanced tek nesne; tek tek
+   * silinemez) — bu yüzden çağıranlar ağaçları HER ZAMAN parsel dışına koyar.
+   */
+  private pineBelt(s: THREE.Scene, pts: [number, number, number][], dark = 0x3f6f4a, light = 0x548a58) {
+    if (!pts.length) return
+    // ÖNCE KENNEY AĞACI: `city/suburban/tree-large` her şubede zaten yüklü ve gövdesiyle
+    // tepesiyle düzgün duruyor. Prosedürel çam yalnız o model inmediyse devreye girer.
+    // (İlk denemede prosedürel kademeli koni kullanıldı; kademeler arası boşluk
+    // "uçan tabak" gibi görünüyordu — ekran görüntüsüyle görüldü ve terk edildi.)
+    const proto = this.statics?.treeLarge
+      ? fitModel(this.statics.treeLarge, 2.5, 'z')
+      : buildPineProc(1, dark, light)
+    proto.updateMatrixWorld(true)
+    // Mesh'in YEREL dönüşümü (koni -90° X + z ötelemesi) geometriye PİŞİRİLİR.
+    // Pişirilmezse instanced kopyalarda koniler yana yatıyor — ilk denemede oldu.
+    const parts: { g: THREE.BufferGeometry; m: THREE.Material }[] = []
+    proto.traverse(o => {
+      const me = o as THREE.Mesh
+      if (!me.isMesh) return
+      const g = me.geometry.clone()
+      g.applyMatrix4(me.matrixWorld)
+      parts.push({ g, m: me.material as THREE.Material })
+    })
+    const m4 = new THREE.Matrix4()
+    for (const { g, m } of parts) {
+      const im = new THREE.InstancedMesh(g, m, pts.length)
+      pts.forEach(([x, y, k], i) => {
+        m4.makeScale(k, k, k)
+        m4.setPosition(x, y, 0)
+        im.setMatrixAt(i, m4)
+      })
       im.instanceMatrix.needsUpdate = true
-      if (im.instanceColor) im.instanceColor.needsUpdate = true
       im.castShadow = true
       s.add(im)
     }
-    const TRUCK_Y = [-20.4, -17.9, -15.4, -12.9]
-    const PALET = [0xe8e4d8, 0xd6d2c6, 0xc46a3a, 0x4d6fa3]
-    inst(new THREE.BoxGeometry(5.60, 2.10, 2.35), lam2(0xffffff), 4,
-      (m, i) => m.setPosition(-14.80, TRUCK_Y[i], 1.35), PALET)
-    inst(new THREE.BoxGeometry(2.30, 2.05, 2.60), lam2(0xffffff), 4,
-      (m, i) => m.setPosition(-10.55, TRUCK_Y[i], 1.30), PALET)
-    inst(new THREE.CylinderGeometry(0.42, 0.42, 0.30, 8), lam2(0x22262a), 24, (m, i) => {
-      const t = Math.floor(i / 6), k = i % 6
-      m.makeRotationX(Math.PI / 2)
-      m.setPosition(-17.2 + (k % 3) * 2.6 + (k < 3 ? 0 : 6.4), TRUCK_Y[t] + (k < 3 ? -0.95 : 0.95), 0.42)
-    })
-    inst(new THREE.PlaneGeometry(8.60, 0.14), lam2(0xe8e4d8), 5,
-      (m, i) => m.setPosition(-13.5, -21.65 + i * 2.5, 0.02))
-
-    // ---- Yol imzası: direkler, bariyer, korkuluk, çit, çalı (hepsi instanced) ----
-    inst(new THREE.CylinderGeometry(0.13, 0.16, 11, 8), lam2(0x6a7078), 9, (m, i) => {
-      m.makeRotationX(Math.PI / 2); m.setPosition(13.90, -52 + i * 13, 5.5)
-    })
-    inst(new THREE.BoxGeometry(1.60, 0.35, 0.22), lam2(0x8d949c), 9,
-      (m, i) => m.setPosition(12.90, -52 + i * 13, 10.60))
-    inst(new THREE.BoxGeometry(0.55, 0.30, 3.80), lam2(0x9aa1a9), 16,
-      (m, i) => m.setPosition(15.80, -30 + i * 4, 1.90))
-    inst(new THREE.BoxGeometry(0.12, 0.12, 0.75), lam2(0xb9bec4), 24,
-      (m, i) => m.setPosition(13.40, -46 + i * 4, 0.38))
-    inst(new THREE.CylinderGeometry(0.05, 0.05, 0.90, 5), lam2(0xe8e4d8), 24, (m, i) => {
-      m.makeRotationX(Math.PI / 2); m.setPosition(3.75, -28 + i * 2.4, 0.45)
-    })
-    inst(new THREE.CylinderGeometry(0.08, 0.08, 2.20, 6), lam2(0x8d949c), 17, (m, i) => {
-      m.makeRotationX(Math.PI / 2); m.setPosition(16.80, -28 + i * 3.5, 1.10)
-    })
-    inst(new THREE.ConeGeometry(0.50, 1.10, 5), lam2(this.theme.palette.vegetation), 20, (m, i) => {
-      m.makeRotationX(-Math.PI / 2); m.setPosition(16.30, -28 + i * 2.95, 0.55)
-    })
   }
 
-  /** METROPOL — TİCARİ DOKU (Kenney city-kit-commercial)
+  /** OTOYOL — ağır sanayi kuşağı (plan: scenery.ts OTOYOL_PLAN) */
+  private buildIndustrialDistrict(s: THREE.Scene) {
+    const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
+    this.placePlan(SCENE_PLANS.otoyol, s)
+
+    // ---- TIR PARKI: karşı yakada DEĞİL, istasyonun batı sırtında (alçak, örtmez) ----
+    const TRUCK_Y = [-20.4, -17.9, -15.4, -12.9]
+    const PALET = [0xe8e4d8, 0xd6d2c6, 0xc46a3a, 0x4d6fa3]
+    this.instAt(s, new THREE.BoxGeometry(5.60, 2.10, 2.35), lam2(0xffffff), 4,
+      (m, i) => m.setPosition(-16.80, TRUCK_Y[i], 1.35), PALET)
+    this.instAt(s, new THREE.BoxGeometry(2.30, 2.05, 2.60), lam2(0xffffff), 4,
+      (m, i) => m.setPosition(-12.55, TRUCK_Y[i], 1.30), PALET)
+    this.instAt(s, new THREE.CylinderGeometry(0.42, 0.42, 0.30, 8), lam2(0x22262a), 24, (m, i) => {
+      const t = Math.floor(i / 6), k = i % 6
+      m.makeRotationX(Math.PI / 2)
+      m.setPosition(-19.2 + (k % 3) * 2.6 + (k < 3 ? 0 : 6.4), TRUCK_Y[t] + (k < 3 ? -0.95 : 0.95), 0.42)
+    })
+    this.instAt(s, new THREE.PlaneGeometry(8.60, 0.14), lam2(0xe8e4d8), 5,
+      (m, i) => m.setPosition(-15.5, -21.65 + i * 2.5, 0.02))
+
+    // ---- KARŞI YAKA ZEMİNİ: konteyner istifi + kantar (hepsi ≤ 2.6 → görüş açık) ----
+    const CONT = [0xc46a3a, 0x4d6fa3, 0x3f7f5f, 0xb8b2a4]
+    this.instAt(s, new THREE.BoxGeometry(6.10, 2.44, 2.59), lam2(0xffffff), 8, (m, i) => {
+      const row = Math.floor(i / 4), k = i % 4
+      m.setPosition(23.40 + row * 3.0, -6.4 + k * 2.7, 1.30)
+    }, CONT)
+    // kantar platformu + kulübesi
+    const scalePad = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 9.0), lam2(0x4a5057))
+    scalePad.position.set(14.60, -25.60, 0.018); s.add(scalePad)
+    const hut = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 2.2), lam2(0xd9d5c9))
+    hut.position.set(17.20, -25.60, 1.10); hut.castShadow = true; s.add(hut)
+
+    // ---- YOL İMZASI: yüksek direkler + korkuluk (koridorun DIŞINDA, x ≥ 12.6) ----
+    this.instAt(s, new THREE.CylinderGeometry(0.13, 0.16, 11, 8), lam2(0x6a7078), 9, (m, i) => {
+      m.makeRotationX(Math.PI / 2); m.setPosition(12.80, -52 + i * 13, 5.5)
+    })
+    this.instAt(s, new THREE.BoxGeometry(1.60, 0.35, 0.22), lam2(0x8d949c), 9,
+      (m, i) => m.setPosition(11.90, -52 + i * 13, 10.60))
+    this.instAt(s, new THREE.BoxGeometry(0.12, 0.12, 0.75), lam2(0xb9bec4), 30,
+      (m, i) => m.setPosition(12.20, -46 + i * 4, 0.38))
+    // refüj çalısı (koridorun ortasında değil, kenar bandında)
+    this.instAt(s, new THREE.SphereGeometry(0.42, 7, 5), lam2(0x6f8a5c), 22,
+      (m, i) => m.setPosition(3.60, -30 + i * 2.9, 0.36))
+
+    // ---- ÇAM KUŞAĞI: yol boyu, parsel bandının DIŞINDA (|y| > 25) ----
+    const pines: [number, number, number][] = []
+    for (let i = 0; i < 9; i++) pines.push([13.40 + (i % 2) * 1.1, -27 - i * 3.1, 0.95 + (i % 3) * 0.12])
+    for (let i = 0; i < 9; i++) pines.push([13.40 + (i % 2) * 1.1, 27 + i * 3.1, 0.95 + (i % 3) * 0.12])
+    this.pineBelt(s, pines, 0x4a6d47, 0x5f8a52)
+  }
+
+  /** METROPOL — ticari merkez (plan: scenery.ts METROPOL_PLAN)
    *
-   *  Yerleşim kamera bandına göre: batı duvarı YÜKSEK (x -7.8 cephe hattı), doğu duvarı
-   *  bilinçli ALÇAK (H ≤ 7). Sebep üslup değil gölge: doğuya konan yüksek bina karşı
-   *  istasyonun üstüne y-2H uzunluğunda gölge atıyor; H=7'de gölge parselin doğu ucunda
-   *  kalıyor, H=14 olsaydı karşı istasyonu tamamen yutardı.
-   *
-   *  Kuzeye gittikçe yükselme de zorunluluk: yükseklik bütçesi Hmax ≈ 14.2 + 0.20x + 0.40y.
+   *  Batı duvarı yüksek ve camlı (ekranın SAĞI, derinlikte geri → istasyonu örtmez);
+   *  karşı yaka bilinçli olarak zemin kat: alçak dükkân sırası + otopark + tente.
+   *  Eski 5×5×13.5 gri kutu siluetinin yerini bu ikili aldı.
    */
   private buildCommercialDistrict(s: THREE.Scene) {
     const K = this.kit
-    if (!K) { this.buildBlockSkyline(s); return }
     const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
-    let placed = 0
-    const put = (name: string, h: number, x: number, y: number, rot = 0) => {
-      const proto = K[name]
-      if (!proto) return
-      const g = fitModel(proto, h, 'z')
-      g.position.set(x, y, 0); g.rotation.z = rot
-      s.add(g); placed++
-    }
-    // ---- Batı duvarı: bitişik nizam, kuzeye doğru yükselen siluet ----
-    put('building-k', 4.5, -9.24, -19.50)
-    put('building-n', 6.5, -10.19, -13.00)
-    put('building-skyscraper-e', 9.8, -9.29, -5.50)   // portre telefonda görünen tek kule
-    put('building-h', 6.0, -9.85, 1.50, Math.PI / 2)  // alçak ara-dolgu: kule ritmini kırar
-    put('building-skyscraper-b', 15.5, -10.15, 8.50)
-    put('building-skyscraper-c', 13.0, -10.01, 15.00) // N5'ten alçak → düz tepe hattı olmaz
-    put('building-skyscraper-d', 20.5, -10.40, 22.00) // imza kule
-    put('building-c', 4.2, -17.00, -16.50)            // ara sokağın karşı cephesi
-    // ---- Doğu duvarı: ALÇAK tutuldu (gölge kısıtı) ----
-    put('building-k', 7.0, 25.64, 4.00)
-    put('building-k', 5.6, 25.60, 14.00)
-    put('building-n', 5.5, 25.42, 22.50)
-    put('building-h', 6.0, 25.45, -5.00)
-
-    // ---- Siluet: low-detail-building-c × 11, TEK InstancedMesh (1 draw call) ----
-    // Model 0.50×0.50×2.25 kare kesit; düzgün OLMAYAN ölçekle çeşitlilik bedava gelir,
-    // bu yüzden fitModel kullanılmaz.
-    const sil = K['low-detail-building-c']
-    if (sil) {
-      const geo: THREE.BufferGeometry[] = []
-      sil.traverse(o => { if ((o as THREE.Mesh).isMesh) geo.push((o as THREE.Mesh).geometry) })
-      const SIL: [number, number, number, number, number][] = [
-        [5.0, 5.0, 13.5, -17.50, 13.00], [5.5, 5.5, 12.0, -17.80, 5.50],
-        [5.0, 6.0, 9.5, -18.00, -2.50], [5.5, 5.0, 6.5, -17.60, -9.50],
-        [5.5, 5.5, 9.5, -24.50, 1.50], [5.0, 5.5, 6.6, -24.80, -6.50],
-        [5.5, 5.0, 3.4, -25.00, -14.50], [5.0, 5.0, 9.0, 31.50, 20.50],
-        [4.5, 5.0, 8.0, 30.00, 27.00], [5.0, 5.0, 6.0, 25.90, -13.50],
-        [5.0, 5.5, 7.5, 25.90, -21.00],
-      ]
-      if (geo.length) {
-        const im = new THREE.InstancedMesh(geo[0], lam2(0x8b94a1), SIL.length)
-        const m4 = new THREE.Matrix4()
-        SIL.forEach(([ex, ey, h, x, y], i) => {
-          m4.makeScale(ex / 0.5, ey / 0.5, h / 2.25)
-          m4.setPosition(x, y, 0)
-          im.setMatrixAt(i, m4)
-        })
-        im.instanceMatrix.needsUpdate = true
-        im.castShadow = true
-        s.add(im); placed++
-      }
-    }
+    const placed = this.placePlan(SCENE_PLANS.metropol, s)
+    if (placed === 0) { this.buildBlockSkyline(s); return }
 
     // ---- SOKAK DOKUSU: metropolün çevre yolundan asıl ayrıştığı yer ----
     const strip = (w: number, d: number, x: number, y: number, c: number, z = 0.02) => {
@@ -1342,16 +1555,23 @@ export class World {
       m.position.set(x, y, z); s.add(m)
     }
     strip(1.30, 54, -7.15, 0, 0xd8d4c8)     // kaldırım (batı)
-    strip(0.70, 54, 10.55, 0, 0xd8d4c8)     // kaldırım (doğu)
-    strip(2.00, 46, -14.00, 2.0, 0x9aa1a9)  // ara sokak
-    for (const bx of [-6.62, 10.18]) {
+    strip(0.70, 54, 11.90, 0, 0xd8d4c8)     // kaldırım (doğu, koridorun dışı)
+    strip(2.20, 46, -13.60, 2.0, 0x9aa1a9)  // ara sokak (batı kuleleriyle ön sıra arası)
+    strip(9.20, 42, 21.60, -1.0, 0x4a5057)  // karşı yaka otoparkı: alçak, geniş, şehirli
+    for (const bx of [-6.62, 11.53]) {
       const k = new THREE.Mesh(new THREE.BoxGeometry(0.12, 54, 0.10), lam2(0xc9c5ba))
       k.position.set(bx, 0, 0.05); s.add(k)
     }
-    // şemsiyeler ve tenteler — tek tek GLB yerine instanced (draw call disiplini)
+    // otopark çizgileri
+    const lineY: number[] = []
+    for (let y = -20; y <= 19; y += 2.6) lineY.push(y)
+    this.instAt(s, new THREE.PlaneGeometry(4.4, 0.10), lam2(0xe8e4d8), lineY.length,
+      (m, i) => m.setPosition(19.20, lineY[i], 0.021))
+
+    // ---- ŞEMSİYE ve TENTE: tek tek GLB yerine instanced ----
     const instFrom = (proto: THREE.Group | null | undefined, h: number,
                       pts: [number, number][], zOff = 0) => {
-      if (!proto) return
+      if (!proto || !pts.length) return
       const fit = fitModel(proto, h, 'z')
       const geos: THREE.BufferGeometry[] = []
       let mat: THREE.Material | null = null
@@ -1363,76 +1583,40 @@ export class World {
       const m4 = new THREE.Matrix4()
       pts.forEach(([x, y], i) => { m4.makeTranslation(x, y, zOff); im.setMatrixAt(i, m4) })
       im.instanceMatrix.needsUpdate = true
-      s.add(im); placed++
+      s.add(im)
     }
-    instFrom(K['detail-parasol-a'], 1.15,
+    instFrom(K?.['detail-parasol-a'], 1.15,
       [-21, -17.5, -11, -5, 0.5, 6.5, 12.5, 18, 24].map(y => [-7.00, y] as [number, number]))
-    instFrom(K['detail-parasol-a'], 0.9,
-      [-20, -16, 14, 18, 22].map(y => [10.55, y] as [number, number]))
+    instFrom(K?.['detail-parasol-a'], 0.9,
+      [-20, -16, 14, 18, 22].map(y => [11.90, y] as [number, number]))
     // Tente YALNIZ batı duvarının doğuya bakan cephesinde: kameradan yalnız +x/+y yüzler görünür
-    instFrom(K['detail-awning'], 1.1,
+    instFrom(K?.['detail-awning'], 1.1,
       [-21.5, -17.5, -15.0, -11.2, -5.5, 0.6, 2.4, 7.2, 9.8, 14.0, 16.0, 20.6, 23.4]
         .map(y => [-7.65, y] as [number, number]), 1.2)
 
-    if (placed === 0) this.buildBlockSkyline(s)
+    // ---- SOKAK AĞACI: kaldırımda, parsel dışı bantlarda ----
+    const pines: [number, number, number][] = []
+    for (let i = 0; i < 7; i++) pines.push([12.30, -26.5 - i * 3.4, 0.85])
+    for (let i = 0; i < 7; i++) pines.push([12.30, 26.5 + i * 3.4, 0.85])
+    this.pineBelt(s, pines, 0x3d6b43, 0x4f8250)
   }
 
-  /** ÇEVRE YOLU — ŞEHİR ÇEPERİ (Kenney city-kit-commercial, alçak doku)
+  /** ÇEVRE YOLU — SANAYİ SİTESİ ÇEPERİ (plan: scenery.ts CEVREYOLU_PLAN)
    *
-   *  Bu şube eskiden HİÇ model indirmiyordu ve yolun iki yanı bomboştu. Metropolden
-   *  ayrışması gerekiyor: orası yoğun şehir, burası çeper — alçak strip mall, toplu
-   *  konut slabı, otobüs durağı, yaya bariyeri.
+   *  Oğuz'un tarifi: çevre yolu kenarına endüstri kitinden serpiştirilmiş küçük
+   *  yapılar. Otoyol da aynı kiti kullanır ama ÖLÇEK ayrıştırır: orada 16 birimlik
+   *  baca ve santral, burada 4-6 birimlik atölye sırası. Aynı paket, başka şehir.
    *
-   *  Cephe hatları: doğu x=14.60 (rot π, cephe yola bakar) · batı x=-18.80 (rot 0).
-   *  Parsele denk gelen binalar `decor`'a kaydedilir → oyuncu o parseli betonlayınca
-   *  kendiliğinden silinir (kasabadaki ağaç/taş ile aynı mekanizma).
+   *  Yaya altyapısı çevre yolunun imzası: kaldırım, zebra, bariyer, otobüs durağı.
    */
   private buildRingRoadDistrict(s: THREE.Scene) {
     const K = this.kit
     const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
-    const put = (name: string, h: number, x: number, y: number, rot: number, onParcel: boolean) => {
-      const proto = K?.[name]
-      if (!proto) return
-      const g = fitModel(proto, h, 'z')
-      g.position.set(x, y, 0); g.rotation.z = rot
-      s.add(g)
-      if (onParcel) this.decor.push({ obj: g, x, y })   // parsel betonlanınca silinsin
-    }
-    const P = Math.PI
-    // ---- Doğu şerit: strip mall (cephe yola bakar) ----
-    put('building-c', 4.2, 17.17, -20.40, P, true)   // ışığın ve zebranın karşısı
-    put('building-c', 4.2, 17.17, -15.00, P, true)   // aynı model bilerek: strip mall tekrarlıdır
-    put('building-i', 6.2, 17.00, -4.60, P, true)    // pompaların tam karşısı = görsel çıpa
-    put('building-f', 6.8, 16.97, 2.40, P, true)
-    put('building-c', 4.2, 17.17, 13.40, P, true)
-    put('building-i', 5.8, 16.85, 19.60, P, true)
-    // ---- Batı: çeper konutları ----
-    put('building-i', 6.2, -21.20, -18.50, 0, true)
-    put('low-detail-building-wide-b', 8.6, -20.67, -5.50, 0, true) // toplu konut slabı: istasyonun fonu
-    put('building-f', 8.4, -21.35, 4.60, 0, true)
-    put('building-c', 4.2, -21.37, 15.00, 0, true)
-    put('low-detail-building-k', 7.8, -25.40, 20.00, 0, true)
-    // ---- Kalıcılar: parsel dışında (y<-24 / y>24), asla silinmez ----
-    put('low-detail-building-wide-b', 7.4, 16.21, -28.20, P, false)
-    put('low-detail-building-e', 9.0, 20.60, -32.50, 0, false)
-    put('low-detail-building-k', 7.8, 21.20, -28.80, 0, false)
-    put('building-i', 4.8, 16.46, 28.50, P, false)   // kuzeydoğu = kameranın omzu → TEK ve ALÇAK
-    put('building-c', 5.0, -22.05, -30.00, 0, false)
-    put('low-detail-building-wide-b', 7.4, -20.90, 28.60, 0, false)
-    put('low-detail-building-e', 9.0, -24.60, 33.00, 0, false)
+    this.placePlan(SCENE_PLANS.cevreyolu, s)
 
-    // ---- YAYA ALTYAPISI: yalnız DOĞU yakası (batıda fiziksel yer yok — arsa x=5'te bitiyor) ----
-    const inst = (geo: THREE.BufferGeometry, mat: THREE.Material, n: number,
-                  place: (m: THREE.Matrix4, i: number) => void) => {
-      const im = new THREE.InstancedMesh(geo, mat, n)
-      const m4 = new THREE.Matrix4()
-      for (let i = 0; i < n; i++) { place(m4, i); im.setMatrixAt(i, m4) }
-      im.instanceMatrix.needsUpdate = true
-      s.add(im)
-    }
-    // kaldırım
+    // kaldırım (yol koridorunun DIŞINDA: x ≥ 11.9)
     const walk = new THREE.Mesh(new THREE.PlaneGeometry(1.70, 120), lam2(0xc9c5ba))
-    walk.position.set(11.80, 0, 0.019); s.add(walk)
+    walk.position.set(12.10, 0, 0.019); s.add(walk)
     // ZEBRA: 7 ayrı mesh yerine tek düzlem + çizgili canvas (1 draw call)
     const zc = document.createElement('canvas')
     zc.width = 128; zc.height = 96
@@ -1448,36 +1632,39 @@ export class World {
     // yaya bariyeri: çevre yolunun en tanınabilir öğesi. Zebra hizasında BOŞLUK var.
     const railY: number[] = []
     for (let y = -40; y <= 40; y += 1.35) if (y < -24.6 || y > -20.2) railY.push(y)
-    inst(new THREE.CylinderGeometry(0.045, 0.045, 0.95, 6), lam2(0xb9bec4), railY.length, (m, i) => {
-      m.makeRotationX(Math.PI / 2); m.setPosition(11.06, railY[i], 0.48)
+    this.instAt(s, new THREE.CylinderGeometry(0.045, 0.045, 0.95, 6), lam2(0xb9bec4), railY.length, (m, i) => {
+      m.makeRotationX(Math.PI / 2); m.setPosition(11.76, railY[i], 0.48)
     })
-    inst(new THREE.BoxGeometry(0.05, 1.35, 0.10), lam2(0xb9bec4), railY.length,
-      (m, i) => m.setPosition(11.06, railY[i], 0.86))
+    this.instAt(s, new THREE.BoxGeometry(0.05, 1.35, 0.10), lam2(0xb9bec4), railY.length,
+      (m, i) => m.setPosition(11.76, railY[i], 0.86))
     // otobüs durakları — y<-24 / y>24 seçildi ki parsel alınsa da KALSIN (kamu alanı)
     for (const by of [-25.40, 25.40]) {
-      const proto = K?.['detail-overhang-wide']
-      if (proto) { const g = fitModel(proto, 3.2, 'y'); g.position.set(12.35, by, 0.95); s.add(g) }
-      for (const dy of [-1.4, 1.4]) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6), lam2(0x8d949c))
-        post.rotation.x = Math.PI / 2
-        post.position.set(12.62, by + dy, 1.2); s.add(post)
-      }
+      const proto = K?.['building-s']
+      if (proto) { const g = fitModel(proto, 2.6, 'z'); g.position.set(13.60, by, 0); g.rotation.z = Math.PI; s.add(g) }
       const bench = new THREE.Mesh(new THREE.BoxGeometry(0.45, 2.4, 0.42), lam2(0xa8875c))
       bench.position.set(12.9, by, 0.21); s.add(bench)
     }
-    // dükkân otoparkı (strip mall'ın zemin ayağı) + park çizgileri
+    // dükkân otoparkı (atölye sırasının zemin ayağı) + park çizgileri
     const roadMat2 = lam2(0x41474e)
     for (const [py, pl] of [[-17.7, 9.8], [-1.3, 11.4], [16.45, 10.5]] as [number, number][]) {
       const lot = new THREE.Mesh(new THREE.PlaneGeometry(1.95, pl), roadMat2)
-      lot.position.set(13.63, py, 0.017); s.add(lot)
+      lot.position.set(13.93, py, 0.017); s.add(lot)
     }
     const lineY: number[] = []
     for (let y = -22.6; y <= 21.7; y += 1.3) lineY.push(y)
-    inst(new THREE.PlaneGeometry(1.95, 0.09), lam2(0xe8e4d8), lineY.length,
-      (m, i) => m.setPosition(13.63, lineY[i], 0.018))
+    this.instAt(s, new THREE.PlaneGeometry(1.95, 0.09), lam2(0xe8e4d8), lineY.length,
+      (m, i) => m.setPosition(13.93, lineY[i], 0.018))
+    // sanayi sitesi zemini: batı atölye sırasının önünde beton şerit
+    const yard = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 46), lam2(0x8f959c))
+    yard.position.set(-17.20, 0, 0.016); s.add(yard)
+
+    // ---- ÇAM KUŞAĞI: kaldırım arkası, parsel dışı ----
+    const pines: [number, number, number][] = []
+    for (let i = 0; i < 8; i++) pines.push([12.60, -27 - i * 3.2, 0.9 + (i % 2) * 0.15])
+    for (let i = 0; i < 8; i++) pines.push([12.60, 27 + i * 3.2, 0.9 + (i % 2) * 0.15])
+    this.pineBelt(s, pines, 0x466b41, 0x5c854f)
   }
 
-  /** Kit yokken kullanılan prosedürel kutu silueti (eski davranış — hiç boş sahne kalmaz) */
   private buildBlockSkyline(s: THREE.Scene) {
     const th = this.theme
     const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, n: number, place: (m: THREE.Matrix4, i: number) => void) => {

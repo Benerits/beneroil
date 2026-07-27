@@ -367,7 +367,39 @@ function maxIncomeRate(s) {
   // SAFETY=3 yanlış alarm payı: bu repoda aşırı sıkı guard'lar "param gitti" şikâyeti
   // üretmişti, o yüzden meşru tepenin 3 katından aşağı inilmiyor.
   const SAFETY = 3
-  return Math.max(20, base * 8 * SAFETY * (1 + 0.25 * stars))
+  // ŞUBE MÜDÜRLERİ (pasif şube geliri): oyuncu başka şubedeyken müdürlü şubeler kendi
+  // kasalarına yazıyor ve oyuncu bunu TEK SEFERDE topluyor. Bu sıçrama meşrudur; kova
+  // hızına şubelerin kapasitesi eklenmezse "param gitti" sınıfı yanlış alarm doğar
+  // (bu repoda aşırı sıkı guard'lar tam bunu üretmişti).
+  let branch = 0
+  if (s.locSnapshots && typeof s.locSnapshots === 'object') {
+    for (const sn of Object.values(s.locSnapshots)) {
+      if (!sn || typeof sn !== 'object' || !sn.f || typeof sn.f !== 'object') continue
+      const lvl = Math.max(0, Math.min(3, Math.round(n(sn.f.managerLevel))))
+      if (lvl > 0) branch += 6 + lvl * 4
+    }
+  }
+  return Math.max(20, (base + branch) * 8 * SAFETY * (1 + 0.25 * stars))
+}
+
+/** ŞUBE KASASI CLAMP'İ: istemci tavanıyla BİREBİR (state.ts BRANCH_VAULT_HARD).
+ *  Kurcalanmış save'de branchVault sonsuz para kapısı olmasın. */
+const BRANCH_VAULT_HARD = 220_000
+const VALID_LOCS = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+function clampBranchVault(s) {
+  if (!s) return
+  if (typeof s.branchVault !== 'object' || !s.branchVault || Array.isArray(s.branchVault)) {
+    delete s.branchVault
+    return
+  }
+  const out = {}
+  for (const k of Object.keys(s.branchVault)) {
+    if (!VALID_LOCS.includes(k)) continue
+    const v = Number(s.branchVault[k])
+    if (!isFinite(v) || v <= 0) continue
+    out[k] = Math.min(BRANCH_VAULT_HARD, Math.round(v))
+  }
+  s.branchVault = out
 }
 
 /** Jeton kovası tavanı: tek seferlik meşru sıçramayı (gün dönüşü + sözleşme ödemesi) karşılar */
@@ -458,6 +490,7 @@ function sanitizeSave(save) {
   if ('decorLevel' in s) s.decorLevel = clamp(s.decorLevel, 0, 3, 0)         // dekorasyon sink'i
   if ('wear' in s) s.wear = clamp(s.wear, 0, 1, 0)                           // ekipman yaşlanması
   clampMarina(s)                                                            // marina alanları (additive)
+  clampBranchVault(s)                                                       // şube müdürü kasaları (additive)
   clampRival(s)                                                             // AI rakip durumu
   // _ab (jeton kovası) SUNUCU-SAHİPLİ: istemci ne yazarsa yazsın sınırlanır.
   if ('_ab' in s) {

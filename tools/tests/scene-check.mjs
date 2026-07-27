@@ -31,12 +31,19 @@ const check = (n, c, d = '') => { c ? (pass++, console.log('  ✓ ' + n)) : (fai
 console.log('== 1) Sahneler kite bağlı ve yedekli ==')
 check('otoyol sanayi bölgesi çağrılıyor', /this\.buildIndustrialDistrict\(s\)/.test(world))
 check('metropol ticari doku çağrılıyor', /this\.buildCommercialDistrict\(s\)/.test(world))
-check('sanayi: kit yoksa model konmaz, sahne yine kurulur (put() null-korumalı)',
-  /const proto = K\?\.\[name\]\s*\n\s*if \(!proto\) return/.test(industrial))
-check('metropol: kit yoksa PROSEDÜREL siluete düşüyor (boş sahne kalmaz)',
-  /buildCommercialDistrict[\s\S]{0,300}if \(!K\) \{ this\.buildBlockSkyline\(s\); return \}/.test(world))
-check('metropol: kit geldi ama hiç model yerleşmediyse de yedeğe düşüyor',
-  /if \(placed === 0\) this\.buildBlockSkyline\(s\)/.test(world))
+// Yerleşim artık VERİ (src/scenery.ts) ve tek yerleştirici var: placePlan().
+// Kural kontrolü framing-check.mjs'de; burada YALNIZ bağlantı ve yedek yolu ölçülüyor.
+check('tek yerleştirici: placePlan kite null-korumalı bakıyor',
+  /placePlan\([\s\S]{0,240}if \(!K\) return 0/.test(world))
+check('placePlan eksik modeli atlıyor (tek model düşerse sahne kurulur)',
+  /const proto = K\[p\.model\]\s*\n\s*if \(!proto\) continue/.test(world))
+check('metropol: hiç model yerleşmediyse PROSEDÜREL siluete düşüyor',
+  /if \(placed === 0\) \{ this\.buildBlockSkyline\(s\); return \}/.test(world))
+check('üç kara sahnesi de kendi planını okuyor',
+  /SCENE_PLANS\.otoyol/.test(world) && /SCENE_PLANS\.metropol/.test(world)
+  && /SCENE_PLANS\.cevreyolu/.test(world) && /SCENE_PLANS\.marina/.test(world))
+check('KALDIRILDI: prosedürel gri kutu siluet artık urban blokta YOK',
+  !/blockN = 17/.test(world))
 
 console.log('\n== 2) Manifest ile sahne aynı modelleri konuşuyor ==')
 const kitFiles = {}
@@ -54,7 +61,8 @@ console.log('\n== 3) Yerleşim DETERMİNİST (her açılışta aynı sahne) ==')
 // yol çizim kodunu inceler ve yanlış sonuç verir (ilk sürümde tam bunu yaptı).
 check('sanayi yerleşiminde Math.random YOK', !/Math\.random/.test(industrial))
 check('ticari yerleşimde Math.random YOK', !/Math\.random/.test(commercial))
-check('sanayi yerleşimi SABİT koordinatlı (ölçülmüş banda göre)', /put\('building-q', 4\.5, 22\.60/.test(industrial))
+check('yerleşim planı determinist (scenery.ts sabit koordinat, Math.random yok)',
+  !/Math\.random/.test(fs.readFileSync(path.join(ROOT, 'src/scenery.ts'), 'utf8')))
 
 console.log('\n== 4) Sanayi/ticari yapılar oyun alanını kapatmıyor ==')
 // oyuncunun arsası x -29.5..5 (near) ve 10.9..45.4 (far); yol koridoru x 4.9..10.9
@@ -75,7 +83,7 @@ check('prosedürel yedek InstancedMesh kullanıyor (tek draw call)',
 console.log('\n== 6b) ÇEVRE YOLU sahnesi ==')
 check('çevre yolu sahnesi çağrılıyor', /th\.id === 'cevreyolu'\) this\.buildRingRoadDistrict/.test(world))
 check('parsele denk gelen binalar decor\'a kaydediliyor (betonlanınca silinsin)',
-  /if \(onParcel\) this\.decor\.push/.test(ring))
+  /if \(p\.parcel\) this\.decor\.push/.test(world))
 check('yaya bariyerinde zebra hizasında BOŞLUK var', /y < -24\.6 \|\| y > -20\.2/.test(ring))
 check('zebra TEK draw call (7 mesh değil, çizgili canvas)', /CanvasTexture/.test(ring))
 check('otobüs durakları parsel DIŞINDA (kamu alanı, silinmez)', /\[-25\.40, 25\.40\]/.test(ring))
@@ -102,8 +110,17 @@ check('kırmızı/yeşil fener (denizcilik kuralı)', /0xd44b4b/.test(marina) &&
 check('yakıt güvertesi + babalar var', /const dock = /.test(marina) && /bollard|CylinderGeometry\(0\.13/.test(marina))
 check('şamandıra: kırmızı iskele / yeşil sancak ayrımı (denizcilik kuralı)',
   /buoyAt\('buoy', 10\.40/.test(marina) && /buoyAt\('buoy-flag', 17\.20/.test(marina))
-check('römorkör + bağlı tekne + kargo gemisi', /boat-tug-a/.test(marina) && /boat-row-large/.test(marina) && /ship-cargo-b/.test(marina))
-check('iskelede konteyner (liman dokusu)', /cargo-container/.test(marina))
+const scenery = fs.readFileSync(path.join(ROOT, 'src/scenery.ts'), 'utf8')
+check('römorkör + bağlı tekne + kargo gemisi (plan içinde)',
+  /boat-tug-a/.test(scenery) && /boat-row-large/.test(scenery) && /ship-cargo-b/.test(scenery))
+check('ADA ÜSTÜNDE tekne YOK — hepsi suda (x > 11.6)', (() => {
+  const seg = scenery.slice(scenery.indexOf('MARINA_PLAN'))
+  const rows = [...seg.matchAll(/model: '(boat|ship)[^']*', h: [\d.]+, x: (-?[\d.]+)/g)]
+  return rows.length > 0 && rows.every(m => Number(m[2]) > 11.6)
+})())
+check('adanın tek dikey aksanı fener (yükseklik ≤ 6)', /GÜNEY BURNU FENERİ|fener/i.test(world))
+check('ada patikası normalli (normalsiz geometri SİYAH çıkıyordu)',
+  /pathGeo\.computeVertexNormals\(\)/.test(world))
 
 console.log('\n== 7) Tekneler gerçek modele bağlı ==')
 const cars = fs.readFileSync(path.join(ROOT, 'src/cars.ts'), 'utf8')

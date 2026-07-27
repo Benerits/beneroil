@@ -22,38 +22,37 @@ export type Kit = Record<string, THREE.Group | null>
 
 /** Hangi şube hangi klasörden hangi modelleri ister */
 const MANIFEST: Partial<Record<LocId, { dir: string; files: string[] }>> = {
-  // OTOYOL — sanayi çevresi. 9 model / 896 KB (eski 14 modelden 419 KB daha hafif:
-  // ölü bölgeye konan küçük depolar çıkarıldı, kalanlar daha büyük ölçekte kullanılıyor).
+  // OTOYOL — AĞIR sanayi (santral, baca, hangar). Yerleşim: scenery.ts OTOYOL_PLAN.
   otoyol: {
     dir: 'industrial',
     files: ['building-c', 'building-f', 'building-l', 'building-q', 'building-s', 'building-t',
             'chimney-large', 'chimney-medium', 'detail-tank'],
   },
-  // METROPOL — ticari doku. 11 model / 1371 KB. building-j (430 KB) ve building-l (284 KB)
-  // çıkarıldı: building-k aynı genişliği 241 KB'a veriyor. Yerine iki GERÇEK kule geldi.
+  // ÇEVRE YOLU — SANAYİ SİTESİ. Otoyolla AYNI paketi kullanır ama ölçek ayrıştırır:
+  // orada 16 birim baca, burada 4-6 birim atölye. Aynı dosyalar olduğu için ikinci
+  // şubeye geçişte tarayıcı disk önbelleğinden gelir (ağdan tekrar inmez).
+  // Yerleşim: scenery.ts CEVREYOLU_PLAN.
+  cevreyolu: {
+    dir: 'industrial',
+    files: ['building-c', 'building-f', 'building-q', 'building-s', 'building-t',
+            'chimney-medium', 'detail-tank'],
+  },
+  // METROPOL — ticari doku. Batı duvarı camlı kuleler, karşı yaka alçak dükkân sırası.
+  // Yerleşim: scenery.ts METROPOL_PLAN.
   metropol: {
     dir: 'commercial2',
     files: ['building-c', 'building-h', 'building-k', 'building-n',
             'building-skyscraper-b', 'building-skyscraper-c', 'building-skyscraper-d',
-            'building-skyscraper-e', 'low-detail-building-c', 'detail-awning', 'detail-parasol-a'],
+            'building-skyscraper-e', 'detail-awning', 'detail-parasol-a'],
   },
-  // ÇEVRE YOLU — şehir çeperi. 8 model / 496 KB. Eskiden hiç model indirmiyordu ve
-  // yolun iki yanı bomboştu; metropolden AYRIŞSIN diye alçak ticari doku seçildi.
-  cevreyolu: {
-    dir: 'commercial2',
-    files: ['building-c', 'building-f', 'building-i',
-            'low-detail-building-wide-b', 'low-detail-building-k', 'low-detail-building-e',
-            'detail-awning-wide', 'detail-overhang-wide'],
-  },
-  // MARİNA — deniz. 16 model / 558 KB: 7 müşteri teknesi + dekor + seyir + tersane.
+  // MARİNA — deniz: 7 müşteri teknesi + liman dokusu + seyir işaretleri.
+  // Çıkarıldı: cargo-container-a/b, cargo-pile-a, ramp (yeni ada planında kullanılmıyor).
   marina: {
     dir: 'watercraft',
     files: ['boat-speed-f', 'boat-speed-a', 'boat-fishing-small', 'boat-sail-a',
             'boat-house-c', 'boat-tow-a', 'ship-ocean-liner-small',
             'boat-tug-a', 'boat-row-large',
-            'buoy', 'buoy-flag',
-            'cargo-container-a', 'cargo-container-b', 'cargo-pile-a', 'ramp',
-            'ship-cargo-b'],
+            'buoy', 'buoy-flag', 'ship-cargo-b'],
   },
 }
 

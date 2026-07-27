@@ -23,7 +23,14 @@ check('servis süreleri karadan uzun (en kısası bile 15 sn)', Math.min(...M.BO
 
 console.log('\n== 2) Tesis kilitleri: kim ne zaman gelir ==')
 const g = marina()
-check('yakıt iskelesi YOKKEN hiç tekne gelmez', g.boatSegments().length === 0)
+// ESKİ KURAL: iskele yokken HİÇ tekne gelmiyordu → ₺5M'lik şube ölü açılıyordu
+// ("hiç yanaşan tekne görmedim"). YENİ KURAL: küçükler gelir, büyükler iskele ister.
+const noDock = g.boatSegments()
+check('yakıt iskelesi YOKKEN de KÜÇÜK tekneler gelir (şube ölü açılmaz)', noDock.length >= 3)
+check('iskelesiz gelenler yalnız küçük sınıf (jet ski / sürat / balıkçı)',
+  noDock.every(s => ['jetski', 'surat', 'balikci'].includes(s.id)), noDock.map(s => s.id).join(','))
+check('iskelesiz BÜYÜK tekne gelmez (yatırımın değeri korunur)',
+  !noDock.some(s => ['yelkenli', 'gulet', 'motoryat', 'superyat'].includes(s.id)))
 g.marinaFacs.push('fueldock')
 const base = g.boatSegments()
 check('yakıt iskelesiyle tekneler gelir', base.length > 0)
