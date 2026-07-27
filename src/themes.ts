@@ -42,6 +42,9 @@ export interface LocationTheme {
     repWeight: number      // itibarın ağırlığı (kasabada yüksek: müdavim)
     signWeight: number     // tabelanın ağırlığı (otoyolda yüksek: erken sapma kararı)
     tipRate: number        // bahşiş oranı
+    /** günlük yovmiye çarpanı (varsayılan 1) — marinada > 1: defter incelemesi vb.
+     *  yetkinlik isteyen kadro daha pahalı, şubeyi çevirmek kolay olmasın (Oğuz) */
+    wageMult?: number
   }
 
   /** açılış koşulu (çoklu lokasyon): nakit + marka yıldızı */
@@ -161,7 +164,7 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
     // "ferah ferah" ayrık; transit de bu şeritleri kullanır, iskele önünden geçmez).
     lane: { kind: 'water', count: 1, median: false, barrier: false, rampLength: 6, speed: 0.55,
             service: { near: 15.20, far: 20.40 } },
-    econ: { entryBase: 0.09, priceElasticity: 0.45, repWeight: 1.9, signWeight: 0.25, tipRate: 0.2 },
+    econ: { entryBase: 0.09, priceElasticity: 0.45, repWeight: 1.9, signWeight: 0.25, tipRate: 0.2, wageMult: 1.6 },
     unlock: { cash: 5_000_000, stars: 9 },
   },
   /** Lokasyon 5 — METROPOL (rapor §6.6): alan kıtlığı, EV ağırlıklı, çok alternatif

@@ -847,7 +847,9 @@ export class GameState {
     // Pasif şubede kadro sayısı snapshot'ta küme olarak duruyor (autoPumps/autoChargers).
     const staffMul = 1 + 0.35 * (Math.max(1, Math.round(num('staffLevel'))) - 1)
     const crew = (sn?.autoPumps?.length ?? 0) * POMPACI_WAGE + (sn?.autoChargers?.length ?? 0) * EV_ATTENDANT_WAGE
-    const wage = MANAGER_WAGES[level] + Math.round(crew * staffMul)
+    // pasif şube yovmiyesi de tema çarpanına tabi (marina kadrosu pahalı)
+    const wm = th?.econ.wageMult ?? 1
+    const wage = Math.round((MANAGER_WAGES[level] + Math.round(crew * staffMul)) * wm)
     return { gross, wage, net: Math.max(0, gross - wage), level }
   }
 
@@ -1212,10 +1214,13 @@ export class GameState {
   }
   /** günlük toplam yovmiye (pompacı + şarjcı) — her oyun günü kasadan çekilir */
   dailyWages(): number {
-    // eğitimli personel daha pahalı (her seviye +%35), müdür ayrı kalem
+    // eğitimli personel daha pahalı (her seviye +%35), müdür ayrı kalem.
+    // MARİNA (Oğuz): yovmiye çarpanı 1.6 — defter inceleyen ehliyetli kadro pahalı,
+    // şubeyi çevirmek karada olduğu kadar kolay değil.
     const staffMul = 1 + 0.35 * (this.staffLevel - 1)
-    return Math.round((this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE) * staffMul)
-      + MANAGER_WAGES[Math.min(3, this.managerLevel)]
+    const wm = this.theme().econ.wageMult ?? 1
+    return Math.round((Math.round((this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE) * staffMul)
+      + MANAGER_WAGES[Math.min(3, this.managerLevel)]) * wm)
   }
   /** EKİPMAN YAŞLANMASI: yıpranma arttıkça verim düşer (%100'de -%40) */
   wearEfficiency(): number { return 1 - 0.4 * Math.min(1, Math.max(0, this.wear)) }

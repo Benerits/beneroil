@@ -1049,7 +1049,9 @@ Sorun / Öneri Bildir
   </button>
 
   <!-- müşteri patlaması geri sayımı: rush aktifken görünür (sağ üst, HUD altı) -->
-  <div id="rushtimer" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(64px + env(safe-area-inset-top)); z-index:34;
+  <!-- top 64→136: HUD'un İKİNCİ satırı (Yakıt Siparişi/İnşaat) ~64-120px bandında —
+       rozet butonların üstüne biniyordu (Oğuz), artık o satırın ALTINDA durur -->
+  <div id="rushtimer" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(136px + env(safe-area-inset-top)); z-index:34;
     align-items:center; gap:8px; padding:8px 14px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:14px;
     color:#fff; background:linear-gradient(135deg,#e0903d,#d64545); border:0; border-bottom:3px solid #a93636;
     border-radius:var(--r-md); box-shadow:var(--shadow); animation:rushpulse 1s ease-in-out infinite">
