@@ -398,11 +398,21 @@ export class World {
 
     if (th.lane.barrier) {
       // ---- OTOYOL (rapor §6.4): 2×3 şerit, ORTA BARİYER, ramp şeritleri ----
-      // Yol daha geniş: şerit sayısı temadan (count=3) → toplam genişlik ~4.6 * count/1.6
-      const extra = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 220), roadMat)
-      extra.position.set(ROAD_X - 3.6, 0, 0.009); s.add(extra)   // near yönü ek şeritler
+      // NEAR yönü ek şeridi KALDIRILDI (Oğuz: "benzinlik otoyola taşmış gibi") —
+      // eski tam-boy şerit x 2.6..6.0'a yayılıp istasyon ön sahasının (x≤5.0) ALTINA
+      // giriyordu; forecourt asfalta karışıyordu. Yerine aşağıda OTOKORKULUK geldi:
+      // istasyon/otoyol sınırı fiziksel olarak okunur, rampalar bağlantıyı taşır.
       const extra2 = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 220), roadMat)
       extra2.position.set(ROAD_X + 3.6, 0, 0.009); s.add(extra2) // karşı yön ek şeritler
+      // OTOKORKULUK: yol ile istasyon arası, kapı penceresi (|y|<13) açık — W-profil ray + dikme
+      for (const [y0, y1] of [[-110, -13], [13, 110]] as [number, number][]) {
+        const len = y1 - y0
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.10, len, 0.30), lam(0xb9bec4))
+        rail.position.set(5.32, (y0 + y1) / 2, 0.62); s.add(rail)
+        const postN = Math.floor(len / 4)
+        this.instAt(s, new THREE.BoxGeometry(0.10, 0.10, 0.62), lam(0x8d949c), postN,
+          (m, i) => m.setPosition(5.32, y0 + 2 + i * 4, 0.31))
+      }
       // orta bariyer (new-jersey): karşıya geçiş fiziksel olarak YOK
       const barrier = new THREE.Mesh(new THREE.BoxGeometry(0.55, 220, 0.85), lam(0xd6d2c6))
       barrier.position.set(ROAD_X, 0, 0.42); s.add(barrier)
@@ -490,6 +500,32 @@ export class World {
     lot.position.set(-0.75, 0, 0.015)
     lot.receiveShadow = true
     s.add(lot)
+
+    // ---- KARŞI ŞUBE ARSASI (Oğuz: "yolun karşısına şube açılabilecek boşluk olsun,
+    // zemin dokusu ASLA benzinlik arsasıyla aynı olmasın — sınırlar belli olsun") ----
+    // Kasabadaki çim boşluğun kentsel karşılığı: col-3 parseli (x 10.9..22.4) üzerinde
+    // STABİLİZE dokulu, kesikli turuncu çerçeveli "satılık arsa" plakası. Kasaba zaten
+    // çim (dokunma), marina su (yok). Oyuncu karşıya pompa kurunca beton bunu örter.
+    if (th.lane.kind !== 'water' && th.id !== 'kasaba') {
+      const farLotMat = aiGround('/gen/ground_gravel.png', 5.5, 10,
+        noiseTex('#c0b296', [['#b3a68c', 800], ['#cbbfa2', 800], ['#a2957b', 300]], 10))
+      ;(farLotMat as THREE.MeshLambertMaterial).color = new THREE.Color(0xd9d0ba) // tabandan AÇIK — arsa ayrışır
+      const farLot = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 46.5), farLotMat)
+      farLot.position.set(17.1, 0, 0.013) // x 11.9..22.3 · y -23.25..23.25 (kanal 11.6'ya taşmaz)
+      farLot.receiveShadow = true
+      s.add(farLot)
+      // kesikli çerçeve (satılık/imar hissi) — instanced, 2 draw call
+      const dashMat = lam(0xe0a33c)
+      const perSide = 16
+      this.instAt(s, new THREE.PlaneGeometry(1.6, 0.16), dashMat, perSide * 2, (m, i) => {
+        const k = i % perSide
+        m.setPosition(12.4 + k * (9.6 / (perSide - 1)), i < perSide ? -23.1 : 23.1, 0.017)
+      })
+      this.instAt(s, new THREE.PlaneGeometry(0.16, 1.6), dashMat, perSide * 2, (m, i) => {
+        const k = i % perSide
+        m.setPosition(i < perSide ? 12.05 : 22.15, -22 + k * (44 / (perSide - 1)), 0.017)
+      })
+    }
     this.paveJoints(-6.5, 5, -10, 10)
     this.kerbs.set('0,1:W', box(0.25, 20.4, 0.16, 0xd8dbde, -6.55, 0, 0.08, s))
 
@@ -1494,32 +1530,17 @@ export class World {
     const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
     this.placePlan(SCENE_PLANS.otoyol, s)
 
-    // ---- TIR PARKI: karşı yakada DEĞİL, istasyonun batı sırtında (alçak, örtmez) ----
-    const TRUCK_Y = [-20.4, -17.9, -15.4, -12.9]
-    const PALET = [0xe8e4d8, 0xd6d2c6, 0xc46a3a, 0x4d6fa3]
-    this.instAt(s, new THREE.BoxGeometry(5.60, 2.10, 2.35), lam2(0xffffff), 4,
-      (m, i) => m.setPosition(-16.80, TRUCK_Y[i], 1.35), PALET)
-    this.instAt(s, new THREE.BoxGeometry(2.30, 2.05, 2.60), lam2(0xffffff), 4,
-      (m, i) => m.setPosition(-12.55, TRUCK_Y[i], 1.30), PALET)
-    this.instAt(s, new THREE.CylinderGeometry(0.42, 0.42, 0.30, 8), lam2(0x22262a), 24, (m, i) => {
-      const t = Math.floor(i / 6), k = i % 6
-      m.makeRotationX(Math.PI / 2)
-      m.setPosition(-19.2 + (k % 3) * 2.6 + (k < 3 ? 0 : 6.4), TRUCK_Y[t] + (k < 3 ? -0.95 : 0.95), 0.42)
-    })
-    this.instAt(s, new THREE.PlaneGeometry(8.60, 0.14), lam2(0xe8e4d8), 5,
-      (m, i) => m.setPosition(-15.5, -21.65 + i * 2.5, 0.02))
+    // TIR PARKI KALDIRILDI (Oğuz: "konteynere benzeyen yapılar kalkabilir") —
+    // dorse kutuları (turuncu/mavi, 5.6×2.1) ekranda konteyner istifi gibi okunuyordu.
+    // Batı sırtı artık çam kuşağı + santral silüetine kalıyor.
 
-    // ---- KARŞI YAKA ZEMİNİ: konteyner istifi + kantar (hepsi ≤ 2.6 → görüş açık) ----
-    const CONT = [0xc46a3a, 0x4d6fa3, 0x3f7f5f, 0xb8b2a4]
-    this.instAt(s, new THREE.BoxGeometry(6.10, 2.44, 2.59), lam2(0xffffff), 8, (m, i) => {
-      const row = Math.floor(i / 4), k = i % 4
-      m.setPosition(23.40 + row * 3.0, -6.4 + k * 2.7, 1.30)
-    }, CONT)
-    // kantar platformu + kulübesi
+    // KONTEYNER İSTİFİ KALDIRILDI (Oğuz: "konteynere benzeyen yapılar kalkabilir") —
+    // 8'li istif x 23.4..26.4'te karşı şube arsasının komşu parseline oturuyordu.
+    // Kantar güney kenara alındı (|y| > 26): karşı yaka ŞUBE ARSASI artık tamamen boş.
     const scalePad = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 9.0), lam2(0x4a5057))
-    scalePad.position.set(14.60, -25.60, 0.018); s.add(scalePad)
+    scalePad.position.set(14.60, -31.50, 0.018); s.add(scalePad)
     const hut = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 2.2), lam2(0xd9d5c9))
-    hut.position.set(17.20, -25.60, 1.10); hut.castShadow = true; s.add(hut)
+    hut.position.set(17.20, -31.50, 1.10); hut.castShadow = true; s.add(hut)
 
     // ---- YOL İMZASI: yüksek direkler + korkuluk (koridorun DIŞINDA, x ≥ 12.6) ----
     this.instAt(s, new THREE.CylinderGeometry(0.13, 0.16, 11, 8), lam2(0x6a7078), 9, (m, i) => {
@@ -1560,7 +1581,8 @@ export class World {
     strip(1.30, 54, -7.15, 0, 0xd8d4c8)     // kaldırım (batı)
     strip(0.70, 54, 11.90, 0, 0xd8d4c8)     // kaldırım (doğu, koridorun dışı)
     strip(2.20, 46, -13.60, 2.0, 0x9aa1a9)  // ara sokak (batı kuleleriyle ön sıra arası)
-    strip(9.20, 42, 21.60, -1.0, 0x4a5057)  // karşı yaka otoparkı: alçak, geniş, şehirli
+    // karşı yaka otoparkı ŞUBE ARSASININ (x 11.9..22.3) doğusuna taşındı — arsa açık kalır
+    strip(8.60, 42, 27.30, -1.0, 0x4a5057)
     for (const bx of [-6.62, 11.53]) {
       const k = new THREE.Mesh(new THREE.BoxGeometry(0.12, 54, 0.10), lam2(0xc9c5ba))
       k.position.set(bx, 0, 0.05); s.add(k)
@@ -1569,7 +1591,7 @@ export class World {
     const lineY: number[] = []
     for (let y = -20; y <= 19; y += 2.6) lineY.push(y)
     this.instAt(s, new THREE.PlaneGeometry(4.4, 0.10), lam2(0xe8e4d8), lineY.length,
-      (m, i) => m.setPosition(19.20, lineY[i], 0.021))
+      (m, i) => m.setPosition(27.30, lineY[i], 0.021))
 
     // ---- ŞEMSİYE ve TENTE: tek tek GLB yerine instanced ----
     const instFrom = (proto: THREE.Group | null | undefined, h: number,
@@ -1591,7 +1613,7 @@ export class World {
     instFrom(K?.['detail-parasol-a'], 1.15,
       [-21, -17.5, -11, -5, 0.5, 6.5, 12.5, 18, 24].map(y => [-7.00, y] as [number, number]))
     instFrom(K?.['detail-parasol-a'], 0.9,
-      [-20, -16, 14, 18, 22].map(y => [11.90, y] as [number, number]))
+      [-20, -16, 14, 18, 22].map(y => [23.90, y] as [number, number])) // dükkân önü (arsa dışı)
     // Tente YALNIZ batı duvarının doğuya bakan cephesinde: kameradan yalnız +x/+y yüzler görünür
     instFrom(K?.['detail-awning'], 1.1,
       [-21.5, -17.5, -15.0, -11.2, -5.5, 0.6, 2.4, 7.2, 9.8, 14.0, 16.0, 20.6, 23.4]
@@ -1649,14 +1671,15 @@ export class World {
     }
     // dükkân otoparkı (atölye sırasının zemin ayağı) + park çizgileri
     const roadMat2 = lam2(0x41474e)
+    // ŞUBE ARSASI (x 11.9..22.3) boş kalsın diye cepler dükkân sırasının önüne (x≈23.4) alındı
     for (const [py, pl] of [[-17.7, 9.8], [-1.3, 11.4], [16.45, 10.5]] as [number, number][]) {
       const lot = new THREE.Mesh(new THREE.PlaneGeometry(1.95, pl), roadMat2)
-      lot.position.set(13.93, py, 0.017); s.add(lot)
+      lot.position.set(23.40, py, 0.017); s.add(lot)
     }
     const lineY: number[] = []
     for (let y = -22.6; y <= 21.7; y += 1.3) lineY.push(y)
     this.instAt(s, new THREE.PlaneGeometry(1.95, 0.09), lam2(0xe8e4d8), lineY.length,
-      (m, i) => m.setPosition(13.93, lineY[i], 0.018))
+      (m, i) => m.setPosition(23.40, lineY[i], 0.018))
     // sanayi sitesi zemini: batı atölye sırasının önünde beton şerit
     const yard = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 46), lam2(0x8f959c))
     yard.position.set(-17.20, 0, 0.016); s.add(yard)
@@ -2045,13 +2068,18 @@ export class World {
   }
 
   addPump(index: number, at?: THREE.Vector2, rot = 0) {
-    const base = at ?? new THREE.Vector2(0, PUMP_SLOTS_POS[Math.min(index, 3)].y)
+    const isWater = this.theme.lane.kind === 'water'
+    // MARİNA (Oğuz: "pompayı deniz sınırına çekelim, gemiler tahtaya çıkmasın"):
+    // varsayılan pompa RIHTIM hattına (x≈4.0) kurulur; tekne yuvası her koşulda SUDA
+    // (ada doğu kıyısı 5.3 + tekne payı → x ≥ 6.6). Tekne iskeleye BORDALAR, karaya çıkmaz.
+    const base = at ?? new THREE.Vector2(isWater ? 4.0 : 0, PUMP_SLOTS_POS[Math.min(index, 3)].y)
     // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında, ünite 180° döner.
     // Charger kalıbı: araç yanaşma slotu AÇIYLA birlikte döner — araç hep nozül tarafına yanaşır.
     const far = base.x > ROAD_X
     const ang = rot * Math.PI / 2
     const flip = far ? -1 : 1
     this.pumpSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.8 * flip, base.y + Math.sin(ang) * 1.8, 0)
+    if (isWater) this.pumpSlots[index].x = Math.max(this.pumpSlots[index].x, 6.6) // yuva SUDA kalır
     this.pumpAngles[index] = ang // araç pompanın uzun eksenine paralel dursun (yan durma fixi)
     this.pumpBase[index] = base.clone()
     const g = new THREE.Group()

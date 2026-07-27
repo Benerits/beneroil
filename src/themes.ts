@@ -96,8 +96,8 @@ export const CEVREYOLU: LocationTheme = {
   id: 'cevreyolu',
   name: 'Çevre Yolu',
   ground: {
-    grass: '/gen/ground_concrete.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
-    grassTint: '#8d949c', concreteTint: '#9aa1a9', roadTint: '#41474e',
+    grass: '/gen/ground_pavers.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
+    grassTint: '#a8a49a', concreteTint: '#9aa1a9', roadTint: '#41474e',
   },
   sky: { day: 0xb9c6d4, night: 0x151d29 },
   palette: { line: 0xf0f0ec, accent: 0x2f6fed, vegetation: 0x5f8f57 },
@@ -123,8 +123,8 @@ export const OTOYOL: LocationTheme = {
   id: 'otoyol',
   name: 'Otoyol',
   ground: {
-    grass: '/gen/ground_concrete.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
-    grassTint: '#9b9384', concreteTint: '#a5aab0', roadTint: '#3f454c',
+    grass: '/gen/ground_gravel.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
+    grassTint: '#ab9d84', concreteTint: '#a5aab0', roadTint: '#3f454c',
   },
   sky: { day: 0xc7d3dd, night: 0x121a26 },
   palette: { line: 0xf5f5f0, accent: 0xe8862e, vegetation: 0x7d8a5e },
@@ -168,8 +168,8 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
   metropol: {
     id: 'metropol', name: 'Metropol',
     ground: {
-      grass: '/gen/ground_concrete.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
-      grassTint: '#7f858c', concreteTint: '#9ba1a8', roadTint: '#33383e',
+      grass: '/gen/ground_pavers.png', concrete: '/gen/ground_concrete.png', road: '/gen/ground_asphalt.png',
+      grassTint: '#aeaaa2', concreteTint: '#9ba1a8', roadTint: '#33383e',
     },
     sky: { day: 0xa9b6c6, night: 0x0d1420 },
     palette: { line: 0xffe08a, accent: 0x7f5af0, vegetation: 0x4d7a52 },

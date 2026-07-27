@@ -823,6 +823,8 @@ export interface CarManagerOpts {
   gateOutY: () => number
   /** karşı (yol karşısı) istasyon aktif mi — açıksa karşı şeritten servis trafiği başlar */
   farActive?: () => boolean
+  /** MARİNA: bekleme yuvaları suda kalsın (tekne rıhtım tahtasına çıkmaz) */
+  isWater?: () => boolean
   /** ünitenin oyuncu açısı (rad) — araç slotta bu açıyla hizalanır */
   pumpAngle?: (i: number) => number
   evAngle?: (i: number) => number
@@ -924,7 +926,8 @@ export class CarManager {
    *  Katı cisme (oyuncunun koyduğu bina) denk gelirse koridor boyunca kayar. */
   private waitSpotAt(i: number, st: 'near' | 'far'): THREE.Vector3 {
     const G = this.geom(st)
-    const x = G.gateX + G.sideSign * 0.8
+    // MARİNA: bekleme yuvası SUDA (ada doğu kıyısı 5.3 + pay) — tekne rıhtım tahtasına çıkmaz
+    const x = this.opts.isWater?.() && st === 'near' ? 6.9 : G.gateX + G.sideSign * 0.8
     let y = G.gateInY + G.dirY * WAIT_OFFSETS[Math.min(i, WAIT_OFFSETS.length - 1)]
     for (let k = 0; k < 6 && Car.isSolidAt(x, y); k++) y += G.dirY * 1.4
     return new THREE.Vector3(x, y, 0)

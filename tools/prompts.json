@@ -37,6 +37,16 @@
       "name": "app_icon",
       "noStyle": true,
       "prompt": "iOS app icon, rounded square filling the frame, cute stylized gas station scene: red fuel pump in front, small white station building behind, warm sky, bold saturated colors, Supercell mobile game art style, no text, no watermark."
+    },
+    {
+      "name": "ground_pavers",
+      "prompt": "Perfectly seamless tileable texture of light warm-gray urban sidewalk paving blocks (small square city pavers), top-down orthographic view, subtle tone variation between blocks around #a8a49a and #b6b2a8, very thin joint lines, flat even lighting, no shadows, no objects, no text, stylized look for a cartoon mobile game, edges must tile seamlessly.",
+      "noStyle": true
+    },
+    {
+      "name": "ground_gravel",
+      "prompt": "Perfectly seamless tileable texture of compacted sandy gravel construction lot (stabilized earth with fine crushed stone), top-down orthographic view, warm beige-tan tones around #b3a68c with subtle scattered small pebbles #9a8f78, flat even lighting, no shadows, no tire tracks, no objects, stylized look for a cartoon mobile game, edges must tile seamlessly.",
+      "noStyle": true
     }
   ]
 }

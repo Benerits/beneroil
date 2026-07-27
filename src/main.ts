@@ -1261,6 +1261,7 @@ const cars = new CarManager(world.scene, modelLib, {
   // Otoyolda orta BARİYER var: karşı yön fiziksel olarak erişilemez → karşı istasyon YOK
   // (rapor §6.4: bunun yerine ayna simetrik ikinci tesis ayrı yatırımdır).
   farActive: () => world.farStationOn && !state.theme().lane.barrier,
+  isWater: () => state.theme().lane.kind === 'water',
   farGateInY: () => world.gateIn2.y,
   farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
