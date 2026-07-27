@@ -676,9 +676,10 @@ export class World {
 
     if (id === 'otoyol') {
       // TIR ÖLÇEĞİ: geniş manevra boyası, lastik istifi, varil paleti, yükseklik sınırı çubuğu
-      for (let i = 0; i < 7; i++) paint(2.6, 0.34, 3.10, -19.4 + i * 1.5, 0xe4c24a, Math.PI / 4)
-      paint(9.0, 0.16, -1.60, -12.20, 0xe8e4d8)
-      paint(0.16, 6.0, -5.90, -15.20, 0xe8e4d8)
+      // Chevron taraması ANA ARSANIN İÇİNDE kalmalı: ilk sürümde y -19..-10 bandına
+      // konmuştu ve oyuncu güney parseli betonlamadan çıplak toprağın üstünde yüzüyordu.
+      for (let i = 0; i < 6; i++) paint(2.4, 0.32, 3.10, -8.6 + i * 1.3, 0xe4c24a, Math.PI / 4)
+      paint(7.6, 0.16, -2.00, -9.40, 0xe8e4d8)
       const tyres = new THREE.Group()
       for (let i = 0; i < 6; i++) {
         const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.26, 10), lam(0x22262a))
@@ -698,7 +699,9 @@ export class World {
       gantry.add(crate(0.16, 0.16, 4.4, 0xd6d2c6, 0, -1.9, 2.2))
       gantry.add(crate(0.16, 0.16, 4.4, 0xd6d2c6, 0, 1.9, 2.2))
       gantry.add(crate(0.22, 4.0, 0.26, 0xd64545, 0, 0, 4.3))
-      prop(gantry, 5.35, -8.00)
+      // y=-8 apronun tam ağzıydı ve gabari kirişi fiyat tabelasının önünden geçiyordu
+      // (dev ekran görüntüsünde görüldü). -13.4 hem tabelayı hem giriş kapısını temizler.
+      prop(gantry, 5.35, -13.40)
     } else if (id === 'cevreyolu') {
       // ŞEHİR ÇEPERİ: boyalı park cepleri, çöp kovaları, alçak çit, bisiklet demiri
       for (let i = 0; i < 6; i++) paint(2.3, 0.11, -5.05, 11.2 + i * 1.9, 0xe8e4d8)
