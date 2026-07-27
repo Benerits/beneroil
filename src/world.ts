@@ -416,17 +416,9 @@ export class World {
       // orta bariyer (new-jersey): karşıya geçiş fiziksel olarak YOK
       const barrier = new THREE.Mesh(new THREE.BoxGeometry(0.55, 220, 0.85), lam(0xd6d2c6))
       barrier.position.set(ROAD_X, 0, 0.42); s.add(barrier)
-      // YAVAŞLAMA + HIZLANMA şeridi: apron boyunca yola paralel ek asfalt bandı
-      const gi = APRON_IN_Y, go = APRON_OUT_Y
-      const decel = new THREE.Mesh(new THREE.PlaneGeometry(2.2, th.lane.rampLength), roadMat)
-      decel.position.set(ROAD_X - 3.0, gi - th.lane.rampLength / 2 + 2, 0.012); s.add(decel)
-      const accel = new THREE.Mesh(new THREE.PlaneGeometry(2.2, th.lane.rampLength + 4), roadMat)
-      accel.position.set(ROAD_X - 3.0, go + (th.lane.rampLength + 4) / 2 - 2, 0.012); s.add(accel)
-      // ramp kenar çizgileri (kesikli değil: sürekli, çıkış/giriş şeridi işareti)
-      for (const [cy, len] of [[gi - th.lane.rampLength / 2 + 2, th.lane.rampLength], [go + (th.lane.rampLength + 4) / 2 - 2, th.lane.rampLength + 4]] as [number, number][]) {
-        const line = new THREE.Mesh(new THREE.PlaneGeometry(0.12, len), lam(0xe8e4d8))
-        line.position.set(ROAD_X - 4.1, cy, 0.02); s.add(line)
-      }
+      // RAMPA ASFALTLARI KALDIRILDI (Oğuz: "yan yolu kaldıralım") — yavaşlama/
+      // hızlanma şeridi görselleri istasyon önünde ikinci bir yol gibi okunuyordu.
+      // onRampFull mekaniği (kapasite) DURUYOR; yalnız görsel bant gitti.
       // yüksek direkli aydınlatma (12 m) — otoyol imzası, instanced.
       // x 13.5 claim kolonunda: direkler yalnız |y| > 24'te (parseller açık).
       const HPOLE_Y = [-88, -66, -44, 44, 66, 88]
@@ -482,13 +474,9 @@ export class World {
       }
       this.lightRedLamp = mk(0x5a1e1e, 0.38)
       this.lightGreenLamp = mk(0x1e5a2a, -0.38)
-      // yaya geçidi (zebra) — yaya müşterinin geldiği yer
-      for (let i = 0; i < 7; i++) {
-        const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 4.4), lam(0xf0efe8))
-        stripe.position.set(ROAD_X - 2.0 + i * 0.62, ly - 3.4, 0.023)
-        stripe.rotation.z = Math.PI / 2
-        s.add(stripe)
-      }
+      // YAYA ÇİZGİSİ KALDIRILDI (Oğuz: "yolun ortasında dikine çizgi — gereği yok").
+      // 7 şerit aynı y'de yan yana dizilince zebra değil tek uzun çizgi görünüyordu;
+      // çevre yolundaki gerçek zebra (canvas dokulu) ayrı ve duruyor.
       // ---- KALDIRIM ----
       // KALDIRILDI: buraya 17 adet 5×7×20'lik düz gri kutu koyan "kentsel siluet"
       // vardı. İki hatası birdendi: (1) x 20.9..25.9 aralığı oyuncunun satın
@@ -1371,8 +1359,10 @@ export class World {
     buoyAt('buoy-flag', 17.20, [-14, -1, 12, 25], 0x3fae5f)
 
     // ---- 5) MİSAFİR PONTONLARI + ANA PONTON + DALGAKIRAN ----
+    // Pontonlar ana iskelenin (23.2) parmak iskeleleri — batı ucu 20.2, çıkış
+    // şeridi (19.4) temiz kalır
     inst(new THREE.BoxGeometry(5.6, 1.1, 0.26), lam2(0xa8875c), 5,
-      (m, i) => m.setPosition(19.8, -16 + i * 8, 0.13))
+      (m, i) => m.setPosition(23.00, -16 + i * 8, 0.13))
     const main = new THREE.Mesh(new THREE.BoxGeometry(1.20, 40, 0.30), lam2(0x9b7f56))
     main.position.set(23.20, 0, 0.15); main.castShadow = true; s.add(main)
     const mole = new THREE.Mesh(new THREE.BoxGeometry(1.80, 44, 1.60), lam2(0x8d8577))

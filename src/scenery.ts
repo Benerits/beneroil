@@ -179,12 +179,13 @@ export const MARINA_PLAN: Placement[] = [
   // Ada üstünde tekne/yapı YOK: ilk denemede `boat-house-c` ve `boat-tow-a` çimenin
   // ortasına oturuyordu ("çayırda tekne" görüntüsü). Oğuz'un kısıtı da bu: ada
   // gelişmeyecek. Adadaki tek dikey aksan güneybatı kıyısındaki fener (world.ts).
-  { model: 'boat-tug-a', h: 3.6, x: 20.60, y: -20.00, rot: P / 2, axis: 'x' },
-  { model: 'boat-row-large', h: 2.2, x: 20.20, y: -12.20, rot: P / 2, axis: 'x' },
-  { model: 'boat-row-large', h: 2.0, x: 20.20, y: 4.20, rot: P / 2, axis: 'x' },
-  { model: 'boat-sail-a', h: 4.6, x: 20.40, y: 12.60, rot: P / 2, axis: 'x' },
-  { model: 'boat-house-c', h: 4.8, x: 20.60, y: -4.20, rot: P / 2, axis: 'x' },
-  { model: 'boat-tow-a', h: 4.8, x: 23.60, y: 19.60, rot: P / 2, axis: 'x' },
+  // Bağlı tekneler PONTONLARIN (x 22.3) yanında — çıkış şeridi (19.4) temiz
+  { model: 'boat-tug-a', h: 3.6, x: 22.90, y: -20.00, rot: P / 2, axis: 'x' },
+  { model: 'boat-row-large', h: 2.2, x: 22.60, y: -12.20, rot: P / 2, axis: 'x' },
+  { model: 'boat-row-large', h: 2.0, x: 22.60, y: 4.20, rot: P / 2, axis: 'x' },
+  { model: 'boat-sail-a', h: 4.6, x: 22.80, y: 12.60, rot: P / 2, axis: 'x' },
+  { model: 'boat-house-c', h: 4.8, x: 22.90, y: -4.20, rot: P / 2, axis: 'x' },
+  { model: 'boat-tow-a', h: 4.8, x: 24.20, y: 19.60, rot: P / 2, axis: 'x' },
   { model: 'ship-ocean-liner-small', h: 9.0, x: 31.00, y: 33.00, rot: P / 2, axis: 'x' },
   { model: 'ship-cargo-b', h: 13.0, x: 34.00, y: -30.00, rot: P, axis: 'x' },
 ]

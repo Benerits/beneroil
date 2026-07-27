@@ -705,8 +705,22 @@ export class Tanker {
     this.gateOutYFn = gateOutY
     const inY = gateInY()
     const tint = fuel === 'benzin' ? 0xa8d6b8 : fuel === 'dizel' ? 0xe3c49b : 0xaccdf0
+    // MARİNA: yakıt GEMİYLE gelir (Oğuz) — kara tankeri denizin üstünde yüzüyordu.
+    // Car.waterMinX su şubesinde CarManager tarafından set edilir; tanker de ona bakar.
+    const isWater = Car.waterMinX != null
     let g: THREE.Group
-    if (lib?.tankerBase) {
+    if (isWater) {
+      g = new THREE.Group()
+      const proto = Car.boatKit?.['ship-cargo-a'] ?? Car.boatKit?.['ship-cargo-b']
+      if (proto) g.add(fitModel(proto, 8.0, 'x'))
+      else g.add(buildBoatMesh('motoryat'))
+      // güvertede yakıt tankı: hangi yakıtın geldiği denizden de okunur
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 2.4, 14), lam(tint))
+      tank.rotation.z = Math.PI / 2
+      tank.position.set(-0.4, 0, 1.6)
+      tank.castShadow = true
+      g.add(tank)
+    } else if (lib?.tankerBase) {
       g = new THREE.Group()
       g.add(cloneModel(lib.tankerBase))
       const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.5, 16), lam(tint))
@@ -740,11 +754,13 @@ export class Tanker {
     this.group = g
     // tank nereye taşınırsa taşınsın: şeritten tank hizasına gel, en yakın kenara park et
     const parkY = target.y + [0, 2.4, -2.4][queueIdx % 3]
-    const parkX = Math.min(Math.max(target.x + 3.2, 3.4), 4.0)
+    // MARİNA: gemi-tanker İSKELENİN DOĞUSUNA (suda, x≥6.8) yanaşır — karaya çıkmaz
+    const parkX = isWater ? 6.8 : Math.min(Math.max(target.x + 3.2, 3.4), 4.0)
+    const laneX = isWater ? 7.4 : 4.2
     this.path = [
       new THREE.Vector3(LANE_NEAR, inY - 3.5, 0),
-      new THREE.Vector3(4.2, inY, 0),
-      new THREE.Vector3(4.2, parkY, 0), // şerit boyunca hizaya
+      new THREE.Vector3(laneX, inY, 0),
+      new THREE.Vector3(laneX, parkY, 0), // şerit boyunca hizaya
       new THREE.Vector3(parkX, parkY, 0), // en yakın kenardan boşaltım — içeri dalmaz
     ]
   }
@@ -783,9 +799,10 @@ export class Tanker {
         this.unloading = false
         this.leaving = true
         const outY = this.gateOutYFn() // canlı çıkış konumu (taşınmış olabilir)
+        const exX = Car.waterMinX != null ? 7.4 : 4.2 // marina: gemi suda kalır
         this.path = [
-          new THREE.Vector3(4.2, this.group.position.y, 0), // düz doğuya, şeride çık
-          new THREE.Vector3(4.2, outY, 0),                  // şerit boyunca GÜNCEL çıkışa
+          new THREE.Vector3(exX, this.group.position.y, 0), // düz doğuya, şeride çık
+          new THREE.Vector3(exX, outY, 0),                  // şerit boyunca GÜNCEL çıkışa
           new THREE.Vector3(LANE_NEAR, outY + 4, 0),
           new THREE.Vector3(LANE_NEAR, 44, 0),
         ]

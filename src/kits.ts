@@ -52,7 +52,9 @@ const MANIFEST: Partial<Record<LocId, { dir: string; files: string[] }>> = {
     files: ['boat-speed-f', 'boat-speed-a', 'boat-fishing-small', 'boat-sail-a',
             'boat-house-c', 'boat-tow-a', 'ship-ocean-liner-small',
             'boat-tug-a', 'boat-row-large',
-            'buoy', 'buoy-flag', 'ship-cargo-b'],
+            'buoy', 'buoy-flag', 'ship-cargo-b',
+            // ship-cargo-a = GEMİ-TANKER (Oğuz: marinaya yakıt gemiyle gelsin)
+            'ship-cargo-a'],
   },
 }
 

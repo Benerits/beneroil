@@ -34,6 +34,11 @@ export interface LocSnapshot {
   tankCounts: Record<string, number>
   prices: Record<string, number>
   pendingCash: Record<string, number>
+  /** EXPLOIT FİXİ (Oğuz): sipariş ŞUBEYE bağlıdır — küçük şubede verilen ucuz
+   *  sipariş ana şubenin 20k deposunu dolduruyordu. Eski snapshot'larda alan yok
+   *  → applyLoc fresh (sipariş yok) uygular. */
+  orders?: Record<string, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }>
+  orderQty?: Record<string, number>
   ownedParcels: string[]
   pavedParcels: string[]
   autoPumps: number[]
@@ -698,6 +703,8 @@ export class GameState {
       f,
       tanks: { ...this.tanks }, tankCounts: { ...this.tankCounts }, prices: { ...this.prices },
       pendingCash: { ...this.pendingCash },
+      orders: JSON.parse(JSON.stringify(this.orders)),
+      orderQty: { ...this.orderQty },
       ownedParcels: [...this.ownedParcels], pavedParcels: [...this.pavedParcels],
       autoPumps: [...this.autoPumps], autoChargers: [...this.autoChargers],
       brokenPumps: [...this.brokenPumps], brokenChargers: [...this.brokenChargers],
@@ -718,6 +725,19 @@ export class GameState {
     copyRec(this.tankCounts as unknown as Record<string, number>, sn?.tankCounts, fresh.tankCounts as unknown as Record<string, number>)
     copyRec(this.prices as unknown as Record<string, number>, sn?.prices, fresh.prices as unknown as Record<string, number>)
     this.pendingCash = { ...(sn?.pendingCash ?? {}) }
+    // sipariş ŞUBEYE bağlı: bu şubede bekleyen tanker varsa döner, yoksa temiz başlar
+    for (const f of Object.keys(this.orders) as FuelType[]) {
+      const so = sn?.orders?.[f]
+      // 'delivering' iken şube değişirse tanker nesnesi yok olur → 'arrived' olarak
+      // dön; ana döngü bu şubeye dönüldüğünde yeni tanker spawn edip teslim eder.
+      this.orders[f] = so
+        ? { pending: !!so.pending && !so.arrived && !so.delivering,
+            eta: Number(so.eta) || 0,
+            arrived: !!so.arrived || !!so.delivering,
+            delivering: false, amount: Math.max(0, Number(so.amount) || 0) }
+        : { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
+      this.orderQty[f] = Number(sn?.orderQty?.[f] ?? fresh.orderQty[f]) || fresh.orderQty[f]
+    }
     this.ownedParcels = new Set(sn?.ownedParcels ?? fresh.ownedParcels)
     this.pavedParcels = new Set(sn?.pavedParcels ?? fresh.pavedParcels)
     this.autoPumps = new Set(sn?.autoPumps ?? [])
@@ -1161,8 +1181,12 @@ export class GameState {
   }
 
   deliverFuel(f: FuelType) {
-    // sipariş edilen partiyi ekle (tam doldurma değil); kapasiteyi aşma
-    const add = this.orders[f].amount || this.orderNeed(f)
+    // sipariş edilen partiyi ekle (tam doldurma değil); kapasiteyi aşma.
+    // EXPLOIT FİXİ: eski `|| this.orderNeed(f)` fallback'i, amount'u kaybolmuş
+    // (eski kayıt / şube değişimi) siparişlerde AKTİF şubenin TÜM ihtiyacını
+    // BEDAVA dolduruyordu — küçük şubede 4k öde, ana şubede 20k litre al.
+    // Ödenmemiş litre eklenmez: amount yoksa teslimat boş kapanır.
+    const add = Math.max(0, this.orders[f].amount || 0)
     this.tanks[f] = Math.min(this.fuelCapacity(f), this.tanks[f] + add)
     this.orders[f].amount = 0
   }
@@ -1949,9 +1973,13 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   }
   if (data.orders && typeof data.orders === 'object') {
     for (const f of FUELS) {
-      const o = (data.orders as Record<string, { pending?: boolean; eta?: number; arrived?: boolean; delivering?: boolean }>)[f]
+      const o = (data.orders as Record<string, { pending?: boolean; eta?: number; arrived?: boolean; delivering?: boolean; amount?: number }>)[f]
       if (o) {
         s.orders[f].eta = Math.min(60, Math.max(0, Number(o.eta) || 0))
+        // EXPLOIT FİXİ: amount restore edilmiyordu → 0 kalıp deliverFuel'daki eski
+        // fallback aktif şubenin tüm ihtiyacını bedava ekliyordu. Ödenen parti
+        // miktarı artık kayıttan döner (üst sınır: tek partide max 60k).
+        s.orders[f].amount = Math.min(60_000, Math.max(0, Number(o.amount) || 0))
         // Tanker (fiziksel araç) kaydedilmez. 'delivering' (yolda) ya da 'arrived'
         // iken yenilenirse tanker nesnesi kaybolur ve teslimat asla tamamlanmazdı —
         // sipariş sonsuza dek "yolda" takılırdı. Bunları 'arrived' olarak geri yükle;
