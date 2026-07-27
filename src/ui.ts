@@ -674,11 +674,20 @@ export class UI {
         this.setText(btn, t('Yolda'))
         btn.disabled = true
       } else if (need < 100) {
-        this.setText(info, t('Tank dolu'))
-        this.setText(btn, t('Dolu'))
+        // 2 oyuncu raporu: para yetmeyince de "Dolu" yazıyordu (orderNeed bütçeyle
+        // kırpılıyor) — yanıltıcı. Depoda yer varsa gerçek sebep: PARA.
+        const space = cap - lvl
+        if (space >= 100) {
+          this.setText(info, t('Para yetersiz — alış ₺{0}/L', state.buyPrice(f).toFixed(1)))
+          this.setText(btn, t('Para Yok'))
+        } else {
+          this.setText(info, t('Tank dolu'))
+          this.setText(btn, t('Dolu'))
+        }
         btn.disabled = true
       } else {
-        this.setText(info, t('{0} / {1}L · +{2}L sipariş', Math.round(state.tanks[f]), cap, need))
+        // oyuncu isteği: sipariş ekranında ALIŞ fiyatı görünsün
+        this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap, need, state.buyPrice(f).toFixed(1)))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }

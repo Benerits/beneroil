@@ -569,7 +569,16 @@ function accHistory(): string {
  *  Kâr `salesLog`'a gün sonunda yazılır; eski save'lerdeki kayıtlarda `profit` alanı yoktur
  *  (o günler "veri yok" olarak çizilir, sıfır sanılmasın diye soluk gösterilir). */
 function sevenDayChart(): string {
-  const log = state.salesLog.slice(-7)
+  // Oyuncu raporu: "27. günü iki kere gösteriyor" — sözleşme (ihale) ödemeleri aynı
+  // güne AYRI salesLog kaydı atıyor. Grafik gün bazında BİRLEŞTİRİR.
+  const byDay = new Map<number, { day: number; rev: number; profit?: number }>()
+  for (const e of state.salesLog) {
+    const cur = byDay.get(e.day) ?? { day: e.day, rev: 0 }
+    cur.rev += e.rev
+    if (typeof e.profit === 'number') cur.profit = (cur.profit ?? 0) + e.profit
+    byDay.set(e.day, cur)
+  }
+  const log = [...byDay.values()].sort((a, b) => a.day - b.day).slice(-7)
   if (log.length < 2) return `<div class="acc-note">${t('Grafik için en az 2 günlük veri gerekli.')}</div>`
   const vals = log.map(e => e.profit)
   const known = vals.filter((v): v is number => typeof v === 'number')
@@ -733,7 +742,7 @@ function openOfficePanel() {
         const note = d.level > 0
           ? t('Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}',
               String(d.level), tl(d.net), tl(vault), tl(cap))
-          : t('Müdür YOK — şube kapalı duruyor. Şubeye git, mağazadan müdür tut.')
+          : t('Müdür YOK — şube kapalı duruyor. Şubeye git, Ofis içindeki Şubeler sekmesinden müdür tut.')
         return `<div class="prow" style="flex-wrap:wrap"><span class="pl">${th.name}</span>`
           + (vault > 0 ? `<button class="btn sbuy good" data-collectloc="${id}">${t('Topla ₺{0}', tl(vault))}</button>` : '')
           + `<button class="btn sbuy" data-goloc="${id}">${t('Şubeye Git')}</button>`
@@ -833,10 +842,16 @@ function openOfficePanel() {
   const hist = document.getElementById('of-history')
   if (hist) hist.innerHTML = accHistory()
 
-  // panel her açılışta ÖZET sekmesiyle başlar — kapatıp açınca eski sekmede kalmaz
-  for (const t2 of document.querySelectorAll('#oftabs .tab')) t2.classList.toggle('active', (t2 as HTMLElement).dataset.oftab === 'ozet')
-  for (const pn of document.querySelectorAll<HTMLElement>('.ofpane')) pn.classList.toggle('is-on', pn.dataset.ofpane === 'ozet')
-  const ob = document.querySelector('#officewrap .mbody'); if (ob) ob.scrollTop = 0
+  // İLK açılış ÖZET ile başlar; panel ZATEN AÇIKKEN yeniden çizim AKTİF SEKMEYİ KORUR.
+  // (3 oyuncu raporu: fiyat değiştirince / Devret'e basınca "ana menüye atıyor" —
+  //  devirde EMİN MİSİN butonu Özet'e dönüş yüzünden hiç görünmüyordu → sonsuz döngü.)
+  const wasOpen = document.getElementById('officewrap')?.classList.contains('show') ?? false
+  const keep = wasOpen
+    ? ((document.querySelector('#oftabs .tab.active') as HTMLElement | null)?.dataset.oftab ?? 'ozet')
+    : 'ozet'
+  for (const t2 of document.querySelectorAll('#oftabs .tab')) t2.classList.toggle('active', (t2 as HTMLElement).dataset.oftab === keep)
+  for (const pn of document.querySelectorAll<HTMLElement>('.ofpane')) pn.classList.toggle('is-on', pn.dataset.ofpane === keep)
+  if (!wasOpen) { const ob = document.querySelector('#officewrap .mbody'); if (ob) ob.scrollTop = 0 }
   document.getElementById('officewrap')?.classList.add('show')
 }
 document.getElementById('of-toggle')?.addEventListener('click', () => { document.getElementById('closebtn')?.click(); openOfficePanel() })
@@ -3759,6 +3774,14 @@ function buildingCard(id: string): BuildingCard | null {
         icon: 'i-truck', name: t('Tır Parkı'),
         desc: t('Tırcılar konaklar; sen hiçbir şey yapmadan düzenli gelir akar.'),
         stats: [['Pasif gelir', '₺90-160 / ~45sn'], ['Trafik etkisi', '+%2']],
+      }
+    case 'lamp':
+      // Oyuncu raporu: "can't move street lamp" — kartı yoktu, tıklanınca hiçbir şey
+      // açılmıyordu; Taşı/Yık butonları bu karta genel akıştan otomatik eklenir.
+      return {
+        icon: 'i-bolt', name: t('Sokak Lambası'),
+        desc: t('Gece istasyonu aydınlatır, küçük itibar katkısı verir. Buradan taşıyabilirsin.'),
+        stats: [[t('Adet'), `${state.lampCount}`]],
       }
     case 'airwater': {
       const n = Math.min(6, Math.max(1, state.airWaterCount))

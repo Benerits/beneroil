@@ -212,7 +212,8 @@
       /* ---- Toast bildirimleri: sağ-üstte SABİT dar kolon; kısa toast küçük, uzun toast 2 satıra sarar.
              Genişlik kolonla sınırlı → uzun yazı sola taşmaz. Üst aksiyon butonlarının altında başlar. ---- */
       #toasts { left: auto !important; transform: none !important; right: calc(8px + env(safe-area-inset-right));
-        top: calc(62px + env(safe-area-inset-top)); align-items: flex-end !important;
+        top: calc(62px + env(safe-area-inset-top)); bottom: auto !important; justify-content: flex-start !important;
+        align-items: flex-end !important;
         width: min(220px, 68vw); max-width: min(220px, 68vw); gap: 6px; }
       #toasts > * { max-width: 100% !important; box-sizing: border-box;
         font-size: 11.5px !important; padding: 7px 10px !important; line-height: 1.28;
@@ -545,8 +546,11 @@
     .trow .ic { color: var(--orange); }
 
     /* ---------- Toast ---------- */
-    #toasts { position: fixed; top: calc(84px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 40;
-              display: flex; flex-direction: column; gap: 7px; align-items: center; pointer-events: none; }
+    /* MASAÜSTÜ: SOL ALT köşe (2 oyuncu raporu: "ortada birikiyor, yazının üstüne geliyor").
+       Alt kenara sabit; yeni toast altta, eskiler yukarı iter. Mobil kuralı (aşağıda) sağ kolonu korur. */
+    #toasts { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); left: calc(14px + env(safe-area-inset-left)); z-index: 40;
+              display: flex; flex-direction: column; justify-content: flex-end; gap: 7px; align-items: flex-start; pointer-events: none;
+              max-width: min(420px, 40vw); }
     /* toast = oyunun kart dili: krem + border-bottom "basılı kart" derinliği (jenerik değil) */
     .toast { background: var(--paper); color: var(--ink);
              border: 1.5px solid var(--edge); border-bottom: 3px solid var(--edge);

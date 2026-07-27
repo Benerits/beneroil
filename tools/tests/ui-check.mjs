@@ -36,7 +36,9 @@ const ids = all(/id="(of-[a-z]+)"/g, ofBlock)
 const missing = ids.filter(i => !main.includes(`getElementById('${i}')`))
 check(`${ids.length} bölümün hepsi main.ts'te dolduruluyor`, missing.length === 0, 'boşta: ' + missing)
 check('sekme geçişi bağlı', /#oftabs \.tab/.test(main))
-check('panel açılışta ÖZET sekmesine dönüyor', /dataset\.oftab === 'ozet'/.test(main))
+// GÜNCELLENDİ (3 oyuncu raporu): İLK açılış ÖZET; panel AÇIKKEN yeniden çizim
+// aktif sekmeyi KORUR (fiyat/devir işlemleri Özet'e fırlatmaz)
+check('panel ilk açılış ÖZET + açıkken sekme korunur', /dataset\.oftab === keep/.test(main) && /wasOpen\s*$?/.test(main) && /\?\? 'ozet'/.test(main))
 
 console.log('\n== 4) CSS token bütünlüğü ==')
 // tanımsız değişkene fallback ile bağlanmak tema değişince sessizce kopar
