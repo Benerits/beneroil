@@ -156,11 +156,11 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
     },
     sky: { day: 0xa8dcea, night: 0x0f2436 },
     palette: { line: 0xffffff, accent: 0x1fa8bc, vegetation: 0x4f8f6a },
-    // SEYİR KANALI (Oğuz: "şamandıra hattı denizi ikiye bölsün, trafik sağdan/soldan"):
-    // yeşil şamandıra sırası x=17.2 ORTA AYIRICI — gelen 13.6 (ada tarafı),
-    // çıkan 19.4 (açık deniz tarafı). Eski 12.4/15.2 aynı koridora sıkışıyordu.
+    // SEYİR KANALI (Oğuz: yanaşma bölgesi x 6.6..10.4 TRAFİKSİZ; şamandıra hattı
+    // 17.8 orta ayırıcı — gelen 15.2 ada tarafı, çıkan 20.4 açık deniz tarafı,
+    // "ferah ferah" ayrık; transit de bu şeritleri kullanır, iskele önünden geçmez).
     lane: { kind: 'water', count: 1, median: false, barrier: false, rampLength: 6, speed: 0.55,
-            service: { near: 13.60, far: 19.40 } },
+            service: { near: 15.20, far: 20.40 } },
     econ: { entryBase: 0.09, priceElasticity: 0.45, repWeight: 1.9, signWeight: 0.25, tipRate: 0.2 },
     unlock: { cash: 5_000_000, stars: 9 },
   },

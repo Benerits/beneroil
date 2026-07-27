@@ -109,8 +109,9 @@ check('kıyı çizgisi DETERMİNİST (her açılışta aynı ada)', !/Math\.rand
 check('dış dalgakıran + fenerler', /const mole = /.test(marina) && /0xd44b4b/.test(marina))
 check('kırmızı/yeşil fener (denizcilik kuralı)', /0xd44b4b/.test(marina) && /0x3fae5f/.test(marina))
 check('yakıt güvertesi + babalar var', /const dock = /.test(marina) && /bollard|CylinderGeometry\(0\.13/.test(marina))
+// yeşil sıra 17.80'e taşındı (Oğuz: şamandıra hattı gelen 15.2 / çıkan 20.4'ün ORTA ayırıcısı)
 check('şamandıra: kırmızı iskele / yeşil sancak ayrımı (denizcilik kuralı)',
-  /buoyAt\('buoy', 10\.40/.test(marina) && /buoyAt\('buoy-flag', 17\.20/.test(marina))
+  /buoyAt\('buoy', 10\.40/.test(marina) && /buoyAt\('buoy-flag', 17\.80/.test(marina))
 const scenery = fs.readFileSync(path.join(ROOT, 'src/scenery.ts'), 'utf8')
 check('römorkör + bağlı tekne + kargo gemisi (plan içinde)',
   /boat-tug-a/.test(scenery) && /boat-row-large/.test(scenery) && /ship-cargo-b/.test(scenery))

@@ -668,6 +668,10 @@ export class World {
     this.dressForecourt()
     this.setSign(0)
     this.addPump(0)
+    // ANA ARAZİ GÜVENCESİ (Oğuz: "ana arazimizin üzerinde ASLA olmamalı") —
+    // hangi builder ne serpiştirmiş olursa olsun istasyon lotu (kolon 0, satır 1)
+    // dekor içermez. Load'daki markOwned/paveParcel bu lotu atladığı için tek sigorta bu.
+    this.clearDecorRect(-6.6, 5.1, -10.3, 10.3)
   }
 
   /**
@@ -1355,14 +1359,16 @@ export class World {
         }
       }
     }
+    // kırmızı sıra 10.4: YANAŞMA bölgesinin dış sınırı (trafik giremez);
+    // yeşil sıra 17.8: gelen (15.2) / çıkan (20.4) şeritlerinin ORTA ayırıcısı
     buoyAt('buoy', 10.40, [-19, -6, 7, 20], 0xd44b4b)
-    buoyAt('buoy-flag', 17.20, [-14, -1, 12, 25], 0x3fae5f)
+    buoyAt('buoy-flag', 17.80, [-14, -1, 12, 25], 0x3fae5f)
 
     // ---- 5) MİSAFİR PONTONLARI + ANA PONTON + DALGAKIRAN ----
-    // Pontonlar ana iskelenin (23.2) parmak iskeleleri — batı ucu 20.2, çıkış
-    // şeridi (19.4) temiz kalır
-    inst(new THREE.BoxGeometry(5.6, 1.1, 0.26), lam2(0xa8875c), 5,
-      (m, i) => m.setPosition(23.00, -16 + i * 8, 0.13))
+    // Pontonlar ana iskelenin (23.2) KISA parmakları — batı ucu 21.7, çıkış
+    // şeridi (20.4) temiz kalır
+    inst(new THREE.BoxGeometry(3.2, 1.1, 0.26), lam2(0xa8875c), 5,
+      (m, i) => m.setPosition(23.30, -16 + i * 8, 0.13))
     const main = new THREE.Mesh(new THREE.BoxGeometry(1.20, 40, 0.30), lam2(0x9b7f56))
     main.position.set(23.20, 0, 0.15); main.castShadow = true; s.add(main)
     const mole = new THREE.Mesh(new THREE.BoxGeometry(1.80, 44, 1.60), lam2(0x8d8577))
@@ -1432,6 +1438,19 @@ export class World {
       const t = (i * 2.399)
       m.setPosition(-14.5 + Math.cos(t) * 4.4, -16 + i * 1.85, 0.4)
     })
+
+    // ---- ARKA İKMAL RIHTIMI (Oğuz): tanker gemisi adanın arkasına yanaşır ----
+    const quay = new THREE.Mesh(new THREE.BoxGeometry(11.0, 2.0, 0.5), lam2(0x8d8577))
+    quay.position.set(-7.0, -25.40, 0.25); quay.castShadow = true; s.add(quay)
+    // babalar (gemi bağlama)
+    inst(new THREE.CylinderGeometry(0.11, 0.13, 0.5, 8), lam2(0x2f3438), 6, (m, i) => {
+      m.makeRotationX(Math.PI / 2); m.setPosition(-11.6 + i * 1.9, -26.10, 0.55)
+    })
+    // kıyıya inen ikmal borusu + vana — yakıt buradan tanklara akar
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3.4, 10), lam2(0xb3402f))
+    pipe.position.set(-7.0, -23.3, 0.32); s.add(pipe) // eksen +y (kıyıya dik)
+    const valve = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), lam2(0xd6d2c6))
+    valve.position.set(-7.0, -21.6, 0.42); s.add(valve)
 
     // ---- ADA HAVASI (Oğuz) ----
     // KUMSAL DAİRELERİ KALDIRILDI: çim düzlemiyle z-fight yapıp zoom'da
@@ -1775,6 +1794,8 @@ export class World {
   enableFarStation(inY = APRON_OUT_Y, outY = APRON_IN_Y) {
     if (this.farStationOn) return
     this.farStationOn = true
+    // karşı şube arsası: üstündeki doğal dekor (ağaç vs.) kalkar — tesis sahasında ağaç bitmez
+    this.clearDecorRect(10.9, 22.4, -12.0, 12.0)
     this.buildGate('in', new THREE.Vector2(FAR_GATE_X, inY), 'far')
     this.buildGate('out', new THREE.Vector2(FAR_GATE_X, outY), 'far')
   }
@@ -1807,11 +1828,24 @@ export class World {
   /** arsalara denk gelebilecek doğal dekor (ağaç/taş/çiçek) — beton dökülünce temizlenir */
   private decor: { obj: THREE.Object3D; x: number; y: number }[] = []
 
+  /** Dikdörtgen içindeki TÜM dekoru sahneden sil (Oğuz: "arazi claimlenmişse
+   *  objeler dinamik kalkmalı"). Claim, beton, karşı şube ve load hepsi bunu kullanır. */
+  clearDecorRect(dx0: number, dx1: number, dy0: number, dy1: number) {
+    this.decor = this.decor.filter(d => {
+      const inside = d.x >= dx0 && d.x <= dx1 && d.y >= dy0 && d.y <= dy1
+      if (inside) this.scene.remove(d.obj)
+      return !inside
+    })
+  }
+
   /** satın alınan (henüz betonsuz) arsayı ahşap kazık + ip sınırla işaretle */
   markOwned(c: number, r: number) {
     if (!PARCEL_COLS[c] || !PARCEL_ROWS[r]) return // sınır dışı parsel: crash koruması
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]
+    // CLAIM ANINDA dekor kalkar (eskiden yalnız betonda kalkıyordu — satın alınmış
+    // kahverengi arsada ağaçlar dikili kalıyordu)
+    this.clearDecorRect(x0, x1, y0, y1)
     const g = new THREE.Group()
     const rope = new THREE.MeshLambertMaterial({ color: 0xe0b13e })
     const stake = (px: number, py: number) => cyl(0.07, 0.65, 0x8a6a48, px, py, 0.32, 'z', g)
@@ -1857,11 +1891,7 @@ export class World {
     {
       const [dx0, dx1] = PARCEL_COLS[c]
       const [dy0, dy1] = PARCEL_ROWS[r]
-      this.decor = this.decor.filter(d => {
-        const inside = d.x >= dx0 && d.x <= dx1 && d.y >= dy0 && d.y <= dy1
-        if (inside) this.scene.remove(d.obj)
-        return !inside
-      })
+      this.clearDecorRect(dx0, dx1, dy0, dy1)
     }
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]

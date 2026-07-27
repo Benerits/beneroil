@@ -863,7 +863,7 @@ function renderProfile() {
     row(t('Giriş serisi'), `${state.loginStreak} gün 🔥`)
     + row(t('Başarımlar'), `${state.achievements.size} / 8`)
     + row(t('Günlük görev'), state.dailyDone ? t('tamamlandı ✓') : `${state.dailyServed}/15`)
-    + `<div class="pf-synced">☁️ ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
+    + `<div class="pf-synced"><svg class="ic" style="vertical-align:-3px"><use href="#i-cloud"/></svg> ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
 }
 document.getElementById('accbtn')?.addEventListener('click', renderProfile)
 // Ofis fiyat yönetimi butonları officewrap içinde de çalışsın (bina kartıyla aynı handler)
@@ -2016,7 +2016,7 @@ function showCloudBlockOverlay() {
   o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0d1420f2;display:flex;'
     + 'align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px)'
   o.innerHTML = `<div style="max-width:420px;text-align:center;color:#eaf1fb;font-family:system-ui,sans-serif">
-    <div style="font-size:44px;margin-bottom:8px">☁️⚠️</div>
+    <div style="margin-bottom:8px"><svg width="44" height="44" viewBox="0 0 24 24" style="color:#b8c6da"><use href="#i-cloud"/></svg></div>
     <div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('Buluta bağlanılamadı')}</div>
     <div style="font-size:14px;line-height:1.5;color:#b8c6da;margin-bottom:20px">${t('İlerlemeni korumak için oyun durduruldu. Kaydın güvende — hiçbir şey silinmedi. Bağlantı gelince yenile.')}</div>
     <button id="cloudblock-retry" style="padding:12px 22px;font-size:15px;font-weight:700;border:0;border-radius:12px;background:#2f6fed;color:#fff;cursor:pointer">${t('Yenile')}</button>
@@ -4489,6 +4489,7 @@ function frame() {
     if (mr.collected > 0) parts.push(t('kumbaralar +₺{0}', mr.collected.toLocaleString('tr-TR')))
     if (mr.cleaned) parts.push(t('paneller temizlendi'))
     if (mr.fixed > 0) parts.push(t('{0} arıza tamir edildi', mr.fixed))
+    if (mr.ordered > 0) parts.push(t('{0} yakıt siparişi verildi', mr.ordered))
     if (parts.length) ui.toast(`🧑‍💼 ${t('Müdür turu')}: ${parts.join(' · ')}`, 'good')
     persist()
   }

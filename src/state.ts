@@ -324,7 +324,7 @@ export class GameState {
   logbookBad = 0
   /** EKİPMAN YAŞLANMASI: 0-1 arası yıpranma; %100'de verim -%40, yenileme maliyeti */
   wear = 0
-  managerResult: { collected: number; cleaned: boolean; fixed: number } | null = null
+  managerResult: { collected: number; cleaned: boolean; fixed: number; ordered: number } | null = null
   toiletLevel = 0
 
   // elektrik
@@ -1387,13 +1387,21 @@ export class GameState {
 
   /** MÜDÜR TURU: seviyeye göre kumbara toplar, panel temizler, arıza tamir eder.
    *  Dönen liste oyuncuya rapor edilir (toast). tick()'ten çağrılır. */
-  managerTick(dt: number): { collected: number; cleaned: boolean; fixed: number } | null {
+  managerTick(dt: number): { collected: number; cleaned: boolean; fixed: number; ordered: number } | null {
     if (this.managerLevel <= 0) return null
     this.managerT += dt
     if (this.managerT < 45) return null // 45 sn'de bir tur (gün ≈ 160 sn)
     this.managerT = 0
     let collected = 0
     for (const id of Object.keys(this.pendingCash)) collected += this.collectPending(id)
+    // YAKIT SİPARİŞİ (Oğuz: "müdür yakıt siparişini versin") — Sv.1'den itibaren:
+    // tank %20'nin altına düşen her yakıt için sipariş verir (bütçe elveriyorsa)
+    let ordered = 0
+    for (const f of FUELS) {
+      if (this.tanks[f] < this.fuelCapacity(f) * 0.20 && this.canOrder(f)) {
+        if (this.placeOrder(f)) ordered++
+      }
+    }
     let cleaned = false
     if (this.managerLevel >= 2 && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
       this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
@@ -1409,7 +1417,7 @@ export class GameState {
         this.money -= 1000; this.brokenChargers.delete(i); fixed++
       }
     }
-    return (collected > 0 || cleaned || fixed > 0) ? { collected, cleaned, fixed } : null
+    return (collected > 0 || cleaned || fixed > 0 || ordered > 0) ? { collected, cleaned, fixed, ordered } : null
   }
   loanMonthly(principal: number, rate = LOAN_RATE): number {
     const n = LOAN_TERMS
@@ -1680,6 +1688,19 @@ export function getShopItems(s: GameState): ShopRow[] {
     row('winterslot', 'i-parking', s.winterSlots ? t('Karada Kışlama ({0})', String(s.winterSlots)) : t('Karada Kışlama'),
       t('+₺900/gün (kışın)'), t('Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.'),
       8_000, s.hasMarinaFac('travelift') ? null : t('Önce Travel Lift kur'))
+    // MARKET (Oğuz: "marinaya market koyabilelim") — kara marketiyle aynı mekanik
+    row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1),
+      `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
+      t('Tekneciler ekstra alışveriş yapar. Yerinde yükselir, gelir seviyeyle artar.'),
+      s.marketLevel >= 3 ? null : MARKET_COSTS[s.marketLevel],
+      s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    // MÜDÜR marinada da: kumbara + yakıt siparişi + pasif şube işletmesi
+    row('manager', 'i-gear',
+      s.managerLevel === 0 ? t('Müdür Tut') : t('Müdür Sv.{0}', Math.min(3, s.managerLevel + 1)),
+      s.managerLevel === 0 ? t('kumbara + yakıt siparişi') : s.managerLevel === 1 ? t('+ panel temizliği') : t('+ arıza tamiri'),
+      t('Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. AYRICA sen başka şubedeyken bu şubeyi İŞLETİR: günlük net geliri şube kasasına yazar (Sv.1 %45, Sv.2 %65, Sv.3 %85 verim; kasa dolunca birikme durur). Yovmiyesi vardır.'),
+      s.managerLevel >= 3 ? null : MANAGER_COSTS[s.managerLevel],
+      s.pendingCapTotal() >= 1200 || s.managerLevel > 0 ? null : t('Önce gelir getiren tesisler kur'))
     return rows
   }
   const hasUnpaved = s.ownedParcels.size > s.pavedParcels.size
@@ -1786,7 +1807,7 @@ export function getShopItems(s: GameState): ShopRow[] {
   // ---- MÜDÜR + PERSONEL EĞİTİMİ (geç oyun otomasyonu, raporun 5. ve 7. öncelikleri) ----
   row('manager', 'i-gear',
     s.managerLevel === 0 ? t('Müdür Tut') : t('Müdür Sv.{0}', Math.min(3, s.managerLevel + 1)),
-    s.managerLevel === 0 ? t('kumbara toplar + şubeyi işletir') : s.managerLevel === 1 ? t('+ panel temizliği') : t('+ arıza tamiri'),
+    s.managerLevel === 0 ? t('kumbara + yakıt siparişi') : s.managerLevel === 1 ? t('+ panel temizliği') : t('+ arıza tamiri'),
     t('Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. AYRICA sen başka şubedeyken bu şubeyi İŞLETİR: günlük net geliri şube kasasına yazar (Sv.1 %45, Sv.2 %65, Sv.3 %85 verim; kasa dolunca birikme durur). Yovmiyesi vardır.'),
     s.managerLevel >= 3 ? null : MANAGER_COSTS[s.managerLevel],
     s.pendingCapTotal() >= 1200 || s.managerLevel > 0 ? null : t('Önce gelir getiren tesisler kur'))

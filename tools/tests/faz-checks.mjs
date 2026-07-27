@@ -754,9 +754,15 @@ console.log('== 21) Müdür + personel eğitimi (rapor §7 #5, #7) ==')
   // Sv.1: yalnız kumbara toplar
   m.addPending('market', 400, 'Market'); m.addPending('truckpark', 300, 'Tır')
   m.solarDirt = 0.9; m.solarCount = 1; m.brokenPumps.add(0)
+  // tanklar dolu → otomatik yakıt siparişi tetiklenmez (para karşılaştırması saf kalsın)
+  for (const f of ['benzin', 'dizel', 'lpg']) m.tanks[f] = m.fuelCapacity(f)
   const money0 = m.money
   let res = m.managerTick(50)
   check('Sv.1 kumbaraları topladı', !!res && res.collected >= 700 && m.money > money0)
+  // YENİ (Oğuz): müdür Sv.1 boş tanka yakıt siparişi verir
+  m.managerT = 0; m.tanks.benzin = 0; m.money = Math.max(m.money, 100_000)
+  const resO = m.managerTick(50)
+  check('Sv.1 boş tanka yakıt siparişi verdi', !!resO && resO.ordered >= 1 && m.orders.benzin.pending)
   check('Sv.1 panel temizlemez', res.cleaned === false && m.solarDirt === 0.9)
   check('Sv.1 arıza tamir etmez', res.fixed === 0 && m.brokenPumps.has(0))
   check('tur sayacı sıfırlandı (45 sn'.replace("'", "’") + ' bekler)', m.managerTick(10) === null)

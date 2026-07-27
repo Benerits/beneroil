@@ -748,19 +748,28 @@ export class Tanker {
         w.position.set(wx, wy, 0.32); g.add(w)
       }
     }
+    if (isWater) {
+      // ARKA İKMAL RIHTIMI (Oğuz): gemi adanın ARKASINDAN (kuzey açık deniz) gelir,
+      // kıç rıhtıma (y≈-26) yanaşır, boşaltır, geldiği yoldan gider. Müşteri
+      // trafiğiyle ve yanaşma bölgesiyle hiç kesişmez.
+      const bayX = -10.5 + (queueIdx % 3) * 3.5
+      g.position.set(bayX, -60, 0)
+      scene.add(g)
+      this.group = g
+      this.path = [new THREE.Vector3(bayX, -27.2, 0)]
+      return
+    }
     // yakın şeritte gel: ROAD_X (yol ortası) iki şeridi de bloke edip karşı trafiği kilitliyordu
     g.position.set(LANE_NEAR, -44, 0)
     scene.add(g)
     this.group = g
     // tank nereye taşınırsa taşınsın: şeritten tank hizasına gel, en yakın kenara park et
     const parkY = target.y + [0, 2.4, -2.4][queueIdx % 3]
-    // MARİNA: gemi-tanker İSKELENİN DOĞUSUNA (suda, x≥6.8) yanaşır — karaya çıkmaz
-    const parkX = isWater ? 6.8 : Math.min(Math.max(target.x + 3.2, 3.4), 4.0)
-    const laneX = isWater ? 7.4 : 4.2
+    const parkX = Math.min(Math.max(target.x + 3.2, 3.4), 4.0)
     this.path = [
       new THREE.Vector3(LANE_NEAR, inY - 3.5, 0),
-      new THREE.Vector3(laneX, inY, 0),
-      new THREE.Vector3(laneX, parkY, 0), // şerit boyunca hizaya
+      new THREE.Vector3(4.2, inY, 0),
+      new THREE.Vector3(4.2, parkY, 0), // şerit boyunca hizaya
       new THREE.Vector3(parkX, parkY, 0), // en yakın kenardan boşaltım — içeri dalmaz
     ]
   }
@@ -799,13 +808,15 @@ export class Tanker {
         this.unloading = false
         this.leaving = true
         const outY = this.gateOutYFn() // canlı çıkış konumu (taşınmış olabilir)
-        const exX = Car.waterMinX != null ? 7.4 : 4.2 // marina: gemi suda kalır
-        this.path = [
-          new THREE.Vector3(exX, this.group.position.y, 0), // düz doğuya, şeride çık
-          new THREE.Vector3(exX, outY, 0),                  // şerit boyunca GÜNCEL çıkışa
-          new THREE.Vector3(LANE_NEAR, outY + 4, 0),
-          new THREE.Vector3(LANE_NEAR, 44, 0),
-        ]
+        this.path = Car.waterMinX != null
+          // MARİNA: gemi arka rıhtımdan geldiği yöne (kuzey açık deniz) döner
+          ? [new THREE.Vector3(this.group.position.x, -60, 0)]
+          : [
+            new THREE.Vector3(4.2, this.group.position.y, 0), // düz doğuya, şeride çık
+            new THREE.Vector3(4.2, outY, 0),                  // şerit boyunca GÜNCEL çıkışa
+            new THREE.Vector3(LANE_NEAR, outY + 4, 0),
+            new THREE.Vector3(LANE_NEAR, 44, 0),
+          ]
       }
     } else {
       this.done = true
@@ -1428,7 +1439,10 @@ export class CarManager {
       const crowd = this.stationCrowdFactor(isEv, 'near')
       car.wantsEnter = Math.random() < this.opts.entryChance() * (this.opts.highway?.() ? Math.max(0.75, crowd) : crowd)
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
-      const lx = svc && car.wantsEnter ? svc.near : LANE_NEAR
+      // SU ŞUBESİ: transit de SERVİS şeridini kullanır (Oğuz: "yanaşma yerinden
+      // tekneler dümdüz geçmesin") — LANE_NEAR (6.95) iskelenin dibinden geçiyordu.
+      const lx = this.opts.waterOnly?.() && svc ? svc.near
+        : (svc && car.wantsEnter ? svc.near : LANE_NEAR)
       car.group.position.set(lx, -40, 0)
       car.group.rotation.z = Math.PI / 2
       car.setPath([new THREE.Vector3(lx, 44, 0)])
@@ -1441,7 +1455,8 @@ export class CarManager {
         car.wantsEnter = Math.random() < this.opts.entryChance() * this.stationCrowdFactor(isEv, 'far')
         car.wantsTruckPark = car.isTruck && Math.random() < 0.4 // B6: karşı yakada da tır parkı
       }
-      const lx = svc && car.wantsEnter ? svc.far : LANE_FAR
+      const lx = this.opts.waterOnly?.() && svc ? svc.far
+        : (svc && car.wantsEnter ? svc.far : LANE_FAR)
       car.group.position.set(lx, 40, 0)
       car.group.rotation.z = -Math.PI / 2
       car.setPath([new THREE.Vector3(lx, -44, 0)])

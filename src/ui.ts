@@ -66,15 +66,23 @@ const DIMS: Record<string, (s: GameState) => string> = {
   land: () => '12×14+',
 }
 
-/** inşaat sekmeleri */
+/** inşaat sekmeleri — TAM eşleme (Oğuz: eşlenmeyen satır hiçbir sekmede görünmüyordu;
+ *  marina kataloğunun tamamı + widegate/lamp/manager vb. görünmezdi) */
 const CATEGORY_MAP: Record<string, string> = {
-  land: 'arsa', pave: 'arsa',
+  land: 'arsa', pave: 'arsa', winterslot: 'arsa',
   pump: 'istasyon', sign: 'istasyon', tank: 'istasyon', airwater: 'istasyon', parking: 'istasyon',
   'tankadd-benzin': 'istasyon', 'tankadd-dizel': 'istasyon', 'tankadd-lpg': 'istasyon',
-  market: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
-  coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis',
+  widegate: 'istasyon', lamp: 'istasyon', manager: 'istasyon', train: 'istasyon',
+  insurance: 'istasyon', renew: 'istasyon', fueldock: 'istasyon',
+  market: 'tesis', market2: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
+  coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis', decor: 'tesis',
+  chandlery: 'tesis', shower: 'tesis', clubhouse: 'tesis', icebait: 'tesis',
+  travelift: 'tesis', pumpout: 'tesis', wasteoil: 'tesis', boom: 'tesis',
   grid: 'enerji', battery: 'enerji', evcharger: 'enerji', solar: 'enerji', dieselgen: 'enerji', smr: 'enerji',
 }
+/** berth_* gibi önekli satırlar dahil kategori çözümü */
+const catOf = (id: string): string | undefined =>
+  CATEGORY_MAP[id] ?? (id.startsWith('berth_') ? 'arsa' : undefined)
 
 export class UI {
   activeCar: Car | null = null
@@ -538,7 +546,28 @@ export class UI {
 
   // ---- mağaza ----
 
+  /** İÇİ BOŞ SEKME GİZLENİR (Oğuz) — aktif sekme gizlendiyse ilk görünür sekmeye geç */
+  private refreshShopTabs(state: GameState) {
+    const have = new Set(getShopItems(state).map(r => catOf(r.id)).filter(Boolean) as string[])
+    if (getMaintenanceItems(state).length > 0) have.add('bakim')
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('#shoptabs .tab')]
+    let activeHidden = false
+    for (const tab of tabs) {
+      const show = have.has(tab.dataset.cat!)
+      tab.style.display = show ? '' : 'none'
+      if (!show && tab.classList.contains('active')) activeHidden = true
+    }
+    if (activeHidden) {
+      const first = tabs.find(tb => tb.style.display !== 'none')
+      if (first) {
+        this.shopCat = first.dataset.cat!
+        for (const tb of tabs) tb.classList.toggle('active', tb === first)
+      }
+    }
+  }
+
   private renderShop(state: GameState) {
+    this.refreshShopTabs(state)
     if (this.shopCat === 'bakim') {
       const maint = getMaintenanceItems(state)
       this.shopList.innerHTML = maint.length === 0
@@ -553,7 +582,7 @@ export class UI {
         }).join('')
       return
     }
-    const rows = getShopItems(state).filter(r => CATEGORY_MAP[r.id] === this.shopCat)
+    const rows = getShopItems(state).filter(r => catOf(r.id) === this.shopCat)
     this.shopList.innerHTML = '<div class="shopgrid">' + rows.map(r => {
       const cls = r.status === 'maxed' ? 'card maxed' : r.status === 'locked' ? 'card locked' : 'card'
       let btn: string

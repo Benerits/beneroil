@@ -75,6 +75,8 @@ export const BERTH_KINDS = {
   finger8:  { cost: 40_000, daily: 420, label: t('Parmak İskele 8m') },
   finger12: { cost: 75_000, daily: 780, label: t('Parmak İskele 12m') },
   finger18: { cost: 140_000, daily: 1_500, label: t('Parmak İskele 18m') },
+  // Oğuz: "karşı kıyıdan park parası alabilelim — marina gibi düşün"
+  karsi:  { cost: 90_000, daily: 950, label: t('Karşı Kıyı Parkı') },
   mega:   { cost: 600_000, daily: 7_500, label: t('Süperyat Mevkisi') },
 } as const
 export type BerthKind = keyof typeof BERTH_KINDS
