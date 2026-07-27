@@ -39,6 +39,8 @@ export interface LocSnapshot {
    *  → applyLoc fresh (sipariş yok) uygular. */
   orders?: Record<string, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }>
   orderQty?: Record<string, number>
+  /** şube ekipman değeri (devir eşiği ŞİRKET GENELİ sayar — companyEquipmentValue) */
+  equipVal?: number
   ownedParcels: string[]
   pavedParcels: string[]
   autoPumps: number[]
@@ -714,6 +716,7 @@ export class GameState {
       pendingCash: { ...this.pendingCash },
       orders: JSON.parse(JSON.stringify(this.orders)),
       orderQty: { ...this.orderQty },
+      equipVal: this.equipmentValue(),
       ownedParcels: [...this.ownedParcels], pavedParcels: [...this.pavedParcels],
       autoPumps: [...this.autoPumps], autoChargers: [...this.autoChargers],
       brokenPumps: [...this.brokenPumps], brokenChargers: [...this.brokenChargers],
@@ -939,8 +942,19 @@ export class GameState {
   /** Marka yıldızı geliri kalıcı çarpar (satış + kumbara). 4 yıldız = 2× gelir. */
   prestigeMult(): number { return 1 + 0.25 * this.brandStars }
   /** Bir sonraki devir için gereken kurulu ekipman değeri — her yıldızda İKİYE KATLANIR
-   *  (Idle Miner kalıbı: her kademe daha pahalı). Farm döngüsünü matematiksel olarak kapatır. */
-  handoverThreshold(): number { return 250_000 * Math.pow(2, this.handoverCount) }
+   *  (Idle Miner kalıbı: her kademe daha pahalı). Farm döngüsünü matematiksel olarak kapatır.
+   *  TAVAN 8M (oyuncu raporu: tek şubenin sınırlı kalemleri ~₺1.63M — ×2 katlama bir yerde
+   *  fiziksel imkânsıza dönüyordu). Eşik artık ŞİRKET GENELİ ekipmana bakar (aşağıda). */
+  handoverThreshold(): number { return Math.min(8_000_000, 250_000 * Math.pow(2, this.handoverCount)) }
+  /** ŞİRKET GENELİ kurulu ekipman: aktif şube + pasif şubelerin snapshot'taki değeri.
+   *  MANTIK HATASI FİXİ: eşik tek şubeden karşılanamıyordu (maks ~1.6M sınırlı kalem);
+   *  çoklu şube çağında devir doğal olarak şirket ölçeğinde — yeni şube donatmak yıldız
+   *  yolunu açar. Eski snapshot'larda equipVal yok → 0 sayılır, şubeye girince güncellenir. */
+  companyEquipmentValue(): number {
+    let v = this.equipmentValue()
+    for (const sn of Object.values(this.locSnapshots)) v += Math.max(0, Math.round(Number(sn?.equipVal) || 0))
+    return v
+  }
   /** Devir bedeli: ekipmanın %60'ı (yıkım iadesi %50, devir biraz daha iyi) + son 30 günün
    *  ortalama kârının 10 katı (≤100k). TAM iade DEĞİL — devir gerçek bir maliyet taşır,
    *  yoksa "kur-devret-kur" sonsuz para/yıldız farmı olur. Arsa/beton korunduğu için sayılmaz. */
@@ -951,7 +965,7 @@ export class GameState {
   }
   /** Devir şartı: eşik ekipman + borçsuzluk (gönüllü, asla zorunlu değil). */
   canHandover(): boolean {
-    return this.equipmentValue() >= this.handoverThreshold() && !this.loan.active && !this.partner.active
+    return this.companyEquipmentValue() >= this.handoverThreshold() && !this.loan.active && !this.partner.active
   }
   /** Devirden sonraki büyüme önizlemesi (rapor: ZORUNLU gösterilmeli) */
   handoverPreview(): { cash: number; starsAfter: number; multAfter: number; multNow: number } {

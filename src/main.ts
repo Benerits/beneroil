@@ -755,7 +755,7 @@ function openOfficePanel() {
     const pv = state.handoverPreview()
     // MARKA YILDIZI NEDİR? Oyuncular "yıldız" görüyor ama ne işe yaradığını anlamıyordu.
     // Artık üç soruyu da panel cevaplıyor: ne verir · nasıl kazanılır · ne kadar kaldı.
-    const eq = state.equipmentValue(), thr = state.handoverThreshold()
+    const eq = state.companyEquipmentValue(), thr = state.handoverThreshold()
     const pct = Math.max(0, Math.min(100, Math.round(eq / Math.max(1, thr) * 100)))
     let html = `<div class="pz-card">`
       + `<div class="pz-top"><span class="pz-stars">${state.brandStars > 0 ? '★'.repeat(Math.min(10, state.brandStars)) : '☆'}</span>`
@@ -780,7 +780,7 @@ function openOfficePanel() {
       html += `<div class="pz-prog-head"><span>${t('Sonraki yıldıza')}</span>`
         + `<span class="pz-prog-num">₺${tl(eq)} / ₺${tl(thr)}</span></div>`
         + `<div class="pz-bar"><div class="pz-fill" style="width:${pct}%"></div></div>`
-        + `<div class="pz-fine">${t('Kurulu ekipmanın ₺{0} değerine ulaşınca devir açılır. Her devirde eşik ikiye katlanır.', tl(thr))}</div>`
+        + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik her devirde katlanır (tavan ₺8M).', tl(thr))}</div>`
     }
     pel.innerHTML = html
   }
