@@ -1286,7 +1286,9 @@ const cars = new CarManager(world.scene, modelLib, {
     state.addRep(-0.2)
     if (ui.activeCar === car) autoSelect(nextServableCar())
   },
-})
+  // MARİNA: kapı noktası SUDA (iskele x 3.1..5.3'ün doğusu) — tekne giriş/çıkış
+  // path'i tahtaların üstünden geçmez. Kara şubelerinde eski kapı (4.2) aynen.
+}, state.theme().lane.kind === 'water' ? 7.4 : 4.2)
 
 // ---- Müşteri paneli otomatik açılma tercihi (35 feedback: "sürekli önüme çıkıyor") ----
 // localStorage'da tutulur (save formatına DOKUNMAZ). Kapalıyken panel yalnız araca

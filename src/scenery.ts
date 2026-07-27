@@ -50,40 +50,39 @@ const P = Math.PI
 // bakınca gözün önü açık kalıyor ama çerçeve boş da durmuyor.
 // ─────────────────────────────────────────────────────────────────────────────
 export const OTOYOL_PLAN: Placement[] = [
-  // ---- BATI: santral kütlesi (yüksek serbest) ----
-  { model: 'building-f', h: 11.0, x: -24.60, y: -6.00, parcel: true },
-  { model: 'chimney-large', h: 16.0, x: -27.40, y: -13.50, parcel: true },
-  { model: 'chimney-large', h: 13.5, x: -24.10, y: -16.80, parcel: true },
-  { model: 'building-l', h: 8.0, x: -25.20, y: 4.50, rot: P / 2, parcel: true },
-  { model: 'chimney-medium', h: 12.0, x: -28.20, y: 12.00, parcel: true },
-  { model: 'building-q', h: 5.5, x: -23.80, y: 17.50, parcel: true },
-  { model: 'detail-tank', h: 3.2, x: -19.60, y: -1.20, parcel: true },
-  { model: 'detail-tank', h: 3.2, x: -19.60, y: 1.90, parcel: true },
-  // ---- BATI-İÇ: istasyonun sırtı, ALÇAK (kendi arsanı gölgelemesin) ----
-  { model: 'building-s', h: 3.6, x: -12.90, y: -20.60, rot: P / 2, parcel: true },
-  { model: 'building-t', h: 4.0, x: -13.40, y: 15.80, parcel: true },
-  // ---- ÇERÇEVE KAPATICI: parsel bandının DIŞI (asla silinmez) ----
+  // KURAL (Oğuz): CLAIMLENEBİLİR 18 PARSELİN (x -29.5..45.4, |y| ≤ 24) ÜSTÜNE BİNA GELMEZ.
+  // Binalar üç kuşağa dağıtıldı: BATI UZAK (x ≤ -31, santral silüeti), GÜNEY BANDI ve
+  // KUZEY BANDI (|y| ≥ 27, lojistik sırası). Parsellerin üstünde yalnız ağaç/çalı var
+  // (world.ts placeTree — arsa betonlanınca silinir).
+  // ---- BATI UZAK: termik santral (yüksek serbest, K3) ----
+  { model: 'building-f', h: 11.0, x: -33.50, y: -6.00 },
+  { model: 'chimney-large', h: 16.0, x: -36.50, y: -13.50 },
+  { model: 'chimney-large', h: 13.5, x: -33.00, y: -17.50 },
+  { model: 'building-l', h: 8.0, x: -34.50, y: 4.50, rot: P / 2 },
+  { model: 'chimney-medium', h: 12.0, x: -37.50, y: 12.00 },
+  { model: 'building-q', h: 5.5, x: -32.50, y: 18.00 },
+  { model: 'detail-tank', h: 3.2, x: -31.20, y: -1.20 },
+  { model: 'detail-tank', h: 3.2, x: -31.20, y: 1.90 },
+  // ---- ÇERÇEVE KAPATICI: köşeler (|y| > 26, asla silinmez) ----
   { model: 'chimney-large', h: 18.0, x: -26.00, y: -31.00 },
   { model: 'chimney-medium', h: 14.0, x: -21.00, y: -35.50 },
   { model: 'building-f', h: 12.0, x: -27.50, y: 30.00 },
   { model: 'chimney-medium', h: 15.0, x: -22.50, y: 34.50 },
-  // ---- KARŞI YAKA (Oğuz: "yolun karşısına 2. şube açılacak BOŞLUK kalsın") ----
-  // Şube arsası x 11.9..22.3, |y| ≤ 23.3 → TAMAMEN BOŞ (stabilize plaka world.ts'te).
-  // Alçak lojistik cepheler İKİNCİ kolona (x ≥ 24) ve yan bantlara (|y| ≥ 27) yayıldı:
-  // doku duruyor, arsa açık.
-  { model: 'building-s', h: 4.2, x: 25.20, y: -18.40, rot: P, parcel: true },
-  { model: 'building-s', h: 4.2, x: 25.20, y: -8.90, rot: P, parcel: true },
-  { model: 'building-q', h: 4.6, x: 25.60, y: 3.60, rot: P, parcel: true },
-  { model: 'building-t', h: 4.0, x: 25.20, y: 14.20, rot: P, parcel: true },
-  { model: 'building-c', h: 4.4, x: 31.40, y: -12.00, rot: P, parcel: true },
-  { model: 'building-c', h: 4.4, x: 31.40, y: 8.00, rot: P, parcel: true },
-  // yan bantlar (|y| > 26): arsanın kuzey/güney komşuları — şube sınırını çerçeveler
-  { model: 'building-t', h: 4.2, x: 15.20, y: -29.00, rot: P },
-  { model: 'building-s', h: 4.0, x: 15.20, y: 28.60, rot: P },
-  // karşı yakanın uzağı: parsel dışı, biraz yükselebilir
-  { model: 'building-f', h: 8.0, x: 22.00, y: -33.00, rot: P },
-  { model: 'chimney-medium', h: 11.0, x: 27.50, y: -36.50 },
-  { model: 'building-l', h: 7.5, x: 24.00, y: 33.50, rot: P },
+  // ---- GÜNEY BANDI (y ≤ -27): lojistik sırası — eşit aralık, sıkış tepiş değil ----
+  { model: 'building-s', h: 4.2, x: -8.00, y: -29.00 },
+  { model: 'building-t', h: 4.4, x: -16.00, y: -30.20 },
+  { model: 'building-s', h: 4.2, x: 16.00, y: -29.00, rot: P },
+  { model: 'building-q', h: 4.6, x: 25.50, y: -30.20, rot: P },
+  { model: 'building-c', h: 4.4, x: 34.00, y: -29.00, rot: P },
+  // ---- KUZEY BANDI (y ≥ 27): depo sırası ----
+  { model: 'building-t', h: 4.0, x: -7.00, y: 28.60 },
+  { model: 'building-s', h: 4.2, x: 15.50, y: 28.60, rot: P },
+  { model: 'building-q', h: 4.4, x: 24.50, y: 30.00, rot: P },
+  { model: 'building-c', h: 4.6, x: 33.00, y: 28.60, rot: P },
+  // ---- UZAK KÖŞELER: derinlik katmanı ----
+  { model: 'building-f', h: 8.0, x: 22.00, y: -34.50, rot: P },
+  { model: 'chimney-medium', h: 11.0, x: 28.50, y: -37.00 },
+  { model: 'building-l', h: 7.5, x: 25.50, y: 34.50, rot: P },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,40 +94,36 @@ export const OTOYOL_PLAN: Placement[] = [
 // burada 5 birim atölye). Aynı kit, bambaşka doku.
 // ─────────────────────────────────────────────────────────────────────────────
 export const CEVREYOLU_PLAN: Placement[] = [
-  // ---- BATI (ekranın sağı): sanayi sitesi bloğu, orta boy ----
-  { model: 'building-t', h: 5.0, x: -20.80, y: -21.00, parcel: true },
-  { model: 'building-s', h: 4.2, x: -20.30, y: -12.60, parcel: true },
-  { model: 'building-c', h: 6.5, x: -22.40, y: -3.50, parcel: true },
-  { model: 'building-s', h: 4.2, x: -20.30, y: 5.40, parcel: true },
-  { model: 'building-t', h: 5.0, x: -20.80, y: 14.00, parcel: true },
-  { model: 'building-q', h: 4.6, x: -21.60, y: 21.60, parcel: true },
-  { model: 'chimney-medium', h: 8.5, x: -26.80, y: -8.00, parcel: true },
-  { model: 'detail-tank', h: 2.6, x: -14.20, y: -22.20, parcel: true },
-  // ---- BATI-İÇ: istasyonun arkası, tek sıra alçak atölye ----
-  { model: 'building-s', h: 3.4, x: -12.60, y: 18.60, rot: P / 2, parcel: true },
-  // ---- ÇERÇEVE: parsel dışı ----
+  // KURAL (Oğuz): 18 CLAIMLENEBİLİR PARSELİN (x -29.5..45.4, |y| ≤ 24) ÜSTÜNE BİNA GELMEZ.
+  // Sanayi sitesi BATI UZAĞA (x ≤ -31), strip mall GÜNEY/KUZEY bantlarına (|y| ≥ 27).
+  // ---- BATI UZAK: sanayi sitesi bloğu ----
+  { model: 'building-t', h: 5.0, x: -32.00, y: -21.00 },
+  { model: 'building-s', h: 4.2, x: -31.50, y: -12.60 },
+  { model: 'building-c', h: 6.5, x: -33.50, y: -3.50 },
+  { model: 'building-s', h: 4.2, x: -31.50, y: 5.40 },
+  { model: 'building-t', h: 5.0, x: -32.00, y: 14.00 },
+  { model: 'building-q', h: 4.6, x: -32.80, y: 21.60 },
+  { model: 'chimney-medium', h: 8.5, x: -36.50, y: -8.00 },
+  // ---- ÇERÇEVE: köşeler (|y| > 26) ----
   { model: 'building-c', h: 7.5, x: -23.00, y: -30.50 },
   { model: 'building-f', h: 9.0, x: -27.00, y: -35.00 },
   { model: 'building-c', h: 7.0, x: -22.20, y: 29.80 },
   { model: 'building-t', h: 5.5, x: -16.50, y: 33.00 },
-  // ---- KARŞI YAKA (Oğuz: 2. şube arsası BOŞ kalsın — kasaba dinamiği, yol büyük) ----
-  // Şube arsası x 11.9..22.3, |y| ≤ 23.3 boşaltıldı; strip mall İKİNCİ kolona (x ≥ 24.4)
-  // kaydı, iki dükkân yan bantlara (|y| ≥ 27) "yanlara serpiştirildi".
-  { model: 'building-s', h: 4.0, x: 24.60, y: -19.60, rot: P, parcel: true },
-  { model: 'building-c', h: 4.8, x: 24.80, y: -9.40, rot: P, parcel: true },
-  { model: 'building-q', h: 4.4, x: 24.50, y: 1.80, rot: P, parcel: true },
-  { model: 'building-s', h: 4.0, x: 24.60, y: 11.60, rot: P, parcel: true },
-  { model: 'building-t', h: 4.6, x: 25.00, y: 20.80, rot: P, parcel: true },
-  { model: 'building-c', h: 4.6, x: 31.60, y: -15.00, rot: P, parcel: true },
-  { model: 'building-t', h: 4.4, x: 31.80, y: 4.60, rot: P, parcel: true },
-  { model: 'building-s', h: 4.0, x: 31.60, y: 18.40, rot: P, parcel: true },
-  // yan bantlar: arsanın kuzey/güney çerçevesi
-  { model: 'building-q', h: 4.2, x: 15.00, y: -28.40, rot: P },
-  { model: 'building-s', h: 4.0, x: 15.00, y: 28.20, rot: P },
-  // karşı yakanın uzağı
-  { model: 'building-c', h: 7.0, x: 19.40, y: -32.60, rot: P },
-  { model: 'building-t', h: 6.0, x: 24.80, y: -36.00 },
-  { model: 'building-c', h: 6.5, x: 19.00, y: 32.20, rot: P },
+  // ---- GÜNEY BANDI: strip mall sırası (dükkân önü şemsiye/otopark world.ts'te) ----
+  { model: 'building-s', h: 4.0, x: -7.50, y: -28.60 },
+  { model: 'building-s', h: 4.0, x: 14.00, y: -28.30, rot: P },
+  { model: 'building-c', h: 4.8, x: 21.50, y: -29.60, rot: P },
+  { model: 'building-q', h: 4.4, x: 28.50, y: -28.30, rot: P },
+  { model: 'building-t', h: 4.6, x: 35.00, y: -29.60, rot: P },
+  // ---- KUZEY BANDI ----
+  { model: 'building-q', h: 4.2, x: -7.50, y: 28.60 },
+  { model: 'building-s', h: 4.0, x: 14.00, y: 28.30, rot: P },
+  { model: 'building-c', h: 4.6, x: 21.00, y: 29.60, rot: P },
+  { model: 'building-t', h: 4.4, x: 28.00, y: 28.30, rot: P },
+  // ---- UZAK KATMAN: derinlik ----
+  { model: 'building-c', h: 7.0, x: 19.40, y: -33.60, rot: P },
+  { model: 'building-t', h: 6.0, x: 25.50, y: -36.60 },
+  { model: 'building-c', h: 6.5, x: 19.00, y: 33.40, rot: P },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,42 +134,42 @@ export const CEVREYOLU_PLAN: Placement[] = [
 // çöpe giden şey doğudaki 5×5×13.5 düz gri kutu siluetiydi.
 // ─────────────────────────────────────────────────────────────────────────────
 export const METROPOL_PLAN: Placement[] = [
-  // ---- BATI DUVARI: kuzeye yükselen siluet (yüksek serbest, K3) ----
-  { model: 'building-k', h: 5.5, x: -9.24, y: -21.00, parcel: true },
-  { model: 'building-n', h: 7.0, x: -10.19, y: -14.20, parcel: true },
-  { model: 'building-c', h: 6.0, x: -9.60, y: -7.60, parcel: true },
-  { model: 'building-h', h: 6.0, x: -9.85, y: -1.40, rot: P / 2, parcel: true },
-  { model: 'building-skyscraper-e', h: 11.5, x: -17.40, y: -5.20, parcel: true },
-  { model: 'building-skyscraper-b', h: 16.5, x: -18.10, y: 4.60, parcel: true },
-  { model: 'building-skyscraper-c', h: 13.5, x: -17.60, y: 14.20, parcel: true },
-  { model: 'building-skyscraper-d', h: 21.0, x: -25.20, y: 8.60, parcel: true },
-  { model: 'building-k', h: 6.5, x: -9.40, y: 6.80, parcel: true },
-  { model: 'building-n', h: 7.5, x: -10.10, y: 15.40, parcel: true },
-  { model: 'building-c', h: 5.5, x: -9.55, y: 22.20, parcel: true },
-  { model: 'building-skyscraper-e', h: 12.0, x: -25.80, y: -16.00, parcel: true },
-  // ---- ÇERÇEVE: parsel dışı, en yüksek kütleler ----
+  // KURAL (Oğuz): 18 CLAIMLENEBİLİR PARSELİN (x -29.5..45.4, |y| ≤ 24) ÜSTÜNE BİNA GELMEZ.
+  // Gökdelen duvarı BATI UZAĞA (x ≤ -31, K3 yüksek serbest), zemin kat dükkânlar
+  // GÜNEY/KUZEY bantlarına. `low-detail-*` ailesi hâlâ BİLEREK yok (ince beyaz dilim).
+  // ---- BATI DUVARI: kuzeye yükselen siluet ----
+  { model: 'building-k', h: 5.5, x: -31.20, y: -21.00 },
+  { model: 'building-n', h: 7.0, x: -32.20, y: -14.20 },
+  { model: 'building-c', h: 6.0, x: -31.60, y: -7.60 },
+  { model: 'building-h', h: 6.0, x: -31.90, y: -1.40, rot: P / 2 },
+  { model: 'building-skyscraper-e', h: 11.5, x: -36.40, y: -5.20 },
+  { model: 'building-skyscraper-b', h: 16.5, x: -37.10, y: 4.60 },
+  { model: 'building-skyscraper-c', h: 13.5, x: -36.60, y: 14.20 },
+  { model: 'building-skyscraper-d', h: 21.0, x: -41.50, y: 8.60 },
+  { model: 'building-k', h: 6.5, x: -31.40, y: 6.80 },
+  { model: 'building-n', h: 7.5, x: -32.10, y: 15.40 },
+  { model: 'building-c', h: 5.5, x: -31.55, y: 22.20 },
+  { model: 'building-skyscraper-e', h: 12.0, x: -37.80, y: -16.00 },
+  // ---- ÇERÇEVE: köşeler, en yüksek kütleler (|y| > 26) ----
   { model: 'building-skyscraper-d', h: 24.0, x: -24.00, y: -31.00 },
   { model: 'building-skyscraper-b', h: 19.0, x: -17.00, y: -35.50 },
   { model: 'building-skyscraper-c', h: 17.5, x: -23.00, y: 30.00 },
   { model: 'building-skyscraper-e', h: 14.0, x: -19.50, y: 34.50 },
-  // ---- KARŞI YAKA (Oğuz: 2. şube arsası BOŞ + istasyon dokusu genelde kullanılmıyor) ----
-  // Şube arsası x 11.9..22.3, |y| ≤ 23.3 boşaltıldı; zemin katı dükkânlar İKİNCİ kolona
-  // (x ≥ 24.4) kaydı, ikisi yan bantlara. `low-detail-*` ailesi hâlâ BİLEREK yok
-  // (ince beyaz dilim sorunu). Kule yakın planda yine YOK (K2).
-  { model: 'building-k', h: 4.6, x: 24.60, y: -18.60, rot: P, parcel: true },
-  { model: 'building-c', h: 4.8, x: 24.80, y: -7.20, rot: P, parcel: true },
-  { model: 'building-h', h: 4.4, x: 24.50, y: 3.40, rot: P, parcel: true },
-  { model: 'building-c', h: 4.8, x: 24.80, y: 13.80, rot: P, parcel: true },
-  { model: 'building-k', h: 4.6, x: 24.60, y: 22.60, rot: P, parcel: true },
-  { model: 'building-h', h: 4.8, x: 31.60, y: -12.60, rot: P, parcel: true },
-  { model: 'building-c', h: 4.4, x: 32.00, y: 6.40, rot: P, parcel: true },
-  // yan bantlar: arsanın çerçevesi (alçak — kamera hattı temiz)
-  { model: 'building-h', h: 4.4, x: 15.10, y: -28.60, rot: P },
-  { model: 'building-k', h: 4.2, x: 15.10, y: 28.40, rot: P },
-  // karşı yakanın uzağı: burada yükselebilir, çünkü |y| > 26
-  { model: 'building-skyscraper-e', h: 11.0, x: 20.00, y: -33.50, rot: P },
+  // ---- GÜNEY BANDI: zemin kat dükkân sırası ----
+  { model: 'building-k', h: 4.6, x: -7.00, y: -28.30 },
+  { model: 'building-c', h: 4.8, x: 14.50, y: -28.30, rot: P },
+  { model: 'building-h', h: 4.4, x: 21.00, y: -29.60, rot: P },
+  { model: 'building-c', h: 4.8, x: 27.50, y: -28.30, rot: P },
+  { model: 'building-k', h: 4.6, x: 34.00, y: -29.60, rot: P },
+  // ---- KUZEY BANDI ----
+  { model: 'building-k', h: 4.2, x: -7.00, y: 28.30 },
+  { model: 'building-h', h: 4.4, x: 14.50, y: 28.30, rot: P },
+  { model: 'building-c', h: 4.7, x: 21.60, y: 29.80, rot: P },
+  { model: 'building-h', h: 4.8, x: 28.20, y: 28.30, rot: P },
+  // ---- UZAK KATMAN: gökdelen derinliği (|y| > 31) ----
+  { model: 'building-skyscraper-e', h: 11.0, x: 20.00, y: -34.00, rot: P },
   { model: 'building-skyscraper-c', h: 13.0, x: 26.50, y: -37.50, rot: P },
-  { model: 'building-skyscraper-b', h: 12.0, x: 20.50, y: 32.50, rot: P },
+  { model: 'building-skyscraper-b', h: 12.0, x: 20.50, y: 33.00, rot: P },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────

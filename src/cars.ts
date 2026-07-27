@@ -333,6 +333,7 @@ export class Car {
       const px = p.x + d.x * 1.5 + rx * k
       const py = p.y + d.y * 1.5 + ry * k
       if (Car.insideSolid(px, py)) continue
+      if (Car.waterMinX != null && px < Car.waterMinX) continue // tekne karaya kaçamaz
       this.path.unshift(new THREE.Vector3(px, py, 0))
       this.dodgeT = 3
       return true
@@ -482,8 +483,13 @@ export class Car {
     return Math.max(0, this.patience) / this.maxPatience
   }
 
+  /** SU ŞUBESİ: tekne hiçbir waypoint'te karaya/iskeleye (x < 6.5) çıkamaz.
+   *  CarManager her karede günceller; kara şubelerinde null. */
+  static waterMinX: number | null = null
+
   setPath(points: THREE.Vector3[], onArrive?: () => void) {
     this.path = points.map(p => p.clone())
+    if (Car.waterMinX != null) for (const p of this.path) p.x = Math.max(p.x, Car.waterMinX)
     this.onArrive = onArrive ?? null
   }
 
@@ -990,6 +996,8 @@ export class CarManager {
   }
 
   update(dt: number) {
+    // SU ŞUBESİ: tüm waypoint'ler suda kalsın (iskele doğu kenarı 5.3 + pay)
+    Car.waterMinX = this.opts.isWater?.() ? 6.5 : null
     // ---- Rezervasyon grafiği: geometri değişince (kapı taşındı / karşı istasyon açıldı)
     // bölgeler geom()'dan YENİDEN TÜRETİLİR. Aynalama elle yazılmadığı için B1-B6 sınıfı
     // "near'da doğru, far'da bozuk" hatası imkânsız.
