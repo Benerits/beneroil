@@ -6,13 +6,13 @@ import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './new
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
 import { shareLabel } from './rival'
 import { openLogbook } from './logbook-ui'
-import { makeLogbook, resolveLogbook } from './marina'
+import { makeLogbook, resolveLogbook, logbookFlags } from './marina'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
-  LocId,
+  LocId, MANAGER_COSTS, MANAGER_WAGES,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
@@ -702,6 +702,16 @@ function openOfficePanel() {
     const order: LocId[] = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
     const vaultTotal = state.branchVaultTotal()
     let head = ''
+    // ---- MÜDÜR (Oğuz: "müdür tutmayı ofise koyalım") — bu şubenin müdürü buradan ----
+    {
+      const mL = state.managerLevel
+      const mLocked = mL === 0 && state.pendingCapTotal() < 1200
+      const btn = mL >= 3 ? `<span class="pc">${t('MAKS')} · Sv.3</span>`
+        : mLocked ? `<span class="pc" style="color:var(--muted)">${t('Önce gelir getiren tesisler kur')}</span>`
+        : `<button class="btn sbuy good" id="of-hire-manager">${mL === 0 ? t('Müdür Tut') : t('Yükselt')} · ₺${tl(MANAGER_COSTS[mL])}</button>`
+      head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><svg class="ic" style="vertical-align:-3px"><use href="#i-gear"/></svg> <b>${mL === 0 ? t('Müdür') : t('Müdür Sv.{0}', String(mL))}</b>${mL > 0 ? ` <span style="color:var(--muted);font-weight:650">· ${t('yovmiye ₺{0}/gün', String(MANAGER_WAGES[mL]))}</span>` : ''}</span>${btn}`
+        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder. Sen başka şubedeyken şubeyi işletir.')}</div></div>`
+    }
     if (vaultTotal > 0) {
       head = `<div class="prow"><span class="pl"><b>${t('Şube kasalarında bekleyen')}</b></span>`
         + `<span class="pc">₺${tl(Math.round(vaultTotal))}</span>`
@@ -873,6 +883,12 @@ document.getElementById('of-prices')?.addEventListener('click', e => {
 })
 // ŞUBE: geçiş ve açma
 document.getElementById('of-locations')?.addEventListener('click', e => {
+  // MÜDÜR TUT/YÜKSELT (ofisten) — mağazadaki satın alma akışının aynısı
+  if ((e.target as HTMLElement).closest('#of-hire-manager')) {
+    ui.onBuy('manager')
+    openOfficePanel() // satır tazelensin (seviye/yovmiye değişti)
+    return
+  }
   const go = (e.target as HTMLElement).closest('button[data-goloc]') as HTMLButtonElement | null
   const un = (e.target as HTMLElement).closest('button[data-unlockloc]') as HTMLButtonElement | null
   // ŞUBE KASASI TOPLAMA — tek şube ya da hepsi
@@ -1706,6 +1722,30 @@ function finishSale(car: Car) {
     logbookPending.add(car)
     const lb = makeLogbook(state.day, state.stats.served, boatName(car), Math.max(50, Math.round(car.filled || 800)))
     const full = state.prices.dizel
+    // POMPACI İNCELEMESİ (Oğuz: "defter incelemesini de pompacı yapsın") — bu pompada
+    // pompacı çalışıyorsa defteri o inceler: görünür kusur varsa reddeder, yoksa onaylar.
+    // Modal hiç açılmaz; sonuç toast'la raporlanır.
+    if (car.slotIndex >= 0 && state.autoPumps.has(car.slotIndex)) {
+      const choice = (lb.genuine && logbookFlags(lb).length === 0) ? 'approve' as const : 'reject' as const
+      const out = resolveLogbook(lb, choice, revenue)
+      state.money = Math.max(0, state.money + out.money)
+      state.addRep(out.rep)
+      if (out.violation) state.marinaViolations++
+      if (out.correct) state.logbookOk++; else state.logbookBad++
+      ui.toast(`${t('Pompacı defteri inceledi')} — ${out.msg}`, out.correct ? 'good' : 'bad')
+      logbookPending.delete(car)
+      persist()
+      // openLogbook akışına GİRME — pompacı halletti
+      state.money += revenue
+      state.stats.served++
+      state.stats.revenue += revenue
+      state.addSideRevenue(car.station === 'far', revenue)
+      if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
+      if (car.nozzle) state.stats.liters[car.nozzle] += car.filled
+      car.filling = false
+      concludeService(car, score)
+      return
+    }
     openLogbook(lb, t('Balıkçı Teknesi'), state.buyPrice('dizel') * 1.08, full, (choice, inspected) => {
       const out = resolveLogbook(lb, choice, revenue)
       state.money = Math.max(0, state.money + out.money)

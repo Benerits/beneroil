@@ -72,7 +72,9 @@ const CATEGORY_MAP: Record<string, string> = {
   land: 'arsa', pave: 'arsa', winterslot: 'arsa',
   pump: 'istasyon', sign: 'istasyon', tank: 'istasyon', airwater: 'istasyon', parking: 'istasyon',
   'tankadd-benzin': 'istasyon', 'tankadd-dizel': 'istasyon', 'tankadd-lpg': 'istasyon',
-  widegate: 'istasyon', lamp: 'istasyon', manager: 'istasyon', train: 'istasyon',
+  // manager 'ofis': İNŞAAT sekmelerinde GÖRÜNMEZ (Oğuz: müdür Ofis'ten tutulur) —
+  // satır getShopItems'ta kalır çünkü buyItem fiyat/kilit bilgisini oradan okur
+  widegate: 'istasyon', lamp: 'istasyon', manager: 'ofis', train: 'istasyon',
   insurance: 'istasyon', renew: 'istasyon', fueldock: 'istasyon',
   market: 'tesis', market2: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
   coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis', decor: 'tesis',
