@@ -1055,16 +1055,19 @@ export class CarManager {
     // bütçesi yol trafiğini çoğaltır — sabit arz, gelir tavanını yapısal kılıyordu.
     const pull = this.opts.trafficPull?.() ?? 1
     const cap = 18 + Math.round(8 * (pull - 1))
+    // MARİNA YOĞUNLUK FRENİ (Oğuz: "müşteri çok yoğun, azaltalım") — tekneler
+    // araçtan kat kat büyük tutar bırakır; aynı doğum temposu marinayı boğuyordu.
+    const waterMul = this.opts.waterOnly?.() ? 1.7 : 1
     if (this.nearTimer <= 0 && transitCount < cap) {
       if (spawnClear('near')) {
         this.spawnTransit('near')
-        this.nearTimer = (1.5 + Math.random() * 1.8) / pull
+        this.nearTimer = (1.5 + Math.random() * 1.8) * waterMul / pull
       } else this.nearTimer = 0.5
     }
     if (this.farTimer <= 0 && transitCount < cap) {
       if (spawnClear('far')) {
         this.spawnTransit('far')
-        this.farTimer = (2.0 + Math.random() * 2.4) / pull
+        this.farTimer = (2.0 + Math.random() * 2.4) * waterMul / pull
       } else this.farTimer = 0.5
     }
 

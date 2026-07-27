@@ -413,8 +413,12 @@ export class UI {
       btns.forEach((b, i) => {
         const v = set[Math.min(i, set.length - 1)]
         const show = i < set.length
-        b.style.display = show ? '' : 'none'
-        if (show) { b.dataset.amt = String(v); b.textContent = String(v) }
+        const disp = show ? '' : 'none'
+        if (b.style.display !== disp) b.style.display = disp
+        // KRİTİK (Oğuz: "makrolara tıklanmıyor"): refreshPanel HER FRAME çalışır;
+        // textContent'i koşulsuz yazmak text node'u basılıyken değiştiriyordu —
+        // mousedown/mouseup hedefleri kopunca tarayıcı click ÜRETMİYORDU.
+        if (show && b.dataset.amt !== String(v)) { b.dataset.amt = String(v); b.textContent = String(v) }
       })
     }
     el<HTMLButtonElement>('dismissbtn').disabled = car.filling || car.filled > 0

@@ -769,9 +769,8 @@ export class World {
           prop(g, px, py)
         }
       }
-      paint(1.9, 1.9, 3.10, 6.30, 0x2f6f4a)     // EV park yeri boyası
-      paint(1.5, 0.22, 3.10, 6.30, 0xe8f2ea)
-      paint(0.22, 1.5, 3.10, 6.30, 0xe8f2ea)
+      // EV park boyası (yeşil kare + beyaz artı) KALDIRILDI — Oğuz: çıkışın orada
+      // anlamsız "üzerinde + olan yeşil bir şey" olarak okunuyordu
       paint(1.10, 22, -6.05, 0, 0x9aa1a9)       // arnavut kaldırım şeridi
     } else if (this.theme.lane.kind === 'water') {
       // MARİNA: ahşap güverte, koç boynuzu, cankurtaran, balık kasası — ASFALT DEĞİL
@@ -1297,10 +1296,14 @@ export class World {
         const k = 4 // köşe yuvarlaklığı
         const px = cx + hx * Math.sign(c) * Math.pow(Math.abs(c), 2 / k)
         const py = cy + hy * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / k)
-        // dışa determinist dalgalanma — DOĞU segmentinde sıfır (düz rıhtım)
+        // dışa determinist dalgalanma — DOĞU segmentinde sıfır (düz rıhtım).
+        // Oğuz: "ada fazla düzgün" → genlik büyüdü + üç harmonik: loblar ve girinti
+        // hissi (dalgalanma hep DIŞA doğru — kıyıdaki rıhtım/ağaç/kaya yerleşimi bozulmaz)
         const east = px > X1 - 1.5
         const w = east ? 0
-          : Math.max(0, 1.20 * (0.5 + 0.5 * Math.sin(3 * t + 1.1)) * (0.55 + 0.45 * Math.sin(7 * t + 2.4)))
+          : Math.max(0, 2.1 * (0.5 + 0.5 * Math.sin(2 * t + 0.8)) * (0.40 + 0.60 * Math.sin(5 * t + 2.1))
+              + 1.3 * Math.pow(Math.max(0, Math.sin(9 * t + 4.2)), 2)
+              + 0.5 * Math.sin(13 * t + 0.5))
         const nx = (px - cx) / hx, ny = (py - cy) / hy
         const nl = Math.hypot(nx, ny) || 1
         let X = px + (nx / nl) * (w + off), Y = py + (ny / nl) * (w + off)
@@ -1326,6 +1329,34 @@ export class World {
     layer(1.2, 0xd9c9a2, 0.010)                  // kum
     layer(0.35, 0x8e8878, 0.012)                 // kaya kuşağı
     layer(0, 0x7fa85f, 0.014)                    // ada yüzeyi (istasyon burada)
+
+    // ---- 2b) UYDU ADACIKLAR (Oğuz: referans görsel — takımada hissi) ----
+    // Parsel bandının ve seyir şeritlerinin DIŞINDA, salt dekor.
+    const islet = (cx: number, cy: number, r: number, seed: number) => {
+      const poly = (off: number): THREE.Vector2[] => {
+        const pts: THREE.Vector2[] = []
+        for (let i = 0; i < 26; i++) {
+          const t = (i / 26) * Math.PI * 2
+          const w = 1 + 0.34 * Math.sin(3 * t + seed) + 0.18 * Math.sin(7 * t + seed * 2.3)
+          pts.push(new THREE.Vector2(cx + Math.cos(t) * (r * w + off), cy + Math.sin(t) * (r * w + off)))
+        }
+        return pts
+      }
+      const ring = (off: number, color: number, z: number, opacity = 1) => {
+        const mat = opacity < 1
+          ? new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false })
+          : lam2(color)
+        const m = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(poly(off))), mat)
+        m.position.z = z; s.add(m)
+      }
+      ring(2.0, 0x5fb9cf, 0.006, 0.50)  // sığlık
+      ring(0.7, 0xd9c9a2, 0.010)        // kum
+      ring(0, 0x7fa85f, 0.014)          // çim
+      this.placeTree(cx + 0.6, cy - 0.4, 0.9)
+      if (r > 2) this.placeTree(cx - 0.9, cy + 0.7, 1.1)
+    }
+    islet(-28.0, -33.5, 2.6, 1.7)
+    islet(-25.5, 35.5, 1.9, 4.1)
 
     // ---- 3) RIHTIM ve YAKIT GÜVERTESİ ----
     const dock = new THREE.Mesh(new THREE.BoxGeometry(2.20, 38, 0.22), lam2(0xa8875c))
@@ -1718,13 +1749,9 @@ export class World {
     }
     // dükkân otoparkı (atölye sırasının zemin ayağı) + park çizgileri
     const roadMat2 = lam2(0x41474e)
-    // DÜKKÂN OTOPARKI: strip mall GÜNEY BANDINA taşındı (parseller boş) — cepler de
-    // dükkân sırasının önünde, parsel bandının dışında (y ≤ -26)
-    const lot = new THREE.Mesh(new THREE.PlaneGeometry(24, 1.95), roadMat2)
-    lot.position.set(24.50, -26.25, 0.017); s.add(lot)
-    this.instAt(s, new THREE.PlaneGeometry(0.09, 1.95), lam2(0xe8e4d8), 18,
-      (m, i) => m.setPosition(13.40 + i * 1.3, -26.25, 0.018))
-    // (kuzey cebi kaldırıldı — kuzey bandında artık dükkân yok, kameranın önü açık)
+    // DÜKKÂN OTOPARKI BOYALARI TAMAMEN KALDIRILDI (Oğuz: "claim olmayan toprakta
+    // park yeri kalmış, görüntüsüne gerek yok") — çizgili şerit sahipsiz duruyordu.
+    void roadMat2
     // (eski batı atölye beton şeridi kaldırıldı — atölyeler batı uzağa taşındı, parsel temiz)
     this.parcelGreen()
 

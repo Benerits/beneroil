@@ -17,7 +17,7 @@ export type LocId = 'kasaba' | 'cevreyolu' | 'otoyol' | 'marina' | 'metropol'
 /** Şubeye AİT (lokasyon-bazlı) alanlar. Bunun dışındaki her şey şirket seviyesidir:
  *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
 export const LOC_FIELDS = [
-  'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level',
+  'pumps', 'pumpSpeedLevel', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel', 'toilet2Level',
   'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2', 'managerLevel', 'staffLevel',
   'insurance', 'decorLevel', 'wear', 'gridLevel', 'lampCount',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'rival',
@@ -95,6 +95,11 @@ export const PARTNER_SHARE = 0.25 // teminatsız borç ödenmezse banka günlük
 export type Loan = { active: boolean; principal: number; monthly: number; remaining: number; overdue: number; collateral: string[]; rate: number }
 export type Partner = { active: boolean; remaining: number; share: number }
 export const FILL_RATE = 7 // L/sn
+/** POMPA HIZI GELİŞTİRMESİ (Oğuz: "dolum hızı parayla artırılabilir olsun") —
+ *  Sv.1 +%25, Sv.2 +%50, Sv.3 +%80. Amorti ~4-6 dk (denge kuralı: 3-5 dk erken,
+ *  5-10 dk geç oyun) — hız müşteri/dk demek, fiyat ona göre kademeli. */
+export const PUMPSPEED_COSTS = [16_000, 38_000, 75_000]
+export const PUMPSPEED_MULT = [1, 1.25, 1.5, 1.8]
 export const SPILL_PENALTY_PER_L = 3
 export const WRONG_FUEL_PENALTY = 300
 
@@ -134,7 +139,7 @@ export const MANAGER_WAGES = [0, 400, 750, 1_200]       // index = seviye, günl
 export const STAFF_TRAIN_COSTS = [12_000, 26_000, 48_000] // Sv.1→2, 2→3, 3→4
 export const POMPACI_WAGE = 120       // pompacı GÜNLÜK yovmiyesi (her oyun günü kasadan)
 export const EV_ATTENDANT_WAGE = 150  // şarjcı günlük yovmiyesi
-const TANK_COSTS = [3000, 7000, 15000]
+export const TANK_COSTS = [3000, 7000, 15000]
 export const MAX_TANKS_PER_FUEL = 4
 export const TANK_ADD_COSTS = [0, 6000, 12000, 20000] // index = mevcut adet → 2., 3., 4. tankın maliyeti
 const MARKET_COSTS = [7000, 12000, 20000] // 3 seviye: kur → Sv.2 → Sv.3 (yerinde, aynı footprint)
@@ -223,6 +228,7 @@ export class GameState {
   }
 
   pumps = 1
+  pumpSpeedLevel = 0
   signLevel = 0
   tankLevel = 0
   /** yakıt başına fiziksel tank adedi (kapasite çarpanı) — additive, eski kayıtta default 1 */
@@ -445,7 +451,10 @@ export class GameState {
 
   get tankCapacity() { return TANK_CAPACITY[this.tankLevel] }
   /** yakıt başına kapasite = seviye kapasitesi (CANLI/main ile birebir; per-fuel adet devre dışı — save uyumu) */
-  fuelCapacity(f: FuelType): number { return TANK_CAPACITY[this.tankLevel] * this.tankCounts[f] }
+  fuelCapacity(f: FuelType): number {
+    // MARİNA: kapasite çarpanı (tekne talebi araçların katbekat üstünde)
+    return TANK_CAPACITY[this.tankLevel] * this.tankCounts[f] * (this.theme().features?.tankCapMult ?? 1)
+  }
   get batteryCapacity() { return BATTERY_CAP[this.batteryLevel] }
 
   /** elektrik fiyatının EV müşteri talebine etkisi (1.0 = nötr) */
@@ -1377,6 +1386,8 @@ export class GameState {
 
   /** personel eğitimi etkileri (rapor §7 #7): dolum hızı, bahşiş, hata riski */
   staffFillMult(): number { return 1 + 0.12 * (this.staffLevel - 1) }   // Sv.4 → +%36 hız
+  /** pompa donanım hızı çarpanı (personel çarpanıyla ÇARPILARAK uygulanır) */
+  pumpSpeedMult(): number { return PUMPSPEED_MULT[Math.max(0, Math.min(3, this.pumpSpeedLevel))] }
   staffTipBonus(): number { return 0.05 * (this.staffLevel - 1) }        // bahşiş oranına eklenir
 
   /** MÜDAVİM BAHŞİŞİ (§6.2): kasabada tanıdık esnafa cömert davranılır. Müşterilerin
@@ -1653,7 +1664,7 @@ export interface ShopRow {
 
 /** Marina tesis açıklamaları — mağazada ne işe yaradığı görünsün (rapor §6.5.3) */
 const MARINA_DESC: Record<string, string> = {
-  fueldock: t('Çekirdek döngü: tekneler buraya yanaşıp yakıt alır. Marinanın kalbi — bu olmadan hiç tekne gelmez.'),
+  fueldock: t('YAKIT SATIŞ İZNİ + iskele dolum donanımı. Marinanın ilk yatırımı: bunu kurmadan tekne gelmez, tank/pompa/market kilitli kalır. Bir kez kurulur.'),
   chandlery: t('Halat, can yeleği, olta, harita. Marketin deniz muadili — sepet tutarı 3 katı.'),
   shower: t('Duş & çamaşırhane. Gulet mürettebatı için ZORUNLU — yoksa gulet uğramaz.'),
   clubhouse: t('Yat kulübü / sahil restoranı. Akşam saatlerinde zirve yapar.'),
@@ -1693,6 +1704,35 @@ export function getShopItems(s: GameState): ShopRow[] {
     row('winterslot', 'i-parking', s.winterSlots ? t('Karada Kışlama ({0})', String(s.winterSlots)) : t('Karada Kışlama'),
       t('+₺900/gün (kışın)'), t('Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.'),
       8_000, s.hasMarinaFac('travelift') ? null : t('Önce Travel Lift kur'))
+    // 2. POMPA (Oğuz: "2 tane pompaya izin verelim marinada") — iskele boyu sınırlı: maks 2
+    row('pump', 'i-fuel', t('İskele Pompası #{0}', Math.min(s.pumps + 1, 2)), t('+1 pompa'),
+      t('İskeleye ikinci dolum noktası — aynı anda iki tekne alırsın.'),
+      s.pumps >= 2 ? null : PUMP_COSTS[s.pumps],
+      s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    // DEPO (Oğuz: "marinada tanka tıklayıp seviye artırılabilmeli") — kara ile aynı
+    row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
+      t('Depo büyür (tüm yakıtlar), daha seyrek sipariş verirsin'),
+      s.tankLevel >= 3 ? null : TANK_COSTS[s.tankLevel],
+      s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    // EK TANKLAR (Oğuz: "limitleri çok artırabilmeliyim") — yakıt başına 8 tanka kadar;
+    // 4'ten sonrası kademeli pahalılaşır (kapasite ×3 çarpanıyla birleşince devasa depo)
+    for (const f of FUELS) {
+      const maxT = s.theme().features?.maxTanksPerFuel ?? MAX_TANKS_PER_FUEL
+      if (s.tankCounts[f] < maxT) {
+        const n = s.tankCounts[f]
+        const addCost = n < TANK_ADD_COSTS.length ? TANK_ADD_COSTS[n] : 20_000 + (n - 3) * 15_000
+        row(`tankadd-${f}`, 'i-tank', t('Ek {0} Tankı ({1}/{2})', FUEL_LABEL[f], n + 1, maxT),
+          `+${TANK_CAPACITY[s.tankLevel] * (s.theme().features?.tankCapMult ?? 1)}L`,
+          t('Yalnızca {0} deposunu {1}L büyütür — yer kaplamaz, daha seyrek sipariş.', FUEL_LABEL[f], TANK_CAPACITY[s.tankLevel] * (s.theme().features?.tankCapMult ?? 1)),
+          addCost, s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+      }
+    }
+    // POMPA HIZI marinada da geçerli (iskele pompaları)
+    row('pumpspeed', 'i-fuel', s.pumpSpeedLevel === 0 ? t('Hızlı Dolum Sistemi') : t('Hızlı Dolum Sv.{0}', Math.min(3, s.pumpSpeedLevel + 1)),
+      s.pumpSpeedLevel >= 3 ? t('+%80 hız') : `+%${[25, 50, 80][s.pumpSpeedLevel]} ${t('dolum hızı')}`,
+      t('Yüksek debili pompa donanımı: dolum hızlanır, aynı sürede daha çok müşteri bitirirsin. Tüm pompalara uygulanır.'),
+      s.pumpSpeedLevel >= 3 ? null : PUMPSPEED_COSTS[s.pumpSpeedLevel],
+      s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
     // MARKET (Oğuz: "marinaya market koyabilelim") — kara marketiyle aynı mekanik
     row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1),
       `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
@@ -1719,6 +1759,10 @@ export function getShopItems(s: GameState): ShopRow[] {
   row('pave', 'i-pave', t('Zemin Betonu'), t('arsa başı'),
     t('Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)'),
     PAVE_COST, hasUnpaved ? null : t('Betonsuz arsan yok'))
+  row('pumpspeed', 'i-fuel', s.pumpSpeedLevel === 0 ? t('Hızlı Dolum Sistemi') : t('Hızlı Dolum Sv.{0}', Math.min(3, s.pumpSpeedLevel + 1)),
+    s.pumpSpeedLevel >= 3 ? t('+%80 hız') : `+%${[25, 50, 80][s.pumpSpeedLevel]} ${t('dolum hızı')}`,
+    t('Yüksek debili pompa donanımı: dolum hızlanır, aynı sürede daha çok müşteri bitirirsin. Tüm pompalara uygulanır.'),
+    s.pumpSpeedLevel >= 3 ? null : PUMPSPEED_COSTS[s.pumpSpeedLevel], null)
   row('pump', 'i-fuel', t('Pompa #{0}', Math.min(s.pumps + 1, MAX_PUMPS)), t('+1 pompa'), t('Aynı anda bir müşteri daha alırsın'),
     s.pumps >= MAX_PUMPS ? null : PUMP_COSTS[s.pumps], null)
   row('sign', 'i-sign', t('Tabela Sv.{0}', Math.min(s.signLevel + 1, 3)), t('+%10 trafik'), t('Yoldan geçenlerin uğrama şansı artar'),
@@ -1925,7 +1969,7 @@ export function checkAchievements(s: GameState) {
 // ---- Kayıt ----
 
 const SAVE_FIELDS = [
-  'money', 'reputation', 'stationName', 'pumps', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
+  'money', 'reputation', 'stationName', 'pumps', 'pumpSpeedLevel', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
   'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
@@ -2112,6 +2156,7 @@ export function buyItem(s: GameState, id: string): boolean {
   if (id in MARINA_FACILITIES) { if (!s.marinaFacs.includes(id)) s.marinaFacs.push(id); return true }
   switch (id) {
     case 'pump': s.pumps++; break
+    case 'pumpspeed': s.pumpSpeedLevel++; break
     case 'sign': s.signLevel++; break
     case 'widegate': s.wideGates = true; break
     case 'tank': s.tankLevel++; break

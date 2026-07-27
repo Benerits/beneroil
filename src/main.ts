@@ -12,7 +12,7 @@ import {
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
-  LocId, MANAGER_COSTS, MANAGER_WAGES,
+  LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
 } from './state'
 import { loadModels, loadStatics } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
@@ -3533,7 +3533,7 @@ function buildingCard(id: string): BuildingCard | null {
       desc: t('Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.'),
       stats: [
         [t('Durum'), broken ? t('ARIZALI') : t('Çalışıyor'), broken ? 'bad' : 'good'],
-        [t('Dolum hızı'), t('{0} L/sn', (FILL_RATE * state.staffFillMult()).toFixed(1))],
+        [t('Dolum hızı'), t('{0} L/sn', (FILL_RATE * state.pumpSpeedMult() * state.staffFillMult()).toFixed(1)), state.pumpSpeedLevel > 0 ? 'good' : ''],
         [t('Pompacı'), state.autoPumps.has(i) ? t('ÇALIŞIYOR (gelir senin)') : t('YOK'), state.autoPumps.has(i) ? 'good' : undefined],
         [t('Yovmiye'), t('₺{0}/gün', POMPACI_WAGE), state.autoPumps.has(i) ? 'bad' : undefined],
         [t('Benzin'), `₺${state.prices.benzin}/L`],
@@ -3544,6 +3544,10 @@ function buildingCard(id: string): BuildingCard | null {
         : state.autoPumps.has(i)
           ? { label: t('🧑‍🔧 Pompacıyı işten çıkar'), maintId: `auto-pump-${i}` }
           : { label: t('🧑‍🔧 Pompacı Tut — ₺{0} + ₺{1}/gün', POMPACI_HIRE.toLocaleString('tr-TR'), POMPACI_WAGE), maintId: `auto-pump-${i}` },
+      // Oğuz: pompaya tıklayıp güçlendirme — hız seviyesi karttan alınır (tüm pompalara işler)
+      buy: state.pumpSpeedLevel < 3
+        ? { label: t('Hızlı Dolum Sv.{0} — ₺{1}', state.pumpSpeedLevel + 1, PUMPSPEED_COSTS[state.pumpSpeedLevel].toLocaleString('tr-TR')), id: 'pumpspeed' }
+        : undefined,
     }
   }
   if (id.startsWith('charger-')) {
@@ -3645,6 +3649,10 @@ function buildingCard(id: string): BuildingCard | null {
           ['Kapasite seviyesi', `${state.tankLevel + 1}/4 (maks ${TANK_CAPACITY[3]}L)`],
         ],
         action: { label: t('🛢️ Yakıt Siparişi Ver'), maintId: 'open-order' },
+        // Oğuz: tanka tıklayıp seviye artırma (marinada da çalışır — satır katalogda)
+        buy: state.tankLevel < 3
+          ? { label: t('Depoyu Büyüt — ₺{0} ({1}L)', TANK_COSTS[state.tankLevel].toLocaleString('tr-TR'), TANK_CAPACITY[state.tankLevel + 1]), id: 'tank' }
+          : undefined,
       }
     case 'battery':
       return {
@@ -4476,7 +4484,7 @@ function frame() {
       continue
     }
     // personel eğitimi hızlandırır, EKİPMAN YIPRANMASI yavaşlatır (Katman 2b)
-    const amount = Math.min(FILL_RATE * state.staffFillMult() * state.wearEfficiency() * dt, state.tanks[c.nozzle])
+    const amount = Math.min(FILL_RATE * state.pumpSpeedMult() * state.staffFillMult() * state.wearEfficiency() * dt, state.tanks[c.nozzle])
     c.filled += amount
     state.tanks[c.nozzle] -= amount
     c.bubbleT -= dt // sayaç ~9/sn güncellensin (her frame değil) — okunur, çok hızlı akmaz

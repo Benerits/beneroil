@@ -829,8 +829,14 @@ async function handleApi(req, res, url) {
       // IP başına saatte 1 ile spam engellenir (kötü niyetli çağrı da bunu aşamaz).
       const vb = await readBody(req).catch(() => ({}))
       if (vb && vb.guest === true && rateLimit('guestnotif:' + clientIp(req), 1, 3600_000)) {
-        bumpStat('guests') // misafir istatistiği: saatlik sayaç (admin engagement'ta görünür)
-        pushSignupNotif('guest')
+        await bumpStat('guests') // misafir istatistiği: saatlik sayaç (admin engagement'ta görünür)
+        // STACK (Oğuz): misafir push'u HER misafirde değil, her 10.'da bir gider
+        // (toplam % 10 === 0). Kayıtlı oyuncu push'ları tekil kalır (aşağıda /register).
+        try {
+          const gc = await pool.query(`SELECT COALESCE(SUM(guests),0)::int AS n FROM benzinlik_stat_hourly`)
+          const n = gc.rows[0]?.n ?? 0
+          if (n > 0 && n % 10 === 0) pushSignupNotif('guest', n)
+        } catch { /* sayaç okunamazsa push atlanır — kritik değil */ }
       }
       return json(res, 200, { ok: true })
     }
@@ -1609,7 +1615,7 @@ async function handleVs(req, res, url) {
 
 // Yeni kayıt/misafir EKİBE push — Cash Sort (yayında değil, sadece ekip cihazlarında) APNs altyapısı.
 // Sortubes/tubes-api KULLANILMAZ: orası artık gerçek oyunculu mağaza, segment:all herkese giderdi.
-async function pushSignupNotif(kind = 'registered') {
+async function pushSignupNotif(kind = 'registered', guestTotal = 0) {
   const key = process.env.CASHSORT_VS_KEY
   if (!key || !pool) return
   try {
@@ -1618,7 +1624,7 @@ async function pushSignupNotif(kind = 'registered') {
     const total = c.rows[0]?.total ?? 0
     const online = c.rows[0]?.online ?? 0
     const body = kind === 'guest'
-      ? `🎮 Yeni misafir oyunu denemeye başladı! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
+      ? `🎮 Misafir sayısı ${guestTotal} oldu! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
       : `🎉 Yeni kayıtlı oyuncu katıldı! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
     await fetch('https://cashsort-api.benerits.com/vs/v1/notifications/send', {
       method: 'POST',

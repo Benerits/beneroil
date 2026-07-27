@@ -72,6 +72,10 @@ export interface LocationTheme {
      *  repFloor: müdavimlerin oluşmaya başladığı itibar · share: 5.0 itibarda akışın kaç
      *  katı sadık taban · tip: müdavim bahşiş çarpanı (tanıdık esnafa cömert davranılır) */
     regulars?: { repFloor: number; share: number; tip: number }
+    /** MARİNA (Oğuz): tekneler araçların 10-50 katı litre çeker — aynı tank
+     *  seviyeleri yetmiyordu. Kapasite çarpanı + yakıt başına daha çok ek tank. */
+    tankCapMult?: number
+    maxTanksPerFuel?: number
   }
 }
 
@@ -165,6 +169,8 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
     lane: { kind: 'water', count: 1, median: false, barrier: false, rampLength: 6, speed: 0.55,
             service: { near: 15.20, far: 20.40 } },
     econ: { entryBase: 0.09, priceElasticity: 0.45, repWeight: 1.9, signWeight: 0.25, tipRate: 0.2, wageMult: 1.6 },
+    // tekne talebi devasa: tank kapasitesi ×3, yakıt başına 8 ek tanka kadar
+    features: { tankCapMult: 3, maxTanksPerFuel: 8 },
     unlock: { cash: 5_000_000, stars: 9 },
   },
   /** Lokasyon 5 — METROPOL (rapor §6.6): alan kıtlığı, EV ağırlıklı, çok alternatif
