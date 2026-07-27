@@ -1444,19 +1444,9 @@ export class World {
     })
 
     // ---- ADA HAVASI (Oğuz) ----
-    // kumsal yamaları: burunlarda ve batı kavsinde kum — çim/su geçişi yumuşar
-    for (const [bx, by, br] of [[-8.0, -23.0, 3.4], [-8.5, 22.8, 3.0], [-19.2, 0, 2.4]] as [number, number, number][]) {
-      const beach = new THREE.Mesh(new THREE.CircleGeometry(br, 22), lam2(0xe6d9b4))
-      beach.position.set(bx, by, 0.014); s.add(beach)
-    }
-    // burun kayalıkları: kumsalın denizle buluştuğu hat
-    inst(new THREE.IcosahedronGeometry(0.5, 0), lam2(0x8e8878), 12, (m, i) => {
-      const a = (i / 12) * Math.PI                       // yarım kavis
-      const south = i % 2 === 0
-      const k = 0.6 + ((i * 5) % 3) * 0.25
-      m.makeScale(k, k, k * 0.6)
-      m.setPosition(-8.0 + Math.cos(a) * 3.8, (south ? -23.4 : 23.2) + Math.sin(a) * 0.8, 0.2 * k)
-    })
+    // KUMSAL DAİRELERİ KALDIRILDI: çim düzlemiyle z-fight yapıp zoom'da
+    // "varla yok arası" titriyorlardı (Oğuz ekran görüntüsüyle işaretledi).
+    // Ada havasını ağaçlar + kıyı çizgisi + fener taşıyor.
     // ada ağaçları — placeTree → decor: parsel claim'lenirse otomatik silinir
     const ISLAND_TREES: [number, number, number][] = [
       [-12.0, -19.0, 1.0], [-16.0, -9.0, 1.2], [-11.0, -3.0, 0.9], [-17.0, 3.0, 1.0],
@@ -1632,14 +1622,12 @@ export class World {
     // hepsi claimlenebilir parsellerin (x -29.5..45.4, |y| ≤ 24) üstüne boya basıyordu.
     // Kule duvarı x ≤ -31'e taşındı; dükkânlar ve önü kuzey/güney bantlarında.
     strip(9.20, 1.9, 21.00, -26.25, 0x4a5057)  // güney bandı dükkân önü otoparkı
-    strip(7.00, 1.9, 21.00, 26.25, 0x4a5057)   // kuzey bandı dükkân önü
+    // (kuzey bandı dükkânları kaldırıldı — kameranın önü açık; otoparkı da yok)
     const k = new THREE.Mesh(new THREE.BoxGeometry(0.12, 54, 0.10), lam2(0xc9c5ba))
     k.position.set(-6.62, 0, 0.05); s.add(k)   // istasyon lotu batı bordürü
-    // otopark çizgileri (bant otoparklarında, dikey)
+    // otopark çizgileri (güney bandında, dikey)
     this.instAt(s, new THREE.PlaneGeometry(0.10, 1.9), lam2(0xe8e4d8), 8,
       (m, i) => m.setPosition(17.20 + i * 1.25, -26.25, 0.021))
-    this.instAt(s, new THREE.PlaneGeometry(0.10, 1.9), lam2(0xe8e4d8), 6,
-      (m, i) => m.setPosition(18.00 + i * 1.25, 26.25, 0.021))
     this.parcelGreen()
 
     // ---- ŞEMSİYE ve TENTE: tek tek GLB yerine instanced ----
@@ -1659,10 +1647,9 @@ export class World {
       im.instanceMatrix.needsUpdate = true
       s.add(im)
     }
-    // Şemsiyeler dükkân önlerinde — parsel bandının DIŞINDA (|y| ≥ 26.4)
+    // Şemsiyeler GÜNEY dükkân önlerinde (kuzey = kameranın önü, boş)
     instFrom(K?.['detail-parasol-a'], 1.15,
-      [[14.5, -26.6], [21.0, -26.6], [27.5, -26.6], [34.0, -26.6],
-       [14.5, 26.6], [21.0, 26.6], [28.0, 26.6]] as [number, number][])
+      [[14.5, -26.6], [21.0, -26.6], [27.5, -26.6], [34.0, -26.6]] as [number, number][])
     // Tente batı kule duvarının (x ≤ -31) doğuya bakan cephesinde
     instFrom(K?.['detail-awning'], 1.1,
       [-21.5, -17.5, -15.0, -11.2, -5.5, 0.6, 2.4, 7.2, 9.8, 14.0, 16.0, 20.6, 23.4]
@@ -1713,8 +1700,8 @@ export class World {
     })
     this.instAt(s, new THREE.BoxGeometry(0.05, 1.35, 0.10), lam2(0xb9bec4), railY.length,
       (m, i) => m.setPosition(11.76, railY[i], 0.86))
-    // otobüs durakları — y<-24 / y>24 seçildi ki parsel alınsa da KALSIN (kamu alanı)
-    for (const by of [-25.40, 25.40]) {
+    // otobüs durağı — yalnız GÜNEYDE (kuzey kameranın önü, açık kalır)
+    for (const by of [-25.40]) {
       const proto = K?.['building-s']
       if (proto) { const g = fitModel(proto, 2.6, 'z'); g.position.set(13.60, by, 0); g.rotation.z = Math.PI; s.add(g) }
       const bench = new THREE.Mesh(new THREE.BoxGeometry(0.45, 2.4, 0.42), lam2(0xa8875c))
@@ -1728,10 +1715,7 @@ export class World {
     lot.position.set(24.50, -26.25, 0.017); s.add(lot)
     this.instAt(s, new THREE.PlaneGeometry(0.09, 1.95), lam2(0xe8e4d8), 18,
       (m, i) => m.setPosition(13.40 + i * 1.3, -26.25, 0.018))
-    const lotN = new THREE.Mesh(new THREE.PlaneGeometry(15, 1.95), roadMat2)
-    lotN.position.set(21.00, 26.25, 0.017); s.add(lotN)
-    this.instAt(s, new THREE.PlaneGeometry(0.09, 1.95), lam2(0xe8e4d8), 11,
-      (m, i) => m.setPosition(14.30 + i * 1.3, 26.25, 0.018))
+    // (kuzey cebi kaldırıldı — kuzey bandında artık dükkân yok, kameranın önü açık)
     // (eski batı atölye beton şeridi kaldırıldı — atölyeler batı uzağa taşındı, parsel temiz)
     this.parcelGreen()
 

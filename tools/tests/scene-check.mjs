@@ -86,7 +86,8 @@ check('parsele denk gelen binalar decor\'a kaydediliyor (betonlanınca silinsin)
   /if \(p\.parcel\) this\.decor\.push/.test(world))
 check('yaya bariyerinde zebra hizasında BOŞLUK var', /y < -24\.6 \|\| y > -20\.2/.test(ring))
 check('zebra TEK draw call (7 mesh değil, çizgili canvas)', /CanvasTexture/.test(ring))
-check('otobüs durakları parsel DIŞINDA (kamu alanı, silinmez)', /\[-25\.40, 25\.40\]/.test(ring))
+// KUZEY DURAĞI KALDIRILDI (Oğuz: kameranın önü açık kalsın) — yalnız güney durağı, parsel dışında
+check('otobüs durağı parsel DIŞINDA (kamu alanı, silinmez)', /\[-25\.40\]/.test(ring))
 check('yerleşim determinist', !/Math\.random/.test(ring))
 
 console.log('\n== 6) MARİNA sahnesi ==')
