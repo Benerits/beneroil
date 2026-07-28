@@ -3043,6 +3043,11 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   const g = auth.loadGuest()
   if (g) { applySaveData(g as Record<string, unknown>); saveLoaded = true }
 }
+// KRİTİK: aşağıdaki iki kapı BİLEREK sonsuz bekler (cloud-block / e-posta doğrulama).
+// Boot maskesi bu kapıların ÜSTÜNDE kalıyordu → doğrulanmamış kayıtlı oyuncu kapıyı
+// hiç göremeden "İstasyonun hazırlanıyor"da takılıyordu (oyuncu raporu ×2). Maske
+// motor durmadan önce KOŞULSUZ kalkar.
+document.getElementById('boot')?.remove()
 if (cloudBlocked) await new Promise(() => {}) // oyun motoru burada durur, hiç kayıt gitmez
 // e-posta doğrulama kapısı: doğrulanmadan oyuna devam edilemez
 if (!isFullMode && !isPromoMode && auth.needsVerify()) {
@@ -4182,8 +4187,14 @@ function nightFactor(t: number): number {
   return 1 - (t - 0.9) / 0.1
 }
 
+let bootRemoved = false
 function frame() {
   requestAnimationFrame(frame)
+  // AÇILIŞ MASKESİ — KOŞULSUZ KALDIRMA (KRİTİK regresyon fixi): eski kaldırma satırı
+  // yalnız TOKEN'SIZ akışın (auth kapısı kurulumunun) içindeydi → KAYITLI her oyuncuda
+  // maske sonsuza dek kalıyordu. İlk render karesi = sahne gerçekten hazır; kim olursan
+  // ol maske burada kalkar.
+  if (!bootRemoved) { bootRemoved = true; document.getElementById('boot')?.remove() }
   // sekme/uygulama arka planda: hesaplama+render durur (pil/CPU tasarrufu, ısınma azalır).
   // dt zaten 0.05 ile capli → geri dönünce güvenli devam.
   if (document.hidden) { clock.getDelta(); return }
