@@ -1007,7 +1007,22 @@ document.getElementById('of-prestige')?.addEventListener('click', e => {
     res.cash.toLocaleString('tr-TR'), res.stars, state.prestigeMult().toFixed(2)), 'good', true)
   audio.achieve()
   persist()
-  setTimeout(() => location.reload(), 2800) // sahne temiz kurulsun; push'a yetişme payı (yıldız kaybı fixi)
+  // DEVİR KESİNLEŞTİRME (oyuncu raporları: "devrettim, yıldız gelmedi"):
+  // sayfa, yıldız BULUTA YAZILMADAN yenilenmez. 3 deneme; çoklu-cihaz çatışması
+  // veya kalıcı ağ hatasında reload İPTAL — state yerelde doğru, periyodik senkron
+  // ilk fırsatta yazar. Misafirde yerel kayıt persist ile yazıldı, hemen yenilenir.
+  ;(async () => {
+    let ok = !auth.loggedIn()
+    for (let i = 0; i < 3 && !ok; i++) {
+      try {
+        const r = await auth.pushSave(savePayload()) as { kicked?: boolean; conflict?: boolean }
+        if (r?.kicked || r?.conflict) break // reload ETME — yıldızı ezdirme
+        ok = true
+      } catch { await new Promise(rs => setTimeout(rs, 1200)) }
+    }
+    if (ok) location.reload()
+    else ui.toast(t('Devir kaydedildi — bulut eşitlemesi bekleniyor, sayfa otomatik yenilenecek. Elle yenileme!'), 'bad', true)
+  })()
 })
 
 // B2B sözleşme imzalama
