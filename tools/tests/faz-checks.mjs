@@ -612,25 +612,16 @@ console.log('== 18) Çevre Yolu imzası: trafik ışığı + yaya müşteri (rap
   k.tick(30) // yaya müşteri çalışmamalı
   check('kasabada yaya müşteri geliri YOK', Object.keys(k.pendingCash).length === 0)
 
-  // ÇEVRE YOLU: ışık döngüsü
+  // TRAFİK IŞIĞI KALDIRILDI (Oğuz: "dümdüz flow") — yeni sözleşme: hiçbir temada ışık
+  // yok, boost 1'de sabit, entryBase telafisi gömülü (cevreyolu 0.33 / metropol 0.37)
   const c = new GameState()
   c.unlockedLocs.push('cevreyolu'); c.switchLoc('cevreyolu', { placedPos: {}, placedRot: {}, placedRects: [] })
-  const tl = c.theme().features.trafficLight
-  check('çevre yolunda ışık tanımlı (40s yeşil / 15s kırmızı)', tl.greenSec === 40 && tl.redSec === 15)
-  c.lightT = 5
-  check('döngü başı YEŞİL', c.lightRed() === false && c.lightBoost() === 1)
-  const green = c.entryChance()
-  c.lightT = 45 // 40-55 arası kırmızı
-  check('40. saniyeden sonra KIRMIZI', c.lightRed() === true)
-  check('kırmızıda giriş şansı ×2.2 uygulanır', c.lightBoost() === 2.2)
-  check(`kırmızıda akış BELİRGİN artar (${green.toFixed(2)} → ${c.entryChance().toFixed(2)})`, c.entryChance() > green * 1.5)
-  c.lightT = 56 // döngü başa döndü
-  check('55. saniyeden sonra tekrar yeşil (döngü)', c.lightRed() === false)
-  // geri sayım göstergesi
-  c.lightT = 42
-  check('kırmızı kalan süre doğru (13s)', c.lightRemaining() === 13)
+  check('çevre yolunda ışık ARTIK YOK (dümdüz flow)', c.theme().features.trafficLight === undefined)
+  c.lightT = 45
+  check('ışıksız temada lightRed daima false', c.lightRed() === false && c.lightBoost() === 1)
+  check('kaldırılan boost entryBase\'e gömüldü (0.33)', c.theme().econ.entryBase === 0.33)
   c.lightT = 10
-  check('yeşil kalan süre doğru (30s)', c.lightRemaining() === 30)
+  check('ışıksız temada geri sayım 0 (gösterge kapalı)', c.lightRemaining() === 0)
 
   // YAYA MÜŞTERİ: dükkan varsa ciro gelir, yoksa gelmez
   const w = new GameState()
@@ -666,7 +657,7 @@ console.log('== 18) Çevre Yolu imzası: trafik ışığı + yaya müşteri (rap
   // metropol daha agresif ışık + yoğun yaya
   const m = new GameState()
   m.unlockedLocs.push('metropol'); m.switchLoc('metropol', { placedPos: {}, placedRot: {}, placedRects: [] })
-  check('metropolde ışık daha baskın (boost 2.6)', m.theme().features.trafficLight.boost === 2.6)
+  check('metropolde de ışık YOK — telafi entryBase 0.37', m.theme().features.trafficLight === undefined && m.theme().econ.entryBase === 0.37)
   check('metropolde yaya trafiği daha sık (14s)', m.theme().features.walkIns.everySec === 14)
 }
 
@@ -1116,11 +1107,11 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
   check('metropolde fiyat esnekliği EN YÜKSEK (alternatif bol)', th.econ.priceElasticity > 1.5)
   check('metropolde tabela neredeyse etkisiz', th.econ.signWeight < 0.4)
   check('metropolde müdavim YOK (şehirde kimse esnafı tanımaz)', m.regularsShare() === 0)
-  // ışık mekaniği metropolde daha baskın (çevre yolundan ayrışır)
+  // ışıklar kaldırıldı — ayrışma artık entryBase + yaya yoğunluğuyla
   const cy = new GameState(); cy.unlockedLocs.push('cevreyolu')
   cy.switchLoc('cevreyolu', { placedPos: {}, placedRot: {}, placedRects: [] })
-  check('metropolde ışık etkisi çevre yolundan GÜÇLÜ',
-    th.features.trafficLight.boost > cy.theme().features.trafficLight.boost)
+  check('metropol taban çekiciliği çevre yolundan GÜÇLÜ (ışık telafisi)',
+    th.econ.entryBase > cy.theme().econ.entryBase)
   check('metropolde yaya trafiği çevre yolundan YOĞUN',
     th.features.walkIns.everySec < cy.theme().features.walkIns.everySec)
 }

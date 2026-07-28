@@ -113,13 +113,14 @@ export const CEVREYOLU: LocationTheme = {
   lane: { kind: 'road', count: 2, median: true, barrier: false, rampLength: 0, speed: 1.1,
           service: { near: 5.58, far: 10.23 } },
   // şehirde market/kafe cirosu baskın: fiyat esnekliği yüksek (alternatif çok), tabela zayıf
-  econ: { entryBase: 0.30, priceElasticity: 1.35, repWeight: 0.8, signWeight: 0.6, tipRate: 0.12 },
+  econ: { entryBase: 0.33, priceElasticity: 1.35, repWeight: 0.8, signWeight: 0.6, tipRate: 0.12 },
   unlock: { cash: 500_000, stars: 2 },
   // ÇEVRE YOLU İMZASI (rapor §6.3): ışık ~40 sn yeşil / 15 sn kırmızı; kırmızıda sıkışan
   // sürücü "hazır durmuşken" giriyor → giriş şansı ×2.2. Oyuncu bu pencereleri yakalamayı
   // öğrenir (kapasite planlaması). Yaya müşteri: araçsız market/kafe cirosu.
   features: {
-    trafficLight: { greenSec: 40, redSec: 15, boost: 2.2, y: -19 },
+    // TRAFİK IŞIĞI KALDIRILDI (Oğuz: "dümdüz flow olsun, kafa karıştırıyor") —
+    // kırmızı-boost ortalaması entryBase'e gömüldü (0.30 → 0.33)
     walkIns: { everySec: 22, min: 25, max: 70 },
     urban: true,
   },
@@ -184,10 +185,10 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
     sky: { day: 0xa9b6c6, night: 0x0d1420 },
     palette: { line: 0xffe08a, accent: 0x7f5af0, vegetation: 0x4d7a52 },
     lane: { kind: 'road', count: 3, median: true, barrier: false, rampLength: 0, speed: 1.25 },
-    econ: { entryBase: 0.34, priceElasticity: 1.6, repWeight: 0.65, signWeight: 0.35, tipRate: 0.14 },
+    econ: { entryBase: 0.37, priceElasticity: 1.6, repWeight: 0.65, signWeight: 0.35, tipRate: 0.14 },
     unlock: { cash: 12_000_000, stars: 14 },
     features: {
-      trafficLight: { greenSec: 30, redSec: 20, boost: 2.6, y: -19 }, // şehirde ışık daha baskın
+      // trafik ışığı kaldırıldı (Oğuz) — boost ortalaması entryBase'e gömüldü (0.34 → 0.37)
       walkIns: { everySec: 14, min: 40, max: 110 },                   // yoğun yaya trafiği
       urban: true,
       // Metropol'ün asıl kısıtı yer: 18 parsel yerine 6, üstelik 3.2 katı fiyata.

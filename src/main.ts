@@ -1332,6 +1332,8 @@ const cars = new CarManager(world.scene, modelLib, {
   // (rapor §6.4: bunun yerine ayna simetrik ikinci tesis ayrı yatırımdır).
   farActive: () => world.farStationOn && !state.theme().lane.barrier,
   isWater: () => world.theme.lane.kind === 'water', // sahne teması (save gecikmesine dayanıklı)
+  // FİLO: aktif ihale varsa garantili sözleşme araçları gelir
+  contract: () => state.contract ? { fuel: state.contract.fuel, dailyLiters: state.contract.dailyLiters } : null,
   farGateInY: () => world.gateIn2.y,
   farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
@@ -1555,6 +1557,45 @@ function facName(id: string): string {
     wash2: t('Karşı Oto Yıkama'), oil2: t('Karşı Yağ Değişimi'), coffee2: t('Karşı Kahveci'), restaurant2: t('Karşı Restoran'), toilet: t('Tuvalet'), coffee: t('Kahveci'), restaurant: t('Restoran'), oil: t('Yağ değişimi') } as Record<string, string>)[id] ?? id
 }
 const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean }>()
+
+// ---- POMPACI/ŞARJCI FİGÜRLERİ (Oğuz: "yovmiyeci varsa başına karakter koy") ----
+// Kenney karakter paketi projede yok; walker'larla aynı sanat dilinde prosedürel
+// figür: BenelOil kırmızısı üniforma + şapka. Ünite başında bekler.
+function attendantMesh(kind: 'pump' | 'ev'): THREE.Group {
+  const g = new THREE.Group()
+  const uniform = kind === 'pump' ? 0xd64545 : 0x1fa8bc // pompacı kırmızı, şarjcı turkuaz
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 10),
+    new THREE.MeshLambertMaterial({ color: uniform }))
+  body.rotation.x = Math.PI / 2; body.position.z = 0.32; body.castShadow = true; g.add(body)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8),
+    new THREE.MeshLambertMaterial({ color: 0xf0c8a0 }))
+  head.position.z = 0.68; g.add(head)
+  const capTop = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.07, 10),
+    new THREE.MeshLambertMaterial({ color: uniform }))
+  capTop.rotation.x = Math.PI / 2; capTop.position.z = 0.78; g.add(capTop)
+  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.02),
+    new THREE.MeshLambertMaterial({ color: uniform }))
+  brim.position.set(0.12, 0, 0.75); g.add(brim)
+  return g
+}
+const attendantFigs = new Map<string, THREE.Group>()
+function syncAttendants() {
+  const want = new Map<string, { kind: 'pump' | 'ev'; bid: string }>()
+  for (const i of state.autoPumps) want.set(`p${i}`, { kind: 'pump', bid: i === 0 ? 'pump-0' : `pump-${i}` })
+  for (const i of state.autoChargers) want.set(`c${i}`, { kind: 'ev', bid: `charger-${i}` })
+  for (const [key, fig] of attendantFigs) {
+    if (!want.has(key)) { world.scene.remove(fig); attendantFigs.delete(key) }
+  }
+  for (const [key, w] of want) {
+    const b = world.buildings.find(x => x.id === w.bid)
+    if (!b) continue
+    const px = b.group.position.x + 1.1, py = b.group.position.y + 0.55
+    let fig = attendantFigs.get(key)
+    if (!fig) { fig = attendantMesh(w.kind); world.scene.add(fig); attendantFigs.set(key, fig) }
+    fig.position.set(px, py, 0) // pompa taşınırsa figür de takip eder
+  }
+}
+setInterval(syncAttendants, 2000)
 
 function personMesh(): THREE.Group {
   const g = new THREE.Group()

@@ -459,21 +459,24 @@ export class World {
     if (th.lane.kind === 'water') this.buildMarinaScene(s)
 
     if (th.features?.urban) {
-      // ---- TRAFİK IŞIĞI (mekanik: kırmızıda giriş şansı ×boost) ----
+      // ---- TRAFİK IŞIĞI: yalnız temada TANIMLIYSA çizilir (Oğuz: ışıklar kaldırıldı —
+      // "dümdüz flow"; direk urban bayrağıyla ışıksız şubede de dikiliyordu) ----
       const tl = th.features.trafficLight
-      const ly = tl?.y ?? -19
-      const poleX = ROAD_X - 2.6
-      cyl(0.11, 5.2, 0x50565e, poleX, ly, 2.6, 'z', s)          // direk
-      cyl(0.09, 2.4, 0x50565e, poleX + 1.2, ly, 5.1, 'x', s)     // konsol kol
-      const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 1.15), lam(0x22262b))
-      box.position.set(poleX + 2.3, ly, 4.9); s.add(box)
-      // lambalar: referansları saklanır, mekanikle senkron yanar (setTrafficLight)
-      const mk = (color: number, dz: number) => {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshLambertMaterial({ color, emissive: 0x000000 }))
-        m.position.set(poleX + 2.13, ly, 4.9 + dz); s.add(m); return m
+      if (tl) {
+        const ly = tl.y
+        const poleX = ROAD_X - 2.6
+        cyl(0.11, 5.2, 0x50565e, poleX, ly, 2.6, 'z', s)          // direk
+        cyl(0.09, 2.4, 0x50565e, poleX + 1.2, ly, 5.1, 'x', s)     // konsol kol
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 1.15), lam(0x22262b))
+        box.position.set(poleX + 2.3, ly, 4.9); s.add(box)
+        // lambalar: referansları saklanır, mekanikle senkron yanar (setTrafficLight)
+        const mk = (color: number, dz: number) => {
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshLambertMaterial({ color, emissive: 0x000000 }))
+          m.position.set(poleX + 2.13, ly, 4.9 + dz); s.add(m); return m
+        }
+        this.lightRedLamp = mk(0x5a1e1e, 0.38)
+        this.lightGreenLamp = mk(0x1e5a2a, -0.38)
       }
-      this.lightRedLamp = mk(0x5a1e1e, 0.38)
-      this.lightGreenLamp = mk(0x1e5a2a, -0.38)
       // YAYA ÇİZGİSİ KALDIRILDI (Oğuz: "yolun ortasında dikine çizgi — gereği yok").
       // 7 şerit aynı y'de yan yana dizilince zebra değil tek uzun çizgi görünüyordu;
       // çevre yolundaki gerçek zebra (canvas dokulu) ayrı ve duruyor.
@@ -1629,9 +1632,8 @@ export class World {
     for (let y = -46; y <= 70; y += 4) if (Math.abs(y) > 24) BOLL_Y.push(y)
     this.instAt(s, new THREE.BoxGeometry(0.12, 0.12, 0.75), lam2(0xb9bec4), BOLL_Y.length,
       (m, i) => m.setPosition(12.20, BOLL_Y[i], 0.38))
-    // refüj çalısı (koridorun ortasında değil, kenar bandında)
-    this.instAt(s, new THREE.SphereGeometry(0.42, 7, 5), lam2(0x6f8a5c), 22,
-      (m, i) => m.setPosition(3.60, -30 + i * 2.9, 0.36))
+    // REFÜJ ÇALISI KALDIRILDI (Oğuz ekranıyla): x=3.6 istasyon LOTUNUN içiydi —
+    // arsa genişleyince çalı sırası benzinliğin ortasında kalıyordu.
     this.parcelGreen()
 
     // ---- ÇAM KUŞAĞI: yol boyu, parsel bandının DIŞINDA (|y| > 25) ----
@@ -1715,9 +1717,15 @@ export class World {
     const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
     this.placePlan(SCENE_PLANS.cevreyolu, s)
 
+    // KARŞI-YAKA ALTYAPI GRUBU (Oğuz ekranı: claim'li arsada bariyer kalıyordu):
+    // kaldırım + yaya bariyeri col-3 arsasının içinde — karşı yakadan İLK arsa
+    // alınır alınmaz grup KOMPLE kalkar (instanced'lar tek tek silinemez).
+    const farInfra = new THREE.Group()
+    s.add(farInfra)
+    this.farSideInfra = farInfra
     // kaldırım (yol koridorunun DIŞINDA: x ≥ 11.9)
     const walk = new THREE.Mesh(new THREE.PlaneGeometry(1.70, 120), lam2(0xc9c5ba))
-    walk.position.set(12.10, 0, 0.019); s.add(walk)
+    walk.position.set(12.10, 0, 0.019); farInfra.add(walk)
     // ZEBRA: 7 ayrı mesh yerine tek düzlem + çizgili canvas (1 draw call)
     const zc = document.createElement('canvas')
     zc.width = 128; zc.height = 96
@@ -1735,10 +1743,10 @@ export class World {
     // zebra hizası AÇIK + karşı şube kapı penceresi (|y| < 13) AÇIK — 2. şube alınınca
     // tekne/araç girişi bariyere çarpmasın
     for (let y = -40; y <= 40; y += 1.35) if ((y < -24.6 || y > -20.2) && Math.abs(y) > 13) railY.push(y)
-    this.instAt(s, new THREE.CylinderGeometry(0.045, 0.045, 0.95, 6), lam2(0xb9bec4), railY.length, (m, i) => {
+    this.instAt(farInfra as unknown as THREE.Scene, new THREE.CylinderGeometry(0.045, 0.045, 0.95, 6), lam2(0xb9bec4), railY.length, (m, i) => {
       m.makeRotationX(Math.PI / 2); m.setPosition(11.76, railY[i], 0.48)
     })
-    this.instAt(s, new THREE.BoxGeometry(0.05, 1.35, 0.10), lam2(0xb9bec4), railY.length,
+    this.instAt(farInfra as unknown as THREE.Scene, new THREE.BoxGeometry(0.05, 1.35, 0.10), lam2(0xb9bec4), railY.length,
       (m, i) => m.setPosition(11.76, railY[i], 0.86))
     // otobüs durağı — yalnız GÜNEYDE (kuzey kameranın önü, açık kalır)
     for (const by of [-25.40]) {
@@ -1854,6 +1862,9 @@ export class World {
   isPavedFn: (c: number, r: number) => boolean = () => false
   /** arsalara denk gelebilecek doğal dekor (ağaç/taş/çiçek) — beton dökülünce temizlenir */
   private decor: { obj: THREE.Object3D; x: number; y: number }[] = []
+  /** KARŞI-YAKA altyapısı (kaldırım + yaya bariyeri, col-3 içinde) — instanced olduğundan
+   *  tek tek silinemez; karşı yakadan İLK arsa alınınca grup komple kalkar (Oğuz raporu) */
+  farSideInfra: THREE.Group | null = null
 
   /** Dikdörtgen içindeki TÜM dekoru sahneden sil (Oğuz: "arazi claimlenmişse
    *  objeler dinamik kalkmalı"). Claim, beton, karşı şube ve load hepsi bunu kullanır. */
@@ -1873,6 +1884,8 @@ export class World {
     // CLAIM ANINDA dekor kalkar (eskiden yalnız betonda kalkıyordu — satın alınmış
     // kahverengi arsada ağaçlar dikili kalıyordu)
     this.clearDecorRect(x0, x1, y0, y1)
+    // karşı yakadan arsa alındıysa bariyer/kaldırım bandı komple kalkar
+    if (c >= 3 && this.farSideInfra) { this.scene.remove(this.farSideInfra); this.farSideInfra = null }
     const g = new THREE.Group()
     const rope = new THREE.MeshLambertMaterial({ color: 0xe0b13e })
     const stake = (px: number, py: number) => cyl(0.07, 0.65, 0x8a6a48, px, py, 0.32, 'z', g)
@@ -1919,6 +1932,7 @@ export class World {
       const [dx0, dx1] = PARCEL_COLS[c]
       const [dy0, dy1] = PARCEL_ROWS[r]
       this.clearDecorRect(dx0, dx1, dy0, dy1)
+      if (c >= 3 && this.farSideInfra) { this.scene.remove(this.farSideInfra); this.farSideInfra = null }
     }
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]

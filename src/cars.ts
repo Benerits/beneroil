@@ -859,6 +859,9 @@ export interface CarManagerOpts {
   farActive?: () => boolean
   /** MARİNA: bekleme yuvaları suda kalsın (tekne rıhtım tahtasına çıkmaz) */
   isWater?: () => boolean
+  /** aktif B2B sözleşmesi — FİLO ARAÇLARI garantili gelir (oyuncu raporu:
+   *  "ihale aldım, kimse gelmiyor") */
+  contract?: () => { fuel: FuelType; dailyLiters: number } | null
   /** ünitenin oyuncu açısı (rad) — araç slotta bu açıyla hizalanır */
   pumpAngle?: (i: number) => number
   evAngle?: (i: number) => number
@@ -1069,6 +1072,18 @@ export class CarManager {
         this.spawnTransit('far')
         this.farTimer = (2.0 + Math.random() * 2.4) * waterMul / pull
       } else this.farTimer = 0.5
+    }
+    // ---- FİLO ARAÇLARI (ihale fixi 2. adım): sözleşme aktifken müşteri GARANTİLİ gelir.
+    // Gün ~160 sn → ~20 sn'de bir filo aracı; her biri taahhüdün ~1/8'ini alır.
+    // Organik satış üstüne biner → taahhüt dolabilir; oyuncu filoyu GÖZLE görür.
+    const ct = this.opts.contract?.()
+    if (ct && !this.opts.waterOnly?.()) {
+      this.fleetTimer -= dt
+      const fleetOn = this.cars.filter(c => c.segment === 'filo' && c.phase !== 'gone').length
+      if (this.fleetTimer <= 0 && fleetOn < 3 && spawnClear('near')) {
+        this.fleetTimer = 20
+        this.spawnFleet(ct)
+      }
     }
 
     // ---- ARAÇ-ARAÇ ÇARPIŞMASI: KAPALI (ürün kararı) ----
@@ -1421,6 +1436,24 @@ export class CarManager {
     let r = Math.random() * tot
     for (const b of segs) { r -= b.share; if (r <= 0) return b }
     return segs[segs.length - 1]
+  }
+
+  private fleetTimer = 6
+  /** Sözleşme filosu: girişi ZORUNLU (entryChance zarı yok), yakıt/tutar sözleşmeden */
+  private spawnFleet(ct: { fuel: FuelType; dailyLiters: number }) {
+    const price = this.opts.prices()[ct.fuel]
+    const L = Math.max(40, Math.round(ct.dailyLiters / 8))
+    const seg: CarSegment[] = [{ id: 'filo', share: 1, min: L * price * 0.9, max: L * price * 1.1,
+      marginMult: 1, fuel: ct.fuel, label: 'Filo' }]
+    const car = new Car(this.scene, this.lib, 'fuel', this.opts.prices(), seg, null)
+    car.lane = 'near'; car.station = 'near'; car.phase = 'transit'
+    car.wantsEnter = true
+    const svc = this.opts.serviceLane?.()
+    const lx = svc ? svc.near : LANE_NEAR
+    car.group.position.set(lx, -40, 0)
+    car.group.rotation.z = Math.PI / 2
+    car.setPath([new THREE.Vector3(lx, 44, 0)])
+    this.cars.push(car)
   }
 
   private spawnTransit(lane: 'near' | 'far') {
