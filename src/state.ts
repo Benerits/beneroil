@@ -957,12 +957,15 @@ export class GameState {
    *  TAVAN 8M (oyuncu raporu: tek şubenin sınırlı kalemleri ~₺1.63M — ×2 katlama bir yerde
    *  fiziksel imkânsıza dönüyordu). Eşik artık ŞİRKET GENELİ ekipmana bakar (aşağıda). */
   handoverThreshold(): number {
-    // TAVAN ŞUBE SAYISIYLA ÖLÇEKLENİR (oyuncu raporu: "devirde diğer şubeler
-    // sıfırlanmadığı için sonraki limiti dolduramıyorum"): tek şubenin kurulabilir
-    // sınırlı ekipmanı ~₺1.63M — şube başına ₺1.2M tavan her kademeyi ulaşılabilir
-    // tutar; yeni şube açmak tavanı da büyütür (8M mutlak üst sınır durur).
-    const cap = Math.min(8_000_000, 1_200_000 * Math.max(1, this.unlockedLocs.length))
-    return Math.min(cap, 250_000 * Math.pow(2, this.handoverCount))
+    // İKİ AŞAMALI EŞİK (oyuncu raporları: "diğer şubeler sıfırlanmıyor, dolduramıyorum"
+    // + "4M'den 2.4M'ye düştü ve artmıyor"): şube-tavanına (şube başına ₺1.2M) kadar
+    // her devirde ×2; tavanı aşınca ×1.35'lik YUMUŞAK artışa geçer — eşik asla
+    // sabitlenmez (devir spam'i kapalı) ama yeni şube açmadan da duvara çarpmaz.
+    // Mutlak üst sınır ₺8M.
+    const soft = 1_200_000 * Math.max(1, this.unlockedLocs.length)
+    let t = 250_000
+    for (let i = 0; i < this.handoverCount; i++) t = t < soft ? Math.min(t * 2, Math.max(soft, t * 1.35)) : t * 1.35
+    return Math.min(8_000_000, Math.round(t / 10_000) * 10_000)
   }
   /** ŞİRKET GENELİ kurulu ekipman: aktif şube + pasif şubelerin snapshot'taki değeri.
    *  MANTIK HATASI FİXİ: eşik tek şubeden karşılanamıyordu (maks ~1.6M sınırlı kalem);
