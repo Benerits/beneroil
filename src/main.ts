@@ -1606,12 +1606,11 @@ function syncAttendants() {
   for (const [key, w] of want) {
     const b = world.buildings.find(x => x.id === w.bid)
     if (!b) continue
-    // KONUM (Oğuz v2): oyuncunun KAMERA SAĞI = ekranda pompanın SOLU — figür tam
-    // pompanın yanında, görünür tarafta durur. Ekran-sağ vektörü kamera (1,2,1)
-    // yönünden türetildi ≈ dünya (-0.89, +0.45); araç slotu +x tarafında olduğundan
-    // bu taraf yanaşma yolunun her zaman DIŞINDA.
+    // KONUM (Oğuz v3 — mor X kalibrasyonu): pompanın ekrandaki ÖN-SOL köşesi,
+    // pad'in üstünde. v2'deki (-0.62,+0.34) ekranda ÜST-SAĞA düşmüştü; X'in yeri
+    // bunun tersi yönde → dünya (+0.58, -0.42). Yükseklik aynı (z=0, pad'e basar).
     const bx = b.group.position.x, by = b.group.position.y
-    const dx = -0.62, dy = 0.34
+    const dx = 0.58, dy = -0.42
     let fig = attendantFigs.get(key)
     if (!fig) { fig = attendantMesh(w.kind); world.scene.add(fig); attendantFigs.set(key, fig) }
     fig.position.set(bx + dx, by + dy, 0) // pompa taşınırsa figür de takip eder
