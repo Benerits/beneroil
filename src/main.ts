@@ -1300,8 +1300,10 @@ const cars = new CarManager(world.scene, modelLib, {
   segments: () => state.activeSegments(),
   // MARİNA: tekne segmentleri (kara şubede boş dizi döner → tekne doğmaz)
   boats: () => state.boatCarSegments(),   // TUTAR da buradan gelir (bkz. boatCarSegments)
-  // MARİNA: su şubesinde ARABA ASLA doğmaz — tekne yoksa hiçbir şey doğmaz
-  waterOnly: () => state.theme().lane.kind === 'water',
+  // MARİNA: su şubesinde ARABA ASLA doğmaz — tekne yoksa hiçbir şey doğmaz.
+  // KRİTİK: SAHNENİN temasına bakılır (world locHint ile kurulur) — state.theme()
+  // save yüklenene kadar 'kasaba' döndüğünden denizde araba doğuyordu.
+  waterOnly: () => world.theme.lane.kind === 'water',
   // 4 ŞERİTLİ YOL: istasyona girecek araçların servis şeridi (temadan)
   serviceLane: () => state.theme().lane.service,
   // Araçlar birbirinin içinden geçer (ölçüm: servis 267→363, tıkanma 41→0).
@@ -1329,7 +1331,7 @@ const cars = new CarManager(world.scene, modelLib, {
   // Otoyolda orta BARİYER var: karşı yön fiziksel olarak erişilemez → karşı istasyon YOK
   // (rapor §6.4: bunun yerine ayna simetrik ikinci tesis ayrı yatırımdır).
   farActive: () => world.farStationOn && !state.theme().lane.barrier,
-  isWater: () => state.theme().lane.kind === 'water',
+  isWater: () => world.theme.lane.kind === 'water', // sahne teması (save gecikmesine dayanıklı)
   farGateInY: () => world.gateIn2.y,
   farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
@@ -1356,7 +1358,9 @@ const cars = new CarManager(world.scene, modelLib, {
   },
   // MARİNA: kapı noktası SUDA (iskele x 3.1..5.3'ün doğusu) — tekne giriş/çıkış
   // path'i tahtaların üstünden geçmez. Kara şubelerinde eski kapı (4.2) aynen.
-}, state.theme().lane.kind === 'water' ? 7.4 : 4.2)
+  // SAHNE teması: state.theme() kuruluş anında henüz 'kasaba' dönebiliyordu → 4.2
+  // kalıp tekneler yine iskeleden geçerdi.
+}, world.theme.lane.kind === 'water' ? 7.4 : 4.2)
 
 // ---- Müşteri paneli otomatik açılma tercihi (35 feedback: "sürekli önüme çıkıyor") ----
 // localStorage'da tutulur (save formatına DOKUNMAZ). Kapalıyken panel yalnız araca

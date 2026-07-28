@@ -1373,6 +1373,13 @@ export class CarManager {
         c.dispose(this.scene)
         return false
       }
+      // MARİNA TEMİZLİĞİ (Oğuz: "marinada neden arabalar var"): su şubesinde tekne
+      // olmayan her araç anında kaldırılır — save yüklenmeden önceki karelerde
+      // kara varsayılanıyla doğmuş arabalar denizde yüzüyordu.
+      if (this.opts.waterOnly?.() && !c.boat) {
+        c.dispose(this.scene)
+        return false
+      }
       return true
     })
   }
