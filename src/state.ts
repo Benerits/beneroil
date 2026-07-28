@@ -1019,6 +1019,14 @@ export class GameState {
   /** Sözleşme teklifleri: gün + kapasiteye göre ölçeklenir. Şart: ilgili yakıt kapasitesi
    *  taahhüdün en az 2 katı olmalı (yoksa oyuncu kendini batırır). Deterministik değil —
    *  gün numarasından türetilir ki panel açılıp kapandıkça teklif zıplamasın. */
+  /** Bir yakıtın TAHMİNİ günlük satış hacmi (L) — son 7 günün alım litresinden
+   *  (orta vadede alınan ≈ satılan). İhale taahhütleri buna ölçeklenir. */
+  estDailySales(f: FuelType): number {
+    const s = this.day - 7
+    const lit = this.fuelLog.filter(x => x.f === f && x.day > s).reduce((a, x) => a + x.liters, 0)
+    return Math.round(lit / 7)
+  }
+
   contractOffers(): Contract[] {
     const out: Contract[] = []
     const seedBase = this.day * 7919
@@ -1033,7 +1041,15 @@ export class GameState {
     for (let i = 0; i < TEMPLATES.length; i++) {
       const tpl = TEMPLATES[i]
       const cap = this.fuelCapacity(tpl.fuel)
-      const daily = Math.round(tpl.lit * (0.85 + rnd(i) * 0.4) / 50) * 50
+      // DENGE FİXİ (2 oyuncu raporu: "ihale aldım, kimse almıyor, ceza yiyorum"):
+      // şablon litresi oyuncunun GERÇEK satış hızına bakmıyordu — 900L/gün dizel
+      // taahhüdü kasaba hacmiyle imkânsızdı, sözleşme ceza tuzağına dönüyordu.
+      // Taahhüt artık tahmini günlük satışın ~%60'ıyla SINIRLI; o yakıtı neredeyse
+      // hiç satmayan oyuncuya o teklif HİÇ gösterilmez.
+      const est = this.estDailySales(tpl.fuel)
+      if (est < 120) continue
+      const tplDaily = Math.round(tpl.lit * (0.85 + rnd(i) * 0.4) / 50) * 50
+      const daily = Math.max(100, Math.min(tplDaily, Math.round(est * 0.6 / 50) * 50))
       if (cap < daily * 2) continue // kapasite şartı: taahhüdün 2 katı depo gerekir
       const pricePerL = Math.round(this.prices[tpl.fuel] * tpl.disc * 10) / 10
       const gross = daily * tpl.days * pricePerL
@@ -1056,6 +1072,17 @@ export class GameState {
     if (this.contract) return false
     this.contract = { ...c, daysLeft: c.daysTotal, deliveredToday: 0, missedDays: 0 }
     return true
+  }
+  /** İHALE FESHİ (2 oyuncu isteği: "iptal edemiyorum, ceza tuzağı"): tek seferlik
+   *  cayma bedeli = 2 günlük ceza; itibar -0.2. Kalan günlerin cezasından her zaman ucuz. */
+  cancelContract(): { fee: number } | null {
+    const c = this.contract
+    if (!c) return null
+    const fee = Math.min(this.money, c.penalty * 2)
+    this.money -= fee
+    this.addRep(-0.2)
+    this.contract = null
+    return { fee }
   }
   /** Gün dönümünde çağrılır: taahhüdü kapat, gelir/ceza uygula, süreyi işlet.
    *  Döner: oyuncuya gösterilecek olay ('ok' | 'miss' | 'done' | 'fail') + tutar. */

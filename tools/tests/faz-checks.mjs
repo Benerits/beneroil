@@ -213,6 +213,12 @@ console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
   const s12 = new GameState()
   check('küçük tankta teklif YOK (kapasite şartı)', s12.contractOffers().length === 0)
   s12.tankLevel = 3; s12.tankCounts.dizel = 4; s12.tankCounts.benzin = 3; s12.tankCounts.lpg = 2
+  // YENİ KURAL (2 oyuncu raporu fixi): teklif, oyuncunun GERÇEK satış hızına ölçeklenir —
+  // satış geçmişi olmayan oyuncuya teklif GELMEZ. Testte 7 günlük hacim tohumla:
+  s12.day = 10
+  for (let d = 4; d <= 10; d++) for (const [f, L] of [['dizel', 1600], ['benzin', 1200], ['lpg', 900]])
+    s12.fuelLog.push({ day: d, f, liters: L, cost: 1 })
+  check('satış geçmişi YOKKEN teklif de yok (taahhüt ölçeklemesi)', new GameState().contractOffers().length === 0)
   const offers = s12.contractOffers()
   check(`büyük tankta teklif var (${offers.length} adet)`, offers.length >= 2)
   for (const o of offers) {
@@ -228,6 +234,7 @@ console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
   // imza + tam teslim akışı
   const s13 = new GameState()
   s13.tankLevel = 3; s13.tankCounts.dizel = 4; s13.tankCounts.benzin = 3; s13.tankCounts.lpg = 2
+  s13.day = 10; for (let d = 4; d <= 10; d++) for (const [f, L] of [['dizel', 1600], ['benzin', 1200], ['lpg', 900]]) s13.fuelLog.push({ day: d, f, liters: L, cost: 1 })
   const off = s13.contractOffers()[0]
   check('imza başarılı', s13.signContract(off) === true)
   check('ikinci imza REDDEDİLİR (tek aktif sözleşme)', s13.signContract(off) === false)
@@ -250,6 +257,7 @@ console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
   // ihlal senaryosu: hep eksik teslim → fesih
   const s14 = new GameState()
   s14.tankLevel = 3; s14.tankCounts.dizel = 4; s14.tankCounts.benzin = 3; s14.tankCounts.lpg = 2
+  s14.day = 10; for (let d = 4; d <= 10; d++) for (const [f, L] of [['dizel', 1600], ['benzin', 1200], ['lpg', 900]]) s14.fuelLog.push({ day: d, f, liters: L, cost: 1 })
   s14.signContract(s14.contractOffers()[0])
   let last = null; guard = 0
   while (s14.contract && guard++ < 80) last = s14.processContractDay()
@@ -259,6 +267,7 @@ console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
   // save round-trip: contract serialize/hydrate
   const s15 = new GameState()
   s15.tankLevel = 3; s15.tankCounts.dizel = 4
+  s15.day = 10; for (let d = 4; d <= 10; d++) s15.fuelLog.push({ day: d, f: 'dizel', liters: 1600, cost: 1 })
   s15.signContract(s15.contractOffers()[0])
   s15.contract.deliveredToday = 123
   const ser = serializeState(s15)
@@ -270,7 +279,10 @@ console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
 
 console.log('== 13) Reviewer bulgularının regresyon testleri ==')
 {
-  const mk = () => { const x = new GameState(); x.tankLevel = 3; x.tankCounts.dizel = 4; x.tankCounts.benzin = 3; x.tankCounts.lpg = 2; return x }
+  const mk = () => { const x = new GameState(); x.tankLevel = 3; x.tankCounts.dizel = 4; x.tankCounts.benzin = 3; x.tankCounts.lpg = 2
+    // taahhüt ölçeklemesi (satış geçmişi şartı) için 7 günlük hacim tohumu
+    x.day = 10; for (let d = 4; d <= 10; d++) for (const [f, L] of [['dizel', 1600], ['benzin', 1200], ['lpg', 900]]) x.fuelLog.push({ day: d, f, liters: L, cost: 1 })
+    return x }
   // (1) otobüs segmenti artık truckOnly (sedan'a 278L dizel talebi gitmez)
   const a = new GameState(); a.wideGates = true; a.pumps = 6
   check('otobüs segmenti truckOnly (tır-dışı araca düşmez)', a.activeSegments().find(x => x.id === 'otobus').truckOnly === true)

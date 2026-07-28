@@ -830,15 +830,18 @@ function openOfficePanel() {
         + row(t('Kaçırılan gün'), `${c.missedDays}`, c.missedDays > 0 ? 'bad' : '')
         + row(t('Tamamlama primi'), `₺${tl(c.bonus)}`, 'good')
         + row(t('Eksik gün cezası'), `₺${tl(c.penalty)}`, 'bad')
+        // FESİH (oyuncu isteği ×2): ceza tuzağından çıkış — cayma bedeli 2 günlük ceza
+        + `<button class="btn danger" id="of-cancel-contract" style="width:100%;justify-content:center;margin-top:8px">${t('Sözleşmeyi Feshet — cayma ₺{0} + itibar −0.2', tl(c.penalty * 2))}</button>`
     } else {
       const offers = state.contractOffers()
       if (!offers.length) {
-        cel.innerHTML = `<div class="sd" style="padding:6px 4px">${t('Henüz sözleşme teklifi yok — ilgili yakıtın deposunu büyüt (taahhüdün 2 katı kapasite şart).')}</div>`
+        cel.innerHTML = `<div class="sd" style="padding:6px 4px">${t('Henüz sözleşme teklifi yok — teklifler DÜZENLİ sattığın yakıtlara gelir (son 7 günde günde 120L+ satış) ve deponun taahhüdün 2 katı olması gerekir.')}</div>`
       } else {
         cel.innerHTML = offers.map(o =>
           `<div class="prow" style="flex-wrap:wrap">`
           + `<span class="pl" style="flex:1 1 100%;font-weight:800">${o.name} · ${FUEL_LABEL[o.fuel]}</span>`
           + `<span class="pc" style="flex:1 1 100%">${t('{0} gün · günde {1}L · ₺{2}/L · prim ₺{3} · ceza ₺{4}', o.daysTotal, o.dailyLiters, o.pricePerL, tl(o.bonus), tl(o.penalty))}</span>`
+          + `<span class="pc" style="flex:1 1 100%;color:var(--muted)">${t('Normal müşteri satışların taahhüde sayılır — tahmini günlük {0} satışın: ~{1}L', FUEL_LABEL[o.fuel], state.estDailySales(o.fuel))}</span>`
           + `<button class="btn sbuy good" data-sign="${o.id}" style="margin-top:4px">${t('İmzala')}</button></div>`).join('')
       }
     }
@@ -1007,6 +1010,17 @@ document.getElementById('of-prestige')?.addEventListener('click', e => {
 
 // B2B sözleşme imzalama
 document.getElementById('of-contracts')?.addEventListener('click', e => {
+  // FESİH: iki basışlı onay (yanlışlıkla tek tıkla feshedilmesin)
+  if ((e.target as HTMLElement).closest('#of-cancel-contract')) {
+    const b = document.getElementById('of-cancel-contract') as HTMLButtonElement
+    if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = t('EMİN MİSİN? Feshetmek için tekrar bas'); return }
+    const res = state.cancelContract()
+    if (res) {
+      ui.toast(t('📋 Sözleşme feshedildi — cayma bedeli ₺{0} kesildi.', res.fee.toLocaleString('tr-TR')), 'bad', true)
+      openOfficePanel(); persist()
+    }
+    return
+  }
   const btn = (e.target as HTMLElement).closest('button[data-sign]') as HTMLButtonElement | null
   if (!btn) return
   const offer = state.contractOffers().find(o => o.id === btn.dataset.sign)
