@@ -769,8 +769,19 @@ export class GameState {
     const next = this.applyLoc(this.locSnapshots[to] ?? null)
     delete this.locSnapshots[to] // aktif şube snapshot'ta DURMAZ (çift sayım = anti-cheat 409)
     this.activeLoc = to
+    // D12 (analiz): İLK kasaba-dışı şubeye İLK geçişte Müdür Sv.1 HEDİYE — yeni şubeyi
+    // işletmeye başlama eşiğini düşürür (bir kez; yovmiyesi normal işler)
+    if (!this.firstBranchGift && to !== 'kasaba' && this.managerLevel === 0) {
+      this.firstBranchGift = true
+      this.managerLevel = 1
+      this.giftToast = t('🎁 İlk şube hediyesi: bu şubeye Müdür Sv.1 atandı — kumbara + yakıt siparişi otomatik!')
+    }
     return next
   }
+  /** D12: tek seferlik ilk-şube hediyesi verildi mi (ADDITIVE save alanı) */
+  firstBranchGift = false
+  /** main gösterip sıfırlar */
+  giftToast: string | null = null
   /** Şube açma bedeli/şartı temadan gelir (nakit + marka yıldızı) */
   canUnlockLoc(id: LocId): { ok: boolean; cash: number; stars: number; reason: string } {
     const th = THEMES[id]
@@ -1969,6 +1980,8 @@ const ACHIEVEMENTS: [string, string, (s: GameState) => boolean][] = [
   ['atomic', t('Atom karıncası — Reaktör kuruldu!'), s => s.hasSMR],
   ['landlord', t('Toprak ağası — 9 arsanın tamamı!'), s => s.ownedParcels.size >= 9],
   ['week-one', t('7. gün — Bir haftadır ayaktasın!'), s => s.day >= 7],
+  // D12 (analiz): çoklu şube hedefini görünür kılan başarım
+  ['chain', t('Zincir başladı — İkinci şuben açık!'), s => s.unlockedLocs.length >= 2],
 ]
 
 export function checkAchievements(s: GameState) {
@@ -1989,7 +2002,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount',
+  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
 ] as const
 

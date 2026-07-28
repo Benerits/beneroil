@@ -742,10 +742,14 @@ function openOfficePanel() {
       const note = c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', c.stars) : `₺${tl(c.cash)}`
       // D11 (analiz): "ne kadar kaldı" görünür hedef — kilitli şubede ilerleme çubuğu
       const pct = Math.min(100, Math.round((state.money / Math.max(1, c.cash)) * 100))
+      // D13 (analiz): kilitli şubenin CANLI ÖNİZLEMESİ — merak yaratır ("marina vitrini")
+      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="/gen/loc-${id}.jpg" alt="" loading="lazy" `
+        + `style="width:100%;max-height:110px;object-fit:cover;border-radius:8px;border:1.5px solid var(--edge);filter:saturate(.9)" `
+        + `onerror="this.parentElement.style.display='none'"></div>`
       const prog = c.reason !== 'yildiz' && !c.ok
-        ? `<div style="flex:1 0 100%;margin-top:4px"><div class="pz-bar" style="height:6px"><div class="pz-fill" style="width:${pct}%"></div></div>`
+        ? `${thumb}<div style="flex:1 0 100%;margin-top:4px"><div class="pz-bar" style="height:6px"><div class="pz-fill" style="width:${pct}%"></div></div>`
           + `<div style="font-size:11px;font-weight:650;color:var(--muted);margin-top:2px">${t('₺{0} kaldı (%{1})', tl(Math.max(0, c.cash - state.money)), String(pct))}</div></div>`
-        : ''
+        : thumb
       return `<div class="prow" style="flex-wrap:wrap"><span class="pl" style="color:var(--muted)">${th.name}</span>`
         + `<span class="pc">${note}</span>`
         + (c.ok ? `<button class="btn sbuy good" data-unlockloc="${id}">${t('Şube Aç')}</button>`
@@ -881,7 +885,7 @@ function renderProfile() {
   const acc = document.getElementById('pf-account')
   if (acc) acc.innerHTML =
     row(t('Giriş serisi'), `${state.loginStreak} gün 🔥`)
-    + row(t('Başarımlar'), `${state.achievements.size} / 8`)
+    + row(t('Başarımlar'), `${state.achievements.size} / 9`)
     + row(t('Günlük görev'), state.dailyDone ? t('tamamlandı ✓') : `${state.dailyServed}/15`)
     + `<div class="pf-synced"><svg class="ic" style="vertical-align:-3px"><use href="#i-cloud"/></svg> ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
 }
@@ -934,6 +938,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   placedRects.push(...(next.placedRects as typeof placedRects))
   localStorage.setItem(LOC_HINT_KEY, id) // reload'da sahne doğru temayla kurulsun
   ui.toast(t('📍 {0} şubesine geçildi — sahne yükleniyor…', THEMES[id].name), 'good', true)
+  if (state.giftToast) { ui.toast(state.giftToast, 'good', true); state.giftToast = null } // D12 hediyesi
   lastRemotePush = 0 // throttle'ı atla: şube değişimi reload'dan ÖNCE buluta yazılmalı
   persist()
   Car.solids = hardRects()
@@ -4245,6 +4250,12 @@ function frame() {
     }
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
+    // B6 (analiz): İLK GÜN raporu = duygusal kontrol noktası — misafire kayıp-anı
+    // hatırlatması (oturumda tek gate: 10k gate'i zaten çıktıysa tekrarlama)
+    if (!auth.loggedIn() && state.day === 2 && profit > 0 && !firstTenGateShown && !guestGateShown) {
+      firstTenGateShown = true
+      showAuthGate(t('İlk günün kapandı: ₺{0} kâr! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus.', profit.toLocaleString('tr-TR')))
+    }
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
     const wages = state.dailyWages()
     if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
