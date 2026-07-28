@@ -1621,9 +1621,12 @@ export class GameState {
   }
 
   private pendingTotal(): number { return Object.values(this.pendingCash).reduce((a, v) => a + (v || 0), 0) }
-  /** Aktif (toplam varlık): kasa + kumbaralar + satılabilir ekipman değeri */
-  assets(): number { return this.money + this.pendingTotal() + this.eligibleCollateral().reduce((a, c) => a + c.value, 0) }
-  /** Net işletme sermayesi = likit varlık (kasa+kumbara) − kısa vadeli borç (kalan kredi) */
+  /** İŞLETME SERMAYESİ (Oğuz tanımı): tanktaki akaryakıtın SATIŞ fiyatıyla değeri —
+   *  stok, satılınca kasaya dönecek para olarak okunur */
+  workingCapital(): number { return FUELS.reduce((a, f) => a + this.tanks[f] * this.prices[f], 0) }
+  /** AKTİF (Oğuz tanımı): kasa + işletme sermayesi + inşaattan elde edilenler (kurulu ekipman) */
+  assets(): number { return this.money + this.workingCapital() + this.equipmentValue() }
+  /** (eski gösterge — panelde artık kullanılmıyor, banka tarafı için duruyor) */
   netWorkingCapital(): number { return this.money + this.pendingTotal() - (this.loan.active ? this.loan.remaining : 0) }
   /** son N güne ait satış cirosu */
   salesInPeriod(days: number): number { const s = this.day - days; return this.salesLog.filter(x => x.day > s).reduce((a, x) => a + x.rev, 0) }

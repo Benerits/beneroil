@@ -625,11 +625,13 @@ function openOfficePanel() {
   const row = (k: string, v: string, cls = '') => `<div class="stat"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`
 
   // 1) Finansal durum
-  const nwc = state.netWorkingCapital()
+  // Oğuz tanımları: Kasa = eldeki net · İşletme Sermayesi = tanktaki yakıt × satış
+  // fiyatı (stok değeri) · Aktif = kasa + sermaye + inşaattan elde edilenler
+  const wc = state.workingCapital()
   const fin = document.getElementById('of-financial')
   if (fin) fin.innerHTML =
     row(t('Aktif (varlık)'), `₺${tl(state.assets())}`, 'good')
-    + row(t('Net işletme sermayesi'), `₺${tl(nwc)}`, nwc >= 0 ? '' : 'bad')
+    + row(t('İşletme Sermayesi (stok)'), `₺${tl(wc)}`)
     + row(t('Kasa'), `₺${tl(state.money)}`)
     + row(t('Günlük gider (yovmiye+OPEX+reklam)'), `₺${tl(state.dailyWages() + state.dailyOpex() + state.marketingBudget)}`, 'bad')
 
