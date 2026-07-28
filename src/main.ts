@@ -811,7 +811,7 @@ function openOfficePanel() {
       html += `<div class="pz-prog-head"><span>${t('Sonraki yıldıza')}</span>`
         + `<span class="pz-prog-num">₺${tl(eq)} / ₺${tl(thr)}</span></div>`
         + `<div class="pz-bar"><div class="pz-fill" style="width:${pct}%"></div></div>`
-        + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik önce ikiye katlanır; şube kapasitesine yaklaşınca %35'lik adımlarla artar (asla sabitlenmez).', tl(thr))}</div>`
+        + `<div class="pz-fine">${t('TÃM ÅUBELERÄ°N kurulu ekipmanÄ± âº{0} deÄerine ulaÅÄ±nca devir aÃ§Ä±lÄ±r â yeni Åube donatmak da sayar. EÅik Ã¶nce ikiye katlanÄ±r; Åube kapasitesine yaklaÅÄ±nca %35’lik adÄ±mlarla artar (asla sabitlenmez).', tl(thr))}</div>`
     }
     pel.innerHTML = html
   }
