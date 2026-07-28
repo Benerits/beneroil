@@ -263,6 +263,20 @@ setInterval(() => {
       guestPaused = true
       // huni ölçümü: kapı kaç kez gösterildi (gate_converted ile oranı = başlama dönüşümü)
       fetch('/api/metric', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: 'gate_shown' }) }).catch(() => {})
+      // C9 (analiz): DÖNÜŞ KARTI — yerel kayıttan müdürlü şube kasalarını oku;
+      // birikmiş para varsa kapıda göster ("geri gelme sebebi" ilk bakışta)
+      try {
+        const g = auth.loadGuest() as { s?: { branchVault?: Record<string, number> } } | null
+        const bv = g?.s?.branchVault
+        const tot = bv ? Object.values(bv).reduce((a, b) => a + (Number(b) || 0), 0) : 0
+        const card = document.getElementById('ag-vault') as HTMLDivElement | null
+        if (card) {
+          if (tot >= 100) {
+            card.textContent = t('👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — girip topla!', Math.round(tot).toLocaleString('tr-TR'))
+            card.style.display = 'block'
+          } else card.style.display = 'none'
+        }
+      } catch { /* kart gösterilemezse kapı normal çalışır */ }
     }
     showAuthGate = openGate
     document.getElementById('boot')?.remove() // A5: yükleme maskesi — sahne hazır, kaldır
@@ -3034,6 +3048,11 @@ if (saveLoaded && state.activeLoc !== locHint && !sessionStorage.getItem('benelo
 }
 if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)
+// C9 (analiz): dönen oyuncuya birikimi hatırlat — nereden toplanacağıyla birlikte
+if (saveLoaded && state.branchVaultTotal() >= 100) {
+  ui.toast(t('👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!',
+    Math.round(state.branchVaultTotal()).toLocaleString('tr-TR')), 'good', true)
+}
 // eski yerel kayıt kalıntılarını temizle (artık her şey SQL'de)
 for (const key of Object.keys(localStorage)) {
   if (key.startsWith('benzinlik-save-v1')) localStorage.removeItem(key)
