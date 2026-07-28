@@ -244,10 +244,20 @@ console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
   check('tam teslim → ödeme alınır', r.kind === 'ok' && s13.money > money0, `${r.kind} +${r.amount}`)
   check('gün sayacı işledi', s13.contract.daysLeft === off.daysTotal - 1)
   check('teslim sayacı sıfırlandı', s13.contract.deliveredToday === 0)
-  // eksik teslim → ceza
+  // FİLO SİGORTASI (Oğuz: 'boşa zarar yazmasın'): 0 fiziksel teslim ama TANK DOLU →
+  // eksik depodan tamamlanır, gün OK, ceza YOK, tank düşer
+  const tank0 = s13.contract.dailyLiters + 500
+  s13.tanks[s13.contract.fuel] = tank0
+  const mIns = s13.money
+  r = s13.processContractDay() // deliveredToday = 0 ama tank yeterli
+  check('FİLO SİGORTASI: 0 teslim + dolu tank → gün OK + ödeme + tank düştü',
+    r.kind === 'ok' && s13.money > mIns && s13.tanks[s13.contract.fuel] < tank0 && s13.contract.missedDays === 0,
+    `${r.kind} tank=${Math.round(s13.tanks[s13.contract.fuel])}`)
+  // eksik teslim → ceza (tank YETERSİZKEN — gerçek ihmal)
+  s13.tanks[s13.contract.fuel] = 0
   const m1 = s13.money
-  r = s13.processContractDay() // deliveredToday = 0
-  check('eksik teslim → ceza (kasa düşer, missedDays artar)', r.kind === 'miss' && s13.money < m1 && s13.contract.missedDays === 1)
+  r = s13.processContractDay() // deliveredToday = 0, tank boş
+  check('eksik teslim + BOŞ tank → ceza (kasa düşer, missedDays artar)', r.kind === 'miss' && s13.money < m1 && s13.contract.missedDays === 1)
   // tamamlama: kalan günleri tam teslimle bitir
   let guard = 0
   while (s13.contract && guard++ < 80) { s13.contract.deliveredToday = s13.contract.dailyLiters; r = s13.processContractDay() }
@@ -258,6 +268,7 @@ console.log('== 12) B2B sözleşmeleri (Katman 4a) ==')
   const s14 = new GameState()
   s14.tankLevel = 3; s14.tankCounts.dizel = 4; s14.tankCounts.benzin = 3; s14.tankCounts.lpg = 2
   s14.day = 10; for (let d = 4; d <= 10; d++) for (const [f, L] of [['dizel', 1600], ['benzin', 1200], ['lpg', 900]]) s14.fuelLog.push({ day: d, f, liters: L, cost: 1 })
+  for (const f of ['benzin','dizel','lpg']) s14.tanks[f] = 0 // fesih senaryosu = tank boş ihmali (sigorta devreye giremez)
   s14.signContract(s14.contractOffers()[0])
   let last = null; guard = 0
   while (s14.contract && guard++ < 80) last = s14.processContractDay()
@@ -288,6 +299,7 @@ console.log('== 13) Reviewer bulgularının regresyon testleri ==')
   check('otobüs segmenti truckOnly (tır-dışı araca düşmez)', a.activeSegments().find(x => x.id === 'otobus').truckOnly === true)
   // (2) kısa/kurcalanmış sözleşmede fesih ARTIK mümkün (bedava prim exploit'i kapandı)
   const b = mk()
+  for (const f of ['benzin','dizel','lpg']) b.tanks[f] = 0 // sigorta devreye giremesin (kurcalama senaryosu)
   b.contract = { id:'x', name:'hack', fuel:'dizel', daysTotal:1, daysLeft:1, dailyLiters:4000, pricePerL:20, bonus:120000, penalty:0, deliveredToday:0, missedDays:0 }
   const m0 = b.money
   const rb = b.processContractDay() // 0 teslim

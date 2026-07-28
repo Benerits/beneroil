@@ -1099,6 +1099,17 @@ export class GameState {
   processContractDay(): { kind: 'none' | 'ok' | 'miss' | 'done' | 'fail'; amount: number; name: string } {
     const c = this.contract
     if (!c) return { kind: 'none', amount: 0, name: '' }
+    // FİLO SİGORTASI (E2E kanıtı: yoğun istasyonda filo araçları kapıdan dönebiliyor
+    // ve taahhüt fiziksel trafikle ASLA garanti edilemiyor): gün sonunda eksik kalan
+    // litre, TANKTA YAKIT OLDUĞU SÜRECE depodan toplu filo alımıyla tamamlanır.
+    // Ceza yalnız gerçek ihmalde (tank yetersiz) yazılır — "boşa zarar" imkânsız.
+    {
+      const short = Math.max(0, c.dailyLiters - c.deliveredToday)
+      if (short > 0 && this.tanks[c.fuel] >= short) {
+        this.tanks[c.fuel] -= short
+        c.deliveredToday += short
+      }
+    }
     // TOLERANS (oyuncu raporu: "depom yeterli, yine ceza"): yuvarlamalar (₺→L çevrimi,
     // filo payları) taahhüdü 2-5 litre eksik bırakabiliyordu — %95 doluluk TAM sayılır.
     const delivered = Math.min(c.deliveredToday, c.dailyLiters)

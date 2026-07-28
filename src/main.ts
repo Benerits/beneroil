@@ -830,6 +830,7 @@ function openOfficePanel() {
         + row(t('Kaçırılan gün'), `${c.missedDays}`, c.missedDays > 0 ? 'bad' : '')
         + row(t('Tamamlama primi'), `₺${tl(c.bonus)}`, 'good')
         + row(t('Eksik gün cezası'), `₺${tl(c.penalty)}`, 'bad')
+        + `<div class="sd" style="padding:4px 4px 0">${t('Filo sigortası: gün sonunda eksik kalan taahhüt, tankından otomatik tamamlanır — tankta yeterli yakıt tuttuğun sürece ceza YOK.')}</div>`
         // FESİH (oyuncu isteği ×2): ceza tuzağından çıkış — cayma bedeli 2 günlük ceza
         + `<button class="btn danger" id="of-cancel-contract" style="width:100%;justify-content:center;margin-top:8px">${t('Sözleşmeyi Feshet — cayma ₺{0} + itibar −0.2', tl(c.penalty * 2))}</button>`
     } else {
@@ -3126,6 +3127,9 @@ function buyToast(id: string) {
 
 // 🧪 FULL / vitrin modu: ?full=1 ile her şey kurulu başlar
 const isFullMode = new URLSearchParams(location.search).has('full')
+// VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
+// doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
+if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = { get state() { return state }, get cars() { return cars } }
 let saveLoaded = false
 if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   try {
