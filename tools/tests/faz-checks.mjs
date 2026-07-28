@@ -622,6 +622,9 @@ console.log('== 18) Çevre Yolu imzası: trafik ışığı + yaya müşteri (rap
   // YAYA MÜŞTERİ: dükkan varsa ciro gelir, yoksa gelmez
   const w = new GameState()
   w.unlockedLocs.push('cevreyolu'); w.switchLoc('cevreyolu', { placedPos: {}, placedRot: {}, placedRects: [] })
+  // D12 hediyesi ilk şube geçişinde Müdür Sv.1 atar; müdür turu kumbarayı TOPLAYIP
+  // bu testin ölçtüğü pendingCash'i boşaltıyordu — yaya ölçümü için müdürü kapat
+  w.managerLevel = 0
   w.tick(25) // everySec 22
   check('dükkan yokken yaya müşteri geliri YOK', Object.keys(w.pendingCash).length === 0)
   w.marketLevel = 2; w.walkT = 0
