@@ -469,8 +469,15 @@ const locHint = (localStorage.getItem(LOC_HINT_KEY) as LocId | null) ?? 'kasaba'
 
 // Kenney modelleri (yüklenemezse prosedürele düşer) + AKTİF ŞUBENİN kiti.
 // Kit tembel: kasaba/çevre yolu oyuncusu tek bayt fazla indirmez (bkz. src/kits.ts).
+// AÇILIŞ SİGORTASI (2 oyuncu raporu: "İstasyonun hazırlanıyor"da takılı kaldı):
+// GLB fetch'lerinden biri ASILI kalır ya da REJECT ederse bu top-level await sonsuza
+// dek bekliyor/ölüyordu — boot maskesi hiç kalkmıyordu. Kit yüklemesi artık açılışı
+// KİLİTLEYEMEZ: 20 sn'de cevap yoksa veya hata varsa null ile devam edilir; sahne
+// prosedürel fallback'lerle her durumda kurulur, eksik kit arkada önemsizdir.
+const failSafe = <T,>(p: Promise<T | null>, ms = 20_000): Promise<T | null> =>
+  Promise.race([p.catch(() => null), new Promise<null>(res => setTimeout(() => res(null), ms))])
 const [modelLib, staticLib, branchKit] = await Promise.all([
-  loadModels(), loadStatics(), loadKit(locHint),
+  failSafe(loadModels()), failSafe(loadStatics()), failSafe(loadKit(locHint)),
 ])
 const world = new World(staticLib, locHint, branchKit)
 Car.boatKit = branchKit   // MARİNA: tekne modelleri kitten gelir (yoksa prosedürel gövde)
