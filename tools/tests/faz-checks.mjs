@@ -489,6 +489,7 @@ console.log('== 15b) Prestij: reviewer bulgularının regresyonu ==')
 
   // (8) sözleşme geliri prestijden etkilenir
   const m = new GameState(); m.brandStars = 4; m.tankLevel = 3; m.tankCounts.dizel = 4
+  m.day = 10; for (let d = 4; d <= 10; d++) m.fuelLog.push({ day: d, f: 'dizel', liters: 1600, cost: 1 })
   m.signContract(m.contractOffers().find(o => o.fuel === 'dizel'))
   m.contract.deliveredToday = m.contract.dailyLiters
   const money0 = m.money
