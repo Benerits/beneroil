@@ -14,7 +14,7 @@ import {
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
 } from './state'
-import { loadModels, loadStatics, loadCharacters, cloneModel as cloneChar, fitModel as fitChar } from './models'
+import { loadModels, loadStatics, loadCharacters, fitCharacter } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
 import { isNativePlatform } from './platform'
 import { THEMES } from './themes'
@@ -1578,7 +1578,7 @@ function attendantMesh(kind: 'pump' | 'ev'): THREE.Group {
   const uniform = kind === 'pump' ? 0xd64545 : 0x1fa8bc
   if (charLib?.length) {
     const proto = charLib[kind === 'pump' ? 1 : 4] // male-b pompacı, female-b şarjcı
-    const fig = fitChar(cloneChar(proto), 0.95, 'z')
+    const fig = fitCharacter(proto, 0.95)
     fig.traverse(m => { m.castShadow = true })
     const cap = roleCap(uniform); cap.position.z = 0.97; fig.add(cap)
     return fig
@@ -1625,7 +1625,7 @@ function personMesh(): THREE.Group {
   // KENNEY MİNİ KARAKTER (yüklendiyse) — 6 çeşitten rastgele; inmediyse prosedürel
   if (charLib?.length) {
     const proto = charLib[Math.floor(Math.random() * charLib.length)]
-    const fig = fitChar(cloneChar(proto), 0.9, 'z')
+    const fig = fitCharacter(proto, 0.9)
     fig.traverse(m => { m.castShadow = true })
     return fig
   }

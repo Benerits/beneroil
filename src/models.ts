@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js'
 
 // Kenney Car Kit (CC0, kenney.nl) — modeller Y-up ve +Z'ye bakar.
 // Bizim dünya: z yukarı, araç ileri yönü +x. Sarmalayıcı gruplarla çeviriyoruz.
@@ -51,6 +52,23 @@ export async function loadModels(): Promise<ModelLib | null> {
 
 export function cloneModel(proto: THREE.Group): THREE.Group {
   return proto.clone(true)
+}
+
+/** RIGGED karakter klonu + boy/yer ayarı — mini karakterler SkinnedMesh içerir;
+ *  normal clone(true) iskeleti kopyalayamadığından model GÖRÜNMEZ kalıyordu
+ *  ("sadece şapkası görünüyor" raporu). SkeletonUtils.clone şart. */
+export function fitCharacter(proto: THREE.Group, targetH: number): THREE.Group {
+  const g = skeletonClone(proto) as THREE.Group
+  const box = new THREE.Box3().setFromObject(g)
+  const s = targetH / Math.max(0.001, box.max.z - box.min.z)
+  g.scale.setScalar(s)
+  const b2 = new THREE.Box3().setFromObject(g)
+  g.position.x -= (b2.min.x + b2.max.x) / 2
+  g.position.y -= (b2.min.y + b2.max.y) / 2
+  g.position.z -= b2.min.z
+  const wrap = new THREE.Group()
+  wrap.add(g)
+  return wrap
 }
 
 /** KENNEY MİNİ KARAKTERLER (Oğuz: pompacı/müşteriler bunlardan olsun) — TEMBEL yüklenir
