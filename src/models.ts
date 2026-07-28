@@ -53,6 +53,22 @@ export function cloneModel(proto: THREE.Group): THREE.Group {
   return proto.clone(true)
 }
 
+/** KENNEY MİNİ KARAKTERLER (Oğuz: pompacı/müşteriler bunlardan olsun) — TEMBEL yüklenir
+ *  (açılışı bloklamaz, inmezse prosedürel figürler devrede kalır). ~250KB × 6. */
+export async function loadCharacters(): Promise<THREE.Group[] | null> {
+  try {
+    const loader = new GLTFLoader()
+    const NAMES = ['character-male-a', 'character-male-b', 'character-male-c',
+      'character-female-a', 'character-female-b', 'character-female-c']
+    const list = await Promise.all(NAMES.map(n =>
+      loader.loadAsync(`/kenney/characters/${n}.glb`).then(g => convert(g.scene as unknown as THREE.Group))))
+    return list
+  } catch (err) {
+    console.warn('Mini karakterler yüklenemedi, prosedürel figürler kullanılacak:', err)
+    return null
+  }
+}
+
 // ---- Statik yapılar (Kenney City kitleri) ----
 
 export interface StaticLib {

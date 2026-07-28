@@ -14,7 +14,7 @@ import {
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
 } from './state'
-import { loadModels, loadStatics } from './models'
+import { loadModels, loadStatics, loadCharacters, cloneModel as cloneChar, fitModel as fitChar } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
 import { isNativePlatform } from './platform'
 import { THEMES } from './themes'
@@ -1559,45 +1559,76 @@ function facName(id: string): string {
 const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean }>()
 
 // ---- POMPACI/ŞARJCI FİGÜRLERİ (Oğuz: "yovmiyeci varsa başına karakter koy") ----
-// Kenney karakter paketi projede yok; walker'larla aynı sanat dilinde prosedürel
-// figür: BenelOil kırmızısı üniforma + şapka. Ünite başında bekler.
-function attendantMesh(kind: 'pump' | 'ev'): THREE.Group {
+// KENNEY MİNİ KARAKTERLER tembel yüklenir; inene kadar (veya inmezse) walker'larla
+// aynı dilde prosedürel figür kullanılır. Rol, şapka rengiyle okunur:
+// pompacı KIRMIZI, şarjcı TURKUAZ.
+let charLib: THREE.Group[] | null = null
+loadCharacters().then(l => { charLib = l }) // açılışı BLOKLAMAZ
+function roleCap(uniform: number): THREE.Group {
   const g = new THREE.Group()
-  const uniform = kind === 'pump' ? 0xd64545 : 0x1fa8bc // pompacı kırmızı, şarjcı turkuaz
+  const capTop = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.07, 10),
+    new THREE.MeshLambertMaterial({ color: uniform }))
+  capTop.rotation.x = Math.PI / 2; capTop.position.z = 0.03; g.add(capTop)
+  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.02),
+    new THREE.MeshLambertMaterial({ color: uniform }))
+  brim.position.set(0.12, 0, 0); g.add(brim)
+  return g
+}
+function attendantMesh(kind: 'pump' | 'ev'): THREE.Group {
+  const uniform = kind === 'pump' ? 0xd64545 : 0x1fa8bc
+  if (charLib?.length) {
+    const proto = charLib[kind === 'pump' ? 1 : 4] // male-b pompacı, female-b şarjcı
+    const fig = fitChar(cloneChar(proto), 0.95, 'z')
+    fig.traverse(m => { m.castShadow = true })
+    const cap = roleCap(uniform); cap.position.z = 0.97; fig.add(cap)
+    return fig
+  }
+  const g = new THREE.Group()
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 10),
     new THREE.MeshLambertMaterial({ color: uniform }))
   body.rotation.x = Math.PI / 2; body.position.z = 0.32; body.castShadow = true; g.add(body)
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8),
     new THREE.MeshLambertMaterial({ color: 0xf0c8a0 }))
   head.position.z = 0.68; g.add(head)
-  const capTop = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.07, 10),
-    new THREE.MeshLambertMaterial({ color: uniform }))
-  capTop.rotation.x = Math.PI / 2; capTop.position.z = 0.78; g.add(capTop)
-  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.02),
-    new THREE.MeshLambertMaterial({ color: uniform }))
-  brim.position.set(0.12, 0, 0.75); g.add(brim)
+  const cap = roleCap(uniform); cap.position.z = 0.75; g.add(cap)
   return g
 }
 const attendantFigs = new Map<string, THREE.Group>()
 function syncAttendants() {
-  const want = new Map<string, { kind: 'pump' | 'ev'; bid: string }>()
-  for (const i of state.autoPumps) want.set(`p${i}`, { kind: 'pump', bid: i === 0 ? 'pump-0' : `pump-${i}` })
-  for (const i of state.autoChargers) want.set(`c${i}`, { kind: 'ev', bid: `charger-${i}` })
+  const want = new Map<string, { kind: 'pump' | 'ev'; bid: string; idx: number }>()
+  for (const i of state.autoPumps) want.set(`p${i}`, { kind: 'pump', bid: `pump-${i}`, idx: i })
+  for (const i of state.autoChargers) want.set(`c${i}`, { kind: 'ev', bid: `charger-${i}`, idx: i })
   for (const [key, fig] of attendantFigs) {
     if (!want.has(key)) { world.scene.remove(fig); attendantFigs.delete(key) }
   }
   for (const [key, w] of want) {
     const b = world.buildings.find(x => x.id === w.bid)
     if (!b) continue
-    const px = b.group.position.x + 1.1, py = b.group.position.y + 0.55
+    // ARAÇ ÇARPMASIN (Oğuz): figür, ünitenin ARAÇ SLOTUNA BAKAN yüzünün TERSİNE durur
+    const slot = w.kind === 'pump' ? world.pumpSlots[w.idx] : world.evSlots[w.idx]
+    const bx = b.group.position.x, by = b.group.position.y
+    let dx = 0.9, dy = 0.4
+    if (slot) {
+      const vx = bx - slot.x, vy = by - slot.y
+      const L = Math.hypot(vx, vy) || 1
+      dx = (vx / L) * 0.85; dy = (vy / L) * 0.85 + 0.25 // slotun tersi + hafif yana
+    }
     let fig = attendantFigs.get(key)
     if (!fig) { fig = attendantMesh(w.kind); world.scene.add(fig); attendantFigs.set(key, fig) }
-    fig.position.set(px, py, 0) // pompa taşınırsa figür de takip eder
+    fig.position.set(bx + dx, by + dy, 0) // pompa taşınırsa figür de takip eder
+    if (slot) fig.rotation.z = Math.atan2(slot.y - by, slot.x - bx) // yüzü slota dönük
   }
 }
 setInterval(syncAttendants, 2000)
 
 function personMesh(): THREE.Group {
+  // KENNEY MİNİ KARAKTER (yüklendiyse) — 6 çeşitten rastgele; inmediyse prosedürel
+  if (charLib?.length) {
+    const proto = charLib[Math.floor(Math.random() * charLib.length)]
+    const fig = fitChar(cloneChar(proto), 0.9, 'z')
+    fig.traverse(m => { m.castShadow = true })
+    return fig
+  }
   const g = new THREE.Group()
   const SHIRTS = [0xd66a5b, 0x5b8def, 0x62b56b, 0xe0b13e, 0x9a7bd0]
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 10),
