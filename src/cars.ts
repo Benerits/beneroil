@@ -1442,7 +1442,7 @@ export class CarManager {
   /** Sözleşme filosu: girişi ZORUNLU (entryChance zarı yok), yakıt/tutar sözleşmeden */
   private spawnFleet(ct: { fuel: FuelType; dailyLiters: number }) {
     const price = this.opts.prices()[ct.fuel]
-    const L = Math.max(40, Math.round(ct.dailyLiters / 8))
+    const L = Math.max(40, Math.ceil(ct.dailyLiters / 7)) // 8 araç × 1/7 ≈ %114 — yuvarlama asla eksik bırakmaz
     const seg: CarSegment[] = [{ id: 'filo', share: 1, min: L * price * 0.9, max: L * price * 1.1,
       marginMult: 1, fuel: ct.fuel, label: 'Filo' }]
     const car = new Car(this.scene, this.lib, 'fuel', this.opts.prices(), seg, null)

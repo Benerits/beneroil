@@ -811,7 +811,7 @@ function openOfficePanel() {
       html += `<div class="pz-prog-head"><span>${t('Sonraki yıldıza')}</span>`
         + `<span class="pz-prog-num">₺${tl(eq)} / ₺${tl(thr)}</span></div>`
         + `<div class="pz-bar"><div class="pz-fill" style="width:${pct}%"></div></div>`
-        + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik her devirde katlanır (tavan ₺8M).', tl(thr))}</div>`
+        + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik devirle katlanır; tavanı şube sayın belirler (şube başına ₺1,2M).', tl(thr))}</div>`
     }
     pel.innerHTML = html
   }
@@ -990,6 +990,8 @@ document.getElementById('of-prestige')?.addEventListener('click', e => {
     return
   }
   handoverArmedAt = 0
+  lastRemotePush = 0 // Oyuncu raporu ("2. devirde yıldız 1 kaldı"): reload'dan önce
+                     // push throttle'a takılıp yıldız buluta yazılamıyordu — throttle'ı atla
   const res = state.handover()
   if (!res) { ui.toast(t('Devir şartları sağlanmıyor.'), 'bad'); return }
   // Yerleşim tablolarını da temizle: yoksa boşalan arsada GÖRÜNMEZ DUVARLAR kalır
@@ -1005,7 +1007,7 @@ document.getElementById('of-prestige')?.addEventListener('click', e => {
     res.cash.toLocaleString('tr-TR'), res.stars, state.prestigeMult().toFixed(2)), 'good', true)
   audio.achieve()
   persist()
-  setTimeout(() => location.reload(), 1800) // sahne temiz kurulsun (ekipman gitti)
+  setTimeout(() => location.reload(), 2800) // sahne temiz kurulsun; push'a yetişme payı (yıldız kaybı fixi)
 })
 
 // B2B sözleşme imzalama
@@ -1604,19 +1606,16 @@ function syncAttendants() {
   for (const [key, w] of want) {
     const b = world.buildings.find(x => x.id === w.bid)
     if (!b) continue
-    // ARAÇ ÇARPMASIN (Oğuz): figür, ünitenin ARAÇ SLOTUNA BAKAN yüzünün TERSİNE durur
-    const slot = w.kind === 'pump' ? world.pumpSlots[w.idx] : world.evSlots[w.idx]
+    // KONUM (Oğuz v2): oyuncunun KAMERA SAĞI = ekranda pompanın SOLU — figür tam
+    // pompanın yanında, görünür tarafta durur. Ekran-sağ vektörü kamera (1,2,1)
+    // yönünden türetildi ≈ dünya (-0.89, +0.45); araç slotu +x tarafında olduğundan
+    // bu taraf yanaşma yolunun her zaman DIŞINDA.
     const bx = b.group.position.x, by = b.group.position.y
-    let dx = 0.9, dy = 0.4
-    if (slot) {
-      const vx = bx - slot.x, vy = by - slot.y
-      const L = Math.hypot(vx, vy) || 1
-      dx = (vx / L) * 0.85; dy = (vy / L) * 0.85 + 0.25 // slotun tersi + hafif yana
-    }
+    const dx = -0.62, dy = 0.34
     let fig = attendantFigs.get(key)
     if (!fig) { fig = attendantMesh(w.kind); world.scene.add(fig); attendantFigs.set(key, fig) }
     fig.position.set(bx + dx, by + dy, 0) // pompa taşınırsa figür de takip eder
-    if (slot) fig.rotation.z = Math.atan2(slot.y - by, slot.x - bx) // yüzü slota dönük
+    fig.rotation.z = Math.atan2(-dy, -dx) // yüzü pompaya dönük
   }
 }
 setInterval(syncAttendants, 2000)
@@ -1979,6 +1978,9 @@ function tickEvCharging(dt: number) {
       state.stats.served++
       state.stats.kwh += c.demandKwh
       state.stats.revenue += revenue
+      // Oyuncu raporu: "muhasebede karşı istasyon 0" — EV geliri yaka sayacına
+      // hiç yazılmıyordu; karşı yakada yalnız şarj olan kurulumda pay hep 0 kalıyordu.
+      state.addSideRevenue(c.station === 'far', revenue)
       let score = 4.5
       if (c.patienceFrac < 0.4) score -= 1.5
       ui.toast(t('⚡ {0} kWh şarj tamamlandı: +₺{1}', c.demandKwh, revenue), 'good')

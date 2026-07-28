@@ -956,7 +956,14 @@ export class GameState {
    *  (Idle Miner kalıbı: her kademe daha pahalı). Farm döngüsünü matematiksel olarak kapatır.
    *  TAVAN 8M (oyuncu raporu: tek şubenin sınırlı kalemleri ~₺1.63M — ×2 katlama bir yerde
    *  fiziksel imkânsıza dönüyordu). Eşik artık ŞİRKET GENELİ ekipmana bakar (aşağıda). */
-  handoverThreshold(): number { return Math.min(8_000_000, 250_000 * Math.pow(2, this.handoverCount)) }
+  handoverThreshold(): number {
+    // TAVAN ŞUBE SAYISIYLA ÖLÇEKLENİR (oyuncu raporu: "devirde diğer şubeler
+    // sıfırlanmadığı için sonraki limiti dolduramıyorum"): tek şubenin kurulabilir
+    // sınırlı ekipmanı ~₺1.63M — şube başına ₺1.2M tavan her kademeyi ulaşılabilir
+    // tutar; yeni şube açmak tavanı da büyütür (8M mutlak üst sınır durur).
+    const cap = Math.min(8_000_000, 1_200_000 * Math.max(1, this.unlockedLocs.length))
+    return Math.min(cap, 250_000 * Math.pow(2, this.handoverCount))
+  }
   /** ŞİRKET GENELİ kurulu ekipman: aktif şube + pasif şubelerin snapshot'taki değeri.
    *  MANTIK HATASI FİXİ: eşik tek şubeden karşılanamıyordu (maks ~1.6M sınırlı kalem);
    *  çoklu şube çağında devir doğal olarak şirket ölçeğinde — yeni şube donatmak yıldız
@@ -1089,10 +1096,13 @@ export class GameState {
   processContractDay(): { kind: 'none' | 'ok' | 'miss' | 'done' | 'fail'; amount: number; name: string } {
     const c = this.contract
     if (!c) return { kind: 'none', amount: 0, name: '' }
+    // TOLERANS (oyuncu raporu: "depom yeterli, yine ceza"): yuvarlamalar (₺→L çevrimi,
+    // filo payları) taahhüdü 2-5 litre eksik bırakabiliyordu — %95 doluluk TAM sayılır.
     const delivered = Math.min(c.deliveredToday, c.dailyLiters)
+    const target = c.dailyLiters * 0.95
     let amount = 0
     let kind: 'ok' | 'miss' = 'ok'
-    if (delivered >= c.dailyLiters - 1) {
+    if (delivered >= target) {
       amount = Math.round(c.dailyLiters * c.pricePerL * this.prestigeMult())
       this.money += amount
       this.stats.revenue += amount // ciro raporlarında görünsün (ofis: Satış & Faaliyet Kârı)
