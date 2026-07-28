@@ -645,6 +645,13 @@ export class UI {
     }
     this.setText(this.money, Math.round(state.money).toLocaleString('tr-TR'))
     this.setText(this.day, `${state.day}`)
+    // C10: giriş serisi rozeti (seri ≥2'de görünür)
+    const sc = el<HTMLDivElement>('streak-chip')
+    if (sc) {
+      const show = state.loginStreak >= 2 ? 'flex' : 'none'
+      if (sc.style.display !== show) sc.style.display = show
+      if (state.loginStreak >= 2) this.setText(el<HTMLSpanElement>('streak-n'), `${state.loginStreak}`)
+    }
     this.setText(this.rep, state.reputation.toFixed(1))
     this.setText(el<HTMLSpanElement>('quest'), state.dailyDone ? t('TAMAM') : `${state.dailyServed}/15`)
     if (this.activeCar) this.refreshPanel()

@@ -60,6 +60,11 @@ async function initDb() {
   )`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS guests int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS guest_signups int NOT NULL DEFAULT 0`)
+  // ÖLÇÜM BORCU (analiz E14-15): huni + oturum + reklam sayaçları
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS gate_shown int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS gate_converted int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS ad_views int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS session_minutes int NOT NULL DEFAULT 0`)
   await pool.query(`CREATE TABLE IF NOT EXISTS beneloil_notification (
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
@@ -822,6 +827,15 @@ async function handleApi(req, res, url) {
       }
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=20' })
       return res.end(JSON.stringify(statsCache.data))
+    }
+    if (url === '/api/metric' && req.method === 'POST') {
+      // Hafif huni/oturum sayacı — yalnız BEYAZ LİSTEDEKİ kolonlar (bumpStat kolon adı
+      // enterpolasyonu yapıyor; whitelist dışı girdi ASLA geçmez). IP başına saatlik tavan.
+      const mb = await readBody(req).catch(() => ({}))
+      const ALLOWED = new Set(['gate_shown', 'gate_converted', 'ad_views', 'session_minutes'])
+      const k = String((mb && mb.k) || '')
+      if (ALLOWED.has(k) && rateLimit('metric:' + k + ':' + clientIp(req), 90, 3600_000)) bumpStat(k)
+      return json(res, 200, { ok: true })
     }
     if (url === '/api/visit' && req.method === 'POST') {
       if (rateLimit('visit:' + clientIp(req), 1, 30_000)) bumpStat('visits')

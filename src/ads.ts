@@ -127,13 +127,18 @@ export function interstitial(name: string, opts: { day: number; won: boolean }, 
 }
 
 /** Ödüllü reklam (fırsatlar): oyuncu isterse izler → ödül. onDone(watched). */
+/** ölçüm (analiz E14): izlenen her rewarded reklam saatlik sayaca yazılır */
+function countAdView() {
+  fetch('/api/metric', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: 'ad_views' }) }).catch(() => {})
+}
+
 export function rewarded(name: string, onReward: () => void, onDone?: (watched: boolean) => void) {
   if (native && admob) {
     let ok = false
     // capacitor-community/admob: rewarded ödülü event ile gelir; basitleştirilmiş akış
     admob.addListener?.('onRewardedVideoAdReward', () => { ok = true })
     admob.showRewardVideoAd().then((r: any) => {
-      if (r?.type || ok) { ok = true; onReward() }
+      if (r?.type || ok) { ok = true; countAdView(); onReward() }
       onDone?.(ok)
     }).catch(() => onDone?.(false)).finally(() => prepareRewarded())
     return
@@ -143,7 +148,7 @@ export function rewarded(name: string, onReward: () => void, onDone?: (watched: 
     window.adBreak({
       type: 'reward', name,
       beforeReward: (showAdFn: () => void) => showAdFn(),
-      adViewed: () => { viewed = true; onReward() },
+      adViewed: () => { viewed = true; countAdView(); onReward() },
       adDismissed: () => { viewed = false },
       adBreakDone: () => onDone?.(viewed),
     })

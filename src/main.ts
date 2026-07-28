@@ -33,6 +33,13 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
 // ---- Misafir (hesapsız) HEMEN oynar; kayıt/giriş gate'i yalnız gün-eşiğinde veya "Kaydet"le açılır ----
 let showAuthGate: (headline?: string, hideGuestBtn?: boolean) => void = () => {}
 let guestPaused = false // misafir donması: başlangıç login gate'inde + gün-eşiğinde oyun donar
+// OTURUM SÜRESİ (analiz E14): oyun gerçekten oynanırken (kapı kapalı + sekme görünür)
+// dakikada 1 sayaç — saatlik toplamı "toplam oynanan dakika"yı verir
+setInterval(() => {
+  if (!guestPaused && document.visibilityState === 'visible') {
+    fetch('/api/metric', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: 'session_minutes' }) }).catch(() => {})
+  }
+}, 60_000)
 {
   const gated = !localStorage.getItem('benzinlik-token')
   if (gated) {
@@ -254,8 +261,11 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
       gate.style.display = 'flex'
       gate.classList.add('solid')
       guestPaused = true
+      // huni ölçümü: kapı kaç kez gösterildi (gate_converted ile oranı = başlama dönüşümü)
+      fetch('/api/metric', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: 'gate_shown' }) }).catch(() => {})
     }
     showAuthGate = openGate
+    document.getElementById('boot')?.remove() // A5: yükleme maskesi — sahne hazır, kaldır
     openGate() // başta HEP göster
     const proceedGuest = () => {
       // ekibe "misafir katıldı" push'u: oyuncu GERÇEKTEN misafir başlayınca, cihaz başına 1 kez
@@ -268,32 +278,11 @@ let guestPaused = false // misafir donması: başlangıç login gate'inde + gün
       gate.classList.remove('solid')
       maybeGuestGate() // gün-eşiği zaten dolduysa (yenileyip dönen misafir) gate ANINDA geri açılır (kayıt zorunlu)
     }
-    // Misafir'e basınca BİR KEZ kayıt-avantaj modalı (dönüşüm teşviki) — ikinci basışta direkt geçer
-    let guestPitchShown = false
+    // A4 (huni analizi): kayıt-avantaj ARA MODALI KALDIRILDI — başlama akışına fazladan
+    // tıklama ekliyordu; kayıt teklifi oyun İÇİ kancalarda (₺10k banner, gün-eşiği) sürüyor.
     gGuestBtn.addEventListener('click', () => {
-      if (guestPitchShown) { proceedGuest(); return }
-      guestPitchShown = true
-      const o = document.createElement('div')
-      o.id = 'guestpitch'
-      o.style.cssText = 'position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(20,28,38,.5);backdrop-filter:blur(3px)'
-      const li = (s: string) => `<div style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.45"><span style="color:var(--green);flex-shrink:0">✓</span><span>${s}</span></div>`
-      o.innerHTML = `<div style="max-width:360px;width:100%;background:var(--paper);border:1.5px solid var(--edge);border-bottom:3px solid var(--edge);border-radius:var(--r-lg);padding:20px 18px;box-shadow:var(--shadow);font-family:var(--font)">
-        <div style="font-size:17px;font-weight:800;margin-bottom:10px">${t('Misafir oynayabilirsin — ama kaydolursan:')}</div>
-        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:16px">
-          ${li(t('+₺2.500 başlangıç bonusu'))}
-          ${li(t('Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)'))}
-          ${li(t('İlerlemen bulutta — cihaz değişse de kaybolmaz'))}
-          ${li(t('Sıradaki Benerits oyununun kapalı BETA’sına erken erişim'))}
-        </div>
-        <button id="gp-reg" class="btn primary" style="width:100%;justify-content:center;font-weight:800;margin-bottom:8px">${t('Kayıt Ol (10 saniye)')}</button>
-        <button id="gp-guest" class="btn" style="width:100%;justify-content:center">${t('Yine de misafir devam et')}</button>
-      </div>`
-      document.body.appendChild(o)
-      document.getElementById('gp-guest')?.addEventListener('click', () => { o.remove(); proceedGuest() })
-      document.getElementById('gp-reg')?.addEventListener('click', () => {
-        o.remove()
-        ;(document.getElementById('gemail') as HTMLInputElement | null)?.focus()
-      })
+      fetch('/api/metric', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: 'gate_converted' }) }).catch(() => {})
+      proceedGuest()
     })
     // Oyun-içi "Şimdi Kayıt Ol" CTA (yalnız misafirken görünür) → gate'i yeniden açar
     const cta = document.getElementById('guestcta') as HTMLButtonElement
@@ -751,10 +740,16 @@ function openOfficePanel() {
       }
       const c = state.canUnlockLoc(id)
       const note = c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', c.stars) : `₺${tl(c.cash)}`
-      return `<div class="prow"><span class="pl" style="color:var(--muted)">${th.name}</span>`
+      // D11 (analiz): "ne kadar kaldı" görünür hedef — kilitli şubede ilerleme çubuğu
+      const pct = Math.min(100, Math.round((state.money / Math.max(1, c.cash)) * 100))
+      const prog = c.reason !== 'yildiz' && !c.ok
+        ? `<div style="flex:1 0 100%;margin-top:4px"><div class="pz-bar" style="height:6px"><div class="pz-fill" style="width:${pct}%"></div></div>`
+          + `<div style="font-size:11px;font-weight:650;color:var(--muted);margin-top:2px">${t('₺{0} kaldı (%{1})', tl(Math.max(0, c.cash - state.money)), String(pct))}</div></div>`
+        : ''
+      return `<div class="prow" style="flex-wrap:wrap"><span class="pl" style="color:var(--muted)">${th.name}</span>`
         + `<span class="pc">${note}</span>`
         + (c.ok ? `<button class="btn sbuy good" data-unlockloc="${id}">${t('Şube Aç')}</button>`
-                : `<button class="btn sbuy" disabled>${t('Kilitli')}</button>`) + `</div>`
+                : `<button class="btn sbuy" disabled>${t('Kilitli')}</button>`) + prog + `</div>`
     }).join('')
   }
 
