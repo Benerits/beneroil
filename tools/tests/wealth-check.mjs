@@ -28,10 +28,11 @@ console.log(`başlangıç servet: ₺${Math.round(w0).toLocaleString('tr-TR')}`)
 s.unlockedLocs.push('cevreyolu')
 s.switchLoc('cevreyolu', layout())
 const w1 = wealth(serializeState(s))
-// İLK kez açılan şube kendi başlangıç arsasıyla gelir (+₺7.000: 1 arsa + 1 beton) — meşru
-// ve sunucu allowance'ının (≈100k) çok altında. Ekipman devri ise birebir korunur.
-check(`ilk şube geçişinde yalnız başlangıç arsası eklenir (₺${Math.round(w1 - w0)})`,
-  w1 - w0 >= 0 && w1 - w0 <= 10_000, `${Math.round(w1)} vs ${Math.round(w0)}`)
+// İLK kez açılan şube: başlangıç arsası (+₺7.000) + D12 İLK-ŞUBE HEDİYESİ
+// (Müdür Sv.1 = ₺18.000 kurulum değeri, TEK SEFER) = ≤ ₺26.000 — sunucu
+// allowance'ının (≈100k) hâlâ çok altında. Ekipman devri birebir korunur.
+check(`ilk şube geçişinde arsa + tek seferlik müdür hediyesi eklenir (₺${Math.round(w1 - w0)})`,
+  w1 - w0 >= 0 && w1 - w0 <= 26_000, `${Math.round(w1)} vs ${Math.round(w0)}`)
 
 // yeni şubede yatırım yap — GERÇEK maliyetle (pompa 2:5000 + 3:8000, tabela 1:1500 + 2:4000)
 s.money -= 18_500; s.pumps = 3; s.signLevel = 2
@@ -62,7 +63,7 @@ for (const loc of ['cevreyolu', 'otoyol', 'marina', 'metropol', 'kasaba', 'otoyo
   if (!seen.has(loc)) { seen.add(loc); firstOpenJump = Math.max(firstOpenJump, Math.abs(diff)) }
   else if (Math.abs(diff) > 1) { repeatOk = false; console.log(`     ${loc} (tekrar): ${Math.round(before)} → ${Math.round(after)}`) }
 }
-check(`ilk açılışta artış küçük (başlangıç arsası, ₺${Math.round(firstOpenJump)} ≤ 10k → allowance içinde)`, firstOpenJump <= 10_000)
+check(`ilk açılışta artış küçük (arsa + D12 müdür hediyesi, ₺${Math.round(firstOpenJump)} ≤ 26k → allowance içinde)`, firstOpenJump <= 26_000)
 check('DAHA ÖNCE görülen şubeye geçişte servet SABİT (çift sayım yok)', repeatOk)
 
 // şube açma: servet DÜŞER (sink) ama regresyon guard'ını tetiklemez (fresh-start değil)
