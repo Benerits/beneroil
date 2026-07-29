@@ -3249,8 +3249,14 @@ for (const key of Object.keys(localStorage)) {
 //    sayfa TAZE gün-1 state taşır; korumasız gönderirse hesabın kaydını siler)
 //  • x-session: tek-cihaz kilidi (kicked sekme yazamasın)
 //  • baseUpdatedAt: çoklu-cihaz 409 guard'ı (eski sekme yeniyi ezemesin)
-window.addEventListener('pagehide', () => {
-  if (isFullMode || isPromoMode || cloudBlocked || auth.isKicked() || !auth.loggedIn() || !cloudSynced) return
+let lastFlush = 0
+function flushSaveNow() {
+  if (isFullMode || isPromoMode || cloudBlocked || auth.isKicked()) return
+  if (!auth.loggedIn()) { auth.saveGuest(savePayload()); return } // misafir: yerel senkron flush
+  if (!cloudSynced) return
+  if (Date.now() - lastFlush < 2_000) return // hide/show flap'inde sunucu limitine (2/3sn) takılma
+  lastFlush = Date.now()
+  lastRemotePush = Date.now() // hemen ardından ikinci otomatik push açılmasın
   fetch('/api/save', {
     method: 'POST',
     keepalive: true,
@@ -3260,8 +3266,22 @@ window.addEventListener('pagehide', () => {
       'x-session': auth.sessionId(),
     },
     body: JSON.stringify({ save: savePayload(), baseUpdatedAt: auth.lastUpdatedAt() }),
+  }).then(r => r.json()).then((d: { updatedAt?: string }) => {
+    // KRİTİK: yanıt gelirse damgayı işle — sayfa ölmeyip geri dönerse (iOS arka plan /
+    // bfcache) eski damgayla push atıp SAHTE 409 + zorunlu reload üretiyorduk.
+    if (d?.updatedAt) auth.setLastUpdatedAt(d.updatedAt)
   }).catch(() => {})
+}
+window.addEventListener('pagehide', flushSaveNow)
+// iOS app-switch'te pagehide her zaman ateşlenmez; visibilitychange daha güvenilir
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) flushSaveNow()
+  else lastRemotePush = 0 // dönüşte ilk persist beklemeden buluta yazsın
 })
+// PERİYODİK OTOMATİK KAYIT (veri kaybı fixi): persist yalnız oyuncu aksiyonlarında ve gün
+// sonunda (~2,7 dk) çağrılıyordu — pasif izlenen dakikalar refresh/crash'te kayboluyordu.
+// 10 sn'lik tık, persist'in kendi 5 sn throttle'ından geçerek kaybı ≤10 sn'e indirir.
+setInterval(() => { if (!document.hidden) persist() }, 10_000)
 translateDom() // HUD + statik metinleri çevir
 ;(document.getElementById('lang-tr') as HTMLButtonElement).classList.toggle('good', lang === 'tr')
 ;(document.getElementById('lang-en') as HTMLButtonElement).classList.toggle('good', lang === 'en')

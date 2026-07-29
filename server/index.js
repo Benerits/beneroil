@@ -48,6 +48,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS verify_token text`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_token text`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS session_id text`) // tek-cihaz kilidi
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS save_session text`) // son save'i yazan oturum (self-conflict önleme)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_expires timestamptz`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS signup_ip text`) // abuse/troll tespiti
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS last_ip text`)
@@ -1041,7 +1042,7 @@ async function handleApi(req, res, url) {
       const { save, baseUpdatedAt } = await readBody(req)
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
-      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at, session_id FROM benzinlik_player WHERE email=$1', [email])
+      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at, session_id, save_session FROM benzinlik_player WHERE email=$1', [email])
       if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
       // tek-cihaz kilidi: başka cihaz oturumu devraldıysa bu (eski) cihaz YAZMASIN → kicked.
       // Bağlantı kopması yanlış kick yapmaz: session yalnız BAŞKA cihaz GET/POST yapınca değişir.
@@ -1053,7 +1054,11 @@ async function handleApi(req, res, url) {
       if (baseUpdatedAt && prev.rows[0]?.updated_at) {
         const serverTs = new Date(prev.rows[0].updated_at).getTime()
         const baseTs = new Date(baseUpdatedAt).getTime()
-        if (Number.isFinite(serverTs) && Number.isFinite(baseTs) && serverTs > baseTs + 1000) {
+        // SELF-CONFLICT ÖNLEME: son yazan AYNI oturum ise bu eski değil, kendi yazımızdır
+        // (pagehide keepalive'ın yanıtı istemciye ulaşmadıysa baseUpdatedAt geride kalıyordu
+        //  → sahte 409 → "Başka cihazda oynanmış" reload'u). Farklı oturum yazdıysa gerçek çakışma.
+        const sameSession = sess && prev.rows[0]?.save_session === sess
+        if (Number.isFinite(serverTs) && Number.isFinite(baseTs) && serverTs > baseTs + 1000 && !sameSession) {
           return json(res, 409, { conflict: true, save: prev.rows[0].save, updatedAt: prev.rows[0].updated_at })
         }
       }
@@ -1157,7 +1162,7 @@ async function handleApi(req, res, url) {
         }
       }
       // save yazarken oturumu da bu cihaza sabitle (session_id null'sa claim et)
-      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now(), session_id=COALESCE($3, session_id) WHERE email=$1 RETURNING updated_at', [email, clean, sess || null])
+      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now(), session_id=COALESCE($3, session_id), save_session=COALESCE($3, save_session) WHERE email=$1 RETURNING updated_at', [email, clean, sess || null])
       return json(res, 200, { ok: true, updatedAt: upd.rows[0]?.updated_at })
     }
     // IAP efektini SUNUCU-otoriter uygula (hile-freni cap'ini bypass eder; sonraki save tutarlı olur).
