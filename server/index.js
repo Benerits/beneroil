@@ -1502,6 +1502,14 @@ async function handleVs(req, res, url) {
       await pool.query('UPDATE benzinlik_player SET banned_at=NULL, ban_reason=NULL WHERE email=$1', [em])
       return json(res, 200, { ok: true, action: 'PARDONED', email: em })
     }
+    // yıldız/devir geçmişi (admin Star Log sayfası çeker)
+    if (url === '/vs/v1/starlog' && req.method === 'GET') {
+      const r = await pool.query(`SELECT l.id, l.email, l.prev, l.next, l.kind, l.at,
+          p.id AS player_id, (p.save->'s'->>'day')::int AS day
+        FROM benzinlik_starlog l LEFT JOIN benzinlik_player p ON p.email = l.email
+        ORDER BY l.at DESC LIMIT 500`)
+      return json(res, 200, { data: r.rows })
+    }
     // izahatlar: banlı hesapların savunmaları (admin.benerits.com İzahatlar sayfası çeker)
     if (url === '/vs/v1/appeals' && req.method === 'GET') {
       const r = await pool.query(`SELECT a.id, a.email, a.message, a.created_at,
