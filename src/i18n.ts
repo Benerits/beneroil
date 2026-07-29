@@ -373,6 +373,15 @@ const EN: Record<string, string> = {
   'Adı Değiştir': 'Rename',
   'Vazgeç': 'Cancel',
   'İsim': 'Name',
+  'Hesabın incelemede': 'Your account is under review',
+  'Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.':
+    'We detected a suspicious income/expense imbalance on your account. Please provide an explanation.',
+  'İzahatını buraya yaz…': 'Write your explanation here…',
+  'İzahat Gönder': 'Submit Explanation',
+  'İzahat çok kısa — lütfen durumu açıklayın.': 'Your explanation is too short — please describe the situation.',
+  'İzahatın alındı': 'Explanation received',
+  'Ekibimiz inceledikten sonra hesabınla ilgili karar e-postana bildirilecek.':
+    'Our team will review it and email you the decision about your account.',
   'Bildirimler (sekme kapalıyken tanker/kumbara haberi)': 'Notifications (tanker/jar alerts when tab is inactive)',
   'Efektler: Açık': 'Effects: On',
   '{0} isteyen araca {1} bastın! -{2} ₺': 'Pumped {1} into a car that wanted {0}! -{2} ₺',
@@ -1416,6 +1425,15 @@ const FR: Record<string, string> = {
   'Adı Değiştir': 'Renommer',
   'Vazgeç': 'Annuler',
   'İsim': 'Nom',
+  'Hesabın incelemede': 'Ton compte est en cours d’examen',
+  'Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.':
+    'Nous avons détecté un déséquilibre suspect de revenus/dépenses sur ton compte. Merci de fournir une explication.',
+  'İzahatını buraya yaz…': 'Écris ton explication ici…',
+  'İzahat Gönder': 'Envoyer l’explication',
+  'İzahat çok kısa — lütfen durumu açıklayın.': 'Explication trop courte — décris la situation.',
+  'İzahatın alındı': 'Explication reçue',
+  'Ekibimiz inceledikten sonra hesabınla ilgili karar e-postana bildirilecek.':
+    'Notre équipe l’examinera et la décision te sera communiquée par e-mail.',
   'Bildirimler (sekme kapalıyken tanker/kumbara haberi)': 'Notifications (citerne/tirelire quand l’onglet est en arrière-plan)',
   'Efektler: Açık': 'Effets : activés',
   '{0} isteyen araca {1} bastın! -{2} ₺': 'Tu as mis du {1} dans une voiture qui voulait du {0} ! -{2} ₺',

@@ -83,7 +83,10 @@ setInterval(() => {
             body: JSON.stringify({ email: gEmail.value, password: gPass.value, lang, guest: auth.hasGuest() }),
           })
           const d = await res.json().catch(() => ({}))
-          if (!res.ok) throw new Error(d.error ?? t('Sunucuya ulaşılamadı.'))
+          if (!res.ok) {
+            if (d.appeal) { showAppealOverlay(d.token); return } // izahat banı → savunma formu
+            throw new Error(d.error ?? t('Sunucuya ulaşılamadı.'))
+          }
           localStorage.setItem('benzinlik-token', d.token)
           localStorage.setItem('benzinlik-email', d.email)
           await afterAuth(mode)
@@ -139,7 +142,10 @@ setInterval(() => {
           body: JSON.stringify({ idToken, email, guest: auth.hasGuest() }),
         })
         const d = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(d.error ?? t('Giriş başarısız.'))
+        if (!res.ok) {
+          if (d.appeal) { showAppealOverlay(d.token); return } // izahat banı → savunma formu
+          throw new Error(d.error ?? t('Giriş başarısız.'))
+        }
         localStorage.setItem('benzinlik-token', d.token)
         localStorage.setItem('benzinlik-email', d.email)
         await afterAuth('oauth')
@@ -2296,6 +2302,49 @@ function showCloudBlockOverlay() {
   ;(document.getElementById('cloudblock-retry') as HTMLButtonElement).addEventListener('click', () => location.reload())
 }
 
+/** İZAHAT EKRANI: izahat-banlı hesap girişte bunu görür; savunması /api/appeal ile
+ *  admin paneline düşer. TR/EN i18n'den gelir (Oğuz: "türkçe ve ingilizce dil desteği"). */
+function showAppealOverlay(token?: string) {
+  if (document.getElementById('appealblock')) return
+  cloudBlocked = true // kayıt + oyun durur; tek kanal izahat formu
+  try { liveWs?.close() } catch { /* kapalı olabilir */ }
+  const o = document.createElement('div')
+  o.id = 'appealblock'
+  o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#131a24f5;display:flex;'
+    + 'align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px);overflow:auto'
+  o.innerHTML = `<div style="max-width:440px;width:100%;color:#eaf1fb;font-family:system-ui,sans-serif">
+    <div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('Hesabın incelemede')}</div>
+    <div style="font-size:14px;line-height:1.55;color:#c4d1e2;margin-bottom:16px">${t('Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.')}</div>
+    <textarea id="appeal-msg" maxlength="2000" rows="6" placeholder="${t('İzahatını buraya yaz…')}"
+      style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1.5px solid #33465f;background:#0e1622;color:#eaf1fb;font-size:14px;font-family:inherit;resize:vertical"></textarea>
+    <div id="appeal-err" style="font-size:13px;color:#e08a8a;min-height:18px;margin:6px 0"></div>
+    <button id="appeal-send" style="width:100%;padding:13px;border:0;border-radius:12px;background:#27a05a;color:#fff;font-weight:700;font-size:15px;cursor:pointer">${t('İzahat Gönder')}</button>
+  </div>`
+  document.body.appendChild(o)
+  const btn = document.getElementById('appeal-send') as HTMLButtonElement
+  btn.addEventListener('click', async () => {
+    const msg = (document.getElementById('appeal-msg') as HTMLTextAreaElement).value.trim()
+    const errEl = document.getElementById('appeal-err') as HTMLDivElement
+    errEl.textContent = ''
+    if (msg.length < 10) { errEl.textContent = t('İzahat çok kısa — lütfen durumu açıklayın.'); return }
+    btn.disabled = true
+    try {
+      const res = await fetch('/api/appeal', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-auth': token ?? localStorage.getItem('benzinlik-token') ?? '' },
+        body: JSON.stringify({ message: msg }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.error ?? t('Gönderilemedi, sonra tekrar dene.'))
+      o.firstElementChild!.innerHTML = `<div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('İzahatın alındı')}</div>
+        <div style="font-size:14px;line-height:1.55;color:#c4d1e2">${t('Ekibimiz inceledikten sonra hesabınla ilgili karar e-postana bildirilecek.')}</div>`
+    } catch (e2) {
+      btn.disabled = false
+      errEl.textContent = (e2 as Error).message
+    }
+  })
+}
+
 function showBanOverlay(reason: string) {
   if (document.getElementById('banblock')) return
   cloudBlocked = true // tüm kayıt + oyun + WS reconnect durur
@@ -3227,11 +3276,16 @@ if (!isFullMode && !isPromoMode && auth.loggedIn()) {
       ui.toast(t('Bulut kaydı yüklendi — Gün {0} ({1})', state.day, auth.currentEmail() ?? ''), 'good', true)
       applyOfflineEarnings() // yokken geçen süre kadar pasif gelir
     }
-  } catch {
-    // Bulut kaydı yüklenemedi: TAZE oturumla oynamaya izin verme — yoksa
-    // ilerlemiş bulut kaydının üstüne yazılır. Oyunu kilitle, kayıt gönderme.
-    cloudBlocked = true
-    showCloudBlockOverlay()
+  } catch (e) {
+    const ed = (e as Error & { data?: { appeal?: boolean; token?: string } }).data
+    if (ed?.appeal) {
+      showAppealOverlay(ed.token) // izahat banı: bloklama yerine savunma formu
+    } else {
+      // Bulut kaydı yüklenemedi: TAZE oturumla oynamaya izin verme — yoksa
+      // ilerlemiş bulut kaydının üstüne yazılır. Oyunu kilitle, kayıt gönderme.
+      cloudBlocked = true
+      showCloudBlockOverlay()
+    }
   }
 } else if (!isFullMode && !isPromoMode && !auth.loggedIn()) {
   // MİSAFİR: hesap yok → yerel misafir kaydını yükle (varsa). Oyun yine de gate ardında
@@ -3595,6 +3649,8 @@ ui.onLogin = async (email, pass) => {
     await auth.login(email, pass)
     location.reload()
   } catch (err) {
+    const ed = (err as Error & { data?: { appeal?: boolean; token?: string } }).data
+    if (ed?.appeal) { showAppealOverlay(ed.token); return }
     ui.toast((err as Error).message, 'bad')
   }
 }

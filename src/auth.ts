@@ -44,7 +44,13 @@ async function api(path: string, method: string, body?: unknown): Promise<Record
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Sunucu hatası (${res.status})`)
+  if (!res.ok) {
+    // yanıt gövdesi hatayla taşınır — izahat banı gibi bayraklı 403'ler (appeal:true)
+    // çağıranda ayırt edilebilsin (err.data)
+    const err = new Error((data as { error?: string }).error ?? `Sunucu hatası (${res.status})`) as Error & { data?: Record<string, unknown> }
+    err.data = data as Record<string, unknown>
+    throw err
+  }
   return data as Record<string, unknown>
 }
 

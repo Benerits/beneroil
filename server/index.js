@@ -49,6 +49,9 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_token text`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS session_id text`) // tek-cihaz kilidi
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS save_session text`) // son save'i yazan oturum (self-conflict önleme)
+  // izahat sistemi: şüpheli hesap banlanır (ban_reason='izahat'), oyuncunun savunması buraya düşer
+  await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_appeal(
+    id serial PRIMARY KEY, email text NOT NULL, message text NOT NULL, created_at timestamptz DEFAULT now())`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_expires timestamptz`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS signup_ip text`) // abuse/troll tespiti
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS last_ip text`)
@@ -158,10 +161,10 @@ async function verifyIdToken(idToken, { jwksUrl, issuers, audiences }) {
 // Sağlayıcı kimliğinden hesabı bul/oluştur/birleştir. E-posta gizliyse placeholder kullanılır.
 async function oauthUpsertPlayer(provider, sub, email) {
   const col = provider === 'google' ? 'google_id' : 'apple_id'
-  let r = await pool.query(`SELECT email, banned_at FROM benzinlik_player WHERE ${col}=$1`, [sub])
+  let r = await pool.query(`SELECT email, banned_at, ban_reason FROM benzinlik_player WHERE =`, [sub])
   if (r.rowCount) return r.rows[0]
   if (email) {
-    r = await pool.query('SELECT email, banned_at FROM benzinlik_player WHERE lower(email)=lower($1)', [email])
+    r = await pool.query('SELECT email, banned_at, ban_reason FROM benzinlik_player WHERE lower(email)=lower()', [email])
     if (r.rowCount) {
       await pool.query(`UPDATE benzinlik_player SET ${col}=$1, email_verified=true WHERE lower(email)=lower($2)`, [sub, email])
       return r.rows[0]
@@ -172,7 +175,7 @@ async function oauthUpsertPlayer(provider, sub, email) {
   const pass = hashPassword(crypto.randomBytes(24).toString('hex'))
   const ins = await pool.query(
     `INSERT INTO benzinlik_player(email, pass, ${col}, email_verified) VALUES ($1,$2,$3,true)
-     ON CONFLICT (email) DO UPDATE SET ${col}=EXCLUDED.${col} RETURNING email, banned_at`,
+     ON CONFLICT (email) DO UPDATE SET ${col}=EXCLUDED.${col} RETURNING email, banned_at, ban_reason`,
     [em, pass, sub])
   bumpStat('signups')
   pushSignupNotif() // ekibe "+1 oyuncu" (asla girişi etkilemez)
@@ -346,6 +349,18 @@ function clampMarina(s) {
  *  Kalıcı tablo AÇMIYOR (oyuncu kaydına dokunmama kuralı). Amaç: kırpmanın
  *  sessiz kalmaması; hangi hesapta ne sıklıkla tavan zorlanıyor görülebilsin. */
 const cheatLog = []
+// İZAHAT BANI: hesap kilitli ama savunma kanalı açık. appeal:true gören istemci
+// izahat formunu açar (metinler istemcide TR/EN lokalize); token'la /api/appeal atılır.
+function bannedJson(res, email, reason) {
+  if (reason === 'izahat') {
+    return json(res, 403, {
+      error: 'Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.',
+      appeal: true, token: sign(email),
+    })
+  }
+  return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+}
+
 function auditCheat(email, kind, info) {
   cheatLog.push({ at: new Date().toISOString(), email, kind, ...info })
   if (cheatLog.length > 200) cheatLog.shift()
@@ -906,11 +921,11 @@ async function handleApi(req, res, url) {
           !rateLimit('loginip:' + clientIp(req), 120, 3600_000)) {
         return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
       }
-      const r = await pool.query('SELECT pass, banned_at, email_verified FROM benzinlik_player WHERE email=$1', [e])
+      const r = await pool.query('SELECT pass, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=', [e])
       if (r.rowCount === 0 || !verifyPassword(String(password || ''), r.rows[0].pass)) {
         return json(res, 401, { error: 'E-posta veya şifre hatalı.' })
       }
-      if (r.rows[0].banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      if (r.rows[0].banned_at) return bannedJson(res, e, r.rows[0].ban_reason)
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [e, clientIp(req)])
       bumpStat('logins')
       return json(res, 200, { token: sign(e), email: e, emailVerified: !!r.rows[0].email_verified, verifyRequired: requireVerify() })
@@ -930,7 +945,7 @@ async function handleApi(req, res, url) {
       } catch (e) { console.log('[google] doğrulama hata:', e.message); return json(res, 401, { error: 'Google doğrulaması başarısız.' }) }
       if (p.email && p.email_verified === false) return json(res, 401, { error: 'Google e-postası doğrulanmamış.' })
       const row = await oauthUpsertPlayer('google', String(p.sub), p.email)
-      if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      if (row.banned_at) return bannedJson(res, row.email, row.ban_reason)
       if (body.guest === true) bumpStat('guest_signups') // misafir Google'la hesaba geçti → dönüşüm
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [row.email, clientIp(req)])
       bumpStat('logins')
@@ -952,7 +967,7 @@ async function handleApi(req, res, url) {
       // Apple e-postayı sadece ilk girişte gönderir; sonrakilerde sub yeterli
       const email = p.email || (body.email && /^\S+@\S+\.\S+$/.test(body.email) ? body.email : null)
       const row = await oauthUpsertPlayer('apple', String(p.sub), email)
-      if (row.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      if (row.banned_at) return bannedJson(res, row.email, row.ban_reason)
       if (body.guest === true) bumpStat('guest_signups') // misafir Apple'la hesaba geçti → dönüşüm
       await pool.query('UPDATE benzinlik_player SET sessions=sessions+1, last_seen_at=now(), last_ip=$2 WHERE email=$1', [row.email, clientIp(req)])
       bumpStat('logins')
@@ -1023,10 +1038,21 @@ async function handleApi(req, res, url) {
       await pool.query('INSERT INTO benzinlik_feedback(email, message, game) VALUES ($1, $2, $3)', [email, msg, meta])
       return json(res, 200, { ok: true })
     }
+    // İZAHAT: banlı (izahat) hesap savunmasını buraya yazar — admin panelinde listelenir.
+    // auth() ban kontrolü yapmaz, bu bilinçli: kilitli hesabın TEK açık kanalı burası.
+    if (url === '/api/appeal' && req.method === 'POST') {
+      const email = auth(); if (!email) return
+      if (!rateLimit('appeal:' + email, 3, 3600_000)) return json(res, 429, { error: 'Çok sık deneme — biraz sonra tekrar dene.' })
+      const { message } = await readBody(req)
+      const msg = String(message || '').trim().slice(0, 2000)
+      if (msg.length < 10) return json(res, 400, { error: 'İzahat çok kısa — lütfen durumu açıklayın.' })
+      await pool.query('INSERT INTO benzinlik_appeal(email, message) VALUES ($1, $2)', [email, msg])
+      return json(res, 200, { ok: true })
+    }
     if (url === '/api/save' && req.method === 'GET') {
       const email = auth(); if (!email) return
-      const r = await pool.query('SELECT save, updated_at, banned_at, email_verified FROM benzinlik_player WHERE email=$1', [email])
-      if (r.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
+      const r = await pool.query('SELECT save, updated_at, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=', [email])
+      if (r.rows[0]?.banned_at) return bannedJson(res, email, r.rows[0].ban_reason)
       // tek-cihaz kilidi: yükleyen cihaz oturumu DEVRALIR (session_id claim) → eski cihaz kick olur
       const sess = String(req.headers['x-session'] || '')
       if (sess) await pool.query('UPDATE benzinlik_player SET last_seen_at=now(), session_id=$2 WHERE email=$1', [email, sess])
@@ -1439,6 +1465,15 @@ async function handleVs(req, res, url) {
       }
       const fresh = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at FROM benzinlik_player WHERE id=$1', [id])
       return json(res, 200, userRow(fresh.rows[0]))
+    }
+    // izahatlar: banlı hesapların savunmaları (admin.benerits.com İzahatlar sayfası çeker)
+    if (url === '/vs/v1/appeals' && req.method === 'GET') {
+      const r = await pool.query(`SELECT a.id, a.email, a.message, a.created_at,
+          p.id AS player_id, p.banned_at, p.ban_reason,
+          (p.save->'s'->>'money')::numeric::bigint AS money, (p.save->'s'->>'day')::int AS day
+        FROM benzinlik_appeal a LEFT JOIN benzinlik_player p ON p.email = a.email
+        ORDER BY a.created_at DESC LIMIT 500`)
+      return json(res, 200, { data: r.rows })
     }
     if (url === '/vs/v1/feedback' && req.method === 'GET') {
       const limit = Math.min(5000, Math.max(10, Number(u.searchParams.get('limit')) || 1000))
