@@ -475,10 +475,13 @@ export class GameState {
   gridRate() {
     return this.gridLevel >= 1 ? 2 * (this.gridLevel >= 2 ? 1.3 : 1) : 0
   }
+  /** GÜNEŞ FAKTÖRÜ 0..1 — main her karede gün döngüsünden yazar (gece 0, şafak/akşam
+   *  rampa, gündüz 1). Kaydedilmez; batarya deposuna gündüz depola-gece harca değeri katar. */
+  sunFactor = 1
   /** BEDAVA üretim kWh/sn: güneş + reaktör + jeneratör (altyapı Sv.2 bonusu dahil) */
   freeRate() {
     let r = 0
-    if (this.solarCount > 0) r += 3 * this.solarCount * (1 - 0.7 * this.solarDirt)
+    if (this.solarCount > 0) r += 3 * this.solarCount * (1 - 0.7 * this.solarDirt) * this.sunFactor
     if (this.dieselRunning()) r += 7
     if (this.hasSMR && this.uranium > 0) r += 15
     if (this.gridLevel >= 2) r *= 1.3 // altyapı bonusu bedava üretimi de güçlendirir
@@ -1534,8 +1537,13 @@ export class GameState {
   }
   loanPayoff(): number { return this.loan.active ? this.loan.monthly * this.loan.remaining : 0 }
   repayLoanFull(): boolean {
-    if (!this.loan.active || this.money < this.loanPayoff()) return false
-    this.money -= this.loanPayoff(); this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+    // YUVARLAK KARŞILAŞTIRMA (oyuncu raporu "bakiye olmasına rağmen çekmiyor bazen"):
+    // kasa küsuratlı birikiyor; ekran ₺120.000 gösterirken gerçek 119.999,6 olabiliyor
+    // ve ödeme görünmez kuruş farkıyla reddediliyordu.
+    const payoff = this.loanPayoff()
+    if (!this.loan.active || Math.round(this.money) < Math.round(payoff)) return false
+    this.money = Math.max(0, this.money - payoff)
+    this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
     return true
   }
   /** her oyun günü çağrılır: taksiti kasadan tahsil et; üst üste 2 gecikme + para yetmezse 'seize' (haczi/ortaklığı çağıran yapar) */
@@ -1543,8 +1551,9 @@ export class GameState {
     const l = this.loan
     if (!l.active) return null
     l.overdue += 1
-    while (l.overdue > 0 && l.remaining > 0 && this.money >= l.monthly) {
-      this.money -= l.monthly; l.remaining -= 1; l.overdue -= 1
+    // 0,5₺ tolerans: küsuratlı kasa görünür bakiye yeterken taksidi düşürmüyordu
+    while (l.overdue > 0 && l.remaining > 0 && this.money >= l.monthly - 0.5) {
+      this.money = Math.max(0, this.money - l.monthly); l.remaining -= 1; l.overdue -= 1
     }
     if (l.remaining <= 0) { l.active = false; return 'done' }
     if (l.overdue >= 2) return 'seize'
@@ -1567,8 +1576,8 @@ export class GameState {
   }
   /** ortaklığı peşin kapat (kalan borç payını öde) */
   buyoutPartner(): boolean {
-    if (!this.partner.active || this.money < this.partner.remaining) return false
-    this.money -= this.partner.remaining
+    if (!this.partner.active || Math.round(this.money) < Math.round(this.partner.remaining)) return false
+    this.money = Math.max(0, this.money - this.partner.remaining)
     this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }
     return true
   }

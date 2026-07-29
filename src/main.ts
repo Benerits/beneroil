@@ -975,10 +975,24 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   lastRemotePush = 0 // throttle'ı atla: şube değişimi reload'dan ÖNCE buluta yazılmalı
   persist()
   Car.solids = hardRects()
+  // PUSH-CONFIRMED RELOAD (devir kalıbıyla aynı): şube değişimi buluta YAZILDIĞI
+  // doğrulanmadan reload atılmaz — yazım yarışı kaybedilince bulut eski şubede
+  // kalıyor, her boot oyuncuyu eski şubeye döndürüyordu ("kasabaya geri dönmüyor").
+  // 3 deneme + 6 sn tavan; kit indirme paralel yürür.
+  const pushOk = (async () => {
+    if (!auth.loggedIn()) return
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await auth.pushSave(savePayload()) as { kicked?: boolean; conflict?: boolean }
+        if (!r.kicked && !r.conflict) return
+      } catch { /* tekrar dene */ }
+    }
+  })()
+  const pushCapped = Promise.race([pushOk, new Promise(r => setTimeout(r, 6000))])
   // Hedef şubenin model kitini reload'dan ÖNCE indir: sayfa yenilenince tarayıcı
   // önbellekten okur, oyuncu boş/prosedürel sahne görmez. İndirme başarısız olsa da
   // reload yine yapılır (sahne prosedürele düşer, oyun durmaz).
-  const goReload = () => location.reload()
+  const goReload = () => { pushCapped.finally(() => location.reload()) }
   if (kitNeeded(id) && !kitReady(id)) {
     ui.toast(t('{0} sahnesi indiriliyor ({1} model)…', THEMES[id].name, String(kitSize(id))), '')
     loadKit(id).catch(() => null).then(goReload)
@@ -1659,7 +1673,14 @@ function syncAttendants() {
   }
   for (const [key, w] of want) {
     const b = world.buildings.find(x => x.id === w.bid)
-    if (!b) continue
+    if (!b) {
+      // ünite sahnede yok (taşınıyor/yeniden kuruluyor) → figür SON pozunda DONUP
+      // kalmasın ("şarjcı bugda kalıyor") — kaldır, ünite dönünce yeniden kurulur
+      const ghost = attendantFigs.get(key)
+      if (ghost) { world.scene.remove(ghost); attendantFigs.delete(key) }
+      disposeProp(key)
+      continue
+    }
     // KONUM (Oğuz v3 — mor X kalibrasyonu): pompanın ekrandaki ÖN-SOL köşesi,
     // pad'in üstünde. v2'deki (-0.62,+0.34) ekranda ÜST-SAĞA düşmüştü; X'in yeri
     // bunun tersi yönde → dünya (+0.58, -0.42). Yükseklik aynı (z=0, pad'e basar).
@@ -1670,7 +1691,8 @@ function syncAttendants() {
     // dolum var mı? kendi slotundaki araç pompada ve servis görüyor olmalı
     const serving = cars.cars.find(c =>
       (w.kind === 'ev' ? c.kind === 'ev' : c.kind !== 'ev')
-      && c.slotIndex === w.idx && c.phase === 'atPump' && (c.filling || c.beingServed))
+      && c.slotIndex === w.idx && c.phase === 'atPump'
+      && (c.filling || c.beingServed || c.charging)) // EV 'charging' kullanır, filling DEĞİL
     if (serving) {
       const cp = serving.group.position
       const toPump = new THREE.Vector3(bx - cp.x, by - cp.y, 0)
@@ -1685,8 +1707,9 @@ function syncAttendants() {
       const perp = new THREE.Vector3(-toPump.y, toPump.x, 0)
       fig.position.set(tank.x + toPump.x * 0.22 + perp.x * 0.5, tank.y + toPump.y * 0.22 + perp.y * 0.5, 0)
       fig.rotation.z = Math.atan2(tank.y - fig.position.y, tank.x - fig.position.x)
-      // hortum+tabanca yalnız FİİLEN dolum sürerken; ön serviste (cam silme vs.) el boş
-      if (serving.filling) {
+      // hortum+tabanca yalnız FİİLEN YAKIT dolarken; şarjcıya tabanca YOK (EV'de anlamsız),
+      // ön serviste (cam silme vs.) el boş
+      if (serving.filling && w.kind === 'pump') {
         const prev = serviceProps.get(key)
         if (!prev || prev.car !== serving) {
           disposeProp(key)
@@ -3295,6 +3318,10 @@ if (saveLoaded && state.activeLoc !== locHint && !sessionStorage.getItem('benelo
   localStorage.setItem(LOC_HINT_KEY, state.activeLoc)
   location.reload()
 }
+// Tutarlı boot → tek-seferlik sigorta sıfırlanır. Eski hali sekme ömrü boyunca kilitli
+// kalıyordu: ilk uyuşmazlıktan sonra düzeltici bir daha ASLA çalışmıyordu (şube
+// değiştirme raporlarının ikinci ayağı).
+if (saveLoaded && state.activeLoc === locHint) sessionStorage.removeItem('beneloil-loc-fixed')
 if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)
 // C9 (analiz): dönen oyuncuya birikimi hatırlat — nereden toplanacağıyla birlikte
@@ -4044,12 +4071,13 @@ function buildingCard(id: string): BuildingCard | null {
         action: { label: t('Ücreti Değiştir ({0} → {1})', state.toiletFee === 0 ? t('Ücretsiz') : '₺' + state.toiletFee, state.toiletFee === 0 ? '₺5' : state.toiletFee === 5 ? '₺10' : t('Ücretsiz')), maintId: 'toilet-fee' },
       }
     case 'solar': {
-      const net = 3 * (1 - 0.7 * state.solarDirt) * (state.gridLevel >= 2 ? 1.3 : 1)
+      const net = 3 * (1 - 0.7 * state.solarDirt) * (state.gridLevel >= 2 ? 1.3 : 1) * state.sunFactor
       return {
         icon: 'i-solar', name: t('Güneş Santrali'),
-        desc: t('Bedava elektrik üretir ama paneller kirlendikçe verim düşer. Ara sıra temizlik yaptır.'),
+        desc: t('Gündüz bedava elektrik üretir — GECE ÜRETMEZ, gündüz fazlasını Batarya Deposunda sakla. Paneller kirlendikçe verim düşer.'),
         stats: [
           [t('Üretim'), `+${net.toFixed(1)} kWh/sn`, net < 1 ? 'bad' : 'good'],
+          [t('Gökyüzü'), state.sunFactor > 0.85 ? t('Güneşli') : state.sunFactor > 0.15 ? t('Alacakaranlık') : t('Gece — üretim yok'), state.sunFactor > 0.85 ? 'good' : state.sunFactor <= 0.15 ? 'bad' : ''],
           [t('Kirlilik'), `%${Math.round(state.solarDirt * 100)}`, state.solarDirt > 0.6 ? 'bad' : ''],
         ],
         action: state.solarDirt >= 0.15 ? { label: 'Temizle — ₺300', maintId: 'clean-solar' } : undefined,
@@ -4487,7 +4515,11 @@ function frame() {
   if (exploding) { composer!.render(); return }
 
   dayTime += dt
-  world.setNight(nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE))
+  const nightNow = nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE)
+  world.setNight(nightNow)
+  // GÜNEŞ EĞRİSİ (Oğuz: "gece üretimi 0'a düşebilir"): paneller karanlıkla ters orantılı
+  // üretir — gece 0, şafak/akşam rampa. Batarya deposu artık gerçek değer kazanır.
+  state.sunFactor = 1 - nightNow
 
   // GÜN İÇİ SAAT (HUD): döngü kesri → 24 saat; gün 06:00'da başlar (kredi taksidi
   // gün başında kesildiğinden oyuncular saati görmek istiyor). Metin değişince yazılır.

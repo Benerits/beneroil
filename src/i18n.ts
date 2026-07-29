@@ -373,6 +373,12 @@ const EN: Record<string, string> = {
   'Adı Değiştir': 'Rename',
   'Vazgeç': 'Cancel',
   'İsim': 'Name',
+  'Gündüz bedava elektrik üretir — GECE ÜRETMEZ, gündüz fazlasını Batarya Deposunda sakla. Paneller kirlendikçe verim düşer.':
+    'Generates free power by day — produces NOTHING at night, store the surplus in the Battery Depot. Dirty panels lose efficiency.',
+  'Gökyüzü': 'Sky',
+  'Güneşli': 'Sunny',
+  'Alacakaranlık': 'Twilight',
+  'Gece — üretim yok': 'Night — no output',
   'Hesabın incelemede': 'Your account is under review',
   'Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.':
     'We detected a suspicious income/expense imbalance on your account. Please provide an explanation.',
@@ -1425,6 +1431,12 @@ const FR: Record<string, string> = {
   'Adı Değiştir': 'Renommer',
   'Vazgeç': 'Annuler',
   'İsim': 'Nom',
+  'Gündüz bedava elektrik üretir — GECE ÜRETMEZ, gündüz fazlasını Batarya Deposunda sakla. Paneller kirlendikçe verim düşer.':
+    'Produit de l’électricité gratuite le jour — RIEN la nuit, stocke le surplus dans le dépôt de batteries. Les panneaux sales perdent en rendement.',
+  'Gökyüzü': 'Ciel',
+  'Güneşli': 'Ensoleillé',
+  'Alacakaranlık': 'Crépuscule',
+  'Gece — üretim yok': 'Nuit — aucune production',
   'Hesabın incelemede': 'Ton compte est en cours d’examen',
   'Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.':
     'Nous avons détecté un déséquilibre suspect de revenus/dépenses sur ton compte. Merci de fournir une explication.',
