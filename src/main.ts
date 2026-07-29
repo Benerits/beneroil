@@ -2311,17 +2311,24 @@ function showAppealOverlay(token?: string) {
   if (document.getElementById('appealblock')) return
   cloudBlocked = true // kayıt + oyun durur; tek kanal izahat formu
   try { liveWs?.close() } catch { /* kapalı olabilir */ }
+  // Marka dili: tabela tarzı kırmızı başlık + BENELOIL rozeti, krem kart, Baloo 2
+  // (Oğuz: "oyuna benzer şekilde tasarım yap, logo koy, font bizim sisteme benzesin")
   const o = document.createElement('div')
   o.id = 'appealblock'
-  o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#131a24f5;display:flex;'
-    + 'align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px);overflow:auto'
-  o.innerHTML = `<div style="max-width:440px;width:100%;color:#eaf1fb;font-family:system-ui,sans-serif">
-    <div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('Hesabın incelemede')}</div>
-    <div style="font-size:14px;line-height:1.55;color:#c4d1e2;margin-bottom:16px">${t('Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.')}</div>
-    <textarea id="appeal-msg" maxlength="2000" rows="6" placeholder="${t('İzahatını buraya yaz…')}"
-      style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1.5px solid #33465f;background:#0e1622;color:#eaf1fb;font-size:14px;font-family:inherit;resize:vertical"></textarea>
-    <div id="appeal-err" style="font-size:13px;color:#e08a8a;min-height:18px;margin:6px 0"></div>
-    <button id="appeal-send" style="width:100%;padding:13px;border:0;border-radius:12px;background:#27a05a;color:#fff;font-weight:700;font-size:15px;cursor:pointer">${t('İzahat Gönder')}</button>
+  o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(34,48,60,.58);display:flex;'
+    + 'align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px);overflow:auto;font-family:var(--font,"Baloo 2",sans-serif)'
+  o.innerHTML = `<div style="max-width:420px;width:100%;background:var(--paper,#faf6ec);border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(15,22,30,.4);border-bottom:4px solid rgba(34,48,60,.2)">
+    <div style="background:var(--red,#d64545);padding:18px 20px 16px;text-align:center;border-bottom:4px solid var(--red-dark,#b23434)">
+      <div style="display:inline-block;background:var(--paper,#faf6ec);color:var(--red,#d64545);font-weight:800;letter-spacing:1.5px;padding:3px 16px;border-radius:999px;font-size:13px">BENELOIL</div>
+      <div style="color:#fff;font-weight:800;font-size:19px;margin-top:10px">${t('Hesabın incelemede')}</div>
+    </div>
+    <div id="appeal-body" style="padding:18px 20px 20px">
+      <div style="font-size:14px;line-height:1.55;color:var(--ink,#22303c);margin-bottom:14px">${t('Hesabınızda şüpheli gelir/gider dengesizliği tespit ettik, lütfen izahat veriniz.')}</div>
+      <textarea id="appeal-msg" maxlength="2000" rows="6" placeholder="${t('İzahatını buraya yaz…')}"
+        style="width:100%;box-sizing:border-box;padding:12px;border-radius:var(--r-md,13px);border:1.5px solid var(--edge,rgba(34,48,60,.32));background:#fff;color:var(--ink,#22303c);font-size:14px;font-family:var(--font,inherit);resize:vertical"></textarea>
+      <div id="appeal-err" style="font-size:13px;color:var(--red-dark,#b23434);min-height:18px;margin:6px 0"></div>
+      <button id="appeal-send" style="width:100%;padding:13px;border:0;border-radius:var(--r-md,13px);background:var(--green,#27a05a);border-bottom:3px solid var(--green-dark,#1d7c45);color:#fff;font-weight:800;font-size:15px;font-family:var(--font,inherit);cursor:pointer">${t('İzahat Gönder')}</button>
+    </div>
   </div>`
   document.body.appendChild(o)
   const btn = document.getElementById('appeal-send') as HTMLButtonElement
@@ -2339,8 +2346,11 @@ function showAppealOverlay(token?: string) {
       })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(d.error ?? t('Gönderilemedi, sonra tekrar dene.'))
-      o.firstElementChild!.innerHTML = `<div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('İzahatın alındı')}</div>
-        <div style="font-size:14px;line-height:1.55;color:#c4d1e2">${t('Ekibimiz inceledikten sonra hesabınla ilgili karar e-postana bildirilecek.')}</div>`
+      const body = document.getElementById('appeal-body')!
+      body.innerHTML = `<div style="text-align:center;padding:6px 0 4px">
+        <div style="font-size:18px;font-weight:800;color:var(--green-dark,#1d7c45);margin-bottom:8px">${t('İzahatın alındı')} ✓</div>
+        <div style="font-size:14px;line-height:1.55;color:var(--ink,#22303c)">${t('Ekibimiz inceledikten sonra hesabınla ilgili karar e-postana bildirilecek.')}</div>
+      </div>`
     } catch (e2) {
       btn.disabled = false
       errEl.textContent = (e2 as Error).message
