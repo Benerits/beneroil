@@ -678,8 +678,10 @@ console.log('== 19) Otoyol Dinlenme Tesisi (rapor §6.4) ==')
   const { THEMES } = await import('../../src/themes.ts')
   const hw = THEMES.otoyol.features.highway
   check('otoyolda ramp topolojisi tanımlı', THEMES.otoyol.lane.rampLength === 20 && !!hw)
-  check('orta BARİYER var → karşı istasyon YOK (rapor kuralı)', THEMES.otoyol.lane.barrier === true)
-  check('kasabada bariyer yok (karşı istasyon çalışır)', THEMES.kasaba.lane.barrier === false)
+  // bariyer = yaka GEÇİŞİ yok; karşı ŞERİT trafiği kendi yakasındaki istasyona GİRER
+  // (eski "karşı istasyon YOK" yorumu farActive'i komple kapatıp otoyolda karşı yakayı müşterisiz bırakmıştı)
+  check('orta BARİYER var (otoyol — yaka geçişi yok)', THEMES.otoyol.lane.barrier === true)
+  check('kasabada bariyer yok (yaka geçişi serbest)', THEMES.kasaba.lane.barrier === false)
   check('yavaşlama şeridi kapasitesi 3 araç', hw.rampCap === 3)
   check('birleşme otoyolda ZOR (mergeHard 1.6 — ölçümle dengelendi)', hw.mergeHard > 1.5)
 

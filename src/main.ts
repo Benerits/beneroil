@@ -1354,7 +1354,10 @@ const cars = new CarManager(world.scene, modelLib, {
   gateOutY: () => world.gateOut.y,
   // Otoyolda orta BARİYER var: karşı yön fiziksel olarak erişilemez → karşı istasyon YOK
   // (rapor §6.4: bunun yerine ayna simetrik ikinci tesis ayrı yatırımdır).
-  farActive: () => world.farStationOn && !state.theme().lane.barrier,
+  // OTOYOL FİXİ (Oğuz: "karşı yakaya araba gelmiyormuş"): bariyer YAKA GEÇİŞİNİ engeller,
+  // karşı ŞERİTTEKİ aracın kendi yakasındaki istasyona girmesini değil. Eski `!barrier`
+  // şartı otoyolda karşı istasyonu tamamen müşterisiz bırakıyordu (kuruluyor ama gelir 0).
+  farActive: () => world.farStationOn,
   isWater: () => world.theme.lane.kind === 'water', // sahne teması (save gecikmesine dayanıklı)
   // FİLO: aktif ihale varsa garantili sözleşme araçları gelir
   contract: () => state.contract ? { fuel: state.contract.fuel, dailyLiters: state.contract.dailyLiters } : null,
