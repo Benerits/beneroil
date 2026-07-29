@@ -52,6 +52,11 @@ async function initDb() {
   // izahat sistemi: şüpheli hesap banlanır (ban_reason='izahat'), oyuncunun savunması buraya düşer
   await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_appeal(
     id serial PRIMARY KEY, email text NOT NULL, message text NOT NULL, created_at timestamptz DEFAULT now())`)
+  // YILDIZ GEÇMİŞİ: brandStars her değişimde loglanır (devir/clamp/anomali izi —
+  // "yıldızım silindi" şikâyetleri artık kanıtla incelenebilir)
+  await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_starlog(
+    id serial PRIMARY KEY, email text NOT NULL, prev int NOT NULL, next int NOT NULL,
+    kind text NOT NULL, at timestamptz DEFAULT now())`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS reset_expires timestamptz`)
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS signup_ip text`) // abuse/troll tespiti
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS last_ip text`)
@@ -1113,7 +1118,23 @@ async function handleApi(req, res, url) {
         // KAYDEDİLEN DEĞER de düzeltilir — yalnız allowance'ı düzeltmek yetmiyordu: ilk save
         // 40 yıldızı SQL'e yazınca sonraki save'lerde prevStars=40 olup doğrulama anlamsızlaşıyordu.
         if (firstSave) { stars = 0; clean.s.brandStars = 0 }
-        else if (stars > prevStars + 1) { stars = prevStars; clean.s.brandStars = prevStars }
+        else if (stars > prevStars + 1) {
+          // artış +1'den büyük olamaz (devir tek tek yapılır) → kırp + LOGLA
+          pool.query('INSERT INTO benzinlik_starlog(email, prev, next, kind) VALUES ($1,$2,$3,$4)',
+            [email, prevStars, stars, 'clamp-artis']).catch(() => {})
+          stars = prevStars; clean.s.brandStars = prevStars
+        } else if (stars < prevStars) {
+          // YILDIZ MONOTONIK — ASLA AZALMAZ (Oğuz vakası 29 Tem: bayat sekme/kayıt eski
+          // stars'ı yazınca yıldızlar siliniyordu; azalış hiç doğrulanmıyordu). Meşru
+          // sıfırlama pushSave(null) üzerinden firstSave yolunu kullanır.
+          pool.query('INSERT INTO benzinlik_starlog(email, prev, next, kind) VALUES ($1,$2,$3,$4)',
+            [email, prevStars, stars, 'azalis-engellendi']).catch(() => {})
+          stars = prevStars; clean.s.brandStars = prevStars
+          if (typeof clean.s.handoverCount === 'number') clean.s.handoverCount = Math.max(clean.s.handoverCount, prevStars)
+        } else if (stars === prevStars + 1) {
+          pool.query('INSERT INTO benzinlik_starlog(email, prev, next, kind) VALUES ($1,$2,$3,$4)',
+            [email, prevStars, stars, 'devir']).catch(() => {})
+        }
         // handoverCount de yıldızla tutarlı olmalı (kurcalanmış save ile eşik atlanmasın)
         if (typeof clean.s.handoverCount === 'number') clean.s.handoverCount = Math.min(clean.s.handoverCount, clean.s.brandStars)
         const starMult = 1 + 0.25 * stars
