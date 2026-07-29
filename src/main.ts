@@ -1624,7 +1624,9 @@ function attendantMesh(kind: 'pump' | 'ev'): THREE.Group {
     const proto = charLib[kind === 'pump' ? 1 : 4] // male-b pompacı, female-b şarjcı
     const fig = fitCharacter(proto, 0.95)
     fig.traverse(m => { m.castShadow = true })
-    const cap = roleCap(uniform); cap.position.z = 0.97; fig.add(cap)
+    // Kenney kafası prosedürel kafadan geniş → şapka büyütülür; figür yere indirildiği
+    // için tepe noktası ~0.73 (fitCharacter yere-indirme payı sonrası)
+    const cap = roleCap(uniform); cap.scale.setScalar(1.6); cap.position.z = 0.95; fig.add(cap)
     return fig
   }
   const g = new THREE.Group()
@@ -3285,7 +3287,7 @@ function buyToast(id: string) {
 const isFullMode = new URLSearchParams(location.search).has('full')
 // VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
 // doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
-if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = { get state() { return state }, get cars() { return cars }, get world() { return world } }
+if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = { get state() { return state }, get cars() { return cars }, get world() { return world }, get att() { return attendantFigs } }
 let saveLoaded = false
 if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   try {

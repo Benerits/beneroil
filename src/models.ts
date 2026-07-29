@@ -65,7 +65,9 @@ export function fitCharacter(proto: THREE.Group, targetH: number): THREE.Group {
   const b2 = new THREE.Box3().setFromObject(g)
   g.position.x -= (b2.min.x + b2.max.x) / 2
   g.position.y -= (b2.min.y + b2.max.y) / 2
-  g.position.z -= b2.min.z
+  // SkinnedMesh bbox'ı BIND-POSE'dan ölçülür ve gerçek ayak tabanından aşağıda kalır →
+  // karakterler havada süzülüyordu (Oğuz, headless doğrulandı). Ampirik yere-indirme payı.
+  g.position.z -= b2.min.z + 0.22 * (targetH / 0.95)
   const wrap = new THREE.Group()
   wrap.add(g)
   return wrap
