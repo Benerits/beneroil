@@ -3046,12 +3046,21 @@ function repositionPlacing(x: number, y: number) {
     placing.cx = Math.round(x)
     placing.cy = Math.round(y)
     placing.root.position.set(placing.cx, placing.cy, 0)
+    // KARŞI YAKA ÖNİZLEME FLIP'İ (Oğuz: "yerleştirmeden önce ters görünüyor"): pompa/şarj
+    // kurulunca far tarafta 180° döner (addPump/addEvCharger) — hayalet de AYNI kuralla
+    // dönsün ki oyuncu koymadan önce gerçek yönü görsün.
+    placing.root.rotation.z = placing.rot * Math.PI / 2 + (placingFarFlip() ? Math.PI : 0)
     const odd = placing.rot % 2 === 1
     const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
     placing.valid = isValidPlacement(eff, placing.id, placing.grass)
   }
   placing.planeMat.color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
   placing.planeMat.opacity = placing.valid ? 0.22 : 0.34
+}
+/** pompa/şarj hayaleti karşı yakadaysa 180° döner (kurulumdaki far-flip ile birebir) */
+function placingFarFlip(): boolean {
+  return !!placing && (placing.id.startsWith('pump-') || placing.id.startsWith('charger-'))
+    && placing.cx > ROAD_X
 }
 // mobil: yön butonlarıyla 1 birim kaydır (sürükleme zor)
 function nudgePlacing(dx: number, dy: number) {
@@ -3144,7 +3153,7 @@ window.addEventListener('keydown', e => {
       return
     }
     placing.rot = (placing.rot + 1) % 4
-    placing.root.rotation.z = placing.rot * Math.PI / 2
+    placing.root.rotation.z = placing.rot * Math.PI / 2 + (placingFarFlip() ? Math.PI : 0)
   }
 })
 renderer.domElement.addEventListener('contextmenu', e => { e.preventDefault(); cancelPlacement() })
@@ -3462,7 +3471,7 @@ connectLive()
         return
       }
       placing.rot = (placing.rot + 1) % 4
-      placing.root.rotation.z = placing.rot * Math.PI / 2
+      placing.root.rotation.z = placing.rot * Math.PI / 2 + (placingFarFlip() ? Math.PI : 0)
       repositionPlacing(placing.cx, placing.cy) // döndürünce yeniden doğrula
     })
     document.getElementById('mv-ok')?.addEventListener('click', () => {
