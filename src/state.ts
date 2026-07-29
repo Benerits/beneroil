@@ -972,8 +972,9 @@ export class GameState {
     // AŞAMAZ — tavana dayanınca yeni şube açılana dek orada bekler (her yıldız yine
     // devirle sıfırdan kurulum ister; grind sürer, duvar sürmez).
     const soft = 1_200_000 * Math.max(1, this.unlockedLocs.length)
-    // tek şube full donanım ≈ ₺1.4M (ölçüldü) → %85'i gerçekçi hedef
-    const reachable = Math.round(1_400_000 * 0.85) * Math.max(1, this.unlockedLocs.length)
+    // Oğuz kalibrasyonu (29 Tem): şube başına ~₺1.5M kurulabiliyor → tavan 1.5M × şube
+    // (2 şubeyle 6. yıldız = ₺3M; sıkı ama ulaşılabilir)
+    const reachable = 1_500_000 * Math.max(1, this.unlockedLocs.length)
     let t = 250_000
     for (let i = 0; i < this.handoverCount; i++) t = t < soft ? Math.min(t * 2, Math.max(soft, t * 1.35)) : t * 1.35
     t = Math.min(t, reachable)
