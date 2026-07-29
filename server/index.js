@@ -161,10 +161,10 @@ async function verifyIdToken(idToken, { jwksUrl, issuers, audiences }) {
 // Sağlayıcı kimliğinden hesabı bul/oluştur/birleştir. E-posta gizliyse placeholder kullanılır.
 async function oauthUpsertPlayer(provider, sub, email) {
   const col = provider === 'google' ? 'google_id' : 'apple_id'
-  let r = await pool.query(`SELECT email, banned_at, ban_reason FROM benzinlik_player WHERE =`, [sub])
+  let r = await pool.query(`SELECT email, banned_at, ban_reason FROM benzinlik_player WHERE ${col}=$1`, [sub])
   if (r.rowCount) return r.rows[0]
   if (email) {
-    r = await pool.query('SELECT email, banned_at, ban_reason FROM benzinlik_player WHERE lower(email)=lower()', [email])
+    r = await pool.query('SELECT email, banned_at, ban_reason FROM benzinlik_player WHERE lower(email)=lower($1)', [email])
     if (r.rowCount) {
       await pool.query(`UPDATE benzinlik_player SET ${col}=$1, email_verified=true WHERE lower(email)=lower($2)`, [sub, email])
       return r.rows[0]
@@ -921,7 +921,7 @@ async function handleApi(req, res, url) {
           !rateLimit('loginip:' + clientIp(req), 120, 3600_000)) {
         return json(res, 429, { error: 'Çok fazla deneme — biraz sonra tekrar dene.' })
       }
-      const r = await pool.query('SELECT pass, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=', [e])
+      const r = await pool.query('SELECT pass, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=$1', [e])
       if (r.rowCount === 0 || !verifyPassword(String(password || ''), r.rows[0].pass)) {
         return json(res, 401, { error: 'E-posta veya şifre hatalı.' })
       }
@@ -1051,7 +1051,7 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/save' && req.method === 'GET') {
       const email = auth(); if (!email) return
-      const r = await pool.query('SELECT save, updated_at, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=', [email])
+      const r = await pool.query('SELECT save, updated_at, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=$1', [email])
       if (r.rows[0]?.banned_at) return bannedJson(res, email, r.rows[0].ban_reason)
       // tek-cihaz kilidi: yükleyen cihaz oturumu DEVRALIR (session_id claim) → eski cihaz kick olur
       const sess = String(req.headers['x-session'] || '')
