@@ -503,7 +503,7 @@ export class GameState {
           const mult = 1 + 0.3 * this.marketLevel + (this.hasCoffee ? 0.2 : 0) + (this.hasRestaurant ? 0.3 : 0)
           const id = this.marketLevel > 0 ? 'market' : this.hasCoffee ? 'coffee' : 'restaurant'
           this.addPending(id, Math.round(base * mult), t('Yaya müşteri'))
-          this.events.push(t('🚶 Yaya müşteri alışveriş yaptı (yol karşısından geldi)'))
+          this.events.push(t('Yaya müşteri alışveriş yaptı (yol karşısından geldi)'))
         }
       }
     }
@@ -538,7 +538,7 @@ export class GameState {
     if (this.hasSolar && this.solarDirt < 1) {
       const before = this.solarDirt
       this.solarDirt = Math.min(1, this.solarDirt + 0.0045 * dt)
-      if (before < 0.6 && this.solarDirt >= 0.6) this.events.push(t('🧽 Güneş panelleri iyice kirlendi, üretim düşüyor!'))
+      if (before < 0.6 && this.solarDirt >= 0.6) this.events.push(t('Güneş panelleri iyice kirlendi, üretim düşüyor!'))
     }
     // uranyum: sipariş takibi + üretim sırasında tükenme
     if (this.uraniumPending) {
@@ -546,20 +546,20 @@ export class GameState {
       if (this.uraniumEta <= 0) {
         this.uraniumPending = false
         this.uranium = 100
-        this.events.push(t('☢️ Uranyum teslim edildi — reaktör tam güçte!'))
+        this.events.push(t('Uranyum teslim edildi — reaktör tam güçte!'))
       }
     }
     if (this.hasSMR && this.uranium > 0 && this.batteryLevel > 0 && this.battery < this.batteryCapacity) {
       const before = this.uranium
       this.uranium = Math.max(0, this.uranium - URANIUM_DRAIN_PER_S * dt)
-      if (before > 20 && this.uranium <= 20) this.events.push(t('☢️ Uranyum azalıyor! Yeni çubuk sipariş et.'))
-      if (before > 0 && this.uranium === 0) this.events.push(t('🚨 Uranyum bitti — reaktör üretimi DURDU!'))
+      if (before > 20 && this.uranium <= 20) this.events.push(t('Uranyum azalıyor! Yeni çubuk sipariş et.'))
+      if (before > 0 && this.uranium === 0) this.events.push(t('Uranyum bitti — reaktör üretimi DURDU!'))
     }
     if (this.hasSMR) {
       const before = this.smrWear
       this.smrWear = Math.min(1, this.smrWear + 0.004 * dt)
-      if (before < 0.5 && this.smrWear >= 0.5) this.events.push(t('☢️ Reaktör bakım istiyor!'))
-      if (before < 0.75 && this.smrWear >= 0.75) this.events.push(t('🚨 REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!'))
+      if (before < 0.5 && this.smrWear >= 0.5) this.events.push(t('Reaktör bakım istiyor!'))
+      if (before < 0.75 && this.smrWear >= 0.75) this.events.push(t('REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!'))
       if (this.smrWear > 0.7 && Math.random() < dt * 0.012 * (this.smrWear - 0.7) / 0.3) {
         this.exploded = true
       }
@@ -614,14 +614,14 @@ export class GameState {
       for (let i = 0; i < this.pumps; i++) {
         if (!this.brokenPumps.has(i) && Math.random() < (dt / 3600) * stress * care) {
           this.brokenPumps.add(i)
-          this.events.push(t('🔧 Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.', i + 1))
+          this.events.push(t('Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.', i + 1))
           break
         }
       }
       for (let i = 0; i < this.evChargers; i++) {
         if (!this.brokenChargers.has(i) && Math.random() < (dt / 4200) * stress * care) {
           this.brokenChargers.add(i)
-          this.events.push(t('🔌 Şarj ünitesi #{0} arızalandı!', i + 1))
+          this.events.push(t('Şarj ünitesi #{0} arızalandı!', i + 1))
           break
         }
       }
@@ -774,7 +774,7 @@ export class GameState {
     if (!this.firstBranchGift && to !== 'kasaba' && this.managerLevel === 0) {
       this.firstBranchGift = true
       this.managerLevel = 1
-      this.giftToast = t('🎁 İlk şube hediyesi: bu şubeye Müdür Sv.1 atandı — kumbara + yakıt siparişi otomatik!')
+      this.giftToast = t('İlk şube hediyesi: bu şubeye Müdür Sv.1 atandı — kumbara + yakıt siparişi otomatik!')
     }
     return next
   }
@@ -1367,7 +1367,7 @@ export class GameState {
       // koşullar oluştuysa rakip SAHNEYE ÇIKAR (bir kez)
       if (this.rivalAllowed()) {
         this.rival = freshRival(this.avgPrice(), this.day)
-        return t('🏁 Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.', this.rivalName())
+        return t('Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.', this.rivalName())
       }
       return ''
     }
@@ -1633,7 +1633,7 @@ export class GameState {
     if (cur < cap && next >= cap) {
       this.events.push(t('{0} kumbarası doldu — tıklayıp topla, yoksa ciro erimeye başlar!', name))
     } else if (cur >= hard - 1 && amt > 0) {
-      this.events.push(t('⚠️ {0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!', name))
+      this.events.push(t('{0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!', name))
     }
   }
 
@@ -2042,7 +2042,7 @@ export function checkAchievements(s: GameState) {
   for (const [id, title, cond] of ACHIEVEMENTS) {
     if (!s.achievements.has(id) && cond(s)) {
       s.achievements.add(id)
-      s.events.push(t('🏆 Başarım: {0}', title))
+      s.events.push(t('Başarım: {0}', title))
     }
   }
 }

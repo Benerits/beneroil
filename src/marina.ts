@@ -191,18 +191,18 @@ export function resolveLogbook(lb: Logbook, choice: LogbookChoice, saleValue: nu
   if (choice === 'approve') {
     if (valid) {
       return { money: Math.round(saleValue * LOGBOOK_MARGIN), rep: 0.05, violation: false, correct: true,
-        msg: t('📄 Defter onaylandı — ÖTV\'siz satış yapıldı (+₺{0} marj)', Math.round(saleValue * LOGBOOK_MARGIN)) }
+        msg: t('Defter onaylandı — ÖTV\'siz satış yapıldı (+₺{0} marj)', Math.round(saleValue * LOGBOOK_MARGIN)) }
     }
     return { money: -LOGBOOK_FINE, rep: -0.5, violation: true, correct: false,
-      msg: t('🚫 Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!', LOGBOOK_FINE.toLocaleString('tr-TR')) }
+      msg: t('Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!', LOGBOOK_FINE.toLocaleString('tr-TR')) }
   }
   // REDDET
   if (!valid) {
     return { money: 0, rep: -0.2, violation: false, correct: true,
-      msg: t('✅ Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.') }
+      msg: t('Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.') }
   }
   return { money: 0, rep: -0.35, violation: false, correct: false,
-    msg: t('❌ Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.') }
+    msg: t('Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.') }
 }
 
 // ---- 6) RİSK OLAYLARI (rapor §6.5.6) ----
@@ -226,19 +226,19 @@ export interface MarinaEvent {
 export const MARINA_EVENTS: MarinaEvent[] = [
   { id: 'sizinti', label: t('Yakıt sızıntısı'), weight: { yaz: 1, sonbahar: 1, kis: 0.6, ilkbahar: 1 },
     money: -35_000, rep: -0.6, days: 0, preventedBy: 'boom',
-    msg: t('🛢️ Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.') },
+    msg: t('Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.') },
   { id: 'lodos', label: t('Lodos / fırtına'), weight: { yaz: 0.3, sonbahar: 1.4, kis: 2.2, ilkbahar: 1.1 },
     money: -18_000, rep: -0.25, days: 1,
-    msg: t('🌊 Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.') },
+    msg: t('Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.') },
   { id: 'suruklenme', label: t('Sürüklenen tekne'), weight: { yaz: 0.4, sonbahar: 1, kis: 1.6, ilkbahar: 0.8 },
     money: -22_000, rep: -0.3, days: 0,
-    msg: t('⚓ Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.') },
+    msg: t('Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.') },
   { id: 'denetim', label: t('Denetim'), weight: { yaz: 1, sonbahar: 1, kis: 1, ilkbahar: 1 },
     money: 0, rep: 0, days: 0,
-    msg: t('🚫 Denetim geldi — belgelerin düzgündü, sorunsuz geçti.') },
+    msg: t('Denetim geldi — belgelerin düzgündü, sorunsuz geçti.') },
   { id: 'musilaj', label: t('Deniz kirliliği'), weight: { yaz: 0.7, sonbahar: 0.3, kis: 0.1, ilkbahar: 0.4 },
     money: 0, rep: -0.4, days: 20, preventedBy: 'pumpout',
-    msg: t('🦑 Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.') },
+    msg: t('Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.') },
 ]
 
 /** Determinist olay seçimi (gün tohumlu). Mavi Bayrak denetim/olay sıklığını YARIYA indirir. */

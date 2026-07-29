@@ -38,7 +38,7 @@ ground.receiveShadow = true; scene.add(ground)
 
 const statEl = document.getElementById('stat')!
 function showDetail(s: St) {
-  const facs = [['🛒', s.market], ['🚿', s.wash ? 1 : 0], ['🔧', s.oil ? 1 : 0], ['☕', s.coffee ? 1 : 0], ['🍽️', s.restaurant ? 1 : 0], ['🚚', s.truckpark ? 1 : 0], ['☀️', s.solar], ['☢️', s.smr ? 1 : 0], ['🔋', s.battery]]
+  const facs = [['', s.market], ['', s.wash ? 1 : 0], ['', s.oil ? 1 : 0], ['', s.coffee ? 1 : 0], ['', s.restaurant ? 1 : 0], ['', s.truckpark ? 1 : 0], ['', s.solar], ['', s.smr ? 1 : 0], ['', s.battery]]
     .filter(([, n]) => (n as number) > 0).map(([e]) => e).join(' ') || '—'
   statEl.innerHTML =
     `<div class="chip"><div class="k">GÜN</div><div class="v">${s.day}</div></div>`

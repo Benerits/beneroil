@@ -272,7 +272,7 @@ setInterval(() => {
         const card = document.getElementById('ag-vault') as HTMLDivElement | null
         if (card) {
           if (tot >= 100) {
-            card.textContent = t('👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — girip topla!', Math.round(tot).toLocaleString('tr-TR'))
+            card.textContent = t('Sen yokken müdürlü şubelerin ₺{0} biriktirdi — girip topla!', Math.round(tot).toLocaleString('tr-TR'))
             card.style.display = 'block'
           } else card.style.display = 'none'
         }
@@ -425,7 +425,7 @@ function scheduleBackgroundReminders() {
   for (const tk of tankers) {
     const eta = state.orders[tk.fuel]?.eta ?? 0
     if (eta > 3) notifs.push({ id: 1_700_000_000 + tk.slot, title: world?.stationName ?? 'BenelOil',
-      body: t('🚚 {0} tankeri istasyona ulaştı!', FUEL_LABEL[tk.fuel]), schedule: { at: new Date(Date.now() + eta * 1000) } })
+      body: t('{0} tankeri istasyona ulaştı!', FUEL_LABEL[tk.fuel]), schedule: { at: new Date(Date.now() + eta * 1000) } })
   }
   // Tank bitmeye yakın bildirimi: pompacılar arka planda satmaya devam eder (offline satış) —
   // toplam stok %15'in altına ineceği anı hesapla, o dakikaya bildirim kur (2 saat cap).
@@ -439,13 +439,13 @@ function scheduleBackgroundReminders() {
       const secs = (totalStock - lowAt) / rate
       if (secs < 7200) notifs.push({
         id: 1_800_000_001, title: world?.stationName ?? 'BenelOil',
-        body: t('⛽ Tankların bitmek üzere — sipariş verme vakti!'),
+        body: t('Tankların bitmek üzere — sipariş verme vakti!'),
         schedule: { at: new Date(Date.now() + Math.max(60, secs) * 1000) },
       })
     } else if (totalStock <= lowAt) {
       // zaten kritik: 1 dk sonra hatırlat (uygulamayı kapatırken görsün)
       notifs.push({ id: 1_800_000_001, title: world?.stationName ?? 'BenelOil',
-        body: t('⛽ Tankların bitmek üzere — sipariş verme vakti!'), schedule: { at: new Date(Date.now() + 60_000) } })
+        body: t('Tankların bitmek üzere — sipariş verme vakti!'), schedule: { at: new Date(Date.now() + 60_000) } })
     }
   }
   if (notifs.length) { try { P.LocalNotifications.schedule({ notifications: notifs }) } catch { /* yok say */ } }
@@ -811,7 +811,7 @@ function openOfficePanel() {
       html += `<div class="pz-prog-head"><span>${t('Sonraki yıldıza')}</span>`
         + `<span class="pz-prog-num">₺${tl(eq)} / ₺${tl(thr)}</span></div>`
         + `<div class="pz-bar"><div class="pz-fill" style="width:${pct}%"></div></div>`
-        + `<div class="pz-fine">${t('TÃM ÅUBELERÄ°N kurulu ekipmanÄ± âº{0} deÄerine ulaÅÄ±nca devir aÃ§Ä±lÄ±r â yeni Åube donatmak da sayar. EÅik Ã¶nce ikiye katlanÄ±r; Åube kapasitesine yaklaÅÄ±nca %35’lik adÄ±mlarla artar (asla sabitlenmez).', tl(thr))}</div>`
+        + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik önce ikiye katlanır; şube kapasitesine yaklaşınca %35’lik adımlarla artar (asla sabitlenmez).', tl(thr))}</div>`
     }
     pel.innerHTML = html
   }
@@ -823,7 +823,7 @@ function openOfficePanel() {
     if (c) {
       const pct = Math.min(100, Math.round(c.deliveredToday / c.dailyLiters * 100))
       cel.innerHTML =
-        `<div class="sd" style="font-weight:800;color:var(--ink);padding:2px 4px 6px">📋 ${c.name} · ${FUEL_LABEL[c.fuel]}</div>`
+        `<div class="sd" style="font-weight:800;color:var(--ink);padding:2px 4px 6px">${c.name} · ${FUEL_LABEL[c.fuel]}</div>`
         + row(t('Günlük taahhüt'), `${Math.round(c.deliveredToday)} / ${c.dailyLiters} L (%${pct})`, pct >= 100 ? 'good' : 'bad')
         + row(t('Sözleşme fiyatı'), `₺${c.pricePerL}/L`)
         + row(t('Kalan gün'), `${c.daysLeft} / ${c.daysTotal}`)
@@ -911,7 +911,7 @@ function renderProfile() {
     + row(t('Toplam ciro'), `₺${tl(state.stats.revenue)}`, 'good')
   const acc = document.getElementById('pf-account')
   if (acc) acc.innerHTML =
-    row(t('Giriş serisi'), `${state.loginStreak} gün 🔥`)
+    row(t('Giriş serisi'), `${state.loginStreak} gün`)
     + row(t('Başarımlar'), `${state.achievements.size} / 9`)
     + row(t('Günlük görev'), state.dailyDone ? t('tamamlandı ✓') : `${state.dailyServed}/15`)
     + `<div class="pf-synced"><svg class="ic" style="vertical-align:-3px"><use href="#i-cloud"/></svg> ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
@@ -938,7 +938,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   if (col || colAll) {
     const got = state.collectBranchVaults(col ? (col.dataset.collectloc as LocId) : undefined)
     if (got > 0) {
-      ui.toast(t('👔 Şube kasası toplandı: +₺{0}', got.toLocaleString('tr-TR')), 'good')
+      ui.toast(t('Şube kasası toplandı: +₺{0}', got.toLocaleString('tr-TR')), 'good')
       audio.achieve()
     }
     openOfficePanel(); persist()
@@ -947,7 +947,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   if (un) {
     const id = un.dataset.unlockloc as LocId
     if (!state.unlockLoc(id)) { ui.toast(t('Şube açma şartları sağlanmıyor.'), 'bad'); return }
-    ui.toast(t('🏗️ {0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.', THEMES[id].name), 'good', true)
+    ui.toast(t('{0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.', THEMES[id].name), 'good', true)
     audio.achieve(); openOfficePanel(); persist()
     return
   }
@@ -964,7 +964,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   Object.assign(placedRot, next.placedRot)
   placedRects.push(...(next.placedRects as typeof placedRects))
   localStorage.setItem(LOC_HINT_KEY, id) // reload'da sahne doğru temayla kurulsun
-  ui.toast(t('📍 {0} şubesine geçildi — sahne yükleniyor…', THEMES[id].name), 'good', true)
+  ui.toast(t('{0} şubesine geçildi — sahne yükleniyor…', THEMES[id].name), 'good', true)
   if (state.giftToast) { ui.toast(state.giftToast, 'good', true); state.giftToast = null } // D12 hediyesi
   lastRemotePush = 0 // throttle'ı atla: şube değişimi reload'dan ÖNCE buluta yazılmalı
   persist()
@@ -974,7 +974,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   // reload yine yapılır (sahne prosedürele düşer, oyun durmaz).
   const goReload = () => location.reload()
   if (kitNeeded(id) && !kitReady(id)) {
-    ui.toast(t('📦 {0} sahnesi indiriliyor ({1} model)…', THEMES[id].name, String(kitSize(id))), '')
+    ui.toast(t('{0} sahnesi indiriliyor ({1} model)…', THEMES[id].name, String(kitSize(id))), '')
     loadKit(id).catch(() => null).then(goReload)
     setTimeout(goReload, 12000) // ağ takılırsa oyuncuyu bekletme
   } else setTimeout(goReload, 1600) // sahne temadan yeniden kurulsun
@@ -1004,7 +1004,7 @@ document.getElementById('of-prestige')?.addEventListener('click', e => {
     if (id !== 'gatein' && id !== 'gateout' && id !== 'office' && id !== 'tank') placedRects.splice(i, 1)
   }
   Car.solids = hardRects()
-  ui.toast(t('🤝 İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})',
+  ui.toast(t('İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})',
     res.cash.toLocaleString('tr-TR'), res.stars, state.prestigeMult().toFixed(2)), 'good', true)
   audio.achieve()
   persist()
@@ -1034,7 +1034,7 @@ document.getElementById('of-contracts')?.addEventListener('click', e => {
     if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = t('EMİN MİSİN? Feshetmek için tekrar bas'); return }
     const res = state.cancelContract()
     if (res) {
-      ui.toast(t('📋 Sözleşme feshedildi — cayma bedeli ₺{0} kesildi.', res.fee.toLocaleString('tr-TR')), 'bad', true)
+      ui.toast(t('Sözleşme feshedildi — cayma bedeli ₺{0} kesildi.', res.fee.toLocaleString('tr-TR')), 'bad', true)
       openOfficePanel(); persist()
     }
     return
@@ -1044,7 +1044,7 @@ document.getElementById('of-contracts')?.addEventListener('click', e => {
   const offer = state.contractOffers().find(o => o.id === btn.dataset.sign)
   if (!offer) { ui.toast(t('Teklif güncellendi — yeni listeye bak.'), 'bad'); openOfficePanel(); return }
   if (state.signContract(offer)) {
-    ui.toast(t('📋 {0} sözleşmesi imzalandı — günde {1}L {2} teslim et!', offer.name, offer.dailyLiters, FUEL_LABEL[offer.fuel]), 'good', true)
+    ui.toast(t('{0} sözleşmesi imzalandı — günde {1}L {2} teslim et!', offer.name, offer.dailyLiters, FUEL_LABEL[offer.fuel]), 'good', true)
     openOfficePanel()
     persist()
   } else ui.toast(t('Zaten aktif bir sözleşmen var.'), 'bad')
@@ -1160,11 +1160,11 @@ async function grantProduct(id: string, transactionId?: string) {
   if (p.kind === 'noads') {
     try { await auth.iapGrant(id, transactionId) } catch { /* offline: yine de yerelde aç */ }
     state.noAds = true; setPremium(true)
-    ui.toast(t('✅ Reklamlar kaldırıldı — teşekkürler!'), 'good')
+    ui.toast(t('Reklamlar kaldırıldı — teşekkürler!'), 'good')
   } else if (p.kind === 'coins' && p.coins) {
     try { const r = await auth.iapGrant(id, transactionId); state.money = r.money; lastRemotePush = Date.now() }
     catch { state.money += p.coins }
-    ui.toast(t('✅ +₺{0} kasana eklendi!', p.coins.toLocaleString('tr-TR')), 'good')
+    ui.toast(t('+₺{0} kasana eklendi!', p.coins.toLocaleString('tr-TR')), 'good')
   }
   persist(); renderStore()
 }
@@ -1202,24 +1202,24 @@ document.getElementById('bank-body')?.addEventListener('click', e => {
   if (tgt.closest('#bank-take')) {
     let total = 0; for (const id of bankSelected) total += state.collateralValue(id)
     if (total > 0 && state.takeLoan(total, [...bankSelected])) {
-      ui.toast(t('🏦 Kredi onaylandı — +₺{0} kasana geçti!', total.toLocaleString('tr-TR')), 'good')
+      ui.toast(t('Kredi onaylandı — +₺{0} kasana geçti!', total.toLocaleString('tr-TR')), 'good')
       renderBank(); persist()
     }
     return
   }
   if (tgt.closest('#bank-adv')) {
     const amt = state.advanceLimit()
-    if (state.takeAdvance(amt)) { ui.toast(t('🏦 Avans onaylandı — +₺{0} kasana geçti!', amt.toLocaleString('tr-TR')), 'good'); renderBank(); persist() }
+    if (state.takeAdvance(amt)) { ui.toast(t('Avans onaylandı — +₺{0} kasana geçti!', amt.toLocaleString('tr-TR')), 'good'); renderBank(); persist() }
     return
   }
   if (tgt.closest('#bank-payoff')) {
-    if (state.repayLoanFull()) { ui.toast(t('🏦 Kredi kapatıldı — teminatların serbest!'), 'good'); renderBank(); persist() }
-    else ui.toast(t('💸 Erken kapatmaya kasan yetmiyor.'), 'bad')
+    if (state.repayLoanFull()) { ui.toast(t('Kredi kapatıldı — teminatların serbest!'), 'good'); renderBank(); persist() }
+    else ui.toast(t('Erken kapatmaya kasan yetmiyor.'), 'bad')
     return
   }
   if (tgt.closest('#bank-buyout')) {
-    if (state.buyoutPartner()) { ui.toast(t('🏦 Ortaklık kapatıldı — istasyon tamamen senin!'), 'good'); renderBank(); persist() }
-    else ui.toast(t('💸 Ortaklığı kapatmaya kasan yetmiyor.'), 'bad')
+    if (state.buyoutPartner()) { ui.toast(t('Ortaklık kapatıldı — istasyon tamamen senin!'), 'good'); renderBank(); persist() }
+    else ui.toast(t('Ortaklığı kapatmaya kasan yetmiyor.'), 'bad')
   }
 })
 
@@ -1256,7 +1256,7 @@ function seizeCollateral() {
   state.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
   Car.solids = hardRects()
   cars.rerouteForGates() // dünya değişti: rotalar tazelensin (eski konuma süren araç kalmasın)
-  ui.toast(t('🏦 Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!'), 'bad')
+  ui.toast(t('Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!'), 'bad')
   if (selectedBuilding) refreshBuildingCard()
   persist()
 }
@@ -1341,7 +1341,7 @@ const cars = new CarManager(world.scene, modelLib, {
     state.stats.lost++
     if (rampFullT <= 0) {
       rampFullT = 12
-      ui.toast(t('🛣️ Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.'), 'bad')
+      ui.toast(t('Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.'), 'bad')
     }
   },
   gateInY: () => world.gateIn.y,
@@ -1405,8 +1405,8 @@ function updateFarHint() {
   const anyPaved = farParcels.some(k => state.pavedParcels.has(k))
   const txt = document.getElementById('farhint-text')
   if (txt) txt.textContent = anyPaved
-    ? t('🚧 Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.')
-    : t('🚧 Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.')
+    ? t('Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.')
+    : t('Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.')
   box.style.display = 'block'
 }
 document.getElementById('farhint-x')?.addEventListener('click', () => {
@@ -1490,7 +1490,7 @@ function facilityVisits(car: Car): Visit[] {
       .find(([mid, lvl]) => lvl > 0 && sameSide(mid))
     if (mk) {
       const [mid, lvl] = mk
-      v.push({ buildingId: mid, revenue: () => Math.round((25 + Math.random() * 35) * lvl), toastMsg: m => t('🛒 Market alışverişi: +₺{0}', m), score: 0.2 })
+      v.push({ buildingId: mid, revenue: () => Math.round((25 + Math.random() * 35) * lvl), toastMsg: m => t('Market alışverişi: +₺{0}', m), score: 0.2 })
     }
   }
   const pickFac = (base: string, has: boolean, has2: boolean): string | null => {
@@ -1504,17 +1504,17 @@ function facilityVisits(car: Car): Visit[] {
     v.push({
       buildingId: toiletId,
       revenue: () => fee,
-      toastMsg: mm => t('🚻 Tuvalet ücreti: +₺{0}', mm),
+      toastMsg: mm => t('Tuvalet ücreti: +₺{0}', mm),
       score: 0.15 * state.toiletLevel - (fee > 0 ? 0.03 + fee * 0.012 : 0),
     })
   }
   const coffeeId = pickFac('coffee', state.hasCoffee, state.hasCoffee2)
   if (car.wantsCoffee && coffeeId) {
-    v.push({ buildingId: coffeeId, revenue: () => Math.round(20 + Math.random() * 25), toastMsg: m => t('☕ Kahve satışı: +₺{0}', m), score: 0.15 })
+    v.push({ buildingId: coffeeId, revenue: () => Math.round(20 + Math.random() * 25), toastMsg: m => t('Kahve satışı: +₺{0}', m), score: 0.15 })
   }
   const foodId = pickFac('restaurant', state.hasRestaurant, state.hasRestaurant2)
   if (car.wantsFood && foodId) {
-    v.push({ buildingId: foodId, revenue: () => Math.round(80 + Math.random() * 80), toastMsg: m => t('🍽️ Restoran hesabı: +₺{0}', m), score: 0.25 })
+    v.push({ buildingId: foodId, revenue: () => Math.round(80 + Math.random() * 80), toastMsg: m => t('Restoran hesabı: +₺{0}', m), score: 0.25 })
   }
   return v
 }
@@ -1522,7 +1522,7 @@ function facilityVisits(car: Car): Visit[] {
 /** olmayan tesisi arayan müşterinin hayal kırıklığı */
 function missingPenalty(car: Car): number {
   let d = 0
-  if (car.wantsToilet && state.toiletLevel === 0) { d -= 0.8; ui.toast('🚻 Müşteri tuvalet arıyordu, bulamadı!', 'bad') }
+  if (car.wantsToilet && state.toiletLevel === 0) { d -= 0.8; ui.toast('Müşteri tuvalet arıyordu, bulamadı!', 'bad') }
   if (car.wantsMarket && state.marketLevel === 0) d -= 0.3
   if (car.wantsCoffee && !state.hasCoffee) d -= 0.1
   if (car.wantsFood && !state.hasRestaurant) d -= 0.1
@@ -1550,7 +1550,7 @@ function vehicleServices(car: Car): number {
   if (car.wantsOil && oilId) {
     const m = Math.round(150 + Math.random() * 100)
     state.addPending(oilId, m, t('Yağ değişimi')); d += 0.25
-    ui.toast(t('🔧 Yağ değişimi: +₺{0} kumbarada', m), 'good')
+    ui.toast(t('Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
   if (car.wantsAir && state.hasAirWater && anyOnSide('airwater')) {
     // adet çarpanı: çok üniteli istasyonda aynı anda birden çok araç kullanır (pendingCap'in
@@ -1720,7 +1720,7 @@ function updateWalkers(dt: number) {
 }
 
 function emojiFor(score: number): string {
-  return score >= 4.5 ? '😍' : score >= 3.5 ? '🙂' : score >= 2.5 ? '😐' : '😡'
+  return score >= 4.5 ? '' : score >= 3.5 ? '' : score >= 2.5 ? '' : ''
 }
 
 // ---- Servis akışı (yakıt) ----
@@ -1778,7 +1778,7 @@ function concludeService(car: Car, score: number) {
   const visits = facilityVisits(car)
   if (visits.length > 0 && cars.sendToParking(car)) {
     pendingVisits.set(car, { visits, score, started: false })
-    if (parkInfoShown < 2) { parkInfoShown++; ui.toast(t('🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.'), '') } // eğitici: oturumda 2 kez yeter (bildirim spam fixi)
+    if (parkInfoShown < 2) { parkInfoShown++; ui.toast(t('Müşteri aracını otoparka çekti, tesisleri kullanacak.'), '') } // eğitici: oturumda 2 kez yeter (bildirim spam fixi)
   } else {
     // otopark doluysa ziyaret gelirleri yine gelsin (hızlı mod)
     for (const v of visits) {
@@ -1840,7 +1840,7 @@ function finishSale(car: Car) {
   // pompacı satışı: gelirin TAMAMI kasaya girer (kesinti yok). Oyuncu yalnızca bahşişten
   // feragat eder. Pozitif toast göster — eskiden sadece kesinti görünüp "hep zarar" sanılıyordu.
   if (car.autoServed && revenue0 > 0) {
-    ui.toast(t('🧑‍🔧 Pompacı sattı: +₺{0}', Math.round(revenue)), 'good', true)
+    ui.toast(t('Pompacı sattı: +₺{0}', Math.round(revenue)), 'good', true)
   }
   // PREMIUM SEGMENT primi (Katman 1c): premium müşteri aynı litreye daha yüksek marj öder.
   // Marj = fiyat − alış; prim yalnız MARJ üzerine bindirilir (litre fiyatı bozulmaz).
@@ -1849,7 +1849,7 @@ function finishSale(car: Car) {
     const bonus = Math.round(car.filled * marginPerL * (car.marginMult - 1))
     if (bonus > 0) {
       revenue += bonus
-      ui.toast(t('⭐ Premium müşteri primi: +₺{0}', bonus), 'good')
+      ui.toast(t('Premium müşteri primi: +₺{0}', bonus), 'good')
     }
   }
   // MARKA YILDIZI (prestij) kalıcı gelir çarpanı — devir yatırımının geri dönüşü
@@ -1896,7 +1896,7 @@ function finishSale(car: Car) {
       if (out.correct) state.logbookOk++; else state.logbookBad++
       ui.toast(out.msg, out.money < 0 || !out.correct ? 'bad' : 'good')
       if (!inspected && !out.correct) {
-        ui.toast(t('💡 İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.'), '')
+        ui.toast(t('İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.'), '')
       }
       logbookPending.delete(car)
       persist()
@@ -1919,7 +1919,7 @@ function wrongFuel(car: Car) {
   const wfPenalty = Math.round((state.graceActive ? 100 : WRONG_FUEL_PENALTY) * state.damageMult()) // sigorta hasarı yarılar
   state.money -= wfPenalty
   state.addRep(-0.4)
-  ui.toast(t('🚨 {0} isteyen araca {1} bastın! -{2} ₺', FUEL_LABEL[car.demandType], FUEL_LABEL[car.nozzle!], wfPenalty), 'bad')
+  ui.toast(t('{0} isteyen araca {1} bastın! -{2} ₺', FUEL_LABEL[car.demandType], FUEL_LABEL[car.nozzle!], wfPenalty), 'bad')
   car.showFeedback('😡')
   cars.releaseCar(car)
   if (ui.activeCar === car) autoSelect(nextServableCar())
@@ -1946,7 +1946,7 @@ ui.onDismiss = car => {
 ui.onCleanWindows = car => {
   if (car.phase !== 'atPump' || car.windowsCleaned) return
   car.cleanWindows()
-  ui.toast(t('Ön cam pırıl pırıl — bahşiş şansı arttı! ✨'), 'good')
+  ui.toast(t('Ön cam pırıl pırıl — bahşiş şansı arttı!'), 'good')
 }
 
 /** batarya deposu seviyesine göre araca akış hızı (kWh/sn) */
@@ -1958,7 +1958,7 @@ function startCharging(car: Car, auto = false) {
   if (car.phase !== 'atPump' || car.charging || car.squatting) return
   if (state.dieselRunning() && Math.random() < 0.35) {
     car.demandKwh = Math.ceil(car.demandKwh / 2)
-    ui.toast('🔊 Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!', 'bad')
+    ui.toast('Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!', 'bad')
   }
   car.charging = true
   car.beingServed = true
@@ -1977,7 +1977,7 @@ function tickEvCharging(dt: number) {
     if (c.slotIndex >= 0 && state.brokenChargers.has(c.slotIndex)) {
       c.charging = false
       ui.toast(t('Şarj ünitesi arızalandı — şarj durdu, tamir gerekli.'), 'bad')
-      notifyIfHidden(t('🔧 Şarj ünitesi arızalandı — tamir gerekli!'), 'ariza-sarj')
+      notifyIfHidden(t('Şarj ünitesi arızalandı — tamir gerekli!'), 'ariza-sarj')
       cars.releaseCar(c)
       continue
     }
@@ -1985,7 +1985,7 @@ function tickEvCharging(dt: number) {
     const give = Math.min(need, cap * dt, state.battery)
     state.battery = Math.max(0, state.battery - give)
     c.chargedKwh += give
-    c.setCounter(`⚡ ${Math.floor(c.chargedKwh)}/${c.demandKwh} kWh`)
+    c.setCounter(`${Math.floor(c.chargedKwh)}/${c.demandKwh} kWh`)
     if (c.chargedKwh >= c.demandKwh - 0.001) {
       c.charging = false
       const revenue = Math.round(c.demandKwh * state.elecPrice)
@@ -1998,7 +1998,7 @@ function tickEvCharging(dt: number) {
       state.addSideRevenue(c.station === 'far', revenue)
       let score = 4.5
       if (c.patienceFrac < 0.4) score -= 1.5
-      ui.toast(t('⚡ {0} kWh şarj tamamlandı: +₺{1}', c.demandKwh, revenue), 'good')
+      ui.toast(t('{0} kWh şarj tamamlandı: +₺{1}', c.demandKwh, revenue), 'good')
       const anyFacility = state.marketLevel > 0 || state.toiletLevel > 0 || state.hasCoffee || state.hasRestaurant
       if (anyFacility && Math.random() < 0.12) {
         // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
@@ -2007,7 +2007,7 @@ function tickEvCharging(dt: number) {
         c.setCounter(t('MOLADA · GÖNDER →'))
         const visits = facilityVisits(c)
         spawnWalkerFor(c, { visits, score, squat: true })
-        ui.toast(t('⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆'), 'bad')
+        ui.toast(t('Molacı üniteyi tutuyor — göndermek için araca dokun'), 'bad')
       } else {
         concludeService(c, score)
       }
@@ -2168,7 +2168,7 @@ async function syncSave() {
   } catch {
     // Kayıt SESSİZCE düşmesin: üst üste başarısızlıkta oyuncuyu uyar (yoksa oyuncu
     // kaydettiğini sanıp çıkıyor ve ilerlemesini kaybediyor).
-    if (++saveFails === 3) ui.toast(t('⚠️ Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!'), 'bad', true)
+    if (++saveFails === 3) ui.toast(t('Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!'), 'bad', true)
   } finally { syncing = false }
 }
 // Tek-cihaz kilidi: başka cihaz oturumu devralınca burası duraklar (ilerleme güvende).
@@ -2179,7 +2179,7 @@ function showKickedOverlay() {
   o.id = 'kickedblock'
   o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#1a0d0df5;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px)'
   o.innerHTML = `<div style="max-width:420px;text-align:center;color:#eaf1fb;font-family:system-ui,sans-serif">
-    <div style="font-size:44px;margin-bottom:8px">📱🔒</div>
+    <div style="font-size:44px;margin-bottom:8px"></div>
     <div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('Başka cihazda açıldı')}</div>
     <div style="font-size:14px;line-height:1.5;color:#e0b8b8;margin-bottom:20px">${t('Bu hesap başka bir cihazda açıldığı için burada duraklatıldı. İlerlemen güvende — hiçbir şey silinmedi. Buradan devam etmek için yenile.')}</div>
     <button id="kicked-retry" style="padding:12px 22px;font-size:15px;font-weight:700;border:0;border-radius:12px;background:#d64545;color:#fff;cursor:pointer">${t('Buradan devam et (Yenile)')}</button>
@@ -2190,7 +2190,7 @@ function showKickedOverlay() {
 auth.onKicked(showKickedOverlay)
 /** başka cihaz daha yeni oynadı → clobber etme, en güncel ilerlemeye temiz reload ile senkronla */
 function onRemoteNewer() {
-  ui.toast(t('🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…'), '')
+  ui.toast(t('Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…'), '')
   setTimeout(() => location.reload(), 1400)
 }
 
@@ -2220,7 +2220,7 @@ function showBanOverlay(reason: string) {
   o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#1a0d0df5;display:flex;'
     + 'align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px)'
   o.innerHTML = `<div style="max-width:420px;text-align:center;color:#f4e9e9;font-family:system-ui,sans-serif">
-    <div style="font-size:46px;margin-bottom:8px">🚫</div>
+    <div style="font-size:46px;margin-bottom:8px"></div>
     <div style="font-size:20px;font-weight:800;margin-bottom:10px">${t('Hesabın askıya alındı')}</div>
     <div style="font-size:14px;line-height:1.5;color:#d8b8b8;margin-bottom:20px">${reason || t('Kurallar ihlal edildi.')}</div>
     <button id="banblock-ok" style="padding:12px 22px;font-size:15px;font-weight:700;border:0;border-radius:12px;background:#c9433b;color:#fff;cursor:pointer">${t('Tamam')}</button>
@@ -2237,7 +2237,7 @@ function showVerifyGate() {
   o.id = 'verifygate'
   o.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#0d1420f7;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;font-family:system-ui,sans-serif'
   o.innerHTML = `<div style="max-width:400px;width:100%;text-align:center;color:#eaf1fb">
-    <div style="font-size:44px;margin-bottom:6px">📧</div>
+    <div style="font-size:44px;margin-bottom:6px"></div>
     <div style="font-size:20px;font-weight:800;margin-bottom:8px">${t('E-postanı doğrula')}</div>
     <div style="font-size:14px;line-height:1.5;color:#b8c6da;margin-bottom:16px"><b>${email}</b> ${t('adresine doğrulama bağlantısı gönderdik. Mailindeki linke tıkla, sonra Kontrol Et’e bas.')}</div>
     <button id="vg-check" style="width:100%;padding:12px;border:0;border-radius:10px;background:#27a05a;color:#fff;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px">${t('Doğruladım — Kontrol Et')}</button>
@@ -2373,17 +2373,17 @@ function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
   o.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#0d1420cc;display:flex;align-items:center;justify-content:center;padding:22px;font-family:var(--font,system-ui)'
   o.innerHTML =
     `<div style="background:linear-gradient(180deg,#fdfaf2,#f1ebdb);border:2px solid #e0d4bd;border-bottom-width:7px;border-radius:22px;padding:22px 26px;max-width:340px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(10,14,20,.5)">`
-    + `<div style="font-size:44px;line-height:1">🏭💤</div>`
+    + `<div style="font-size:44px;line-height:1"></div>`
     + `<div style="font-size:22px;font-weight:800;color:#1e2a36;margin:8px 0 2px">Tekrar hoş geldin!</div>`
-    + `<div style="font-size:13px;font-weight:700;color:#7a6152">${dur} yoktun — istasyonun senin için çalıştı ⛽</div>`
+    + `<div style="font-size:13px;font-weight:700;color:#7a6152">${dur} yoktun — istasyonun senin için çalıştı</div>`
     + `<div style="font-size:34px;font-weight:800;color:#2fa05a;margin:14px 0 2px">+₺${income.toLocaleString('tr-TR')}</div>`
     + `<div style="font-size:11px;font-weight:700;color:#9aa4b0;margin-bottom:${soldL > 0 ? 10 : 16}px">kasana eklendi</div>`
     + (soldL > 0
         ? `<div style="font-size:12.5px;font-weight:750;color:#5c6b76;background:#efe8d6;border-radius:12px;padding:9px 11px;margin-bottom:14px;line-height:1.45">`
-          + t('⛽ {0} L yakıt satıldı — tank seviyelerine göz at.', soldL.toLocaleString('tr-TR'))
+          + t('{0} L yakıt satıldı — tank seviyelerine göz at.', soldL.toLocaleString('tr-TR'))
           + `</div>`
         : '')
-    + `<button id="off-ok" style="width:100%;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">Devam et 🚀</button>`
+    + `<button id="off-ok" style="width:100%;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">Devam et</button>`
     + `</div>`
   document.body.appendChild(o)
   const close = () => o.remove()
@@ -2817,7 +2817,7 @@ function startPlacement(id: string, move = false) {
     : t('Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir'), '')
   if (!reserveHintShown) {
     reserveHintShown = true
-    ui.toast(t('🟠 Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.'), '', true)
+    ui.toast(t('Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.'), '', true)
   }
 }
 
@@ -2830,8 +2830,8 @@ function startZoneMode(kind: 'land' | 'pave') {
   const zw = document.getElementById('zonecostwrap'); const zc = document.getElementById('zonecost')
   if (zw && zc) { zw.style.display = 'flex'; zc.style.color = 'var(--ink)'; zc.textContent = kind === 'land' ? t('Parsele dokun…') : t('Arsana dokun…') }
   ui.toast(kind === 'land'
-    ? t('🏞️ Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal')
-    : t('🧱 Zemin seçimi: betonlanacak arsana tıkla · ESC iptal'), '')
+    ? t('Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal')
+    : t('Zemin seçimi: betonlanacak arsana tıkla · ESC iptal'), '')
 }
 
 function cancelPlacement() {
@@ -2928,7 +2928,7 @@ function confirmPlacement() {
       : p.id.startsWith('charger-') ? 'evcharger'
       : p.id.split('#')[0]
     if (!buyItem(state, purchaseId)) {
-      ui.toast(t('💸 Para yetmiyor!'), 'bad')
+      ui.toast(t('Para yetmiyor!'), 'bad')
       cancelPlacement()
       return
     }
@@ -2951,7 +2951,7 @@ function confirmPlacement() {
   // karşıya (yol karşısı) İLK pompa/şarj konunca karşı istasyon aktive olur: otomatik giriş-çıkış + karşı şerit trafiği
   if ((p.id.startsWith('pump-') || p.id.startsWith('charger-')) && p.cx > ROAD_X && !world.farStationOn) {
     enableFarStationClear() // kapıları mevcut karşı-yapılardan kaçırarak kur
-    ui.toast('🚧 Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.', 'good', true)
+    ui.toast('Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.', 'good', true)
   }
   const i = placedRects.findIndex(r => r.id === p.id)
   if (i >= 0) placedRects.splice(i, 1)
@@ -2969,23 +2969,23 @@ function confirmZone() {
   if (z.kind === 'land') {
     // METROPOL alan kıtlığı (§6.6): şehirde satın alınabilecek parsel sayısı sınırlı
     if (state.parcelLimitReached()) {
-      ui.toast(t('🏙️ Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.',
+      ui.toast(t('Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.',
         String(state.parcelLimit())), 'bad')
       return
     }
     const cost = parcelCost(z.c, z.r, state)
-    if (state.money < cost) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
+    if (state.money < cost) { ui.toast(t('Para yetmiyor!'), 'bad'); return }
     state.money -= cost
     state.ownedParcels.add(key)
     world.markOwned(z.c, z.r)
-    if (z.c >= 3) ui.toast('🏞️ Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.', 'good', true)
-    ui.toast(t('🏞️ Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.', cost.toLocaleString('tr-TR')), 'good')
+    if (z.c >= 3) ui.toast('Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.', 'good', true)
+    ui.toast(t('Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.', cost.toLocaleString('tr-TR')), 'good')
   } else {
-    if (state.money < PAVE_COST) { ui.toast(t('💸 Para yetmiyor!'), 'bad'); return }
+    if (state.money < PAVE_COST) { ui.toast(t('Para yetmiyor!'), 'bad'); return }
     state.money -= PAVE_COST
     state.pavedParcels.add(key)
     world.paveParcel(z.c, z.r)
-    ui.toast('🧱 Zemin betonlandı — artık yapı kurabilirsin!', 'good')
+    ui.toast('Zemin betonlandı — artık yapı kurabilirsin!', 'good')
   }
   cancelPlacement()
   persist()
@@ -3088,7 +3088,7 @@ ui.onSell = id => {
   if (refund === null) return
   removeBuildingVisual(id)
   audio.build()
-  ui.toast(t('🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}', refund.toLocaleString('tr-TR')), 'good', true)
+  ui.toast(t('Yıkıldı — yatırımın yarısı iade: +₺{0}', refund.toLocaleString('tr-TR')), 'good', true)
   selectedBuilding = null
   world.setSelected(null)
   ui.hideBuildingCard()
@@ -3100,32 +3100,32 @@ ui.onSell = id => {
 function buyToast(id: string) {
   audio.build()
   switch (id) {
-    case 'pump': ui.toast(t('⛽ Pompa #{0} kuruldu!', state.pumps), 'good'); break
-    case 'sign': ui.toast('🪧 Tabela büyüdü — daha çok müşteri gelecek!', 'good'); break
-    case 'widegate': ui.toast(t('🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!'), 'good'); break
-    case 'tank': ui.toast(t('🛢️ Tank kapasitesi: {0}L', state.tankCapacity), 'good'); break
-    case 'market': ui.toast('🛒 Market açıldı!', 'good'); break
-    case 'market2': ui.toast(t('🛒 Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!'), 'good'); break
-    case 'toilet': ui.toast('🚻 Tuvalet hizmete girdi!', 'good'); break
-    case 'grid': ui.toast(t('⚡ Elektrik altyapısı Sv.{0} kuruldu!', state.gridLevel), 'good'); break
-    case 'battery': ui.toast('🔋 Batarya deposu kuruldu — üretim biriktikçe dolacak.', 'good'); break
-    case 'evcharger': syncSignPrices(); ui.toast('🔌 DC şarj ünitesi kuruldu!', 'good'); break
-    case 'solar': ui.toast('☀️ Güneş santrali kuruldu. ⚠️ Paneller zamanla kirlenir!', 'good'); break
-    case 'dieselgen': ui.toast('🛠️ Jeneratör kuruldu. ⚠️ Gürültüsü EV müşterilerini kaçırabilir!', 'good'); break
-    case 'smr': ui.toast('☢️ Reaktör devrede! ⚠️ BAKIMI ASLA AKSATMA — patlarsa her şey gider!', 'bad'); break
-    case 'wash': ui.toast('🚿 Oto yıkama açıldı — müşteriler araç yıkatacak!', 'good'); break
-    case 'oil': ui.toast('🔧 Yağ değişim istasyonu açıldı!', 'good'); break
-    case 'coffee': ui.toast('☕ Kahveci açıldı!', 'good'); break
-    case 'restaurant': ui.toast('🍽️ Restoran açıldı — yolcular yemek molası verecek!', 'good'); break
-    case 'truckpark': ui.toast('🚛 Tır parkı açıldı — düzenli konaklama geliri!', 'good'); break
-    case 'airwater': ui.toast('💨 Hava-su ünitesi kuruldu!', 'good'); break
-    case 'lamp': ui.toast(t('💡 Sokak lambası kuruldu — gece istasyon aydınlık!'), 'good'); break
-    case 'selfwash': ui.toast('🧽 Self yıkama açıldı — köpük ve su otomatik satılacak!', 'good'); break
-    case 'parking': ui.toast('🅿️ Otopark açıldı — müşteriler park edip tesisleri gezebilecek!', 'good'); break
+    case 'pump': ui.toast(t('Pompa #{0} kuruldu!', state.pumps), 'good'); break
+    case 'sign': ui.toast('Tabela büyüdü — daha çok müşteri gelecek!', 'good'); break
+    case 'widegate': ui.toast(t('Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!'), 'good'); break
+    case 'tank': ui.toast(t('Tank kapasitesi: {0}L', state.tankCapacity), 'good'); break
+    case 'market': ui.toast('Market açıldı!', 'good'); break
+    case 'market2': ui.toast(t('Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!'), 'good'); break
+    case 'toilet': ui.toast('Tuvalet hizmete girdi!', 'good'); break
+    case 'grid': ui.toast(t('Elektrik altyapısı Sv.{0} kuruldu!', state.gridLevel), 'good'); break
+    case 'battery': ui.toast('Batarya deposu kuruldu — üretim biriktikçe dolacak.', 'good'); break
+    case 'evcharger': syncSignPrices(); ui.toast('DC şarj ünitesi kuruldu!', 'good'); break
+    case 'solar': ui.toast('Güneş santrali kuruldu. Paneller zamanla kirlenir!', 'good'); break
+    case 'dieselgen': ui.toast('Jeneratör kuruldu. Gürültüsü EV müşterilerini kaçırabilir!', 'good'); break
+    case 'smr': ui.toast('Reaktör devrede! BAKIMI ASLA AKSATMA — patlarsa her şey gider!', 'bad'); break
+    case 'wash': ui.toast('Oto yıkama açıldı — müşteriler araç yıkatacak!', 'good'); break
+    case 'oil': ui.toast('Yağ değişim istasyonu açıldı!', 'good'); break
+    case 'coffee': ui.toast('Kahveci açıldı!', 'good'); break
+    case 'restaurant': ui.toast('Restoran açıldı — yolcular yemek molası verecek!', 'good'); break
+    case 'truckpark': ui.toast('Tır parkı açıldı — düzenli konaklama geliri!', 'good'); break
+    case 'airwater': ui.toast('Hava-su ünitesi kuruldu!', 'good'); break
+    case 'lamp': ui.toast(t('Sokak lambası kuruldu — gece istasyon aydınlık!'), 'good'); break
+    case 'selfwash': ui.toast('Self yıkama açıldı — köpük ve su otomatik satılacak!', 'good'); break
+    case 'parking': ui.toast('Otopark açıldı — müşteriler park edip tesisleri gezebilecek!', 'good'); break
   }
 }
 
-// 🧪 FULL / vitrin modu: ?full=1 ile her şey kurulu başlar
+// FULL / vitrin modu: ?full=1 ile her şey kurulu başlar
 const isFullMode = new URLSearchParams(location.search).has('full')
 // VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
 // doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
@@ -3174,7 +3174,7 @@ if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)
 // C9 (analiz): dönen oyuncuya birikimi hatırlat — nereden toplanacağıyla birlikte
 if (saveLoaded && state.branchVaultTotal() >= 100) {
-  ui.toast(t('👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!',
+  ui.toast(t('Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!',
     Math.round(state.branchVaultTotal()).toLocaleString('tr-TR')), 'good', true)
 }
 // eski yerel kayıt kalıntılarını temizle (artık her şey SQL'de)
@@ -3311,7 +3311,7 @@ function tutActive() {
 function tutStart() {
   if (tutStep !== 0 || !tutEl || !tutActive()) return
   tutStep = 1
-  tutEl.innerHTML = t('👋 Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.')
+  tutEl.innerHTML = t('Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.')
   tutEl.style.display = 'block'
 }
 function tutAdvance(to: number) {
@@ -3322,7 +3322,7 @@ function tutAdvance(to: number) {
   } else if (to === 3 && tutStep < 3) {
     tutStep = 3
     localStorage.setItem('beneloil-onboarded', '1')
-    tutEl.innerHTML = t('🎉 İlk satışın! İpucu: <b>🧼 cam temizle</b> = daha çok bahşiş. Büyümek için <b>🛒 mağazadan</b> pompa/tesis al, <b>🏢 ofisten</b> fiyatı ayarla.')
+    tutEl.innerHTML = t('İlk satışın! İpucu: <b>cam temizle</b> = daha çok bahşiş. Büyümek için <b>mağazadan</b> pompa/tesis al, <b>ofisten</b> fiyatı ayarla.')
     setTimeout(() => { if (tutEl) tutEl.style.display = 'none' }, 9000)
   }
 }
@@ -3380,15 +3380,15 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
     state.opexStart = state.day
     if (state.equipmentValue() > 50_000 && !localStorage.getItem('beneloil-opex-note')) {
       localStorage.setItem('beneloil-opex-note', '1')
-      ui.toast(t('🏛️ YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.'), '', true)
+      ui.toast(t('YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.'), '', true)
     }
   }
 
-  // ---- 🎁 Kayıt bonusu: register / OAuth-yeni-hesap sonrası İLK açılışta bir kez ----
+  // ---- Kayıt bonusu: register / OAuth-yeni-hesap sonrası İLK açılışta bir kez ----
   if (!isFullMode && !isPromoMode && auth.loggedIn() && localStorage.getItem(auth.REG_BONUS_KEY)) {
     localStorage.removeItem(auth.REG_BONUS_KEY)
     state.money += 2500
-    ui.toast(t('🎁 Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!'), 'good', true)
+    ui.toast(t('Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!'), 'good', true)
     audio.achieve()
     persist()
   }
@@ -3411,7 +3411,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
       // geri dönüş kancası: lapsed oyuncuya "seni özledik" bonusu (seriyi cezalandırmadan geri çeker)
       if (lapsed) {
         state.money += 1000
-        ui.toast(t('Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000 🎁'), 'good', true)
+        ui.toast(t('Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000'), 'good', true)
       }
       state.dailyDate = today
       state.dailyServed = 0
@@ -3419,7 +3419,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
       persist()
     } else {
       state.lastLoginDate = today // teaser günde 1 kez görünsün
-      ui.toast(t('🔒 Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!'), '', true)
+      ui.toast(t('Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!'), '', true)
     }
   }
   if (state.dailyDate !== today) {
@@ -3472,7 +3472,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
           fuelCash = Math.round(fuelCash)
           state.money += fuelCash
           total += fuelCash
-          ui.toast(t('⛽ Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!',
+          ui.toast(t('Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!',
             Math.round(soldTotal).toLocaleString('tr-TR'), fuelCash.toLocaleString('tr-TR')), 'good', true)
         }
       }
@@ -3526,7 +3526,7 @@ if (isFullMode) {
   state.money = 50_000
   for (const f of FUELS) state.tanks[f] = state.fuelCapacity(f)
   state.battery = state.batteryCapacity
-  ui.toast('🧪 FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!', 'good')
+  ui.toast('FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!', 'good')
 }
 
 ui.onMaint = id => {
@@ -3538,13 +3538,13 @@ ui.onMaint = id => {
       ui.toast(t('Pompa #{0}: pompacı işten çıktı — dolum yine sende.', i + 1), '')
     } else {
       if (state.money < POMPACI_HIRE) {
-        ui.toast(t('💸 Para yetmiyor — pompacı işe alma ₺{0}.', POMPACI_HIRE.toLocaleString('tr-TR')), 'bad')
+        ui.toast(t('Para yetmiyor — pompacı işe alma ₺{0}.', POMPACI_HIRE.toLocaleString('tr-TR')), 'bad')
         return
       }
       state.money -= POMPACI_HIRE
       state.autoPumps.add(i)
       audio.build()
-      ui.toast(t('🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.', i + 1), 'good')
+      ui.toast(t('Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.', i + 1), 'good')
     }
     refreshBuildingCard()
     persist()
@@ -3557,12 +3557,12 @@ ui.onMaint = id => {
       ui.toast(t('DC Şarj #{0}: şarjcı işten çıktı — şarjı yine sen yaparsın.', i + 1), '')
     } else {
       if (state.money < EV_ATTENDANT_HIRE) {
-        ui.toast(t('💸 Para yetmiyor — şarjcı işe alma ₺{0}.', EV_ATTENDANT_HIRE.toLocaleString('tr-TR')), 'bad')
+        ui.toast(t('Para yetmiyor — şarjcı işe alma ₺{0}.', EV_ATTENDANT_HIRE.toLocaleString('tr-TR')), 'bad')
         return
       }
       state.money -= EV_ATTENDANT_HIRE
       state.autoChargers.add(i)
-      ui.toast(t('⚡ DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!', i + 1), 'good')
+      ui.toast(t('DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!', i + 1), 'good')
     }
     refreshBuildingCard()
     persist()
@@ -3576,13 +3576,13 @@ ui.onMaint = id => {
     return
   }
   if (doMaintenance(state, id)) {
-    if (id === 'clean-solar') ui.toast('🧽 Paneller tertemiz, üretim tam güçte!', 'good')
-    else if (id === 'maint-smr') ui.toast('☢️ Reaktör bakımı yapıldı, güvendesin.', 'good')
-    else if (id === 'order-uranium') ui.toast('☢️ Uranyum siparişi verildi — özel konvoy yolda!', 'good')
-    else ui.toast('🔧 Tamir edildi, tekrar hizmette!', 'good')
+    if (id === 'clean-solar') ui.toast('Paneller tertemiz, üretim tam güçte!', 'good')
+    else if (id === 'maint-smr') ui.toast('Reaktör bakımı yapıldı, güvendesin.', 'good')
+    else if (id === 'order-uranium') ui.toast('Uranyum siparişi verildi — özel konvoy yolda!', 'good')
+    else ui.toast('Tamir edildi, tekrar hizmette!', 'good')
     if (selectedBuilding) refreshBuildingCard()
   } else {
-    ui.toast('💸 Bunun için yeterli para yok!', 'bad')
+    ui.toast('Bunun için yeterli para yok!', 'bad')
   }
 }
 
@@ -3698,10 +3698,10 @@ function buildingCard(id: string): BuildingCard | null {
         [t('Dizel'), `₺${state.prices.dizel}/L`],
       ],
       action: broken
-        ? { label: '🔧 Tamir Et — ₺800', maintId: `fix-pump-${i}` }
+        ? { label: 'Tamir Et — ₺800', maintId: `fix-pump-${i}` }
         : state.autoPumps.has(i)
-          ? { label: t('🧑‍🔧 Pompacıyı işten çıkar'), maintId: `auto-pump-${i}` }
-          : { label: t('🧑‍🔧 Pompacı Tut — ₺{0} + ₺{1}/gün', POMPACI_HIRE.toLocaleString('tr-TR'), POMPACI_WAGE), maintId: `auto-pump-${i}` },
+          ? { label: t('Pompacıyı işten çıkar'), maintId: `auto-pump-${i}` }
+          : { label: t('Pompacı Tut — ₺{0} + ₺{1}/gün', POMPACI_HIRE.toLocaleString('tr-TR'), POMPACI_WAGE), maintId: `auto-pump-${i}` },
       // Oğuz: pompaya tıklayıp güçlendirme — hız seviyesi karttan alınır (tüm pompalara işler)
       buy: state.pumpSpeedLevel < 3
         ? { label: t('Hızlı Dolum Sv.{0} — ₺{1}', state.pumpSpeedLevel + 1, PUMPSPEED_COSTS[state.pumpSpeedLevel].toLocaleString('tr-TR')), id: 'pumpspeed' }
@@ -3722,10 +3722,10 @@ function buildingCard(id: string): BuildingCard | null {
         [t('Satış'), `₺${state.elecPrice}/kWh`],
       ],
       action: broken
-        ? { label: '🔧 Tamir Et — ₺1.000', maintId: `fix-charger-${i}` }
+        ? { label: 'Tamir Et — ₺1.000', maintId: `fix-charger-${i}` }
         : state.autoChargers.has(i)
-          ? { label: t('🧑‍🔧 Şarjcıyı işten çıkar'), maintId: `auto-charger-${i}` }
-          : { label: t('🧑‍🔧 Şarjcı Tut — ₺{0} + ₺{1}/gün', EV_ATTENDANT_HIRE.toLocaleString('tr-TR'), EV_ATTENDANT_WAGE), maintId: `auto-charger-${i}` },
+          ? { label: t('Şarjcıyı işten çıkar'), maintId: `auto-charger-${i}` }
+          : { label: t('Şarjcı Tut — ₺{0} + ₺{1}/gün', EV_ATTENDANT_HIRE.toLocaleString('tr-TR'), EV_ATTENDANT_WAGE), maintId: `auto-charger-${i}` },
     }
   }
   switch (id) {
@@ -3757,7 +3757,7 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
           ['Kural', t('Çıkışla arası en az 5 birim')]],
         buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
-          ? { label: t('🛣️ Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          ? { label: t('Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
           : undefined,
       }
     }
@@ -3770,7 +3770,7 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
           ['Kural', t('Girişle arası en az 5 birim')]],
         buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
-          ? { label: t('🛣️ Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          ? { label: t('Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
           : undefined,
       }
     }
@@ -3806,7 +3806,7 @@ function buildingCard(id: string): BuildingCard | null {
           [t('LPG'), `${Math.round(state.tanks.lpg)} / ${state.fuelCapacity('lpg')}L`, state.tanks.lpg < state.fuelCapacity('lpg') * 0.15 ? 'bad' : ''],
           ['Kapasite seviyesi', `${state.tankLevel + 1}/4 (maks ${TANK_CAPACITY[3]}L)`],
         ],
-        action: { label: t('🛢️ Yakıt Siparişi Ver'), maintId: 'open-order' },
+        action: { label: t('Yakıt Siparişi Ver'), maintId: 'open-order' },
         // Oğuz: tanka tıklayıp seviye artırma (marinada da çalışır — satır katalogda)
         buy: state.tankLevel < 3
           ? { label: t('Depoyu Büyüt — ₺{0} ({1}L)', TANK_COSTS[state.tankLevel].toLocaleString('tr-TR'), TANK_CAPACITY[state.tankLevel + 1]), id: 'tank' }
@@ -3878,7 +3878,7 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Üretim'), `+${net.toFixed(1)} kWh/sn`, net < 1 ? 'bad' : 'good'],
           [t('Kirlilik'), `%${Math.round(state.solarDirt * 100)}`, state.solarDirt > 0.6 ? 'bad' : ''],
         ],
-        action: state.solarDirt >= 0.15 ? { label: '🧽 Temizle — ₺300', maintId: 'clean-solar' } : undefined,
+        action: state.solarDirt >= 0.15 ? { label: 'Temizle — ₺300', maintId: 'clean-solar' } : undefined,
       }
     }
     case 'dieselgen':
@@ -3888,7 +3888,7 @@ function buildingCard(id: string): BuildingCard | null {
         stats: [
           [t('Üretim'), `+7 kWh/sn`],
           [t('Yakıt tüketimi'), '0.25 L/sn'],
-          [t('Durum'), state.dieselRunning() ? t('ÇALIŞIYOR 🔊') : 'Beklemede', state.dieselRunning() ? 'bad' : 'good'],
+          [t('Durum'), state.dieselRunning() ? t('ÇALIŞIYOR') : 'Beklemede', state.dieselRunning() ? 'bad' : 'good'],
         ],
       }
     case 'wash':
@@ -3962,12 +3962,12 @@ function buildingCard(id: string): BuildingCard | null {
         ],
       }
     case 'smr': {
-      const risk = state.smrWear > 0.7 ? t('YÜKSEK ☠️') : state.smrWear > 0.5 ? 'Orta' : t('Düşük')
+      const risk = state.smrWear > 0.7 ? t('YÜKSEK') : state.smrWear > 0.5 ? 'Orta' : t('Düşük')
       const producing = state.uranium > 0
       let action: BuildingCard['action']
-      if (state.smrWear >= 0.5) action = { label: t('☢️ Bakım Yap — ₺1.500'), maintId: 'maint-smr' }
-      else if (!state.uraniumPending && state.uranium <= 60) action = { label: t('🟢 Uranyum Sipariş Et — ₺{0}', URANIUM_COST.toLocaleString('tr-TR')), maintId: 'order-uranium' }
-      else if (state.smrWear >= 0.1) action = { label: t('☢️ Bakım Yap — ₺1.500'), maintId: 'maint-smr' }
+      if (state.smrWear >= 0.5) action = { label: t('Bakım Yap — ₺1.500'), maintId: 'maint-smr' }
+      else if (!state.uraniumPending && state.uranium <= 60) action = { label: t('Uranyum Sipariş Et — ₺{0}', URANIUM_COST.toLocaleString('tr-TR')), maintId: 'order-uranium' }
+      else if (state.smrWear >= 0.1) action = { label: t('Bakım Yap — ₺1.500'), maintId: 'maint-smr' }
       return {
         icon: 'i-reactor', name: t('Modüler Reaktör'),
         desc: t('En güçlü enerji kaynağı. Uranyumla çalışır, yıprandıkça patlama riski artar — bakımı ASLA aksatma.'),
@@ -4005,7 +4005,7 @@ function refreshBuildingCard() {
     card.move = { label: t('Taşı'), id: selectedBuilding }
   }
   const si = sellInfo(state, selectedBuilding)
-  if (si) card.sell = { label: t('🧨 Yık — +₺{0}', si.refund.toLocaleString('tr-TR')), id: selectedBuilding }
+  if (si) card.sell = { label: t('Yık — +₺{0}', si.refund.toLocaleString('tr-TR')), id: selectedBuilding }
   ui.showBuildingCard(card)
 }
 
@@ -4020,8 +4020,8 @@ let doubleOfferT = 0 // 2x teklifi ekranda kalma süresi
 function showAdOffer(kind: 'rush' | 'double', profit = 0) {
   adOffer = { kind, profit }
   adBtnLabel.textContent = kind === 'double'
-    ? t('🎬 Reklam İzle: Günü 2x Yap (+₺{0})', profit.toLocaleString('tr-TR'))
-    : t('🎬 Reklam İzle: Müşteri Patlaması')
+    ? t('Reklam İzle: Günü 2x Yap (+₺{0})', profit.toLocaleString('tr-TR'))
+    : t('Reklam İzle: Müşteri Patlaması')
   adBtn.style.display = 'flex'
 }
 adBtn.addEventListener('click', () => {
@@ -4031,7 +4031,7 @@ adBtn.addEventListener('click', () => {
     () => {
       if (offer.kind === 'double') {
         state.money += offer.profit
-        ui.toast(t('🎬 Günün kârı 2 katına çıktı: +₺{0}!', offer.profit.toLocaleString('tr-TR')), 'good')
+        ui.toast(t('Günün kârı 2 katına çıktı: +₺{0}!', offer.profit.toLocaleString('tr-TR')), 'good')
       } else {
         state.promo = { type: 'rush', until: Date.now() + 90_000 }
         ui.toast(t('MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!'), 'good')
@@ -4076,7 +4076,7 @@ editBtn.addEventListener('click', () => {
   editBtn.classList.toggle('danger', editMode)
   cancelPlacement()
   ui.toast(editMode
-    ? t('✏️ Düzenleme AÇIK — binaya dokun ve taşı')
+    ? t('Düzenleme AÇIK — binaya dokun ve taşı')
     : t('Düzenleme modu kapandı.'), '')
 })
 
@@ -4114,7 +4114,7 @@ function updateZoneAt(x: number, y: number) {
     const across = (c >= 3 ? t(' · yol karşısı') : '')
       + (lim !== null ? t(' · {0}/{1} parsel', String(state.ownedParcels.size), String(lim)) : '')
     zw.style.display = 'flex'
-    zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ' ✗'}`
+    zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ''}`
     zc.style.color = zoneMode.valid ? 'var(--green-dark)' : 'var(--red)'
   }
 }
@@ -4184,7 +4184,7 @@ window.addEventListener('pointerup', e => {
       if (pt) repositionPlacing(pt.x, pt.y)
       if (placing && Math.abs(placing.cx - prevX) + Math.abs(placing.cy - prevY) > 0.5) return
       if (placing.valid) confirmPlacement()
-      else ui.toast('🚫 Buraya yerleştiremezsin — sahipli ve betonlu alana koy.', 'bad')
+      else ui.toast('Buraya yerleştiremezsin — sahipli ve betonlu alana koy.', 'bad')
     }
     return
   }
@@ -4229,7 +4229,7 @@ function handleClick(e: PointerEvent) {
       // molada elektrikli araç: tıklayınca direkt gönder (arıza pill'i gibi, panel/popup açılmadan)
       if (c.kind === 'ev' && c.squatting) ui.onDismiss(c)
       // pompacı/şarjcı devredeyse otomasyon hallediyor → dokunulsa bile panel/popup AÇMA
-      else if (isAttendantCar(c)) ui.toast(t('🧑‍🔧 Pompacı bu aracı hallediyor.'), '', true)
+      else if (isAttendantCar(c)) ui.toast(t('Pompacı bu aracı hallediyor.'), '', true)
       else ui.selectCar(c)
     }
     return
@@ -4315,7 +4315,7 @@ function frame() {
   dayTime += dt
   world.setNight(nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE))
 
-  // 🕒 GÜN İÇİ SAAT (HUD): döngü kesri → 24 saat; gün 06:00'da başlar (kredi taksidi
+  // GÜN İÇİ SAAT (HUD): döngü kesri → 24 saat; gün 06:00'da başlar (kredi taksidi
   // gün başında kesildiğinden oyuncular saati görmek istiyor). Metin değişince yazılır.
   {
     const frac = (dayTime % DAY_CYCLE) / DAY_CYCLE
@@ -4323,7 +4323,7 @@ function frame() {
     const str = `${String(Math.floor(hTot)).padStart(2, '0')}:${String(Math.floor((hTot % 1) * 60)).padStart(2, '0')}`
     if (str !== lastClockStr) { lastClockStr = str; const el = document.getElementById('hud-clock'); if (el) el.textContent = str }
   }
-  // ⚡ promo geri sayımı (14 feedback'in isteği): müşteri patlaması VE yakıt indirimi —
+  // promo geri sayımı (14 feedback'in isteği): müşteri patlaması VE yakıt indirimi —
   // aktifken sağ üstte kalan saniye, kaybolmayan sabit rozet (oyuncu kampanyayı kaçırmaz).
   {
     const rt = document.getElementById('rushtimer') as HTMLDivElement | null
@@ -4394,11 +4394,11 @@ function frame() {
       auth.saveGuest(savePayload()); maybeGuestGate() // misafir: gün başı kaydet + gün-5 eşiği (boştayken de)
       // dönüşüm teşviki: gün 3-4 sonunda somut kayıp uyarısı (gün 5 zaten zorunlu gate)
       if (state.day >= 3 && state.day < GUEST_MAX_DAY) {
-        ui.toast(t('💾 {0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.', state.day - 1), 'bad', true)
+        ui.toast(t('{0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.', state.day - 1), 'bad', true)
       }
     }
     const profit = Math.round(state.money - state.dayStartMoney)
-    ui.toast(t('📅 Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
+    ui.toast(t('Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
     // B6 (analiz): İLK GÜN raporu = duygusal kontrol noktası — misafire kayıp-anı
     // hatırlatması (oturumda tek gate: 10k gate'i zaten çıktıysa tekrarlama)
     if (!auth.loggedIn() && state.day === 2 && profit > 0 && !firstTenGateShown && !guestGateShown) {
@@ -4407,13 +4407,13 @@ function frame() {
     }
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
     const wages = state.dailyWages()
-    if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('🧑‍🔧 Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
+    if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
     // B2B sözleşme günü: taahhüt kapanışı, gelir/ceza, tamamlama primi
     const cres = state.processContractDay()
-    if (cres.kind === 'ok') ui.toast(t('📋 {0}: günlük taahhüt teslim edildi (+₺{1})', cres.name, cres.amount.toLocaleString('tr-TR')), 'good', true)
-    else if (cres.kind === 'miss') ui.toast(t('📋 {0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)', cres.name, cres.amount.toLocaleString('tr-TR')), 'bad', true)
-    else if (cres.kind === 'done') ui.toast(t('🏆 {0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3', cres.name, cres.amount.toLocaleString('tr-TR')), 'good', true)
-    else if (cres.kind === 'fail') ui.toast(t('❌ {0} sözleşmesi ihlalden feshedildi — prim yok.', cres.name), 'bad', true)
+    if (cres.kind === 'ok') ui.toast(t('{0}: günlük taahhüt teslim edildi (+₺{1})', cres.name, cres.amount.toLocaleString('tr-TR')), 'good', true)
+    else if (cres.kind === 'miss') ui.toast(t('{0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)', cres.name, cres.amount.toLocaleString('tr-TR')), 'bad', true)
+    else if (cres.kind === 'done') ui.toast(t('{0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3', cres.name, cres.amount.toLocaleString('tr-TR')), 'good', true)
+    else if (cres.kind === 'fail') ui.toast(t('{0} sözleşmesi ihlalden feshedildi — prim yok.', cres.name), 'bad', true)
     // panel açıkken gün döndüyse tazele: teklif id'leri güne bağlı, eski butonlar ölü kalırdı
     if (document.getElementById('officewrap')?.classList.contains('show')) openOfficePanel()
     // RUHSAT & DENETİM (Katman 2b): 30 günde bir, varlıkla ölçekli. Ödenmezse itibar cezası
@@ -4423,11 +4423,11 @@ function frame() {
       if (state.money >= fee) {
         state.money -= fee
         state.licenseDueDay = state.day + 30
-        ui.toast(t('📜 İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)', fee.toLocaleString('tr-TR')), '')
+        ui.toast(t('İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)', fee.toLocaleString('tr-TR')), '')
       } else {
         state.licenseDueDay = state.day + 3 // 3 günde bir tekrar dener
         state.addRep(-0.3)
-        ui.toast(t('📜 Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!', fee.toLocaleString('tr-TR')), 'bad', true)
+        ui.toast(t('Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!', fee.toLocaleString('tr-TR')), 'bad', true)
       }
     }
     // İşletme gideri (OPEX): amortisman + emlak vergisi — geç oyunda birikimi düzleştiren sink.
@@ -4435,14 +4435,14 @@ function frame() {
     const opex = state.dailyOpex()
     if (opex > 0) {
       state.money = Math.max(0, state.money - opex)
-      ui.toast(t('🏛️ İşletme gideri (bakım+vergi): -₺{0}', opex.toLocaleString('tr-TR')), '')
+      ui.toast(t('İşletme gideri (bakım+vergi): -₺{0}', opex.toLocaleString('tr-TR')), '')
     }
     // Reklam bütçesi tahsilatı: para yetmiyorsa o günün kampanyası kısılır (bütçe korunur)
     if (state.marketingBudget > 0) {
       const spend = Math.min(state.marketingBudget, Math.max(0, Math.floor(state.money))) // floor: kesirli kasada eksiye taşma yok (reviewer bulgusu)
       if (spend > 0) state.money -= spend
-      if (spend < state.marketingBudget) ui.toast(t('📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.'), 'bad')
-      else ui.toast(t('📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})', spend.toLocaleString('tr-TR'), state.trafficPull().toFixed(2)), '')
+      if (spend < state.marketingBudget) ui.toast(t('Reklam bütçesine para yetmedi — kampanya bugün kısık.'), 'bad')
+      else ui.toast(t('Reklam kampanyası yayında: -₺{0} (trafik ×{1})', spend.toLocaleString('tr-TR'), state.trafficPull().toFixed(2)), '')
     }
     // ---- AI RAKİP (Katman 4d): günlük tepki ----
     const rivalMsg = state.rivalDayTurn()
@@ -4453,8 +4453,8 @@ function frame() {
       if (mi.total > 0) {
         state.money += mi.total
         ui.toast(mi.winter > 0
-          ? t('⚓ Bağlama ₺{0} + kışlama ₺{1} tahsil edildi', mi.berth.toLocaleString('tr-TR'), mi.winter.toLocaleString('tr-TR'))
-          : t('⚓ Bağlama geliri: +₺{0}', mi.berth.toLocaleString('tr-TR')), 'good')
+          ? t('Bağlama ₺{0} + kışlama ₺{1} tahsil edildi', mi.berth.toLocaleString('tr-TR'), mi.winter.toLocaleString('tr-TR'))
+          : t('Bağlama geliri: +₺{0}', mi.berth.toLocaleString('tr-TR')), 'good')
       }
       const ev = state.marinaDayEvent()
       if (ev) {
@@ -4465,13 +4465,13 @@ function frame() {
         ui.toast(ev.msg, ev.money < 0 || ev.rep < 0 ? 'bad' : '')
         const bf = state.blueFlag()
         if (!bf.ok && state.marinaViolations === 3) {
-          ui.toast(t('🏳️ Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.'), 'bad')
+          ui.toast(t('Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.'), 'bad')
         }
       } else if (state.marinaViolations > 0 && state.day % 15 === 0) {
         // sicil zamanla temizlenir: ceza kalıcı değil (raporun telafi ilkesi)
         state.marinaViolations--
         if (state.marinaViolations < 3 && state.blueFlag().ok) {
-          ui.toast(t('🏳️ Sicilin temizlendi — Mavi Bayrak geri alındı!'), 'good')
+          ui.toast(t('Sicilin temizlendi — Mavi Bayrak geri alındı!'), 'good')
         }
       }
     }
@@ -4484,10 +4484,10 @@ function frame() {
       const added = vaults.reduce((a, v) => a + v.added, 0)
       const full = vaults.filter(v => v.full)
       if (added > 0) {
-        ui.toast(t('👔 Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla', added.toLocaleString('tr-TR')), 'good')
+        ui.toast(t('Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla', added.toLocaleString('tr-TR')), 'good')
       }
       if (full.length) {
-        ui.toast(t('👔 {0} şubesinin kasası DOLDU — uğramazsan birikmez',
+        ui.toast(t('{0} şubesinin kasası DOLDU — uğramazsan birikmez',
           full.map(v => THEMES[v.loc].name).join(', ')), 'bad')
       }
     }
@@ -4495,22 +4495,22 @@ function frame() {
     const rep = state.reconcileReputation()
     if (Math.abs(rep.delta) >= 0.03) {
       ui.toast(rep.delta > 0
-        ? t('⭐ İtibar yükseldi: {0} (bekleyen müşteri kaybın az)', state.reputation.toFixed(2))
-        : t('⭐ İtibar düştü: {0} — müşteriler beklemekten gidiyor!', state.reputation.toFixed(2)),
+        ? t('İtibar yükseldi: {0} (bekleyen müşteri kaybın az)', state.reputation.toFixed(2))
+        : t('İtibar düştü: {0} — müşteriler beklemekten gidiyor!', state.reputation.toFixed(2)),
         rep.delta > 0 ? 'good' : 'bad')
     }
     // kredi taksiti (aylık = 1 oyun günü)
     const loanRes = state.processLoanDay()
-    if (loanRes === 'done') ui.toast(t('🏦 Kredi tamamen ödendi — teminatların serbest! 🎉'), 'good')
-    else if (loanRes === 'warn') ui.toast(t('🏦 Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.'), 'bad')
+    if (loanRes === 'done') ui.toast(t('Kredi tamamen ödendi — teminatların serbest!'), 'good')
+    else if (loanRes === 'warn') ui.toast(t('Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.'), 'bad')
     else if (loanRes === 'seize') {
       if (state.loan.collateral.length) seizeCollateral() // teminatlı → haciz
-      else { state.startPartnership(); ui.toast(t('🏦 Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!', Math.round(PARTNER_SHARE * 100)), 'bad') }
+      else { state.startPartnership(); ui.toast(t('Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!', Math.round(PARTNER_SHARE * 100)), 'bad') }
     }
     // banka ortaklığı aktifse günlük kârdan payını al
     const pc = state.applyPartnerCut(profit)
-    if (pc?.kind === 'ended') ui.toast(t('🏦 Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin! 🎉'), 'good')
-    else if (pc?.kind === 'cut' && pc.amount > 0) ui.toast(t('🏦 Banka ortağı kâr payı aldı: -₺{0}', pc.amount.toLocaleString('tr-TR')), '')
+    if (pc?.kind === 'ended') ui.toast(t('Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin!'), 'good')
+    else if (pc?.kind === 'cut' && pc.amount > 0) ui.toast(t('Banka ortağı kâr payı aldı: -₺{0}', pc.amount.toLocaleString('tr-TR')), '')
     if (document.getElementById('bankwrap')?.classList.contains('show')) renderBank()
     // dönemsel muhasebe: biten günün satış cirosunu kaydet
     const dayRev = Math.max(0, Math.round(state.stats.revenue - state.dayStartRevenue))
@@ -4541,7 +4541,7 @@ function frame() {
     // (Kapatılabilir: "Misafir olarak devam et" görünür kalır; oturumda 1 kez.)
     if (!auth.loggedIn() && !firstTenGateShown && state.achievements.has('first-10k')) {
       firstTenGateShown = true
-      showAuthGate(t('🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.'))
+      showAuthGate(t('İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.'))
     }
   }
   saveT -= dt
@@ -4552,14 +4552,14 @@ function frame() {
 
   // bina uyarı etiketleri
   const warns = new Map<string, { text: string; maintId: string }>()
-  state.brokenPumps.forEach(i => warns.set(`pump-${i}`, { text: t('🔧 ARIZA · TAMİR ₺800'), maintId: `fix-pump-${i}` }))
-  state.brokenChargers.forEach(i => warns.set(`charger-${i}`, { text: t('🔧 ARIZA · TAMİR ₺1.000'), maintId: `fix-charger-${i}` }))
-  if (state.hasSolar && state.solarDirt >= 0.6) warns.set('solar', { text: t('🧽 TEMİZLİK ₺300'), maintId: 'clean-solar' })
+  state.brokenPumps.forEach(i => warns.set(`pump-${i}`, { text: t('ARIZA · TAMİR ₺800'), maintId: `fix-pump-${i}` }))
+  state.brokenChargers.forEach(i => warns.set(`charger-${i}`, { text: t('ARIZA · TAMİR ₺1.000'), maintId: `fix-charger-${i}` }))
+  if (state.hasSolar && state.solarDirt >= 0.6) warns.set('solar', { text: t('TEMİZLİK ₺300'), maintId: 'clean-solar' })
   if (state.hasSMR && state.smrWear >= 0.5) {
-    warns.set('smr', { text: state.smrWear > 0.75 ? t('🚨 BAKIM ŞART ₺1.500') : '☢️ BAKIM ₺1.500', maintId: 'maint-smr' })
+    warns.set('smr', { text: state.smrWear > 0.75 ? t('BAKIM ŞART ₺1.500') : 'BAKIM ₺1.500', maintId: 'maint-smr' })
   } else if (state.hasSMR && state.uranium <= 15 && !state.uraniumPending) {
     warns.set('smr', {
-      text: state.uranium === 0 ? t('🚨 URANYUM BİTTİ · ₺2.500') : '🟢 URANYUM AZ · ₺2.500',
+      text: state.uranium === 0 ? t('URANYUM BİTTİ · ₺2.500') : 'URANYUM AZ · ₺2.500',
       maintId: 'order-uranium',
     })
   }
@@ -4652,7 +4652,7 @@ function frame() {
     if (!(c.filling && c.kind === 'fuel' && c.phase === 'atPump' && c.nozzle && !c.wrongFuelHandled)) continue
     if (c.slotIndex >= 0 && state.brokenPumps.has(c.slotIndex)) {
       ui.toast(t('Pompa arızalandı — dolum yarıda kaldı, tamir gerekli.'), 'bad')
-      notifyIfHidden(t('🔧 Pompa arızalandı — tamir gerekli!'), 'ariza-pompa')
+      notifyIfHidden(t('Pompa arızalandı — tamir gerekli!'), 'ariza-pompa')
       finishSale(c)
       continue
     }
@@ -4716,7 +4716,7 @@ function frame() {
     if (mr.cleaned) parts.push(t('paneller temizlendi'))
     if (mr.fixed > 0) parts.push(t('{0} arıza tamir edildi', mr.fixed))
     if (mr.ordered > 0) parts.push(t('{0} yakıt siparişi verildi', mr.ordered))
-    if (parts.length) ui.toast(`🧑‍💼 ${t('Müdür turu')}: ${parts.join(' · ')}`, 'good')
+    if (parts.length) ui.toast(`${t('Müdür turu')}: ${parts.join(' · ')}`, 'good')
     persist()
   }
   audio.setDiesel(state.dieselRunning() && !state.closed)
@@ -4770,7 +4770,7 @@ maybeShowNews()     // sürüm değiştiyse notları bir kez göster (#465)
 frame()
 
 
-// 🎬 REKLAM MODU (?promo=1): oyun kendi reklamını oynar — tek pompadan nükleer çağa.
+// REKLAM MODU (?promo=1): oyun kendi reklamını oynar — tek pompadan nükleer çağa.
 if (isPromoMode) {
   state.money = 9000
   const fastAd = new URLSearchParams(location.search).has('fast')

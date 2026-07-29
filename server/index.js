@@ -205,7 +205,6 @@ function mailTemplate(kind, lang, url) {
   const C = {
     verify: {
       subject: en ? 'BenelOil — Verify your email' : 'BenelOil — E-postanı doğrula',
-      emoji: '📧',
       title: en ? 'Verify your email' : 'E-postanı doğrula',
       body: en ? 'Welcome to BenelOil! Confirm your email address to keep running your station.'
         : 'BenelOil’e hoş geldin! İstasyonunu işletmeye devam etmek için e-postanı doğrula.',
@@ -213,7 +212,6 @@ function mailTemplate(kind, lang, url) {
     },
     reset: {
       subject: en ? 'BenelOil — Reset your password' : 'BenelOil — Şifre sıfırlama',
-      emoji: '🔑',
       title: en ? 'Reset your password' : 'Şifreni sıfırla',
       body: en ? 'We received a request to reset your password. Tap below to set a new one — this link is valid for 1 hour.'
         : 'Şifreni sıfırlama isteği aldık. Yeni şifre belirlemek için aşağıya dokun — bağlantı 1 saat geçerli.',
@@ -226,9 +224,8 @@ function mailTemplate(kind, lang, url) {
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#eef1f4">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f4;padding:28px 12px"><tr><td align="center">
 <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 6px 24px rgba(9,9,11,.08);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-<tr><td style="background:linear-gradient(135deg,#e8862e,#d64545);padding:26px 28px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff;letter-spacing:-.5px">⛽ BenelOil</div></td></tr>
+<tr><td style="background:linear-gradient(135deg,#e8862e,#d64545);padding:26px 28px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff;letter-spacing:-.5px">BenelOil</div></td></tr>
 <tr><td style="padding:34px 30px 10px;text-align:center">
-<div style="font-size:42px;margin-bottom:8px">${C.emoji}</div>
 <h1 style="margin:0 0 12px;font-size:22px;color:#1c2530">${C.title}</h1>
 <p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#5a6570">${C.body}</p>
 <a href="${url}" style="display:inline-block;padding:14px 32px;background:#27a05a;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:15px">${C.btn}</a>
@@ -252,7 +249,7 @@ function sendResetEmail(email, token, lang) {
 }
 function htmlPage(res, title, msg) {
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-  res.end(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;background:#0d1420;color:#eaf1fb;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px"><div style="max-width:400px;text-align:center"><div style="font-size:40px">⛽</div><h2>${title}</h2><p style="color:#b8c6da">${msg}</p><a href="${BASE_URL}" style="display:inline-block;margin-top:12px;padding:12px 22px;background:#27a05a;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Oyuna dön</a></div></body>`)
+  res.end(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;background:#0d1420;color:#eaf1fb;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px"><div style="max-width:400px;text-align:center"><div style="font-size:40px"></div><h2>${title}</h2><p style="color:#b8c6da">${msg}</p><a href="${BASE_URL}" style="display:inline-block;margin-top:12px;padding:12px 22px;background:#27a05a;color:#fff;text-decoration:none;border-radius:10px;font-weight:700">Oyuna dön</a></div></body>`)
 }
 
 function json(res, code, data) {
@@ -1638,8 +1635,8 @@ async function pushSignupNotif(kind = 'registered', guestTotal = 0) {
     const total = c.rows[0]?.total ?? 0
     const online = c.rows[0]?.online ?? 0
     const body = kind === 'guest'
-      ? `🎮 Misafir sayısı ${guestTotal} oldu! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
-      : `🎉 Yeni kayıtlı oyuncu katıldı! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
+      ? `Misafir sayısı ${guestTotal} oldu! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
+      : `Yeni kayıtlı oyuncu katıldı! (toplam ${total} kayıt · şu an ${online} kişi oynuyor)`
     await fetch('https://cashsort-api.benerits.com/vs/v1/notifications/send', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' },
@@ -1663,7 +1660,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     return res.end(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>BenelOil — Şifre Sıfırla</title>
 <body style="font-family:system-ui,sans-serif;background:#0d1420;color:#eaf1fb;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px">
-<div style="max-width:380px;width:100%;text-align:center"><div style="font-size:40px">⛽</div><h2>Yeni şifre belirle</h2>
+<div style="max-width:380px;width:100%;text-align:center"><div style="font-size:40px"></div><h2>Yeni şifre belirle</h2>
 <input id="pw" type="password" placeholder="Yeni şifre (en az 4 karakter)" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #33465f;background:#12233d;color:#fff;font-size:15px;margin:8px 0">
 <button id="go" style="width:100%;padding:12px;border:0;border-radius:10px;background:#27a05a;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Şifreyi Değiştir</button>
 <p id="msg" style="color:#b8c6da;font-size:13px;margin-top:12px"></p></div>

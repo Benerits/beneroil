@@ -3,9 +3,9 @@
  *
  * Raporun tarifi birebir uygulanır:
  *
- *   🚤 "MAVİ RÜZGAR" — Balıkçı Teknesi
+ *   "MAVİ RÜZGAR" — Balıkçı Teknesi
  *      İstek: 1.800 L  ÖTV'siz motorin   (₺11/L yerine ₺6.5/L)
- *      📄 Defter ibraz edildi
+ *      Defter ibraz edildi
  *      [İNCELE]   ← Kota: 1.400/2.000 L · Vize: geçerli · İmza: ✓
  *      [ONAYLA — ÖTV'siz ver]        [REDDET — tam fiyat teklif et]
  *

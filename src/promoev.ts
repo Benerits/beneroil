@@ -182,7 +182,7 @@ async function boot() {
   // "BENELOIL · x KM" tabelaları
   placeKmSign(0.24, 1, 'BENELOIL', '1 KM →')
   placeKmSign(0.52, -1, 'BENELOIL', '500 M →')
-  placeKmSign(0.78, 1, 'BENELOIL ⚡', '100 M →')
+  placeKmSign(0.78, 1, 'BENELOIL', '100 M →')
 
   // EV araba — oyunun GERÇEK elektrikli aracı (prosedürel cyan hatch, buildCarMesh)
   evCar = buildCarMesh('hatch', 0x35c7d6)

@@ -30,9 +30,9 @@ const EN: Record<string, string> = {
   'Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}': 'Manager Lv.{0} · ₺{1} net/day · till ₺{2}/{3}',
   'Müdür YOK — şube kapalı duruyor. Şubeye git, Ofis içindeki Şubeler sekmesinden müdür tut.': 'NO manager — this branch is idle. Visit it and hire one from Office → Branches.',
   'Topla ₺{0}': 'Collect ₺{0}',
-  '👔 Şube kasası toplandı: +₺{0}': '👔 Branch till collected: +₺{0}',
-  '👔 Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla': '👔 Your branch managers earned +₺{0} — collect it in Office › Branches',
-  '👔 {0} şubesinin kasası DOLDU — uğramazsan birikmez': '👔 The {0} branch till is FULL — nothing accrues until you drop by',
+  'Şube kasası toplandı: +₺{0}': 'Branch till collected: +₺{0}',
+  'Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla': 'Your branch managers earned +₺{0} — collect it in Office › Branches',
+  '{0} şubesinin kasası DOLDU — uğramazsan birikmez': 'The {0} branch till is FULL — nothing accrues until you drop by',
   'kumbara toplar + şubeyi işletir': 'empties piggy banks + runs the branch',
   'kumbara + yakıt siparişi': 'piggy banks + fuel orders',
   'Alım Defteri': 'Purchase Ledger',
@@ -41,7 +41,7 @@ const EN: Record<string, string> = {
   'İşletme Sermayesi (stok)': 'Working Capital (stock)',
   'Sözleşmeyi Feshet — cayma ₺{0} + itibar −0.2': 'Cancel Contract — ₺{0} exit fee + −0.2 reputation',
   'EMİN MİSİN? Feshetmek için tekrar bas': 'ARE YOU SURE? Tap again to cancel',
-  '📋 Sözleşme feshedildi — cayma bedeli ₺{0} kesildi.': '📋 Contract cancelled — ₺{0} exit fee charged.',
+  'Sözleşme feshedildi — cayma bedeli ₺{0} kesildi.': 'Contract cancelled — ₺{0} exit fee charged.',
   'Henüz sözleşme teklifi yok — teklifler DÜZENLİ sattığın yakıtlara gelir (son 7 günde günde 120L+ satış) ve deponun taahhüdün 2 katı olması gerekir.': 'No contract offers yet — offers come for fuels you sell REGULARLY (120L+/day over the last 7 days) and your tank must hold twice the daily commitment.',
   'Normal müşteri satışların taahhüde sayılır — tahmini günlük {0} satışın: ~{1}L': 'Regular customer sales count toward the commitment — your estimated daily {0} sales: ~{1}L',
   'Kayıt yok, kurulum yok — 3 saniyede pompadasın.': 'No sign-up, no setup — you’re at the pump in 3 seconds.',
@@ -51,10 +51,10 @@ const EN: Record<string, string> = {
   'İstasyonun hazırlanıyor…': 'Preparing your station…',
   'Yükleme beklenenden uzun sürdü — bağlantı yavaş olabilir ya da yeni sürüm dağıtılıyor.': 'Loading is taking longer than expected — your connection may be slow, or a new version is rolling out.',
   'İlk günün kapandı: ₺{0} kâr! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus.': 'Your first day closed with ₺{0} profit! This progress lives only on this device — sign up to move it to the cloud, plus a ₺2,500 bonus.',
-  '🎁 İlk şube hediyesi: bu şubeye Müdür Sv.1 atandı — kumbara + yakıt siparişi otomatik!': '🎁 First-branch gift: a Lv.1 Manager was assigned here — piggy banks + fuel orders run automatically!',
+  'İlk şube hediyesi: bu şubeye Müdür Sv.1 atandı — kumbara + yakıt siparişi otomatik!': 'First-branch gift: a Lv.1 Manager was assigned here — piggy banks + fuel orders run automatically!',
   'Zincir başladı — İkinci şuben açık!': 'The chain begins — second branch open!',
-  '👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — girip topla!': '👔 While you were away, your managed branches earned ₺{0} — jump in and collect!',
-  '👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!': '👔 While you were away, your managed branches earned ₺{0} — collect it in Office → Branches!',
+  'Sen yokken müdürlü şubelerin ₺{0} biriktirdi — girip topla!': 'While you were away, your managed branches earned ₺{0} — jump in and collect!',
+  'Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!': 'While you were away, your managed branches earned ₺{0} — collect it in Office → Branches!',
   'Henüz yakıt alımı yok.': 'No fuel purchases yet.',
   'Son 7 gün yakıt gideri: ₺{0}': 'Fuel spend, last 7 days: ₺{0}',
   'Pompacı defteri inceledi': 'Attendant inspected the logbook',
@@ -74,7 +74,7 @@ const EN: Record<string, string> = {
   'İskeleye ikinci dolum noktası — aynı anda iki tekne alırsın.': 'A second filling point on the dock — serve two boats at once.',
   '+%80 hız': '+80% speed',
   '{0} yakıt siparişi verildi (müdür)': '{0} fuel order(s) placed (manager)',
-  'TÃM ÅUBELERÄ°N kurulu ekipmanÄ± âº{0} deÄerine ulaÅÄ±nca devir aÃ§Ä±lÄ±r â yeni Åube donatmak da sayar. EÅik Ã¶nce ikiye katlanÄ±r; Åube kapasitesine yaklaÅÄ±nca %35’lik adÄ±mlarla artar (asla sabitlenmez).': 'Handover unlocks when installed equipment ACROSS ALL BRANCHES reaches âº{0} â outfitting new branches counts. The threshold doubles at first, then grows in 35% steps near your branch capacity (it never freezes).',
+  'TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik önce ikiye katlanır; şube kapasitesine yaklaşınca %35’lik adımlarla artar (asla sabitlenmez).': 'Handover unlocks when installed equipment ACROSS ALL BRANCHES reaches ₺{0} — outfitting new branches counts. The threshold doubles at first, then grows in 35% steps near your branch capacity (it never freezes).',
   'Müdür': 'Manager',
   'yovmiye ₺{0}/gün': 'wage ₺{0}/day',
   '45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder. Sen başka şubedeyken şubeyi işletir.': 'Rounds every 45s: empties piggy banks + orders fuel for low tanks; Lv.2 cleans panels; Lv.3 repairs breakdowns. Runs the branch while you are away.',
@@ -82,17 +82,17 @@ const EN: Record<string, string> = {
   'Karşı Kıyı Parkı': 'Opposite Shore Mooring',
   'Tekneciler ekstra alışveriş yapar. Yerinde yükselir, gelir seviyeyle artar.': 'Boaters shop extra. Upgrades in place; income grows with level.',
   'Yüksek kapasite: çok sayıda şarj ünitesini aynı anda besler': 'High capacity: powers many charge points at once',
-  '⛽ {0} L yakıt satıldı — tank seviyelerine göz at.': '⛽ {0} L of fuel sold — check your tank levels.',
-  '📦 {0} sahnesi indiriliyor ({1} model)…': '📦 Downloading the {0} scene ({1} models)…',
+  '{0} L yakıt satıldı — tank seviyelerine göz at.': '{0} L of fuel sold — check your tank levels.',
+  '{0} sahnesi indiriliyor ({1} model)…': 'Downloading the {0} scene ({1} models)…',
   'BenelOil — Petrol İstasyonu Oyunu': 'BenelOil — Gas Station Tycoon',
   // --- Faz 2: şablon dizelerinden kurtarılan metinler ---
   'Google eklentisi bulunamadı.': 'Google plugin not found.',
   'Apple eklentisi bulunamadı.': 'Apple plugin not found.',
-  '⛽ Pompa #{0} kuruldu!': '⛽ Pump #{0} is up!',
-  'OYUNCUYA ULAŞTIK 🎉': 'PLAYERS AND COUNTING 🎉',
+  'Pompa #{0} kuruldu!': 'Pump #{0} is up!',
+  'OYUNCUYA ULAŞTIK': 'PLAYERS AND COUNTING',
   'TAMAM': 'DONE',
   '{0} / {1}L · +{2}L sipariş': '{0} / {1}L · order +{2}L',
-  '🏙️ Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.': '🏙️ You have reached this branch’s land limit ({0} plots) — space is tight in the city, choose carefully.',
+  'Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.': 'You have reached this branch’s land limit ({0} plots) — space is tight in the city, choose carefully.',
   ' · {0}/{1} parsel': ' · {0}/{1} plots',
   'Müdavim müşteri': 'Regular customers',
   // --- fiyat kartı / araç sayacı (kod içi literaller) ---
@@ -100,7 +100,7 @@ const EN: Record<string, string> = {
   'santralden': 'from plant',
   'alış ₺{0}': 'cost ₺{0}',
   'MOLADA · GÖNDER →': 'ON BREAK · SEND →',
-  '🛢️ Tank kapasitesi: {0}L': '🛢️ Tank capacity: {0}L',
+  'Tank kapasitesi: {0}L': 'Tank capacity: {0}L',
 
   // --- Giriş ekranı ---
   'BENELOIL': 'BENELOIL',
@@ -125,14 +125,14 @@ const EN: Record<string, string> = {
   'Misafir olarak devam et': 'Continue as guest',
   'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
     'You reached Day {0}! Sign up (or continue with Google/Apple) to keep playing — your progress moves to the cloud, plus a ₺2,500 bonus and daily streak rewards.',
-  '🎁 Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
-    '🎁 Sign-up bonus: +₺2,500 added to your cash — welcome, boss!',
-  '🔒 Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!':
-    '🔒 Daily login bonus (+₺500, up to ₺2,000 with a streak) is for registered players — sign up and start your streak!',
-  '💾 {0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.':
-    '💾 {0} days of progress live only on this device! Sign up: cloud save + ₺2,500 bonus + daily streak rewards.',
-  '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
-    '🎉 You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
+  'Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
+    'Sign-up bonus: +₺2,500 added to your cash — welcome, boss!',
+  'Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!':
+    'Daily login bonus (+₺500, up to ₺2,000 with a streak) is for registered players — sign up and start your streak!',
+  '{0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.':
+    '{0} days of progress live only on this device! Sign up: cloud save + ₺2,500 bonus + daily streak rewards.',
+  'İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
+    'You earned your first ₺10,000! This progress lives only on this device — sign up: cloud save, plus a ₺2,500 bonus and daily streak rewards.',
   'İPTAL': 'CANCEL',
   'Sıralama & Sezon': 'Leaderboard & Season', 'Sezon': 'Season', 'Sezon trafiği': 'Season traffic',
   'Sıralama yükleniyor…': 'Loading leaderboard…', 'Sıralama alınamadı.': 'Could not load leaderboard.',
@@ -149,9 +149,9 @@ const EN: Record<string, string> = {
   'verim +%{0}': '+{0}% efficiency',
   'Yıpranan ünitelerin verimi düşer. Yenileme yıpranmayı sıfırlar.':
     'Worn units lose efficiency. Renewal resets wear to zero.',
-  '📜 İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)': '📜 Operating licence renewed: -₺{0} (valid 30 days)',
-  '📜 Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!':
-    '📜 Licence renewal failed (₺{0} needed) — inspection penalty: reputation dropped!',
+  'İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)': 'Operating licence renewed: -₺{0} (valid 30 days)',
+  'Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!':
+    'Licence renewal failed (₺{0} needed) — inspection penalty: reputation dropped!',
   'Müdür Tut': 'Hire Manager', 'Müdür Sv.{0}': 'Manager Lv.{0}',
   'kumbara toplar': 'collects piggy banks', '+ panel temizliği': '+ panel cleaning', '+ arıza tamiri': '+ breakdown repairs',
   'Müdür 45 saniyede bir turlar: Sv.1 tüm kumbaraları toplar, Sv.2 güneş panellerini temizler, Sv.3 arızaları tamir eder. AYRICA sen başka şubedeyken bu şubeyi İŞLETİR: günlük net geliri şube kasasına yazar (Sv.1 %45, Sv.2 %65, Sv.3 %85 verim; kasa dolunca birikme durur). Yovmiyesi vardır.':
@@ -178,7 +178,7 @@ const EN: Record<string, string> = {
   'KIRMIZI {0}s · akın!': 'RED {0}s · rush!',
   'yeşil {0}s': 'green {0}s',
   'Yaya müşteri': 'Walk-in customer',
-  '🚶 Yaya müşteri alışveriş yaptı (yol karşısından geldi)': '🚶 A walk-in customer shopped (came from across the street)',
+  'Yaya müşteri alışveriş yaptı (yol karşısından geldi)': 'A walk-in customer shopped (came from across the street)',
   'Şubeler': 'Branches',
   'AKTİF': 'ACTIVE',
   'Şubeye Git': 'Go to Branch',
@@ -186,9 +186,9 @@ const EN: Record<string, string> = {
   'Kilitli': 'Locked',
   '{0} marka yıldızı gerekir': 'Requires {0} brand stars',
   'Şube açma şartları sağlanmıyor.': 'Branch requirements are not met.',
-  '🏗️ {0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.': '🏗️ {0} branch opened! Switch to it from the Branches section.',
+  '{0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.': '{0} branch opened! Switch to it from the Branches section.',
   'Şube değiştirilemedi.': 'Could not switch branch.',
-  '📍 {0} şubesine geçildi — sahne yükleniyor…': '📍 Switched to {0} — loading scene…',
+  '{0} şubesine geçildi — sahne yükleniyor…': 'Switched to {0} — loading scene…',
   'Marka & Devir': 'Brand & Handover',
   'Marka yıldızı': 'Brand stars',
   'Gelir çarpanı': 'Income multiplier',
@@ -202,13 +202,13 @@ const EN: Record<string, string> = {
   'Devir için önce kredi/ortaklık kapatılmalı.': 'Close your loan/partnership before handing over.',
   'Devir, ₺250.000 üzeri kurulu ekipmanla açılır (şu an ₺{0}).': 'Handover unlocks with over ₺250,000 of installed equipment (currently ₺{0}).',
   'Devir şartları sağlanmıyor.': 'Handover requirements are not met.',
-  '🤝 İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})':
-    '🤝 Station handed over! Cash: ₺{0} · you earned Brand Star #{1} (income ×{2})',
+  'İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})':
+    'Station handed over! Cash: ₺{0} · you earned Brand Star #{1} (income ×{2})',
   'Kurumsal Sözleşmeler': 'Corporate Contracts',
   'Premium yakıt müşterisi': 'Premium fuel customer',
   'Filo aracı': 'Fleet vehicle',
   'Servis / otobüs': 'Shuttle / bus',
-  '⭐ Premium müşteri primi: +₺{0}': '⭐ Premium customer bonus: +₺{0}',
+  'Premium müşteri primi: +₺{0}': 'Premium customer bonus: +₺{0}',
   'Kargo Filosu': 'Cargo Fleet',
   'Belediye Otobüs Filosu': 'Municipal Bus Fleet',
   'Taksi Durağı': 'Taxi Rank',
@@ -224,23 +224,23 @@ const EN: Record<string, string> = {
   '{0} gün · günde {1}L · ₺{2}/L · prim ₺{3} · ceza ₺{4}': '{0} days · {1}L/day · ₺{2}/L · bonus ₺{3} · penalty ₺{4}',
   'Henüz sözleşme teklifi yok — ilgili yakıtın deposunu büyüt (taahhüdün 2 katı kapasite şart).':
     'No contract offers yet — expand the relevant fuel tank (needs 2× the daily commitment).',
-  '📋 {0} sözleşmesi imzalandı — günde {1}L {2} teslim et!': '📋 Signed {0} — deliver {1}L of {2} per day!',
+  '{0} sözleşmesi imzalandı — günde {1}L {2} teslim et!': 'Signed {0} — deliver {1}L of {2} per day!',
   'Zaten aktif bir sözleşmen var.': 'You already have an active contract.',
-  '📋 {0}: günlük taahhüt teslim edildi (+₺{1})': '📋 {0}: daily commitment delivered (+₺{1})',
-  '📋 {0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)': '📋 {0}: commitment MISSED — penalty applied ({1}₺)',
-  '🏆 {0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3': '🏆 {0} contract COMPLETED! Bonus: +₺{1} · reputation +0.3',
-  '❌ {0} sözleşmesi ihlalden feshedildi — prim yok.': '❌ {0} contract terminated for breach — no bonus.',
+  '{0}: günlük taahhüt teslim edildi (+₺{1})': '{0}: daily commitment delivered (+₺{1})',
+  '{0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)': '{0}: commitment MISSED — penalty applied ({1}₺)',
+  '{0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3': '{0} contract COMPLETED! Bonus: +₺{1} · reputation +0.3',
+  '{0} sözleşmesi ihlalden feshedildi — prim yok.': '{0} contract terminated for breach — no bonus.',
   'Reklam (günlük)': 'Marketing (daily)',
   'trafik ×{0}': 'traffic ×{0}',
-  '🏛️ İşletme gideri (bakım+vergi): -₺{0}': '🏛️ Operating cost (upkeep+tax): -₺{0}',
-  '📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})': '📣 Ad campaign running: -₺{0} (traffic ×{1})',
-  '📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.': '📣 Not enough cash for the ad budget — campaign reduced today.',
-  '🏛️ YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.':
-    '🏛️ NEW: Operating costs arrived (upkeep+tax, scales with assets) — phased in over 10 days. Track them in the Office panel.',
+  'İşletme gideri (bakım+vergi): -₺{0}': 'Operating cost (upkeep+tax): -₺{0}',
+  'Reklam kampanyası yayında: -₺{0} (trafik ×{1})': 'Ad campaign running: -₺{0} (traffic ×{1})',
+  'Reklam bütçesine para yetmedi — kampanya bugün kısık.': 'Not enough cash for the ad budget — campaign reduced today.',
+  'YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.':
+    'NEW: Operating costs arrived (upkeep+tax, scales with assets) — phased in over 10 days. Track them in the Office panel.',
   'Günlük gider (yovmiye+OPEX+reklam)': 'Daily costs (wages+OPEX+ads)',
-  '⛽ Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!':
-    '⛽ Your attendants sold ~{0}L of fuel while you were away (+₺{1}) — check your tank levels!',
-  '⛽ Tankların bitmek üzere — sipariş verme vakti!': '⛽ Your tanks are almost empty — time to order fuel!',
+  'Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!':
+    'Your attendants sold ~{0}L of fuel while you were away (+₺{1}) — check your tank levels!',
+  'Tankların bitmek üzere — sipariş verme vakti!': 'Your tanks are almost empty — time to order fuel!',
   'Misafir oynayabilirsin — ama kaydolursan:': 'You can play as a guest — but if you sign up:',
   '+₺2.500 başlangıç bonusu': '+₺2,500 starter bonus',
   'Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)': 'Daily login streak — growing bonus every day (₺500 → ₺2,000)',
@@ -249,7 +249,7 @@ const EN: Record<string, string> = {
   'Kayıt Ol (10 saniye)': 'Sign Up (takes 10 seconds)',
   'Yine de misafir devam et': 'Continue as guest anyway',
   'Bu fiyatlarla müşteri akışı': 'Customer flow at these prices',
-  '🟠 Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.': '🟠 Orange areas are car lanes/reserved — you can’t build there.',
+  'Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.': 'Orange areas are car lanes/reserved — you can’t build there.',
   'Karşı Market': 'Across-Road Market',
   'Karşı Market Sv.{0}': 'Across-Road Market Lv.{0}',
   'Yol karşısındaki istasyonun müşterileri için ikinci market — karşı yakaya kurulur, yerinde yükselir.':
@@ -258,12 +258,12 @@ const EN: Record<string, string> = {
     'Across-road customers shop here — extra income for the far side.',
   'Önce ana marketi kur': 'Build the main market first',
   'Karşıda betonlu arsa gerekli': 'Needs paved land across the road',
-  '🛒 Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!':
-    '🛒 Across-road market is open — far-side customers will start shopping!',
-  '🚧 Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.':
-    '🚧 Your land across the road is ready! Place a pump or charger — entry/exit gates appear AUTOMATICALLY.',
-  '🚧 Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.':
-    '🚧 First pave your land across the road, then place a pump/charger — gates appear AUTOMATICALLY.',
+  'Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!':
+    'Across-road market is open — far-side customers will start shopping!',
+  'Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.':
+    'Your land across the road is ready! Place a pump or charger — entry/exit gates appear AUTOMATICALLY.',
+  'Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.':
+    'First pave your land across the road, then place a pump/charger — gates appear AUTOMATICALLY.',
   'Parsele dokun…': 'Tap a parcel…',
   'Arsana dokun…': 'Tap your land…',
   '+₺{0} toplandı! ({1} ünitenin ortak kumbarası — gelir ×{1})': '+₺{0} collected! (shared piggy bank of {1} units — income ×{1})',
@@ -295,7 +295,7 @@ const EN: Record<string, string> = {
   'Sunucu hatası.': 'Server error.',
   'Mağaza': 'Store',
   'Hesap': 'Account',
-  '🏗️ Ofisi Taşı': '🏗️ Move Office',
+  'Ofisi Taşı': 'Move Office',
   'Teklif güncellendi — yeni listeye bak.': 'That offer changed — check the new list.',
   // 7 günlük kâr grafiği + yaka dağılımı (ofis raporu)
   'Grafik için en az 2 günlük veri gerekli.': 'The chart needs at least 2 days of data.',
@@ -342,18 +342,18 @@ const EN: Record<string, string> = {
   'Mesaj çok kısa — biraz detay ver.': 'Message too short — add a bit more detail.',
 
   // --- Sık toast'lar ---
-  'Taşındı!': 'Moved!', '💸 Para yetmiyor!': "💸 Can't afford it!",
+  'Taşındı!': 'Moved!', 'Para yetmiyor!': "Can't afford it!",
   'Sıfırdan başlıyorsun — hayırlı olsun patron!': 'Starting fresh — good luck, boss!',
   'İstasyon tekrar AÇIK — bekleriz!': 'Station is OPEN again — welcome!',
   'Müşteri beklemekten sıkıldı ve gitti!': 'Customer got tired of waiting and left!',
   'Çıkış yapıldı.': 'Logged out.',
   'Pompa arızalandı — dolum yarıda kaldı, tamir gerekli.': 'Pump broke down — refill cut short, repair needed.',
   'Şarj ünitesi arızalandı — şarj durdu, tamir gerekli.': 'Charger broke down — charging stopped, repair needed.',
-  '🚿 OTO YIKAMA': '🚿 CAR WASH',
-  '☕ KAHVE': '☕ COFFEE',
-  '🍽️ RESTORAN': '🍽️ RESTAURANT',
-  '🚛 TIR PARKI': '🚛 TRUCK STOP',
-  '🧽 SELF YIKAMA': '🧽 SELF WASH',
+  'OTO YIKAMA': 'CAR WASH',
+  'KAHVE': 'COFFEE',
+  'RESTORAN': 'RESTAURANT',
+  'TIR PARKI': 'TRUCK STOP',
+  'SELF YIKAMA': 'SELF WASH',
   'HAVA · SU': 'AIR · WATER',
   '{0} L/sn': '{0} L/s',
   '+3 kWh/sn': '+3 kWh/s',
@@ -372,45 +372,45 @@ const EN: Record<string, string> = {
   'İstasyon adı (tabelada görünür)': 'Station name (shown on the sign)',
   'Bildirimler (sekme kapalıyken tanker/kumbara haberi)': 'Notifications (tanker/jar alerts when tab is inactive)',
   'Efektler: Açık': 'Effects: On',
-  '🚨 {0} isteyen araca {1} bastın! -{2} ₺': '🚨 Pumped {1} into a car that wanted {0}! -{2} ₺',
+  '{0} isteyen araca {1} bastın! -{2} ₺': 'Pumped {1} into a car that wanted {0}! -{2} ₺',
   'Sen yokken tesislerin çalıştı: kumbaralarda ~₺{0} birikti — topla!': 'Your facilities worked while away: ~₺{0} in jars — collect it!',
   'İstasyon KAPALI — yeni müşteri girmez, itibar etkilenmez. Bakım için rahatsın.': 'Station CLOSED — no new customers, rating unaffected. Free to do maintenance.',
   'Beton iadesi: {0} arsa söküldü, +₺{1} iade edildi.': 'Paving refund: {0} plots removed, +₺{1} refunded.',
   'Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca cezalıdır.': 'Petrol & diesel refills. You pick the fuel and amount — wrong nozzle is penalized.',
   'Santrallerin ürettiği elektriği biriktirir. Elektrikli araçlar buradan anında şarj alır.': 'Stores power from your plants. EVs charge from here instantly.',
   'FULLE {0}': 'FILL UP {0}',
-  '🚨 {0} isteyen araca {1} verildi — CEZA!': '🚨 Gave {1} to a car that wanted {0} — PENALTY!',
-  '🏞️ Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.': '🏞️ Land purchased (-₺{0}) — pave it to build.',
+  '{0} isteyen araca {1} verildi — CEZA!': 'Gave {1} to a car that wanted {0} — PENALTY!',
+  'Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.': 'Land purchased (-₺{0}) — pave it to build.',
   'Bulut kaydı yüklendi — Gün {0} ({1})': 'Cloud save loaded — Day {0} ({1})',
   'Sen yokken tesislerin çalıştı: kumbaralarda ~₺{0} birikti — toplamayı unutma!': 'Your facilities worked while away: ~₺{0} in jars — collect it!',
   'Beton iadesi: {0} arsa söküldü, +₺{1}': 'Paving refund: {0} plots removed, +₺{1}',
   '+{0} kWh/sn (şebeke dahil)': '+{0} kWh/s (grid included)',
-  '🟢 Uranyum Sipariş Et — ₺{0}': '🟢 Order Uranium — ₺{0}',
-  '📅 Gün {0} bitti — {1}: ₺{2}': '📅 Day {0} ended — {1}: ₺{2}',
+  'Uranyum Sipariş Et — ₺{0}': 'Order Uranium — ₺{0}',
+  'Gün {0} bitti — {1}: ₺{2}': 'Day {0} ended — {1}: ₺{2}',
   'kâr': 'profit',
   'zarar': 'loss',
   'Otomatik Şarj: {0} — değiştir': 'Auto-charge: {0} — toggle',
-  '🧨 Yık — +₺{0}': '🧨 Demolish — +₺{0}',
-  '🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}': '🧨 Demolished — half your investment back: +₺{0}',
+  'Yık — +₺{0}': 'Demolish — +₺{0}',
+  'Yıkıldı — yatırımın yarısı iade: +₺{0}': 'Demolished — half your investment back: +₺{0}',
   // --- Pompacı ---
   'Pompacı': 'Attendant',
   'ÇALIŞIYOR (gelirin tamamı senin)': 'ON DUTY (you keep all revenue)',
   'YOK': 'NONE',
-  '🧑‍🔧 Pompacı Çalıştır — ₺{0}': '🧑‍🔧 Hire Attendant — ₺{0}',
-  '🧑‍🔧 Pompacıyı işten çıkar': '🧑‍🔧 Dismiss attendant',
+  'Pompacı Çalıştır — ₺{0}': 'Hire Attendant — ₺{0}',
+  'Pompacıyı işten çıkar': 'Dismiss attendant',
   'Pompa #{0}: pompacı işten çıktı — dolum yine sende.': 'Pump #{0}: attendant dismissed — filling is on you again.',
-  '💸 Para yetmiyor — pompacı işe alma ₺{0}.': '💸 Not enough cash — hiring costs ₺{0}.',
-  '🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.':
-    '🧑‍🔧 Pump #{0}: attendant hired — auto-fills the right fuel, you keep the full sale. Only the tip goes to them.',
-  '🧑‍🔧 Pompacı sattı: +₺{0}': '🧑‍🔧 Attendant sold: +₺{0}',
+  'Para yetmiyor — pompacı işe alma ₺{0}.': 'Not enough cash — hiring costs ₺{0}.',
+  'Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.':
+    'Pump #{0}: attendant hired — auto-fills the right fuel, you keep the full sale. Only the tip goes to them.',
+  'Pompacı sattı: +₺{0}': 'Attendant sold: +₺{0}',
   // --- Geniş giriş/çıkış ---
   'Geniş Giriş-Çıkış': 'Wide Entry & Exit',
   '2 şerit': '2 lanes',
   'Kapı ağızları genişler: araçlar ikili sıra girip çıkar, kuyruk yola taşmaz':
     'Gate mouths widen: cars enter and exit two abreast, queues stay off the road',
   'Önce 2. pompayı al': 'Buy the 2nd pump first',
-  '🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!':
-    '🛣️ Entry & exit widened — cars now flow two abreast!',
+  'Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!':
+    'Entry & exit widened — cars now flow two abreast!',
   'Ücreti Değiştir ({0} → {1})': 'Change Fee ({0} → {1})',
   'Müzik: {0}': 'Music: {0}',
   'Efektler: {0}': 'Effects: {0}',
@@ -426,15 +426,15 @@ const EN: Record<string, string> = {
   'Başarımlar: {0}/8 · Görev: {1}': 'Achievements: {0}/8 · Quest: {1}',
   '{0} · boşaltıyor': '{0} · unloading',
   'Tır park etti: ₺{0} kumbarada': 'Truck parked: ₺{0} in the jar',
-  '🛒 Market alışverişi: +₺{0}': '🛒 Market purchase: +₺{0}',
-  '🚻 Tuvalet ücreti: +₺{0}': '🚻 Restroom fee: +₺{0}',
-  '☕ Kahve satışı: +₺{0}': '☕ Coffee sale: +₺{0}',
-  '🍽️ Restoran hesabı: +₺{0}': '🍽️ Restaurant bill: +₺{0}',
+  'Market alışverişi: +₺{0}': 'Market purchase: +₺{0}',
+  'Tuvalet ücreti: +₺{0}': 'Restroom fee: +₺{0}',
+  'Kahve satışı: +₺{0}': 'Coffee sale: +₺{0}',
+  'Restoran hesabı: +₺{0}': 'Restaurant bill: +₺{0}',
   'Araç yıkandı: ₺{0} kumbarada': 'Car washed: ₺{0} in the jar',
-  '🔧 Yağ değişimi yapıldı: +₺{0}': '🔧 Oil changed: +₺{0}',
+  'Yağ değişimi yapıldı: +₺{0}': 'Oil changed: +₺{0}',
   'Günlük görev: {0}/15 müşteri': 'Daily quest: {0}/15 customers',
-  '⚡ {0} kWh şarj tamamlandı: +₺{1}': '⚡ {0} kWh charged: +₺{1}',
-  '⚡ Elektrik altyapısı Sv.{0} kuruldu!': '⚡ Power grid Lv.{0} built!',
+  '{0} kWh şarj tamamlandı: +₺{1}': '{0} kWh charged: +₺{1}',
+  'Elektrik altyapısı Sv.{0} kuruldu!': 'Power grid Lv.{0} built!',
   'Günlük giriş bonusu: +₺{0} (seri: {1} gün)': 'Daily login bonus: +₺{0} (streak: {1} days)',
   'DC Şarj #{0}: otomatik şarj AÇIK — EV sormadan şarj alır.': 'DC Charger #{0}: auto-charge ON — EVs charge without asking.',
   'DC Şarj #{0}: otomatik şarj kapalı.': 'DC Charger #{0}: auto-charge off.',
@@ -442,23 +442,23 @@ const EN: Record<string, string> = {
   '+₺{0} toplandı!': '+₺{0} collected!',
   '{0} tankı boş kaldı! Satış yarım kaldı — sipariş ver.': '{0} tank ran dry! Sale cut short — order more.',
   'DC Şarj #{0}': 'DC Charger #{0}',
-  '🔧 Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.': '🔧 Pump #{0} broke down! Click it and repair from the card.',
-  '🔌 Şarj ünitesi #{0} arızalandı!': '🔌 Charger #{0} broke down!',
+  'Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.': 'Pump #{0} broke down! Click it and repair from the card.',
+  'Şarj ünitesi #{0} arızalandı!': 'Charger #{0} broke down!',
   '{0} kumbarası doldu — üstüne tıklayıp topla!': '{0} jar is full — click to collect!',
   'Güneş Santrali ({0})': 'Solar Plant ({0})',
   'Panel Temizliği (kir %{0})': 'Panel Cleaning (dirt {0}%)',
   'Reaktör Bakımı (yıpranma %{0})': 'Reactor Maintenance (wear {0}%)',
   'Uranyum Siparişi (%{0} kaldı)': 'Order Uranium ({0}% left)',
   'Şarj #{0} Tamiri': 'Charger #{0} Repair',
-  '🏆 Başarım: {0}': '🏆 Achievement: {0}',
+  'Başarım: {0}': 'Achievement: {0}',
   'Pompa #{0} Tamiri': 'Pump #{0} Repair',
   'Tır parkı': 'Truck stop',
   'Oto yıkama': 'Car wash',
   'Self yıkama': 'Self wash',
   'Taşıma modu: yeni yeri seç · R ile döndür · sağ tık/ESC iptal': 'Move mode: pick a spot · R to rotate · right-click/ESC to cancel',
   'Yerleştirme modu: kareye tıkla · R ile döndür · sağ tık/ESC iptal': 'Placement mode: click a tile · R to rotate · right-click/ESC to cancel',
-  '🏞️ Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal': '🏞️ Land: click an adjacent plot (₺6-14k) · ESC to cancel',
-  '🧱 Zemin seçimi: betonlanacak arsana tıkla · ESC iptal': '🧱 Paving: click a plot to pave · ESC to cancel',
+  'Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal': 'Land: click an adjacent plot (₺6-14k) · ESC to cancel',
+  'Zemin seçimi: betonlanacak arsana tıkla · ESC iptal': 'Paving: click a plot to pave · ESC to cancel',
   'İstasyon KAPALI — yeni müşteri girmez, itibar etkilenmez. Bakım için rahatsız olmadan çalış.': 'Station CLOSED — no new customers, rating unaffected. Do maintenance in peace.',
   'BENZİNLİK': 'BENELOIL',
   'Benzin ve dizel dolumu. Müşterinin istediği yakıtı ve tutarı sen girersin — yanlış tabanca ceza, doğrusu bahşiş.': 'Petrol & diesel refills. You pick the fuel and amount — wrong nozzle penalized, right one tipped.',
@@ -488,7 +488,7 @@ const EN: Record<string, string> = {
   'Bedava elektrik üretir ama paneller kirlendikçe verim düşer. Ara sıra temizlik yaptır.': 'Generates free power, but output drops as panels get dirty. Clean it occasionally.',
   'Tanktan mazot yakarak elektrik üretir. Çalışırken gürültüsü şarjdaki müşterileri rahatsız eder.': 'Burns diesel from the tank to make power. Its noise disturbs charging customers.',
   'Yakıt tüketimi': 'Fuel use',
-  'ÇALIŞIYOR 🔊': 'RUNNING 🔊',
+  'ÇALIŞIYOR': 'RUNNING',
   'Yakıt alan müşterilerin bir kısmı çıkışta aracını yıkatır.': 'Some fueling customers wash their car on the way out.',
   'Hizmet ücreti': 'Service fee',
   'Kullanım oranı': 'Usage rate',
@@ -501,9 +501,9 @@ const EN: Record<string, string> = {
   'Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.': 'Served customers park here to visit the market, restroom, cafe and restaurant.',
   '4 araç': '4 cars', '{0} araç': '{0} cars',
   'Bakım vakti gelen araçlar burada yağ değiştirir — en kârlı yan hizmet.': 'Cars due for service change oil here — the most profitable side service.',
-  'YÜKSEK ☠️': 'HIGH ☠️',
+  'YÜKSEK': 'HIGH',
   'Düşük': 'Low',
-  '☢️ Bakım Yap — ₺1.500': '☢️ Maintain — ₺1,500',
+  'Bakım Yap — ₺1.500': 'Maintain — ₺1,500',
   'En güçlü enerji kaynağı. Uranyumla çalışır, yıprandıkça patlama riski artar — bakımı ASLA aksatma.': 'The strongest power source. Runs on uranium; explosion risk grows with wear — NEVER skip maintenance.',
   'Yıpranma': 'Wear',
   'Düzenleme modu AÇIK: taşımak istediğin binaya tıkla (pompa, şarj ve tank sabittir)': 'Edit mode ON: click a building to move it (pumps, chargers and tank are fixed)',
@@ -513,11 +513,11 @@ const EN: Record<string, string> = {
   'Bu arsa senin değil — önce satın al.': 'You don\'t own this plot — buy it first.',
   'Başarım': 'Achievement',
   'KRİTİK': 'CRITICAL',
-  '🔧 ARIZA · TAMİR ₺800': '🔧 BROKEN · REPAIR ₺800',
-  '🔧 ARIZA · TAMİR ₺1.000': '🔧 BROKEN · REPAIR ₺1,000',
-  '🧽 TEMİZLİK ₺300': '🧽 CLEAN ₺300',
-  '🚨 BAKIM ŞART ₺1.500': '🚨 MAINTAIN NOW ₺1,500',
-  '🚨 URANYUM BİTTİ · ₺2.500': '🚨 OUT OF URANIUM · ₺2,500',
+  'ARIZA · TAMİR ₺800': 'BROKEN · REPAIR ₺800',
+  'ARIZA · TAMİR ₺1.000': 'BROKEN · REPAIR ₺1,000',
+  'TEMİZLİK ₺300': 'CLEAN ₺300',
+  'BAKIM ŞART ₺1.500': 'MAINTAIN NOW ₺1,500',
+  'URANYUM BİTTİ · ₺2.500': 'OUT OF URANIUM · ₺2,500',
   'KENDİ BENZİNLİĞİNİ KUR': 'BUILD YOUR STATION',
   'YAKIT SATMAYA BAŞLA': 'START SELLING FUEL',
   'BÜYÜ VE GELİŞ': 'GROW & EXPAND',
@@ -537,12 +537,12 @@ const EN: Record<string, string> = {
   'Müşteri FULLE istiyor — tabancayı seç, FULLE bas': 'Customer wants FILL UP — pick the nozzle, hit FILL UP',
   'Giriş gerekli — oturum kapandı, sayfayı yenile.': 'Sign-in required — session ended, refresh the page.',
   'tamamlandı': 'completed',
-  '🧽 Güneş panelleri iyice kirlendi, üretim düşüyor!': '🧽 Solar panels got dirty, output is dropping!',
-  '☢️ Uranyum teslim edildi — reaktör tam güçte!': '☢️ Uranium delivered — reactor at full power!',
-  '☢️ Uranyum azalıyor! Yeni çubuk sipariş et.': '☢️ Uranium running low! Order a new rod.',
-  '🚨 Uranyum bitti — reaktör üretimi DURDU!': '🚨 Out of uranium — reactor output STOPPED!',
-  '☢️ Reaktör bakım istiyor!': '☢️ Reactor needs maintenance!',
-  '🚨 REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!': '🚨 REACTOR CRITICAL! Maintain now or it explodes!',
+  'Güneş panelleri iyice kirlendi, üretim düşüyor!': 'Solar panels got dirty, output is dropping!',
+  'Uranyum teslim edildi — reaktör tam güçte!': 'Uranium delivered — reactor at full power!',
+  'Uranyum azalıyor! Yeni çubuk sipariş et.': 'Uranium running low! Order a new rod.',
+  'Uranyum bitti — reaktör üretimi DURDU!': 'Out of uranium — reactor output STOPPED!',
+  'Reaktör bakım istiyor!': 'Reactor needs maintenance!',
+  'REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!': 'REACTOR CRITICAL! Maintain now or it explodes!',
   'Yakıt indirimi sona erdi.': 'Fuel discount ended.',
   'Müşteri patlaması sona erdi.': 'Customer rush ended.',
   'FIRSAT: 60 saniye boyunca yakıt siparişi YARI FİYAT!': 'DEAL: fuel orders HALF PRICE for 60 seconds!',
@@ -562,8 +562,8 @@ const EN: Record<string, string> = {
   // --- 3D bina etiketleri ---
   'YAKIT TANKI': 'FUEL TANK', 'GİRİŞ': 'ENTRANCE', 'ÇIKIŞ': 'EXIT', 'OFİS': 'OFFICE',
   'MARKET': 'MARKET', 'TUVALET': 'RESTROOM', 'BATARYA DEPOSU': 'BATTERY DEPOT',
-  'GÜNEŞ SANTRALİ': 'SOLAR PLANT', 'JENERATÖR': 'GENERATOR', 'OTO YIKAMA': 'CAR WASH',
-  'KAHVECİ': 'CAFE', 'RESTORAN': 'RESTAURANT', 'TIR PARKI': 'TRUCK STOP', 'SELF YIKAMA': 'SELF WASH',
+  'GÜNEŞ SANTRALİ': 'SOLAR PLANT', 'JENERATÖR': 'GENERATOR', 
+  'KAHVECİ': 'CAFE', 
   'OTOPARK': 'PARKING', 'HAVA-SU ÜNİTESİ': 'AIR & WATER', 'REAKTÖR': 'REACTOR',
   'TABELA': 'SIGN', 'SOKAK LAMBASI': 'STREET LAMP',
   'POMPA #{0}': 'PUMP #{0}', 'DC ŞARJ #{0}': 'DC CHARGER #{0}',
@@ -643,10 +643,10 @@ const EN: Record<string, string> = {
   '{0} teslimatı gecikti — yakıt yine de teslim edildi.': '{0} delivery delayed — fuel delivered anyway.',
   '{0} tankeri zaten yolda — teslimatı bekle.': '{0} tanker already on the way — wait for delivery.',
   'Bahşiş: +₺{0}': 'Tip: +₺{0}', 'Taşan yakıt cezası: -₺{0}': 'Spill penalty: -₺{0}',
-  'Camları Temizle': 'Clean Windows', '✨ Camlar Temiz': '✨ Windows Clean',
-  'Ön cam pırıl pırıl — bahşiş şansı arttı! ✨': 'Windshield sparkling — bigger tip chance! ✨',
+  'Camları Temizle': 'Clean Windows', 'Camlar Temiz': 'Windows Clean',
+  'Ön cam pırıl pırıl — bahşiş şansı arttı!': 'Windshield sparkling — bigger tip chance!',
   'Temiz camlara bahşiş: +₺{0}': 'Clean-windows tip: +₺{0}',
-  'Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000 🎁': 'Welcome back, boss! Comeback gift: +₺1,000 🎁',
+  'Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000': 'Welcome back, boss! Comeback gift: +₺1,000',
   'Bakiye güncellendi': 'Balance updated', 'Kayıt güncellendi ✓': 'Save updated ✓', 'Güncelleme uygulanıyor…': 'Applying update…',
   'Hesabın askıya alındı': 'Your account is suspended', 'Kurallar ihlal edildi.': 'Terms of Service violation.', 'Tamam': 'OK',
   'E-postanı doğrula': 'Verify your email',
@@ -664,42 +664,42 @@ const EN: Record<string, string> = {
   'Şifre sıfırlama bağlantısı gönderildi (kayıtlıysa). Mailini kontrol et.': 'Password reset link sent (if registered). Check your email.',
   'Gönderilemedi, sonra tekrar dene.': 'Could not send, try again later.',
   'Yerleştir': 'Place', 'Buraya yerleştirilemez — kırmızıysa başka yere taşı.': 'Cannot place here — if red, move elsewhere.',
-  '👋 Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.': '👋 Welcome, boss! Your first customer is here — check the panel and pick <b>the matching-color nozzle</b>.',
+  'Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.': 'Welcome, boss! Your first customer is here — check the panel and pick <b>the matching-color nozzle</b>.',
   'Tabanca seçildi ✓ Şimdi <b>tutar gir</b> ya da <b>FULLE</b> bas, sonra <b>BAŞLAT</b>.': 'Nozzle selected ✓ Now <b>enter an amount</b> or hit <b>FILL UP</b>, then <b>START</b>.',
-  '🎉 İlk satışın! İpucu: <b>🧼 cam temizle</b> = daha çok bahşiş. Büyümek için <b>🛒 mağazadan</b> pompa/tesis al, <b>🏢 ofisten</b> fiyatı ayarla.': '🎉 Your first sale! Tip: <b>🧼 clean windows</b> = bigger tips. To grow, buy pumps/facilities from the <b>🛒 shop</b> and set prices from the <b>🏢 office</b>.',
+  'İlk satışın! İpucu: <b>cam temizle</b> = daha çok bahşiş. Büyümek için <b>mağazadan</b> pompa/tesis al, <b>ofisten</b> fiyatı ayarla.': 'Your first sale! Tip: <b>clean windows</b> = bigger tips. To grow, buy pumps/facilities from the <b>shop</b> and set prices from the <b>office</b>.',
   'Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!': 'Your facilities worked while you were away: earned ~₺{0} — collect the piggy banks!',
   'Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir': 'Move mode: arrow buttons or tap · ⟳ rotate · ✓ place',
   'Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir': 'Place mode: arrow buttons or tap · ⟳ rotate · ✓ place',
   'Buluta bağlanılamadı': "Couldn't connect to the cloud", 'Yenile': 'Refresh',
   'İlerlemeni korumak için oyun durduruldu. Kaydın güvende — hiçbir şey silinmedi. Bağlantı gelince yenile.': 'The game is paused to protect your progress. Your save is safe — nothing was deleted. Refresh once you are back online.',
   'MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!': 'CUSTOMER RUSH! 90 seconds of heavy traffic — hit the pumps!',
-  '🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.': '🅿️ Customer parked to use the facilities.',
+  'Müşteri aracını otoparka çekti, tesisleri kullanacak.': 'Customer parked to use the facilities.',
   'Tuvalet artık ücretsiz.': 'Restroom is now free.', 'Tuvalet ücreti: ₺{0}': 'Restroom fee: ₺{0}',
   'Ücretsiz': 'Free', 'GÜNLÜK GÖREV TAMAM: 15 müşteri — ödül +₺1.000!': 'DAILY QUEST DONE: 15 customers — reward +₺1,000!',
   'İstasyon bakıma alındı — itibar düşmez.': 'Station under maintenance — rating protected.',
-  '🛣️ Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.':
-    '🛣️ The slip lane is full — a customer pulled back onto the motorway! Expand your capacity.',
+  'Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.':
+    'The slip lane is full — a customer pulled back onto the motorway! Expand your capacity.',
   'EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!':
     'An EV customer saw a charger blocked by a car that wasn’t charging and DROVE OFF — rating dropped!',
-  '🚻 Müşteri tuvalet arıyordu, bulamadı!': '🚻 A customer went looking for a restroom and found none!',
-  '🔧 Yağ değişimi: +₺{0} kumbarada': '🔧 Oil change: +₺{0} in the piggy bank',
-  '🔊 Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
-    '🔊 Put off by the generator noise — they’ll only charge half as much!',
+  'Müşteri tuvalet arıyordu, bulamadı!': 'A customer went looking for a restroom and found none!',
+  'Yağ değişimi: +₺{0} kumbarada': 'Oil change: +₺{0} in the piggy bank',
+  'Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
+    'Put off by the generator noise — they’ll only charge half as much!',
   'Depo şu an boş — üretim geldikçe şarj yavaş akacak.': 'The depot is empty right now — charging will trickle in as power is generated.',
-  '🔧 Şarj ünitesi arızalandı — tamir gerekli!': '🔧 Charger broke down — repair needed!',
-  '🔧 Pompa arızalandı — tamir gerekli!': '🔧 Pump broke down — repair needed!',
-  '⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆': '⚡ An idler is hogging the charger — tap the car to send them off 👆',
-  '⚠️ Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!':
-    '⚠️ Cloud save is failing — check your connection, your progress is NOT being saved!',
-  '🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…':
-    '🔄 Played on another device — syncing to your latest progress…',
-  '⭐ İtibar yükseldi: {0} (bekleyen müşteri kaybın az)': '⭐ Rating up: {0} (you barely lost anyone to waiting)',
-  '⭐ İtibar düştü: {0} — müşteriler beklemekten gidiyor!': '⭐ Rating down: {0} — customers are leaving from the wait!',
-  '✏️ Düzenleme AÇIK — binaya dokun ve taşı': '✏️ Edit mode ON — tap a building to move it',
+  'Şarj ünitesi arızalandı — tamir gerekli!': 'Charger broke down — repair needed!',
+  'Pompa arızalandı — tamir gerekli!': 'Pump broke down — repair needed!',
+  'Molacı üniteyi tutuyor — göndermek için araca dokun': 'An idler is hogging the charger — tap the car to send them off',
+  'Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!':
+    'Cloud save is failing — check your connection, your progress is NOT being saved!',
+  'Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…':
+    'Played on another device — syncing to your latest progress…',
+  'İtibar yükseldi: {0} (bekleyen müşteri kaybın az)': 'Rating up: {0} (you barely lost anyone to waiting)',
+  'İtibar düştü: {0} — müşteriler beklemekten gidiyor!': 'Rating down: {0} — customers are leaving from the wait!',
+  'Düzenleme AÇIK — binaya dokun ve taşı': 'Edit mode ON — tap a building to move it',
   '{0} kumbarası doldu — tıklayıp topla, yoksa ciro erimeye başlar!':
     '{0} piggy bank is full — tap to collect or your takings start melting away!',
-  '⚠️ {0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!': '⚠️ {0} piggy bank is PACKED — incoming revenue is being lost!',
-  '🧪 FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!': '🧪 FULL MODE: everything built — drag to pan, scroll to zoom!',
+  '{0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!': '{0} piggy bank is PACKED — incoming revenue is being lost!',
+  'FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!': 'FULL MODE: everything built — drag to pan, scroll to zoom!',
   // --- Batch: eksik EN çevirileri (v2 güncelleme) ---
   'Finansal Durum': 'Financial Status', 'Yakıt Satış Fiyatları': 'Fuel Selling Prices',
   'Müşteri & İtibar': 'Customers & Reputation', 'Satış & Faaliyet Kârı': 'Sales & Operating Profit',
@@ -737,62 +737,62 @@ const EN: Record<string, string> = {
   'Sahipsin ✓': 'Owned ✓', 'Satın Alımları Geri Yükle': 'Restore Purchases', 'İşleniyor…': 'Processing…',
   'Satın alma tamamlanamadı.': 'Purchase could not be completed.', 'Satın alımlar geri yüklendi.': 'Purchases restored.',
   'Geri yüklenecek satın alma yok.': 'No purchases to restore.',
-  '🏦 Kredi onaylandı — +₺{0} kasana geçti!': '🏦 Loan approved — +₺{0} added to your cash!',
-  '🏦 Avans onaylandı — +₺{0} kasana geçti!': '🏦 Advance approved — +₺{0} added to your cash!',
-  '🏦 Kredi kapatıldı — teminatların serbest!': '🏦 Loan paid off — your collateral is released!',
-  '💸 Erken kapatmaya kasan yetmiyor.': '💸 Not enough cash to pay off early.',
-  '🏦 Ortaklık kapatıldı — istasyon tamamen senin!': '🏦 Partnership bought out — the station is all yours!',
-  '💸 Ortaklığı kapatmaya kasan yetmiyor.': '💸 Not enough cash to buy out the partnership.',
-  '🏦 Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!': '🏦 Payment failed — your collateral was SEIZED and taken from the station!',
-  '🏦 Kredi tamamen ödendi — teminatların serbest! 🎉': '🏦 Loan fully repaid — your collateral is released! 🎉',
-  '🏦 Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.': '🏦 Loan installment overdue! Top up your cash — 2 misses in a row triggers seizure.',
-  '🏦 Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!': '🏦 Debt unpaid — the bank became a {0}% PARTNER, collected from profit share!',
-  '🏦 Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin! 🎉': '🏦 The bank recovered its share — partnership ended, the station is all yours! 🎉',
-  '🏦 Banka ortağı kâr payı aldı: -₺{0}': '🏦 Bank partner took its profit share: -₺{0}',
+  'Kredi onaylandı — +₺{0} kasana geçti!': 'Loan approved — +₺{0} added to your cash!',
+  'Avans onaylandı — +₺{0} kasana geçti!': 'Advance approved — +₺{0} added to your cash!',
+  'Kredi kapatıldı — teminatların serbest!': 'Loan paid off — your collateral is released!',
+  'Erken kapatmaya kasan yetmiyor.': 'Not enough cash to pay off early.',
+  'Ortaklık kapatıldı — istasyon tamamen senin!': 'Partnership bought out — the station is all yours!',
+  'Ortaklığı kapatmaya kasan yetmiyor.': 'Not enough cash to buy out the partnership.',
+  'Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!': 'Payment failed — your collateral was SEIZED and taken from the station!',
+  'Kredi tamamen ödendi — teminatların serbest!': 'Loan fully repaid — your collateral is released!',
+  'Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.': 'Loan installment overdue! Top up your cash — 2 misses in a row triggers seizure.',
+  'Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!': 'Debt unpaid — the bank became a {0}% PARTNER, collected from profit share!',
+  'Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin!': 'The bank recovered its share — partnership ended, the station is all yours!',
+  'Banka ortağı kâr payı aldı: -₺{0}': 'Bank partner took its profit share: -₺{0}',
   // pompacı / şarjcı / bina
   'Tabela': 'Sign', 'Trafik etkisi': 'Traffic impact', 'Genişlik': 'Width', 'Geniş · 2 şerit': 'Wide · 2 lanes', 'Tek şerit': 'Single lane',
   'Yoldan geçenlerin uğrama şansını artırır. Fiyatları buradan da ayarlayabilir, Taşı ile yerini değiştirebilirsin.': 'Increases the chance passers-by stop. You can also set prices here and reposition it with Move.',
-  '🛣️ Geniş Giriş-Çıkış — ₺{0}': '🛣️ Wide Entry & Exit — ₺{0}',
+  'Geniş Giriş-Çıkış — ₺{0}': 'Wide Entry & Exit — ₺{0}',
   'ÇALIŞIYOR (gelir senin)': 'ON DUTY (you keep revenue)', 'Yovmiye': 'Daily wage', '₺{0}/gün': '₺{0}/day', 'Şarjcı': 'Charge Attendant',
-  '🧑‍🔧 Pompacı Tut — ₺{0} + ₺{1}/gün': '🧑‍🔧 Hire Attendant — ₺{0} + ₺{1}/day',
-  '🧑‍🔧 Şarjcı Tut — ₺{0} + ₺{1}/gün': '🧑‍🔧 Hire Charge Attendant — ₺{0} + ₺{1}/day',
-  '🧑‍🔧 Şarjcıyı işten çıkar': '🧑‍🔧 Dismiss charge attendant', 'Hava-Su': 'Air-Water', 'Yağ değişimi': 'Oil change',
+  'Pompacı Tut — ₺{0} + ₺{1}/gün': 'Hire Attendant — ₺{0} + ₺{1}/day',
+  'Şarjcı Tut — ₺{0} + ₺{1}/gün': 'Hire Charge Attendant — ₺{0} + ₺{1}/day',
+  'Şarjcıyı işten çıkar': 'Dismiss charge attendant', 'Hava-Su': 'Air-Water', 'Yağ değişimi': 'Oil change',
   'DC Şarj #{0}: şarjcı işten çıktı — şarjı yine sen yaparsın.': 'DC Charger #{0}: attendant dismissed — you charge cars again.',
-  '💸 Para yetmiyor — şarjcı işe alma ₺{0}.': '💸 Not enough cash — hiring a charge attendant costs ₺{0}.',
-  '⚡ DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!': '⚡ DC Charger #{0}: attendant hired — EVs charge automatically, you keep all revenue!',
-  '🧑‍🔧 Pompacı bu aracı hallediyor.': '🧑‍🔧 The attendant is handling this car.',
-  '🧑‍🔧 Günlük yovmiye ödendi: -₺{0}': '🧑‍🔧 Daily wages paid: -₺{0}',
-  '🛢️ Yakıt Siparişi Ver': '🛢️ Order Fuel', 'Başka cihazda açıldı': 'Opened on another device',
+  'Para yetmiyor — şarjcı işe alma ₺{0}.': 'Not enough cash — hiring a charge attendant costs ₺{0}.',
+  'DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!': 'DC Charger #{0}: attendant hired — EVs charge automatically, you keep all revenue!',
+  'Pompacı bu aracı hallediyor.': 'The attendant is handling this car.',
+  'Günlük yovmiye ödendi: -₺{0}': 'Daily wages paid: -₺{0}',
+  'Yakıt Siparişi Ver': 'Order Fuel', 'Başka cihazda açıldı': 'Opened on another device',
   'Bu hesap başka bir cihazda açıldığı için burada duraklatıldı. İlerlemen güvende — hiçbir şey silinmedi. Buradan devam etmek için yenile.': 'This account was opened on another device, so it\'s paused here. Your progress is safe — nothing was deleted. Refresh to continue here.',
   'Buradan devam et (Yenile)': 'Continue here (Refresh)', 'Geçerli bir e-posta gir.': 'Enter a valid email.',
   'Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.': 'This unit\'s orientation is fixed (car approach) — you can only pick its spot.',
-  '🚚 {0} tankeri istasyona ulaştı!': '🚚 {0} tanker reached the station!',
-  '✅ Reklamlar kaldırıldı — teşekkürler!': '✅ Ads removed — thank you!', '✅ +₺{0} kasana eklendi!': '✅ +₺{0} added to your cash!',
-  '🎬 Reklam İzle: Günü 2x Yap (+₺{0})': '🎬 Watch Ad: Double Today\'s Profit (+₺{0})', '🎬 Reklam İzle: Müşteri Patlaması': '🎬 Watch Ad: Customer Rush',
-  '🎬 Günün kârı 2 katına çıktı: +₺{0}!': '🎬 Today\'s profit doubled: +₺{0}!', '· yol karşısı': '· across the road', 'Beton': 'Paving',
+  '{0} tankeri istasyona ulaştı!': '{0} tanker reached the station!',
+  'Reklamlar kaldırıldı — teşekkürler!': 'Ads removed — thank you!', '+₺{0} kasana eklendi!': '+₺{0} added to your cash!',
+  'Reklam İzle: Günü 2x Yap (+₺{0})': 'Watch Ad: Double Today\'s Profit (+₺{0})', 
+  'Günün kârı 2 katına çıktı: +₺{0}!': 'Today\'s profit doubled: +₺{0}!', '· yol karşısı': '· across the road', 'Beton': 'Paving',
   // bina kurulum toast'ları (toast() artık t()'den geçiyor)
-  '🔧 Tamir edildi, tekrar hizmette!': '🔧 Repaired, back in service!', '🔧 Tamir Et — ₺800': '🔧 Repair — ₺800', '🔧 Tamir Et — ₺1.000': '🔧 Repair — ₺1,000',
-  '🧽 Temizle — ₺300': '🧽 Clean — ₺300', '🧽 Paneller tertemiz, üretim tam güçte!': '🧽 Panels spotless, output at full power!',
-  '☢️ Reaktör bakımı yapıldı, güvendesin.': '☢️ Reactor maintained, you\'re safe.', '☢️ Uranyum siparişi verildi — özel konvoy yolda!': '☢️ Uranium ordered — special convoy on the way!',
-  '💸 Bunun için yeterli para yok!': '💸 Not enough cash for this!', 'Pasif gelir': 'Passive income',
-  '🚧 Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.': '🚧 Across-road station opened! Automatic entry/exit added — customers arrive from the opposite lane.',
-  '🏞️ Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.': '🏞️ Across-road plot bought — pave it, then build a pump/charger; the first pump adds automatic entry/exit.',
-  '🧱 Zemin betonlandı — artık yapı kurabilirsin!': '🧱 Plot paved — you can build now!',
-  '🪧 Tabela büyüdü — daha çok müşteri gelecek!': '🪧 Sign upgraded — more customers coming!', '🛒 Market açıldı!': '🛒 Market opened!',
-  '🚻 Tuvalet hizmete girdi!': '🚻 Restroom is open for business!',
-  '💡 Sokak lambası kuruldu — gece istasyon aydınlık!': '💡 Street lamp installed — the station stays bright at night!',
-  '🔋 Batarya deposu kuruldu — üretim biriktikçe dolacak.': '🔋 Battery depot built — it fills as power is generated.', '🔌 DC şarj ünitesi kuruldu!': '🔌 DC charger built!',
-  '☀️ Güneş santrali kuruldu. ⚠️ Paneller zamanla kirlenir!': '☀️ Solar plant built. ⚠️ Panels get dirty over time!',
-  '🛠️ Jeneratör kuruldu. ⚠️ Gürültüsü EV müşterilerini kaçırabilir!': '🛠️ Generator built. ⚠️ Its noise may scare EV customers away!',
-  '☢️ Reaktör devrede! ⚠️ BAKIMI ASLA AKSATMA — patlarsa her şey gider!': '☢️ Reactor online! ⚠️ NEVER skip maintenance — if it explodes you lose everything!',
-  '🚿 Oto yıkama açıldı — müşteriler araç yıkatacak!': '🚿 Car wash opened — customers will wash their cars!', '🔧 Yağ değişim istasyonu açıldı!': '🔧 Oil change station opened!',
-  '☕ Kahveci açıldı!': '☕ Cafe opened!', '🍽️ Restoran açıldı — yolcular yemek molası verecek!': '🍽️ Restaurant opened — travelers will take meal breaks!',
-  '🚛 Tır parkı açıldı — düzenli konaklama geliri!': '🚛 Truck stop opened — steady lodging income!', '💨 Hava-su ünitesi kuruldu!': '💨 Air-water unit built!',
-  '🧽 Self yıkama açıldı — köpük ve su otomatik satılacak!': '🧽 Self wash opened — foam and water sold automatically!',
-  '🅿️ Otopark açıldı — müşteriler park edip tesisleri gezebilecek!': '🅿️ Parking lot opened — customers can park and visit facilities!',
+  'Tamir edildi, tekrar hizmette!': 'Repaired, back in service!', 'Tamir Et — ₺800': 'Repair — ₺800', 'Tamir Et — ₺1.000': 'Repair — ₺1,000',
+  'Temizle — ₺300': 'Clean — ₺300', 'Paneller tertemiz, üretim tam güçte!': 'Panels spotless, output at full power!',
+  'Reaktör bakımı yapıldı, güvendesin.': 'Reactor maintained, you\'re safe.', 'Uranyum siparişi verildi — özel konvoy yolda!': 'Uranium ordered — special convoy on the way!',
+  'Bunun için yeterli para yok!': 'Not enough cash for this!', 'Pasif gelir': 'Passive income',
+  'Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.': 'Across-road station opened! Automatic entry/exit added — customers arrive from the opposite lane.',
+  'Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.': 'Across-road plot bought — pave it, then build a pump/charger; the first pump adds automatic entry/exit.',
+  'Zemin betonlandı — artık yapı kurabilirsin!': 'Plot paved — you can build now!',
+  'Tabela büyüdü — daha çok müşteri gelecek!': 'Sign upgraded — more customers coming!', 'Market açıldı!': 'Market opened!',
+  'Tuvalet hizmete girdi!': 'Restroom is open for business!',
+  'Sokak lambası kuruldu — gece istasyon aydınlık!': 'Street lamp installed — the station stays bright at night!',
+  'Batarya deposu kuruldu — üretim biriktikçe dolacak.': 'Battery depot built — it fills as power is generated.', 'DC şarj ünitesi kuruldu!': 'DC charger built!',
+  'Güneş santrali kuruldu. Paneller zamanla kirlenir!': 'Solar plant built. Panels get dirty over time!',
+  'Jeneratör kuruldu. Gürültüsü EV müşterilerini kaçırabilir!': 'Generator built. Its noise may scare EV customers away!',
+  'Reaktör devrede! BAKIMI ASLA AKSATMA — patlarsa her şey gider!': 'Reactor online! NEVER skip maintenance — if it explodes you lose everything!',
+  'Oto yıkama açıldı — müşteriler araç yıkatacak!': 'Car wash opened — customers will wash their cars!', 'Yağ değişim istasyonu açıldı!': 'Oil change station opened!',
+  'Kahveci açıldı!': 'Cafe opened!', 'Restoran açıldı — yolcular yemek molası verecek!': 'Restaurant opened — travelers will take meal breaks!',
+  'Tır parkı açıldı — düzenli konaklama geliri!': 'Truck stop opened — steady lodging income!', 'Hava-su ünitesi kuruldu!': 'Air-water unit built!',
+  'Self yıkama açıldı — köpük ve su otomatik satılacak!': 'Self wash opened — foam and water sold automatically!',
+  'Otopark açıldı — müşteriler park edip tesisleri gezebilecek!': 'Parking lot opened — customers can park and visit facilities!',
   'Tekrar hoş geldin!': 'Welcome back!', 'Sipariş verilemedi (tank dolu ya da para yetmiyor).': 'Order failed (tank full or not enough cash).',
   'Müşteri kibarca gönderildi.': 'Customer politely dismissed.', 'Molacı uğurlandı — şarj yeri boşaldı.': 'Idle customer dismissed — charging spot freed.',
-  'Otomatik şarj başladı.': 'Auto-charge started.', '🚫 Buraya yerleştiremezsin — sahipli ve betonlu alana koy.': '🚫 Can\'t place here — put it on an owned, paved area.',
+  'Otomatik şarj başladı.': 'Auto-charge started.', 'Buraya yerleştiremezsin — sahipli ve betonlu alana koy.': 'Can\'t place here — put it on an owned, paved area.',
   'Bu arsa zaten senin.': 'You already own this plot.',
   // state.ts (bina isim/açıklama + teminat)
   'Batarya Deposu': 'Battery Depot', 'Jeneratör': 'Generator', 'Reaktör': 'Reactor', 'DC Şarj': 'DC Charger',
@@ -889,8 +889,8 @@ const EN: Record<string, string> = {
   'Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.':
     'Haul the boat out so it can winter ashore — your biggest earner in the cold months.',
   'Önce Travel Lift kur': 'Build the Travel Lift first',
-  '⚓ Bağlama ₺{0} + kışlama ₺{1} tahsil edildi': '⚓ Berthing ₺{0} + winter storage ₺{1} collected',
-  '⚓ Bağlama geliri: +₺{0}': '⚓ Berthing income: +₺{0}',
+  'Bağlama ₺{0} + kışlama ₺{1} tahsil edildi': 'Berthing ₺{0} + winter storage ₺{1} collected',
+  'Bağlama geliri: +₺{0}': 'Berthing income: +₺{0}',
 
   // --- Marina: Mavi Bayrak ---
   'Eksik çevre hizmeti: {0}': 'Missing environmental service: {0}',
@@ -898,26 +898,26 @@ const EN: Record<string, string> = {
   'Mavi Bayrak geçerli': 'Blue Flag valid',
   'Mavi Bayrak şartı': 'Blue Flag requirement',
   'Mavi Bayrak gerekli': 'Blue Flag required',
-  '🏳️ Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.':
-    '🏳️ Blue Flag suspended — clear your record and you get it back.',
-  '🏳️ Sicilin temizlendi — Mavi Bayrak geri alındı!': '🏳️ Your record is clear — Blue Flag restored!',
+  'Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.':
+    'Blue Flag suspended — clear your record and you get it back.',
+  'Sicilin temizlendi — Mavi Bayrak geri alındı!': 'Your record is clear — Blue Flag restored!',
 
   // --- Marina: risk olayları ---
   'Yakıt sızıntısı': 'Fuel spill',
-  '🛢️ Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.':
-    '🛢️ Fuel spill! No boom in place, it spread across the water — you were fined.',
+  'Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.':
+    'Fuel spill! No boom in place, it spread across the water — you were fined.',
   'Lodos / fırtına': 'Southwesterly gale / storm',
-  '🌊 Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.':
-    '🌊 A southwesterly gale hit — poorly moored boats were damaged and you paid compensation.',
+  'Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.':
+    'A southwesterly gale hit — poorly moored boats were damaged and you paid compensation.',
   'Sürüklenen tekne': 'Dragging boat',
-  '⚓ Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.':
-    '⚓ A boat dragged its mooring and hit another — chain-reaction damage.',
+  'Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.':
+    'A boat dragged its mooring and hit another — chain-reaction damage.',
   'Denetim': 'Inspection',
-  '🚫 Denetim geldi — belgelerin düzgündü, sorunsuz geçti.':
-    '🚫 An inspection came round — your paperwork was in order, no trouble.',
+  'Denetim geldi — belgelerin düzgündü, sorunsuz geçti.':
+    'An inspection came round — your paperwork was in order, no trouble.',
   'Deniz kirliliği': 'Sea pollution',
-  '🦑 Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.':
-    '🦑 A mucilage (sea snot) bloom hit — tourist boat traffic stays low for 20 days.',
+  'Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.':
+    'A mucilage (sea snot) bloom hit — tourist boat traffic stays low for 20 days.',
 
   // --- ÖTV'siz Yakıt Alım Defteri (logbook-ui.ts + marina.ts) ---
   'Yakıt Alım Defteri': 'Fuel Purchase Logbook',
@@ -941,39 +941,39 @@ const EN: Record<string, string> = {
   'İNCELE': 'INSPECT',
   'ONAYLA': 'APPROVE',
   'REDDET': 'REJECT',
-  '💡 İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.':
-    '💡 Tip: INSPECT before you decide — a faulty logbook always leaves a visible tell.',
+  'İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.':
+    'Tip: INSPECT before you decide — a faulty logbook always leaves a visible tell.',
   'Kota yetersiz: {0}/{1} L kullanılmış, {2} L isteniyor':
     'Quota too low: {0}/{1} L already used, {2} L requested',
   'Vize süresi dolmuş': 'The endorsement has expired',
   'İmza uyuşmuyor': 'The signature does not match',
   'Tarih tutarsızlığı var': 'The dates do not add up',
-  "📄 Defter onaylandı — ÖTV'siz satış yapıldı (+₺{0} marj)":
-    '📄 Logbook approved — duty-free sale completed (+₺{0} margin)',
-  '🚫 Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!':
-    '🚫 You approved a forged logbook — the inspection fined you ₺{0}!',
-  '✅ Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.':
-    '✅ You rejected a faulty logbook — the customer is furious but you are safe.',
-  '❌ Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.':
-    '❌ You rejected a valid logbook — this commercial customer will never come back.',
+  "Defter onaylandı — ÖTV'siz satış yapıldı (+₺{0} marj)":
+    'Logbook approved — duty-free sale completed (+₺{0} margin)',
+  'Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!':
+    'You approved a forged logbook — the inspection fined you ₺{0}!',
+  'Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.':
+    'You rejected a faulty logbook — the customer is furious but you are safe.',
+  'Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.':
+    'You rejected a valid logbook — this commercial customer will never come back.',
 
   // --- AI rakip istasyon (rival.ts) — marka adları çevrilmez ---
   'ŞİMŞEK PETROL': 'ŞİMŞEK PETROL',
   'ANADOLU ENERJİ': 'ANADOLU ENERJİ',
   'Pazar payın': 'Your market share',
   ' · kampanyada': ' · on promotion',
-  '⚔️ {0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!':
-    '⚔️ {0} slashed its price: ₺{1}/L — it is trying to win market share back!',
-  '📣 {0} kampanya başlattı — 5 gün boyunca daha çekici olacak.':
-    '📣 {0} launched a promotion — it will be more tempting for 5 days.',
-  '💰 {0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!':
-    '💰 {0} got comfortable and raised its price: ₺{1}/L — your opening!',
+  '{0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!':
+    '{0} slashed its price: ₺{1}/L — it is trying to win market share back!',
+  '{0} kampanya başlattı — 5 gün boyunca daha çekici olacak.':
+    '{0} launched a promotion — it will be more tempting for 5 days.',
+  '{0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!':
+    '{0} got comfortable and raised its price: ₺{1}/L — your opening!',
   'Pazara HÂKİMSİN (%{0})': 'You OWN the market ({0}%)',
   'Öndesin (%{0})': 'You are ahead ({0}%)',
   'Başa baş (%{0})': 'Neck and neck ({0}%)',
   'Geridesin (%{0})': 'You are behind ({0}%)',
-  '🏁 Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.':
-    '🏁 {0} just opened across the road — pricing is a NEGOTIATION now. Track your market share from the Office.',
+  'Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.':
+    '{0} just opened across the road — pricing is a NEGOTIATION now. Track your market share from the Office.',
 
   // --- Marka yıldızı / devir kartı (prestij) ---
   '{0} marka yıldızı': '{0} brand stars',
@@ -1003,7 +1003,6 @@ const EN: Record<string, string> = {
   'Muhasebe': 'Accounting',
   'İhaleler': 'Contracts',
   'Büyüme': 'Growth',
-  'Ofisi Taşı': 'Move Office',
 }
 
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
@@ -1015,9 +1014,9 @@ const FR: Record<string, string> = {
   'Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}': 'Gérant niv.{0} · {1} ₺ net/jour · caisse {2}/{3} ₺',
   'Müdür YOK — şube kapalı duruyor. Şubeye git, Ofis içindeki Şubeler sekmesinden müdür tut.': 'AUCUN gérant — cette succursale est à l\'arrêt. Rends-y visite et engage un gérant dans la boutique.',
   'Topla ₺{0}': 'Encaisser {0} ₺',
-  '👔 Şube kasası toplandı: +₺{0}': '👔 Caisse de la succursale encaissée : +{0} ₺',
-  '👔 Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla': '👔 Tes gérants ont gagné +{0} ₺ — encaisse dans Bureau › Succursales',
-  '👔 {0} şubesinin kasası DOLDU — uğramazsan birikmez': '👔 La caisse de {0} est PLEINE — plus rien ne s\'accumule sans ta visite',
+  'Şube kasası toplandı: +₺{0}': 'Caisse de la succursale encaissée : +{0} ₺',
+  'Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla': 'Tes gérants ont gagné +{0} ₺ — encaisse dans Bureau › Succursales',
+  '{0} şubesinin kasası DOLDU — uğramazsan birikmez': 'La caisse de {0} est PLEINE — plus rien ne s\'accumule sans ta visite',
   'kumbara toplar + şubeyi işletir': 'vide les tirelires + exploite la succursale',
   'kumbara + yakıt siparişi': 'tirelires + commandes de carburant',
   'Alım Defteri': 'Registre d’achats',
@@ -1026,7 +1025,7 @@ const FR: Record<string, string> = {
   'İşletme Sermayesi (stok)': 'Fonds de roulement (stock)',
   'Sözleşmeyi Feshet — cayma ₺{0} + itibar −0.2': 'Résilier le contrat — ₺{0} de dédit + −0,2 réputation',
   'EMİN MİSİN? Feshetmek için tekrar bas': 'SÛR ? Appuie encore pour résilier',
-  '📋 Sözleşme feshedildi — cayma bedeli ₺{0} kesildi.': '📋 Contrat résilié — dédit de ₺{0} prélevé.',
+  'Sözleşme feshedildi — cayma bedeli ₺{0} kesildi.': 'Contrat résilié — dédit de ₺{0} prélevé.',
   'Henüz sözleşme teklifi yok — teklifler DÜZENLİ sattığın yakıtlara gelir (son 7 günde günde 120L+ satış) ve deponun taahhüdün 2 katı olması gerekir.': 'Pas encore d’offres — elles arrivent pour les carburants vendus RÉGULIÈREMENT (120 L+/jour sur 7 jours) et la cuve doit contenir 2× l’engagement quotidien.',
   'Normal müşteri satışların taahhüde sayılır — tahmini günlük {0} satışın: ~{1}L': 'Les ventes clients comptent pour l’engagement — ventes quotidiennes estimées de {0} : ~{1} L',
   'Kayıt yok, kurulum yok — 3 saniyede pompadasın.': 'Ni inscription ni installation — à la pompe en 3 secondes.',
@@ -1036,10 +1035,10 @@ const FR: Record<string, string> = {
   'İstasyonun hazırlanıyor…': 'Préparation de ta station…',
   'Yükleme beklenenden uzun sürdü — bağlantı yavaş olabilir ya da yeni sürüm dağıtılıyor.': 'Le chargement est plus long que prévu — connexion lente ou nouvelle version en cours de déploiement.',
   'İlk günün kapandı: ₺{0} kâr! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus.': 'Première journée bouclée : ₺{0} de profit ! Cette progression n’existe que sur cet appareil — inscris-toi pour la mettre dans le cloud, plus ₺2 500 de bonus.',
-  '🎁 İlk şube hediyesi: bu şubeye Müdür Sv.1 atandı — kumbara + yakıt siparişi otomatik!': '🎁 Cadeau de première succursale : un gérant Nv.1 y est affecté — tirelires + commandes automatiques !',
+  'İlk şube hediyesi: bu şubeye Müdür Sv.1 atandı — kumbara + yakıt siparişi otomatik!': 'Cadeau de première succursale : un gérant Nv.1 y est affecté — tirelires + commandes automatiques !',
   'Zincir başladı — İkinci şuben açık!': 'La chaîne démarre — deuxième succursale ouverte !',
-  '👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — girip topla!': '👔 Pendant ton absence, tes succursales gérées ont gagné ₺{0} — entre et encaisse !',
-  '👔 Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!': '👔 Pendant ton absence, tes succursales gérées ont gagné ₺{0} — encaisse via Bureau → Succursales !',
+  'Sen yokken müdürlü şubelerin ₺{0} biriktirdi — girip topla!': 'Pendant ton absence, tes succursales gérées ont gagné ₺{0} — entre et encaisse !',
+  'Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!': 'Pendant ton absence, tes succursales gérées ont gagné ₺{0} — encaisse via Bureau → Succursales !',
   'Henüz yakıt alımı yok.': 'Aucun achat de carburant.',
   'Son 7 gün yakıt gideri: ₺{0}': 'Carburant, 7 derniers jours : ₺{0}',
   'Pompacı defteri inceledi': 'Le pompiste a inspecté le registre',
@@ -1059,7 +1058,7 @@ const FR: Record<string, string> = {
   'İskeleye ikinci dolum noktası — aynı anda iki tekne alırsın.': 'Un second point de remplissage — servez deux bateaux à la fois.',
   '+%80 hız': '+80 % vitesse',
   '{0} yakıt siparişi verildi (müdür)': '{0} commande(s) de carburant (gérant)',
-  'TÃM ÅUBELERÄ°N kurulu ekipmanÄ± âº{0} deÄerine ulaÅÄ±nca devir aÃ§Ä±lÄ±r â yeni Åube donatmak da sayar. EÅik Ã¶nce ikiye katlanÄ±r; Åube kapasitesine yaklaÅÄ±nca %35’lik adÄ±mlarla artar (asla sabitlenmez).': 'La cession se dÃ©bloque quand lâÃ©quipement de TOUTES les succursales atteint âº{0} â Ã©quiper de nouvelles succursales compte. Le seuil double dâabord, puis croÃ®t par paliers de 35 % prÃ¨s de ta capacitÃ© (jamais figÃ©).',
+  'TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik önce ikiye katlanır; şube kapasitesine yaklaşınca %35’lik adımlarla artar (asla sabitlenmez).': 'La cession se débloque quand l’équipement de TOUTES les succursales atteint ₺{0} — équiper de nouvelles succursales compte. Le seuil double d’abord, puis croît par paliers de 35 % près de ta capacité (jamais figé).',
   'Müdür': 'Gérant',
   'yovmiye ₺{0}/gün': 'salaire ₺{0}/jour',
   '45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder. Sen başka şubedeyken şubeyi işletir.': 'Tournée toutes les 45 s : vide les tirelires + commande du carburant ; Nv.2 nettoie les panneaux ; Nv.3 répare les pannes. Exploite la succursale en ton absence.',
@@ -1067,17 +1066,17 @@ const FR: Record<string, string> = {
   'Karşı Kıyı Parkı': 'Mouillage rive opposée',
   'Tekneciler ekstra alışveriş yapar. Yerinde yükselir, gelir seviyeyle artar.': 'Les plaisanciers achètent plus. Améliorable sur place ; revenu croissant.',
   'Yüksek kapasite: çok sayıda şarj ünitesini aynı anda besler': 'Grande capacité : alimente plusieurs bornes à la fois',
-  '⛽ {0} L yakıt satıldı — tank seviyelerine göz at.': '⛽ {0} L de carburant vendus — vérifiez vos niveaux de cuve.',
-  '📦 {0} sahnesi indiriliyor ({1} model)…': '📦 Téléchargement de la scène {0} ({1} modèles)…',
+  '{0} L yakıt satıldı — tank seviyelerine göz at.': '{0} L de carburant vendus — vérifiez vos niveaux de cuve.',
+  '{0} sahnesi indiriliyor ({1} model)…': 'Téléchargement de la scène {0} ({1} modèles)…',
   'BenelOil — Petrol İstasyonu Oyunu': 'BenelOil — Tycoon de station-service',
   // --- Faz 2: şablon dizelerinden kurtarılan metinler ---
   'Google eklentisi bulunamadı.': 'Extension Google introuvable.',
   'Apple eklentisi bulunamadı.': 'Extension Apple introuvable.',
-  '⛽ Pompa #{0} kuruldu!': '⛽ Pompe n°{0} installée !',
-  'OYUNCUYA ULAŞTIK 🎉': 'JOUEURS ET ÇA CONTINUE 🎉',
+  'Pompa #{0} kuruldu!': 'Pompe n°{0} installée !',
+  'OYUNCUYA ULAŞTIK': 'JOUEURS ET ÇA CONTINUE',
   'TAMAM': 'FAIT',
   '{0} / {1}L · +{2}L sipariş': '{0} / {1} L · commander +{2} L',
-  '🏙️ Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.': '🏙️ Vous avez atteint la limite de terrains de cette succursale ({0} parcelles) — l’espace est rare en ville, choisissez bien.',
+  'Bu şubede arsa sınırına ulaştın ({0} parsel) — şehirde yer kıt, seçimini dikkatli yap.': 'Vous avez atteint la limite de terrains de cette succursale ({0} parcelles) — l’espace est rare en ville, choisissez bien.',
   ' · {0}/{1} parsel': ' · {0}/{1} parcelles',
   'Müdavim müşteri': 'Clients fidèles',
   // --- fiyat kartı / araç sayacı (kod içi literaller) ---
@@ -1085,7 +1084,7 @@ const FR: Record<string, string> = {
   'santralden': 'de la centrale',
   'alış ₺{0}': 'achat ₺{0}',
   'MOLADA · GÖNDER →': 'EN PAUSE · ENVOYER →',
-  '🛢️ Tank kapasitesi: {0}L': '🛢️ Capacité du réservoir : {0} L',
+  'Tank kapasitesi: {0}L': 'Capacité du réservoir : {0} L',
 
   // --- Giriş ekranı ---
   'BENELOIL': 'BENELOIL',
@@ -1110,14 +1109,14 @@ const FR: Record<string, string> = {
   'Misafir olarak devam et': 'Continuer en invité',
   'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
     'Tu as atteint le Jour {0} ! Inscris-toi (ou continue avec Google/Apple) pour poursuivre — ta progression passe dans le cloud, avec un bonus de ₺2.500 et des récompenses de série quotidienne.',
-  '🎁 Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
-    '🎁 Bonus d’inscription : +₺2.500 dans ta caisse — bienvenue, patron !',
-  '🔒 Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!':
-    '🔒 Le bonus de connexion quotidien (+₺500, jusqu’à ₺2.000 avec la série) est réservé aux joueurs inscrits — inscris-toi et lance ta série !',
-  '💾 {0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.':
-    '💾 {0} jours de progression uniquement sur cet appareil ! Inscris-toi : sauvegarde cloud + bonus ₺2.500 + série quotidienne.',
-  '🎉 İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
-    '🎉 Tu as gagné tes premiers ₺10.000 ! Cette progression n’existe que sur cet appareil — inscris-toi : sauvegarde cloud, bonus de ₺2.500 et série quotidienne.',
+  'Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
+    'Bonus d’inscription : +₺2.500 dans ta caisse — bienvenue, patron !',
+  'Günlük giriş bonusu (+₺500, seriyle ₺2.000’e kadar) kayıtlı oyunculara özel — kaydol, serin başlasın!':
+    'Le bonus de connexion quotidien (+₺500, jusqu’à ₺2.000 avec la série) est réservé aux joueurs inscrits — inscris-toi et lance ta série !',
+  '{0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.':
+    '{0} jours de progression uniquement sur cet appareil ! Inscris-toi : sauvegarde cloud + bonus ₺2.500 + série quotidienne.',
+  'İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.':
+    'Tu as gagné tes premiers ₺10.000 ! Cette progression n’existe que sur cet appareil — inscris-toi : sauvegarde cloud, bonus de ₺2.500 et série quotidienne.',
   'İPTAL': 'ANNULER',
   'Sıralama & Sezon': 'Classement & Saison',
   'Sezon': 'Saison',
@@ -1143,9 +1142,9 @@ const FR: Record<string, string> = {
   'verim +%{0}': '+{0} % de rendement',
   'Yıpranan ünitelerin verimi düşer. Yenileme yıpranmayı sıfırlar.':
     'Le matériel usé perd en rendement. La rénovation remet l’usure à zéro.',
-  '📜 İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)': '📜 Licence d’exploitation renouvelée : -₺{0} (valable 30 jours)',
-  '📜 Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!':
-    '📜 Renouvellement impossible (₺{0} requis) — sanction de l’inspection : réputation en baisse !',
+  'İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)': 'Licence d’exploitation renouvelée : -₺{0} (valable 30 jours)',
+  'Ruhsat yenilenemedi (₺{0} gerekli) — denetim cezası: itibar düştü!':
+    'Renouvellement impossible (₺{0} requis) — sanction de l’inspection : réputation en baisse !',
   'Müdür Tut': 'Embaucher un gérant',
   'Müdür Sv.{0}': 'Gérant niv.{0}',
   'kumbara toplar': 'vide les tirelires',
@@ -1183,7 +1182,7 @@ const FR: Record<string, string> = {
   'KIRMIZI {0}s · akın!': 'ROUGE {0}s · affluence !',
   'yeşil {0}s': 'vert {0}s',
   'Yaya müşteri': 'Client à pied',
-  '🚶 Yaya müşteri alışveriş yaptı (yol karşısından geldi)': '🚶 Un client à pied a fait ses courses (venu d’en face)',
+  'Yaya müşteri alışveriş yaptı (yol karşısından geldi)': 'Un client à pied a fait ses courses (venu d’en face)',
   'Şubeler': 'Succursales',
   'AKTİF': 'ACTIVE',
   'Şubeye Git': 'Aller à la succursale',
@@ -1191,10 +1190,10 @@ const FR: Record<string, string> = {
   'Kilitli': 'Verrouillé',
   '{0} marka yıldızı gerekir': 'Nécessite {0} étoiles de marque',
   'Şube açma şartları sağlanmıyor.': 'Les conditions d’ouverture ne sont pas réunies.',
-  '🏗️ {0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.':
-    '🏗️ Succursale {0} ouverte ! Bascule dessus depuis la section Succursales.',
+  '{0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.':
+    'Succursale {0} ouverte ! Bascule dessus depuis la section Succursales.',
   'Şube değiştirilemedi.': 'Impossible de changer de succursale.',
-  '📍 {0} şubesine geçildi — sahne yükleniyor…': '📍 Bascule vers {0} — chargement de la scène…',
+  '{0} şubesine geçildi — sahne yükleniyor…': 'Bascule vers {0} — chargement de la scène…',
   'Marka & Devir': 'Marque & Cession',
   'Marka yıldızı': 'Étoiles de marque',
   'Gelir çarpanı': 'Multiplicateur de revenus',
@@ -1209,13 +1208,13 @@ const FR: Record<string, string> = {
   'Devir, ₺250.000 üzeri kurulu ekipmanla açılır (şu an ₺{0}).':
     'La cession se débloque au-delà de ₺250.000 de matériel installé (actuellement ₺{0}).',
   'Devir şartları sağlanmıyor.': 'Les conditions de cession ne sont pas réunies.',
-  '🤝 İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})':
-    '🤝 Station cédée ! Caisse : ₺{0} · tu as gagné l’Étoile de marque n°{1} (revenus ×{2})',
+  'İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})':
+    'Station cédée ! Caisse : ₺{0} · tu as gagné l’Étoile de marque n°{1} (revenus ×{2})',
   'Kurumsal Sözleşmeler': 'Contrats entreprises',
   'Premium yakıt müşterisi': 'Client carburant premium',
   'Filo aracı': 'Véhicule de flotte',
   'Servis / otobüs': 'Navette / autocar',
-  '⭐ Premium müşteri primi: +₺{0}': '⭐ Prime client premium : +₺{0}',
+  'Premium müşteri primi: +₺{0}': 'Prime client premium : +₺{0}',
   'Kargo Filosu': 'Flotte de fret',
   'Belediye Otobüs Filosu': 'Flotte de bus municipaux',
   'Taksi Durağı': 'Station de taxis',
@@ -1231,23 +1230,23 @@ const FR: Record<string, string> = {
   '{0} gün · günde {1}L · ₺{2}/L · prim ₺{3} · ceza ₺{4}': '{0} jours · {1} L/jour · ₺{2}/L · prime ₺{3} · pénalité ₺{4}',
   'Henüz sözleşme teklifi yok — ilgili yakıtın deposunu büyüt (taahhüdün 2 katı kapasite şart).':
     'Aucune offre de contrat pour l’instant — agrandis la cuve du carburant concerné (il faut 2× l’engagement journalier).',
-  '📋 {0} sözleşmesi imzalandı — günde {1}L {2} teslim et!': '📋 Contrat {0} signé — livre {1} L de {2} par jour !',
+  '{0} sözleşmesi imzalandı — günde {1}L {2} teslim et!': 'Contrat {0} signé — livre {1} L de {2} par jour !',
   'Zaten aktif bir sözleşmen var.': 'Tu as déjà un contrat en cours.',
-  '📋 {0}: günlük taahhüt teslim edildi (+₺{1})': '📋 {0} : engagement journalier livré (+₺{1})',
-  '📋 {0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)': '📋 {0} : engagement NON TENU — pénalité appliquée ({1}₺)',
-  '🏆 {0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3': '🏆 Contrat {0} TERMINÉ ! Prime : +₺{1} · réputation +0,3',
-  '❌ {0} sözleşmesi ihlalden feshedildi — prim yok.': '❌ Contrat {0} résilié pour manquement — pas de prime.',
+  '{0}: günlük taahhüt teslim edildi (+₺{1})': '{0} : engagement journalier livré (+₺{1})',
+  '{0}: taahhüt EKSİK teslim — ceza uygulandı ({1}₺)': '{0} : engagement NON TENU — pénalité appliquée ({1}₺)',
+  '{0} sözleşmesi TAMAMLANDI! Prim: +₺{1} · itibar +0.3': 'Contrat {0} TERMINÉ ! Prime : +₺{1} · réputation +0,3',
+  '{0} sözleşmesi ihlalden feshedildi — prim yok.': 'Contrat {0} résilié pour manquement — pas de prime.',
   'Reklam (günlük)': 'Publicité (journalier)',
   'trafik ×{0}': 'trafic ×{0}',
-  '🏛️ İşletme gideri (bakım+vergi): -₺{0}': '🏛️ Frais d’exploitation (entretien + taxes) : -₺{0}',
-  '📣 Reklam kampanyası yayında: -₺{0} (trafik ×{1})': '📣 Campagne publicitaire en cours : -₺{0} (trafic ×{1})',
-  '📣 Reklam bütçesine para yetmedi — kampanya bugün kısık.': '📣 Budget pub insuffisant — campagne réduite aujourd’hui.',
-  '🏛️ YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.':
-    '🏛️ NOUVEAU : les frais d’exploitation arrivent (entretien + taxes, indexés sur ton patrimoine) — mis en place progressivement sur 10 jours. Suis-les depuis le Bureau.',
+  'İşletme gideri (bakım+vergi): -₺{0}': 'Frais d’exploitation (entretien + taxes) : -₺{0}',
+  'Reklam kampanyası yayında: -₺{0} (trafik ×{1})': 'Campagne publicitaire en cours : -₺{0} (trafic ×{1})',
+  'Reklam bütçesine para yetmedi — kampanya bugün kısık.': 'Budget pub insuffisant — campagne réduite aujourd’hui.',
+  'YENİ: İşletme giderleri geldi (bakım+vergi, varlıkla ölçekli) — 10 günde kademeli devreye girer. Ofis panelinden takip et.':
+    'NOUVEAU : les frais d’exploitation arrivent (entretien + taxes, indexés sur ton patrimoine) — mis en place progressivement sur 10 jours. Suis-les depuis le Bureau.',
   'Günlük gider (yovmiye+OPEX+reklam)': 'Dépenses journalières (salaires + OPEX + pub)',
-  '⛽ Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!':
-    '⛽ Tes pompistes ont vendu ~{0} L de carburant pendant ton absence (+₺{1}) — vérifie tes cuves !',
-  '⛽ Tankların bitmek üzere — sipariş verme vakti!': '⛽ Tes cuves sont presque vides — il est temps de commander !',
+  'Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!':
+    'Tes pompistes ont vendu ~{0} L de carburant pendant ton absence (+₺{1}) — vérifie tes cuves !',
+  'Tankların bitmek üzere — sipariş verme vakti!': 'Tes cuves sont presque vides — il est temps de commander !',
   'Misafir oynayabilirsin — ama kaydolursan:': 'Tu peux jouer en invité — mais si tu t’inscris :',
   '+₺2.500 başlangıç bonusu': '+₺2.500 de bonus de départ',
   'Günlük giriş serisi — her gün artan bonus (₺500 → ₺2.000)':
@@ -1257,8 +1256,8 @@ const FR: Record<string, string> = {
   'Kayıt Ol (10 saniye)': 'S’inscrire (10 secondes)',
   'Yine de misafir devam et': 'Continuer quand même en invité',
   'Bu fiyatlarla müşteri akışı': 'Flux de clients à ces prix',
-  '🟠 Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.':
-    '🟠 Les zones orange sont des voies de circulation/réservées — impossible d’y construire.',
+  'Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.':
+    'Les zones orange sont des voies de circulation/réservées — impossible d’y construire.',
   'Karşı Market': 'Boutique d’en face',
   'Karşı Market Sv.{0}': 'Boutique d’en face niv.{0}',
   'Yol karşısındaki istasyonun müşterileri için ikinci market — karşı yakaya kurulur, yerinde yükselir.':
@@ -1267,12 +1266,12 @@ const FR: Record<string, string> = {
     'Les clients d’en face achètent ici — revenus supplémentaires pour l’autre côté.',
   'Önce ana marketi kur': 'Construis d’abord la boutique principale',
   'Karşıda betonlu arsa gerekli': 'Il faut un terrain bétonné en face',
-  '🛒 Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!':
-    '🛒 La boutique d’en face est ouverte — les clients de l’autre côté vont commencer à acheter !',
-  '🚧 Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.':
-    '🚧 Ton terrain d’en face est prêt ! Pose une pompe ou une borne — les entrées/sorties arrivent AUTOMATIQUEMENT.',
-  '🚧 Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.':
-    '🚧 Bétonne d’abord ton terrain d’en face, puis pose une pompe/borne — les accès arrivent AUTOMATIQUEMENT.',
+  'Karşı market açıldı — karşı yakanın müşterileri alışverişe başlayacak!':
+    'La boutique d’en face est ouverte — les clients de l’autre côté vont commencer à acheter !',
+  'Karşı arsan hazır! Pompa ya da şarj ünitesi kur — giriş-çıkış kapıları OTOMATİK gelir.':
+    'Ton terrain d’en face est prêt ! Pose une pompe ou une borne — les entrées/sorties arrivent AUTOMATIQUEMENT.',
+  'Karşı arsana önce Zemin Betonu döşe, sonra pompa/şarj kur — kapılar OTOMATİK gelir.':
+    'Bétonne d’abord ton terrain d’en face, puis pose une pompe/borne — les accès arrivent AUTOMATIQUEMENT.',
   'Parsele dokun…': 'Touche une parcelle…',
   'Arsana dokun…': 'Touche ton terrain…',
   '+₺{0} toplandı! ({1} ünitenin ortak kumbarası — gelir ×{1})': '+₺{0} récoltés ! (tirelire commune de {1} unités — revenus ×{1})',
@@ -1306,7 +1305,7 @@ const FR: Record<string, string> = {
   'Sunucu hatası.': 'Erreur serveur.',
   'Mağaza': 'Boutique',
   'Hesap': 'Compte',
-  '🏗️ Ofisi Taşı': '🏗️ Déplacer le bureau',
+  'Ofisi Taşı': 'Déplacer le bureau',
   'Teklif güncellendi — yeni listeye bak.': 'Cette offre a changé — regarde la nouvelle liste.',
   // 7 günlük kâr grafiği + yaka dağılımı (ofis raporu)
   'Grafik için en az 2 günlük veri gerekli.': 'Le graphique a besoin d’au moins 2 jours de données.',
@@ -1383,18 +1382,18 @@ const FR: Record<string, string> = {
   'Mesaj çok kısa — biraz detay ver.': 'Message trop court — donne un peu plus de détails.',
   // --- Sık toast'lar ---
   'Taşındı!': 'Déplacé !',
-  '💸 Para yetmiyor!': '💸 Pas les moyens !',
+  'Para yetmiyor!': 'Pas les moyens !',
   'Sıfırdan başlıyorsun — hayırlı olsun patron!': 'On repart de zéro — bonne chance, patron !',
   'İstasyon tekrar AÇIK — bekleriz!': 'La station est de nouveau OUVERTE — bienvenue !',
   'Müşteri beklemekten sıkıldı ve gitti!': 'Le client en a eu assez d’attendre et il est parti !',
   'Çıkış yapıldı.': 'Déconnecté.',
   'Pompa arızalandı — dolum yarıda kaldı, tamir gerekli.': 'Panne de pompe — plein interrompu, réparation nécessaire.',
   'Şarj ünitesi arızalandı — şarj durdu, tamir gerekli.': 'Panne de borne — charge interrompue, réparation nécessaire.',
-  '🚿 OTO YIKAMA': '🚿 LAVAGE AUTO',
-  '☕ KAHVE': '☕ CAFÉ',
-  '🍽️ RESTORAN': '🍽️ RESTAURANT',
-  '🚛 TIR PARKI': '🚛 RELAIS ROUTIER',
-  '🧽 SELF YIKAMA': '🧽 LAVAGE SELF',
+  'OTO YIKAMA': 'LAVAGE AUTO',
+  'KAHVE': 'CAFÉ',
+  'RESTORAN': 'RESTAURANT',
+  'TIR PARKI': 'RELAIS ROUTIER',
+  'SELF YIKAMA': 'LAVAGE SELF',
   'HAVA · SU': 'AIR · EAU',
   '{0} L/sn': '{0} L/s',
   '+3 kWh/sn': '+3 kWh/s',
@@ -1413,7 +1412,7 @@ const FR: Record<string, string> = {
   'İstasyon adı (tabelada görünür)': 'Nom de la station (affiché sur l’enseigne)',
   'Bildirimler (sekme kapalıyken tanker/kumbara haberi)': 'Notifications (citerne/tirelire quand l’onglet est en arrière-plan)',
   'Efektler: Açık': 'Effets : activés',
-  '🚨 {0} isteyen araca {1} bastın! -{2} ₺': '🚨 Tu as mis du {1} dans une voiture qui voulait du {0} ! -{2} ₺',
+  '{0} isteyen araca {1} bastın! -{2} ₺': 'Tu as mis du {1} dans une voiture qui voulait du {0} ! -{2} ₺',
   'Sen yokken tesislerin çalıştı: kumbaralarda ~₺{0} birikti — topla!':
     'Tes installations ont tourné pendant ton absence : ~₺{0} dans les tirelires — récolte !',
   'İstasyon KAPALI — yeni müşteri girmez, itibar etkilenmez. Bakım için rahatsın.':
@@ -1424,39 +1423,39 @@ const FR: Record<string, string> = {
   'Santrallerin ürettiği elektriği biriktirir. Elektrikli araçlar buradan anında şarj alır.':
     'Stocke l’électricité produite par tes centrales. Les véhicules électriques se rechargent ici instantanément.',
   'FULLE {0}': 'LE PLEIN {0}',
-  '🚨 {0} isteyen araca {1} verildi — CEZA!': '🚨 Du {1} servi à une voiture qui voulait du {0} — SANCTION !',
-  '🏞️ Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.': '🏞️ Terrain acheté (-₺{0}) — bétonne-le pour construire.',
+  '{0} isteyen araca {1} verildi — CEZA!': 'Du {1} servi à une voiture qui voulait du {0} — SANCTION !',
+  'Arsa satın alındı (-₺{0}) — yapı için Zemin Betonu döşe.': 'Terrain acheté (-₺{0}) — bétonne-le pour construire.',
   'Bulut kaydı yüklendi — Gün {0} ({1})': 'Sauvegarde cloud chargée — Jour {0} ({1})',
   'Sen yokken tesislerin çalıştı: kumbaralarda ~₺{0} birikti — toplamayı unutma!':
     'Tes installations ont tourné pendant ton absence : ~₺{0} dans les tirelires — récolte !',
   'Beton iadesi: {0} arsa söküldü, +₺{1}': 'Remboursement du béton : {0} parcelles retirées, +₺{1}',
   '+{0} kWh/sn (şebeke dahil)': '+{0} kWh/s (réseau inclus)',
-  '🟢 Uranyum Sipariş Et — ₺{0}': '🟢 Commander de l’uranium — ₺{0}',
-  '📅 Gün {0} bitti — {1}: ₺{2}': '📅 Fin du jour {0} — {1} : ₺{2}',
+  'Uranyum Sipariş Et — ₺{0}': 'Commander de l’uranium — ₺{0}',
+  'Gün {0} bitti — {1}: ₺{2}': 'Fin du jour {0} — {1} : ₺{2}',
   'kâr': 'bénéfice',
   'zarar': 'perte',
   'Otomatik Şarj: {0} — değiştir': 'Charge auto : {0} — changer',
-  '🧨 Yık — +₺{0}': '🧨 Démolir — +₺{0}',
-  '🧨 Yıkıldı — yatırımın yarısı iade: +₺{0}': '🧨 Démoli — la moitié de ton investissement récupérée : +₺{0}',
+  'Yık — +₺{0}': 'Démolir — +₺{0}',
+  'Yıkıldı — yatırımın yarısı iade: +₺{0}': 'Démoli — la moitié de ton investissement récupérée : +₺{0}',
   // --- Pompacı ---
   'Pompacı': 'Pompiste',
   'ÇALIŞIYOR (gelirin tamamı senin)': 'EN POSTE (tous les revenus sont pour toi)',
   'YOK': 'AUCUN',
-  '🧑‍🔧 Pompacı Çalıştır — ₺{0}': '🧑‍🔧 Embaucher un pompiste — ₺{0}',
-  '🧑‍🔧 Pompacıyı işten çıkar': '🧑‍🔧 Licencier le pompiste',
+  'Pompacı Çalıştır — ₺{0}': 'Embaucher un pompiste — ₺{0}',
+  'Pompacıyı işten çıkar': 'Licencier le pompiste',
   'Pompa #{0}: pompacı işten çıktı — dolum yine sende.': 'Pompe n°{0} : pompiste licencié — les pleins te reviennent.',
-  '💸 Para yetmiyor — pompacı işe alma ₺{0}.': '💸 Pas assez d’argent — l’embauche coûte ₺{0}.',
-  '🧑‍🔧 Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.':
-    '🧑‍🔧 Pompe n°{0} : pompiste embauché — il sert le bon carburant tout seul, la vente entière te revient. Seul le pourboire est pour lui.',
-  '🧑‍🔧 Pompacı sattı: +₺{0}': '🧑‍🔧 Vente du pompiste : +₺{0}',
+  'Para yetmiyor — pompacı işe alma ₺{0}.': 'Pas assez d’argent — l’embauche coûte ₺{0}.',
+  'Pompa #{0}: pompacı işe alındı — doğru yakıtı kendisi doldurur, satışın tamamı kasada. Yalnızca bahşiş pompacının.':
+    'Pompe n°{0} : pompiste embauché — il sert le bon carburant tout seul, la vente entière te revient. Seul le pourboire est pour lui.',
+  'Pompacı sattı: +₺{0}': 'Vente du pompiste : +₺{0}',
   // --- Geniş giriş/çıkış ---
   'Geniş Giriş-Çıkış': 'Entrée-sortie élargie',
   '2 şerit': '2 voies',
   'Kapı ağızları genişler: araçlar ikili sıra girip çıkar, kuyruk yola taşmaz':
     'Les accès s’élargissent : les voitures entrent et sortent sur deux files, la file d’attente ne déborde plus sur la route',
   'Önce 2. pompayı al': 'Achète d’abord la 2e pompe',
-  '🛣️ Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!':
-    '🛣️ Entrée-sortie élargie — les voitures circulent sur deux files !',
+  'Giriş-çıkış genişledi — araçlar ikili sıra girip çıkıyor!':
+    'Entrée-sortie élargie — les voitures circulent sur deux files !',
   'Ücreti Değiştir ({0} → {1})': 'Changer le tarif ({0} → {1})',
   'Müzik: {0}': 'Musique : {0}',
   'Efektler: {0}': 'Effets : {0}',
@@ -1472,15 +1471,15 @@ const FR: Record<string, string> = {
   'Başarımlar: {0}/8 · Görev: {1}': 'Succès : {0}/8 · Quête : {1}',
   '{0} · boşaltıyor': '{0} · déchargement',
   'Tır park etti: ₺{0} kumbarada': 'Camion garé : ₺{0} dans la tirelire',
-  '🛒 Market alışverişi: +₺{0}': '🛒 Achat en boutique : +₺{0}',
-  '🚻 Tuvalet ücreti: +₺{0}': '🚻 Tarif toilettes : +₺{0}',
-  '☕ Kahve satışı: +₺{0}': '☕ Vente de café : +₺{0}',
-  '🍽️ Restoran hesabı: +₺{0}': '🍽️ Addition du restaurant : +₺{0}',
+  'Market alışverişi: +₺{0}': 'Achat en boutique : +₺{0}',
+  'Tuvalet ücreti: +₺{0}': 'Tarif toilettes : +₺{0}',
+  'Kahve satışı: +₺{0}': 'Vente de café : +₺{0}',
+  'Restoran hesabı: +₺{0}': 'Addition du restaurant : +₺{0}',
   'Araç yıkandı: ₺{0} kumbarada': 'Voiture lavée : ₺{0} dans la tirelire',
-  '🔧 Yağ değişimi yapıldı: +₺{0}': '🔧 Vidange effectuée : +₺{0}',
+  'Yağ değişimi yapıldı: +₺{0}': 'Vidange effectuée : +₺{0}',
   'Günlük görev: {0}/15 müşteri': 'Quête du jour : {0}/15 clients',
-  '⚡ {0} kWh şarj tamamlandı: +₺{1}': '⚡ {0} kWh chargés : +₺{1}',
-  '⚡ Elektrik altyapısı Sv.{0} kuruldu!': '⚡ Réseau électrique niv.{0} construit !',
+  '{0} kWh şarj tamamlandı: +₺{1}': '{0} kWh chargés : +₺{1}',
+  'Elektrik altyapısı Sv.{0} kuruldu!': 'Réseau électrique niv.{0} construit !',
   'Günlük giriş bonusu: +₺{0} (seri: {1} gün)': 'Bonus de connexion quotidien : +₺{0} (série : {1} jours)',
   'DC Şarj #{0}: otomatik şarj AÇIK — EV sormadan şarj alır.':
     'Borne DC n°{0} : charge auto ACTIVÉE — les VE se rechargent sans demander.',
@@ -1489,16 +1488,16 @@ const FR: Record<string, string> = {
   '+₺{0} toplandı!': '+₺{0} récoltés !',
   '{0} tankı boş kaldı! Satış yarım kaldı — sipariş ver.': 'La cuve de {0} est vide ! Vente interrompue — passe commande.',
   'DC Şarj #{0}': 'Borne DC n°{0}',
-  '🔧 Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.':
-    '🔧 Panne de la pompe n°{0} ! Clique dessus et répare depuis la fiche.',
-  '🔌 Şarj ünitesi #{0} arızalandı!': '🔌 Panne de la borne n°{0} !',
+  'Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.':
+    'Panne de la pompe n°{0} ! Clique dessus et répare depuis la fiche.',
+  'Şarj ünitesi #{0} arızalandı!': 'Panne de la borne n°{0} !',
   '{0} kumbarası doldu — üstüne tıklayıp topla!': 'La tirelire {0} est pleine — clique pour récolter !',
   'Güneş Santrali ({0})': 'Centrale solaire ({0})',
   'Panel Temizliği (kir %{0})': 'Nettoyage des panneaux (saleté {0} %)',
   'Reaktör Bakımı (yıpranma %{0})': 'Entretien du réacteur (usure {0} %)',
   'Uranyum Siparişi (%{0} kaldı)': 'Commander de l’uranium ({0} % restants)',
   'Şarj #{0} Tamiri': 'Réparation de la borne n°{0}',
-  '🏆 Başarım: {0}': '🏆 Succès : {0}',
+  'Başarım: {0}': 'Succès : {0}',
   'Pompa #{0} Tamiri': 'Réparation de la pompe n°{0}',
   'Tır parkı': 'Relais routier',
   'Oto yıkama': 'Lavage auto',
@@ -1507,9 +1506,9 @@ const FR: Record<string, string> = {
     'Mode déplacement : choisis un emplacement · R pour pivoter · clic droit/ÉCHAP pour annuler',
   'Yerleştirme modu: kareye tıkla · R ile döndür · sağ tık/ESC iptal':
     'Mode placement : clique sur une case · R pour pivoter · clic droit/ÉCHAP pour annuler',
-  '🏞️ Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal':
-    '🏞️ Terrain : clique sur une parcelle voisine (₺6-14 k) · ÉCHAP pour annuler',
-  '🧱 Zemin seçimi: betonlanacak arsana tıkla · ESC iptal': '🧱 Béton : clique sur la parcelle à bétonner · ÉCHAP pour annuler',
+  'Arsa seçimi: bitişik parsele tıkla (₺6-14 bin) · ESC iptal':
+    'Terrain : clique sur une parcelle voisine (₺6-14 k) · ÉCHAP pour annuler',
+  'Zemin seçimi: betonlanacak arsana tıkla · ESC iptal': 'Béton : clique sur la parcelle à bétonner · ÉCHAP pour annuler',
   'İstasyon KAPALI — yeni müşteri girmez, itibar etkilenmez. Bakım için rahatsız olmadan çalış.':
     'Station FERMÉE — aucun nouveau client, la note n’est pas touchée. Fais l’entretien en toute tranquillité.',
   'BENZİNLİK': 'BENELOIL',
@@ -1551,7 +1550,7 @@ const FR: Record<string, string> = {
   'Tanktan mazot yakarak elektrik üretir. Çalışırken gürültüsü şarjdaki müşterileri rahatsız eder.':
     'Brûle le gazole de la cuve pour produire de l’électricité. Son bruit dérange les clients en charge.',
   'Yakıt tüketimi': 'Consommation',
-  'ÇALIŞIYOR 🔊': 'EN MARCHE 🔊',
+  'ÇALIŞIYOR': 'EN MARCHE',
   'Yakıt alan müşterilerin bir kısmı çıkışta aracını yıkatır.':
     'Une partie des clients qui font le plein lave sa voiture en repartant.',
   'Hizmet ücreti': 'Prix du service',
@@ -1571,9 +1570,9 @@ const FR: Record<string, string> = {
   '{0} araç': '{0} voitures',
   'Bakım vakti gelen araçlar burada yağ değiştirir — en kârlı yan hizmet.':
     'Les voitures dues pour l’entretien font leur vidange ici — le service annexe le plus rentable.',
-  'YÜKSEK ☠️': 'ÉLEVÉ ☠️',
+  'YÜKSEK': 'ÉLEVÉ',
   'Düşük': 'Faible',
-  '☢️ Bakım Yap — ₺1.500': '☢️ Entretenir — ₺1.500',
+  'Bakım Yap — ₺1.500': 'Entretenir — ₺1.500',
   'En güçlü enerji kaynağı. Uranyumla çalışır, yıprandıkça patlama riski artar — bakımı ASLA aksatma.':
     'La source d’énergie la plus puissante. Fonctionne à l’uranium ; le risque d’explosion grimpe avec l’usure — ne saute JAMAIS l’entretien.',
   'Yıpranma': 'Usure',
@@ -1585,11 +1584,11 @@ const FR: Record<string, string> = {
   'Bu arsa senin değil — önce satın al.': 'Cette parcelle n’est pas à toi — achète-la d’abord.',
   'Başarım': 'Succès',
   'KRİTİK': 'CRITIQUE',
-  '🔧 ARIZA · TAMİR ₺800': '🔧 EN PANNE · RÉPARER ₺800',
-  '🔧 ARIZA · TAMİR ₺1.000': '🔧 EN PANNE · RÉPARER ₺1.000',
-  '🧽 TEMİZLİK ₺300': '🧽 NETTOYER ₺300',
-  '🚨 BAKIM ŞART ₺1.500': '🚨 ENTRETIEN URGENT ₺1.500',
-  '🚨 URANYUM BİTTİ · ₺2.500': '🚨 PLUS D’URANIUM · ₺2.500',
+  'ARIZA · TAMİR ₺800': 'EN PANNE · RÉPARER ₺800',
+  'ARIZA · TAMİR ₺1.000': 'EN PANNE · RÉPARER ₺1.000',
+  'TEMİZLİK ₺300': 'NETTOYER ₺300',
+  'BAKIM ŞART ₺1.500': 'ENTRETIEN URGENT ₺1.500',
+  'URANYUM BİTTİ · ₺2.500': 'PLUS D’URANIUM · ₺2.500',
   'KENDİ BENZİNLİĞİNİ KUR': 'MONTE TA PROPRE STATION',
   'YAKIT SATMAYA BAŞLA': 'COMMENCE À VENDRE DU CARBURANT',
   'BÜYÜ VE GELİŞ': 'GRANDIS ET DÉVELOPPE-TOI',
@@ -1611,12 +1610,12 @@ const FR: Record<string, string> = {
   'Müşteri FULLE istiyor — tabancayı seç, FULLE bas': 'Le client veut LE PLEIN — choisis le pistolet, appuie sur LE PLEIN',
   'Giriş gerekli — oturum kapandı, sayfayı yenile.': 'Connexion requise — la session a expiré, actualise la page.',
   'tamamlandı': 'terminée',
-  '🧽 Güneş panelleri iyice kirlendi, üretim düşüyor!': '🧽 Les panneaux solaires sont bien sales, la production baisse !',
-  '☢️ Uranyum teslim edildi — reaktör tam güçte!': '☢️ Uranium livré — réacteur à pleine puissance !',
-  '☢️ Uranyum azalıyor! Yeni çubuk sipariş et.': '☢️ L’uranium s’épuise ! Commande une nouvelle barre.',
-  '🚨 Uranyum bitti — reaktör üretimi DURDU!': '🚨 Plus d’uranium — la production du réacteur est À L’ARRÊT !',
-  '☢️ Reaktör bakım istiyor!': '☢️ Le réacteur réclame un entretien !',
-  '🚨 REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!': '🚨 RÉACTEUR CRITIQUE ! Entretiens-le tout de suite ou il explose !',
+  'Güneş panelleri iyice kirlendi, üretim düşüyor!': 'Les panneaux solaires sont bien sales, la production baisse !',
+  'Uranyum teslim edildi — reaktör tam güçte!': 'Uranium livré — réacteur à pleine puissance !',
+  'Uranyum azalıyor! Yeni çubuk sipariş et.': 'L’uranium s’épuise ! Commande une nouvelle barre.',
+  'Uranyum bitti — reaktör üretimi DURDU!': 'Plus d’uranium — la production du réacteur est À L’ARRÊT !',
+  'Reaktör bakım istiyor!': 'Le réacteur réclame un entretien !',
+  'REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!': 'RÉACTEUR CRITIQUE ! Entretiens-le tout de suite ou il explose !',
   'Yakıt indirimi sona erdi.': 'La remise carburant est terminée.',
   'Müşteri patlaması sona erdi.': 'L’affluence de clients est terminée.',
   'FIRSAT: 60 saniye boyunca yakıt siparişi YARI FİYAT!': 'OFFRE : commandes de carburant à MOITIÉ PRIX pendant 60 secondes !',
@@ -1641,11 +1640,7 @@ const FR: Record<string, string> = {
   'BATARYA DEPOSU': 'DÉPÔT BATTERIES',
   'GÜNEŞ SANTRALİ': 'CENTRALE SOLAIRE',
   'JENERATÖR': 'GÉNÉRATEUR',
-  'OTO YIKAMA': 'LAVAGE AUTO',
   'KAHVECİ': 'CAFÉ',
-  'RESTORAN': 'RESTAURANT',
-  'TIR PARKI': 'RELAIS ROUTIER',
-  'SELF YIKAMA': 'LAVAGE SELF',
   'OTOPARK': 'PARKING',
   'HAVA-SU ÜNİTESİ': 'AIR & EAU',
   'REAKTÖR': 'RÉACTEUR',
@@ -1768,10 +1763,10 @@ const FR: Record<string, string> = {
   'Bahşiş: +₺{0}': 'Pourboire : +₺{0}',
   'Taşan yakıt cezası: -₺{0}': 'Amende pour débordement : -₺{0}',
   'Camları Temizle': 'Nettoyer les vitres',
-  '✨ Camlar Temiz': '✨ Vitres propres',
-  'Ön cam pırıl pırıl — bahşiş şansı arttı! ✨': 'Pare-brise étincelant — plus de chances de pourboire ! ✨',
+  'Camlar Temiz': 'Vitres propres',
+  'Ön cam pırıl pırıl — bahşiş şansı arttı!': 'Pare-brise étincelant — plus de chances de pourboire !',
   'Temiz camlara bahşiş: +₺{0}': 'Pourboire vitres propres : +₺{0}',
-  'Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000 🎁': 'Content de te revoir, patron ! Cadeau de retour : +₺1.000 🎁',
+  'Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000': 'Content de te revoir, patron ! Cadeau de retour : +₺1.000',
   'Bakiye güncellendi': 'Solde mis à jour',
   'Kayıt güncellendi ✓': 'Sauvegarde mise à jour ✓',
   'Güncelleme uygulanıyor…': 'Mise à jour en cours…',
@@ -1798,12 +1793,12 @@ const FR: Record<string, string> = {
   'Gönderilemedi, sonra tekrar dene.': 'Envoi impossible, réessaie plus tard.',
   'Yerleştir': 'Placer',
   'Buraya yerleştirilemez — kırmızıysa başka yere taşı.': 'Impossible de placer ici — si c’est rouge, choisis un autre endroit.',
-  '👋 Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.':
-    '👋 Bienvenue, patron ! Ton premier client est là — regarde le panneau et prends <b>le pistolet de la bonne couleur</b>.',
+  'Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.':
+    'Bienvenue, patron ! Ton premier client est là — regarde le panneau et prends <b>le pistolet de la bonne couleur</b>.',
   'Tabanca seçildi ✓ Şimdi <b>tutar gir</b> ya da <b>FULLE</b> bas, sonra <b>BAŞLAT</b>.':
     'Pistolet sélectionné ✓ Maintenant <b>saisis un montant</b> ou appuie sur <b>LE PLEIN</b>, puis <b>DÉMARRER</b>.',
-  '🎉 İlk satışın! İpucu: <b>🧼 cam temizle</b> = daha çok bahşiş. Büyümek için <b>🛒 mağazadan</b> pompa/tesis al, <b>🏢 ofisten</b> fiyatı ayarla.':
-    '🎉 Ta première vente ! Astuce : <b>🧼 nettoyer les vitres</b> = plus de pourboires. Pour grandir, achète pompes et installations dans la <b>🛒 boutique</b> et règle tes prix depuis le <b>🏢 bureau</b>.',
+  'İlk satışın! İpucu: <b>cam temizle</b> = daha çok bahşiş. Büyümek için <b>mağazadan</b> pompa/tesis al, <b>ofisten</b> fiyatı ayarla.':
+    'Ta première vente ! Astuce : <b>nettoyer les vitres</b> = plus de pourboires. Pour grandir, achète pompes et installations dans la <b>boutique</b> et règle tes prix depuis le <b>bureau</b>.',
   'Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!':
     'Tes installations ont tourné pendant ton absence : ~₺{0} gagnés — vide les tirelires !',
   'Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir': 'Mode déplacement : flèches ou toucher · ⟳ pivoter · ✓ placer',
@@ -1815,39 +1810,39 @@ const FR: Record<string, string> = {
     'Le jeu est en pause pour protéger ta progression. Ta sauvegarde est intacte — rien n’a été supprimé. Actualise dès que la connexion revient.',
   'MÜŞTERİ PATLAMASI! 90 saniye yoğun akın — pompalara koş!':
     'AFFLUENCE DE CLIENTS ! 90 secondes de trafic intense — file aux pompes !',
-  '🅿️ Müşteri aracını otoparka çekti, tesisleri kullanacak.': '🅿️ Le client s’est garé pour profiter des installations.',
+  'Müşteri aracını otoparka çekti, tesisleri kullanacak.': 'Le client s’est garé pour profiter des installations.',
   'Tuvalet artık ücretsiz.': 'Les toilettes sont désormais gratuites.',
   'Tuvalet ücreti: ₺{0}': 'Tarif toilettes : ₺{0}',
   'Ücretsiz': 'Gratuit',
   'GÜNLÜK GÖREV TAMAM: 15 müşteri — ödül +₺1.000!': 'QUÊTE DU JOUR RÉUSSIE : 15 clients — récompense +₺1.000 !',
   'İstasyon bakıma alındı — itibar düşmez.': 'Station en entretien — la note ne baisse pas.',
-  '🛣️ Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.':
-    '🛣️ La voie de décélération est saturée — un client est reparti sur l’autoroute ! Augmente ta capacité.',
+  'Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.':
+    'La voie de décélération est saturée — un client est reparti sur l’autoroute ! Augmente ta capacité.',
   'EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!':
     'Un client en véhicule électrique a vu une borne occupée par une voiture qui ne chargeait pas et il EST REPARTI — la note baisse !',
-  '🚻 Müşteri tuvalet arıyordu, bulamadı!': '🚻 Un client cherchait des toilettes et n’en a pas trouvé !',
-  '🔧 Yağ değişimi: +₺{0} kumbarada': '🔧 Vidange : +₺{0} dans la tirelire',
-  '🔊 Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
-    '🔊 Gêné par le bruit du générateur — il ne demandera que la moitié de la charge !',
+  'Müşteri tuvalet arıyordu, bulamadı!': 'Un client cherchait des toilettes et n’en a pas trouvé !',
+  'Yağ değişimi: +₺{0} kumbarada': 'Vidange : +₺{0} dans la tirelire',
+  'Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
+    'Gêné par le bruit du générateur — il ne demandera que la moitié de la charge !',
   'Depo şu an boş — üretim geldikçe şarj yavaş akacak.':
     'Le dépôt est vide pour l’instant — la charge arrivera au compte-gouttes à mesure que l’électricité est produite.',
-  '🔧 Şarj ünitesi arızalandı — tamir gerekli!': '🔧 Panne de borne — réparation nécessaire !',
-  '🔧 Pompa arızalandı — tamir gerekli!': '🔧 Panne de pompe — réparation nécessaire !',
-  '⚡ Molacı üniteyi tutuyor — göndermek için araca dokun 👆':
-    '⚡ Un traînard monopolise la borne — touche la voiture pour le congédier 👆',
-  '⚠️ Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!':
-    '⚠️ La sauvegarde cloud échoue — vérifie ta connexion, ta progression n’est PAS enregistrée !',
-  '🔄 Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…':
-    '🔄 Partie jouée sur un autre appareil — synchronisation vers ta progression la plus récente…',
-  '⭐ İtibar yükseldi: {0} (bekleyen müşteri kaybın az)': '⭐ Note en hausse : {0} (tu n’as presque perdu personne à l’attente)',
-  '⭐ İtibar düştü: {0} — müşteriler beklemekten gidiyor!': '⭐ Note en baisse : {0} — les clients partent à force d’attendre !',
-  '✏️ Düzenleme AÇIK — binaya dokun ve taşı': '✏️ Mode édition ACTIF — touche un bâtiment pour le déplacer',
+  'Şarj ünitesi arızalandı — tamir gerekli!': 'Panne de borne — réparation nécessaire !',
+  'Pompa arızalandı — tamir gerekli!': 'Panne de pompe — réparation nécessaire !',
+  'Molacı üniteyi tutuyor — göndermek için araca dokun':
+    'Un traînard monopolise la borne — touche la voiture pour le congédier',
+  'Bulut kaydı yapılamıyor — bağlantını kontrol et, ilerlemen kaydedilmiyor!':
+    'La sauvegarde cloud échoue — vérifie ta connexion, ta progression n’est PAS enregistrée !',
+  'Başka bir cihazda oynanmış — en güncel ilerlemeye senkronlanıyor…':
+    'Partie jouée sur un autre appareil — synchronisation vers ta progression la plus récente…',
+  'İtibar yükseldi: {0} (bekleyen müşteri kaybın az)': 'Note en hausse : {0} (tu n’as presque perdu personne à l’attente)',
+  'İtibar düştü: {0} — müşteriler beklemekten gidiyor!': 'Note en baisse : {0} — les clients partent à force d’attendre !',
+  'Düzenleme AÇIK — binaya dokun ve taşı': 'Mode édition ACTIF — touche un bâtiment pour le déplacer',
   '{0} kumbarası doldu — tıklayıp topla, yoksa ciro erimeye başlar!':
     'La tirelire {0} est pleine — touche-la pour récolter, sinon ta recette part en fumée !',
-  '⚠️ {0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!':
-    '⚠️ La tirelire {0} est ARCHICOMBLE — la recette qui arrive est perdue !',
-  '🧪 FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!':
-    '🧪 MODE COMPLET : tout est construit — fais glisser pour te déplacer, molette pour zoomer !',
+  '{0} kumbarası TIKA BASA dolu — gelen ciro kayboluyor!':
+    'La tirelire {0} est ARCHICOMBLE — la recette qui arrive est perdue !',
+  'FULL MOD: her şey kurulu — sürükleyerek gez, tekerlekle yaklaş!':
+    'MODE COMPLET : tout est construit — fais glisser pour te déplacer, molette pour zoomer !',
   // --- Batch: eksik EN çevirileri (v2 güncelleme) ---
   'Finansal Durum': 'Situation financière',
   'Yakıt Satış Fiyatları': 'Prix de vente des carburants',
@@ -1931,22 +1926,22 @@ const FR: Record<string, string> = {
   'Satın alma tamamlanamadı.': 'L’achat n’a pas pu aboutir.',
   'Satın alımlar geri yüklendi.': 'Achats restaurés.',
   'Geri yüklenecek satın alma yok.': 'Aucun achat à restaurer.',
-  '🏦 Kredi onaylandı — +₺{0} kasana geçti!': '🏦 Crédit accordé — +₺{0} dans ta caisse !',
-  '🏦 Avans onaylandı — +₺{0} kasana geçti!': '🏦 Avance accordée — +₺{0} dans ta caisse !',
-  '🏦 Kredi kapatıldı — teminatların serbest!': '🏦 Crédit soldé — tes garanties sont libérées !',
-  '💸 Erken kapatmaya kasan yetmiyor.': '💸 Pas assez d’argent pour solder par anticipation.',
-  '🏦 Ortaklık kapatıldı — istasyon tamamen senin!': '🏦 Participation rachetée — la station est entièrement à toi !',
-  '💸 Ortaklığı kapatmaya kasan yetmiyor.': '💸 Pas assez d’argent pour racheter la participation.',
-  '🏦 Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!':
-    '🏦 Paiement impossible — tes garanties ont été SAISIES et retirées de la station !',
-  '🏦 Kredi tamamen ödendi — teminatların serbest! 🎉': '🏦 Crédit intégralement remboursé — tes garanties sont libérées ! 🎉',
-  '🏦 Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.':
-    '🏦 Mensualité de crédit en retard ! Renfloue ta caisse — 2 retards d’affilée déclenchent la saisie.',
-  '🏦 Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!':
-    '🏦 Dette impayée — la banque est devenue ASSOCIÉE à {0} %, prélevée sur les bénéfices !',
-  '🏦 Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin! 🎉':
-    '🏦 La banque a récupéré sa part — partenariat terminé, la station est entièrement à toi ! 🎉',
-  '🏦 Banka ortağı kâr payı aldı: -₺{0}': '🏦 L’associé bancaire a pris sa part des bénéfices : -₺{0}',
+  'Kredi onaylandı — +₺{0} kasana geçti!': 'Crédit accordé — +₺{0} dans ta caisse !',
+  'Avans onaylandı — +₺{0} kasana geçti!': 'Avance accordée — +₺{0} dans ta caisse !',
+  'Kredi kapatıldı — teminatların serbest!': 'Crédit soldé — tes garanties sont libérées !',
+  'Erken kapatmaya kasan yetmiyor.': 'Pas assez d’argent pour solder par anticipation.',
+  'Ortaklık kapatıldı — istasyon tamamen senin!': 'Participation rachetée — la station est entièrement à toi !',
+  'Ortaklığı kapatmaya kasan yetmiyor.': 'Pas assez d’argent pour racheter la participation.',
+  'Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!':
+    'Paiement impossible — tes garanties ont été SAISIES et retirées de la station !',
+  'Kredi tamamen ödendi — teminatların serbest!': 'Crédit intégralement remboursé — tes garanties sont libérées !',
+  'Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.':
+    'Mensualité de crédit en retard ! Renfloue ta caisse — 2 retards d’affilée déclenchent la saisie.',
+  'Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!':
+    'Dette impayée — la banque est devenue ASSOCIÉE à {0} %, prélevée sur les bénéfices !',
+  'Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin!':
+    'La banque a récupéré sa part — partenariat terminé, la station est entièrement à toi !',
+  'Banka ortağı kâr payı aldı: -₺{0}': 'L’associé bancaire a pris sa part des bénéfices : -₺{0}',
   // pompacı / şarjcı / bina
   'Tabela': 'Enseigne',
   'Trafik etkisi': 'Effet sur le trafic',
@@ -1955,24 +1950,24 @@ const FR: Record<string, string> = {
   'Tek şerit': 'Voie unique',
   'Yoldan geçenlerin uğrama şansını artırır. Fiyatları buradan da ayarlayabilir, Taşı ile yerini değiştirebilirsin.':
     'Augmente les chances que les passants s’arrêtent. Tu peux aussi régler les prix ici et la repositionner avec Déplacer.',
-  '🛣️ Geniş Giriş-Çıkış — ₺{0}': '🛣️ Entrée-sortie élargie — ₺{0}',
+  'Geniş Giriş-Çıkış — ₺{0}': 'Entrée-sortie élargie — ₺{0}',
   'ÇALIŞIYOR (gelir senin)': 'EN POSTE (les revenus sont pour toi)',
   'Yovmiye': 'Salaire journalier',
   '₺{0}/gün': '₺{0}/jour',
   'Şarjcı': 'Agent de charge',
-  '🧑‍🔧 Pompacı Tut — ₺{0} + ₺{1}/gün': '🧑‍🔧 Embaucher un pompiste — ₺{0} + ₺{1}/jour',
-  '🧑‍🔧 Şarjcı Tut — ₺{0} + ₺{1}/gün': '🧑‍🔧 Embaucher un agent de charge — ₺{0} + ₺{1}/jour',
-  '🧑‍🔧 Şarjcıyı işten çıkar': '🧑‍🔧 Licencier l’agent de charge',
+  'Pompacı Tut — ₺{0} + ₺{1}/gün': 'Embaucher un pompiste — ₺{0} + ₺{1}/jour',
+  'Şarjcı Tut — ₺{0} + ₺{1}/gün': 'Embaucher un agent de charge — ₺{0} + ₺{1}/jour',
+  'Şarjcıyı işten çıkar': 'Licencier l’agent de charge',
   'Hava-Su': 'Air-Eau',
   'Yağ değişimi': 'Vidange',
   'DC Şarj #{0}: şarjcı işten çıktı — şarjı yine sen yaparsın.':
     'Borne DC n°{0} : agent de charge licencié — les charges te reviennent.',
-  '💸 Para yetmiyor — şarjcı işe alma ₺{0}.': '💸 Pas assez d’argent — embaucher un agent de charge coûte ₺{0}.',
-  '⚡ DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!':
-    '⚡ Borne DC n°{0} : agent de charge embauché — les VE se rechargent tout seuls, tous les revenus sont pour toi !',
-  '🧑‍🔧 Pompacı bu aracı hallediyor.': '🧑‍🔧 Le pompiste s’occupe de cette voiture.',
-  '🧑‍🔧 Günlük yovmiye ödendi: -₺{0}': '🧑‍🔧 Salaires journaliers versés : -₺{0}',
-  '🛢️ Yakıt Siparişi Ver': '🛢️ Commander du carburant',
+  'Para yetmiyor — şarjcı işe alma ₺{0}.': 'Pas assez d’argent — embaucher un agent de charge coûte ₺{0}.',
+  'DC Şarj #{0}: şarjcı işe alındı — EV sormadan şarj olur, gelir tamamen senin!':
+    'Borne DC n°{0} : agent de charge embauché — les VE se rechargent tout seuls, tous les revenus sont pour toi !',
+  'Pompacı bu aracı hallediyor.': 'Le pompiste s’occupe de cette voiture.',
+  'Günlük yovmiye ödendi: -₺{0}': 'Salaires journaliers versés : -₺{0}',
+  'Yakıt Siparişi Ver': 'Commander du carburant',
   'Başka cihazda açıldı': 'Ouvert sur un autre appareil',
   'Bu hesap başka bir cihazda açıldığı için burada duraklatıldı. İlerlemen güvende — hiçbir şey silinmedi. Buradan devam etmek için yenile.':
     'Ce compte a été ouvert sur un autre appareil, la partie est donc en pause ici. Ta progression est intacte — rien n’a été supprimé. Actualise pour continuer ici.',
@@ -1980,58 +1975,57 @@ const FR: Record<string, string> = {
   'Geçerli bir e-posta gir.': 'Saisis une adresse e-mail valide.',
   'Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.':
     'L’orientation de cette unité est fixe (accès des voitures) — tu ne peux choisir que son emplacement.',
-  '🚚 {0} tankeri istasyona ulaştı!': '🚚 Le camion-citerne de {0} est arrivé à la station !',
-  '✅ Reklamlar kaldırıldı — teşekkürler!': '✅ Publicités supprimées — merci !',
-  '✅ +₺{0} kasana eklendi!': '✅ +₺{0} ajoutés à ta caisse !',
-  '🎬 Reklam İzle: Günü 2x Yap (+₺{0})': '🎬 Regarder une pub : doubler le bénéfice du jour (+₺{0})',
-  '🎬 Reklam İzle: Müşteri Patlaması': '🎬 Regarder une pub : affluence de clients',
-  '🎬 Günün kârı 2 katına çıktı: +₺{0}!': '🎬 Bénéfice du jour doublé : +₺{0} !',
+  '{0} tankeri istasyona ulaştı!': 'Le camion-citerne de {0} est arrivé à la station !',
+  'Reklamlar kaldırıldı — teşekkürler!': 'Publicités supprimées — merci !',
+  '+₺{0} kasana eklendi!': '+₺{0} ajoutés à ta caisse !',
+  'Reklam İzle: Günü 2x Yap (+₺{0})': 'Regarder une pub : doubler le bénéfice du jour (+₺{0})',
+  'Günün kârı 2 katına çıktı: +₺{0}!': 'Bénéfice du jour doublé : +₺{0} !',
   '· yol karşısı': '· de l’autre côté de la route',
   'Beton': 'Béton',
   // bina kurulum toast'ları (toast() artık t()'den geçiyor)
-  '🔧 Tamir edildi, tekrar hizmette!': '🔧 Réparé, de nouveau en service !',
-  '🔧 Tamir Et — ₺800': '🔧 Réparer — ₺800',
-  '🔧 Tamir Et — ₺1.000': '🔧 Réparer — ₺1.000',
-  '🧽 Temizle — ₺300': '🧽 Nettoyer — ₺300',
-  '🧽 Paneller tertemiz, üretim tam güçte!': '🧽 Panneaux nickel, production à pleine puissance !',
-  '☢️ Reaktör bakımı yapıldı, güvendesin.': '☢️ Réacteur entretenu, tu es tranquille.',
-  '☢️ Uranyum siparişi verildi — özel konvoy yolda!': '☢️ Uranium commandé — convoi spécial en route !',
-  '💸 Bunun için yeterli para yok!': '💸 Pas assez d’argent pour ça !',
+  'Tamir edildi, tekrar hizmette!': 'Réparé, de nouveau en service !',
+  'Tamir Et — ₺800': 'Réparer — ₺800',
+  'Tamir Et — ₺1.000': 'Réparer — ₺1.000',
+  'Temizle — ₺300': 'Nettoyer — ₺300',
+  'Paneller tertemiz, üretim tam güçte!': 'Panneaux nickel, production à pleine puissance !',
+  'Reaktör bakımı yapıldı, güvendesin.': 'Réacteur entretenu, tu es tranquille.',
+  'Uranyum siparişi verildi — özel konvoy yolda!': 'Uranium commandé — convoi spécial en route !',
+  'Bunun için yeterli para yok!': 'Pas assez d’argent pour ça !',
   'Pasif gelir': 'Revenus passifs',
-  '🚧 Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.':
-    '🚧 Station d’en face ouverte ! Entrée/sortie automatiques ajoutées — des clients arriveront de la voie opposée.',
-  '🏞️ Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.':
-    '🏞️ Parcelle d’en face achetée — bétonne-la, puis construis une pompe/borne ; la première pompe ajoute l’entrée-sortie automatique.',
-  '🧱 Zemin betonlandı — artık yapı kurabilirsin!': '🧱 Parcelle bétonnée — tu peux construire !',
-  '🪧 Tabela büyüdü — daha çok müşteri gelecek!': '🪧 Enseigne agrandie — plus de clients en vue !',
-  '🛒 Market açıldı!': '🛒 Boutique ouverte !',
-  '🚻 Tuvalet hizmete girdi!': '🚻 Les toilettes sont en service !',
-  '💡 Sokak lambası kuruldu — gece istasyon aydınlık!': '💡 Lampadaire installé — la station reste éclairée la nuit !',
-  '🔋 Batarya deposu kuruldu — üretim biriktikçe dolacak.':
-    '🔋 Dépôt de batteries construit — il se remplira au fil de la production.',
-  '🔌 DC şarj ünitesi kuruldu!': '🔌 Borne de charge DC construite !',
-  '☀️ Güneş santrali kuruldu. ⚠️ Paneller zamanla kirlenir!':
-    '☀️ Centrale solaire construite. ⚠️ Les panneaux se salissent avec le temps !',
-  '🛠️ Jeneratör kuruldu. ⚠️ Gürültüsü EV müşterilerini kaçırabilir!':
-    '🛠️ Générateur construit. ⚠️ Son bruit peut faire fuir les clients VE !',
-  '☢️ Reaktör devrede! ⚠️ BAKIMI ASLA AKSATMA — patlarsa her şey gider!':
-    '☢️ Réacteur en service ! ⚠️ NE SAUTE JAMAIS L’ENTRETIEN — s’il explose, tu perds tout !',
-  '🚿 Oto yıkama açıldı — müşteriler araç yıkatacak!': '🚿 Lavage auto ouvert — les clients vont faire laver leur voiture !',
-  '🔧 Yağ değişim istasyonu açıldı!': '🔧 Station de vidange ouverte !',
-  '☕ Kahveci açıldı!': '☕ Café ouvert !',
-  '🍽️ Restoran açıldı — yolcular yemek molası verecek!': '🍽️ Restaurant ouvert — les voyageurs feront une pause repas !',
-  '🚛 Tır parkı açıldı — düzenli konaklama geliri!': '🚛 Relais routier ouvert — revenus d’hébergement réguliers !',
-  '💨 Hava-su ünitesi kuruldu!': '💨 Unité air-eau construite !',
-  '🧽 Self yıkama açıldı — köpük ve su otomatik satılacak!': '🧽 Lavage self ouvert — mousse et eau vendues automatiquement !',
-  '🅿️ Otopark açıldı — müşteriler park edip tesisleri gezebilecek!':
-    '🅿️ Parking ouvert — les clients pourront se garer et visiter les installations !',
+  'Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.':
+    'Station d’en face ouverte ! Entrée/sortie automatiques ajoutées — des clients arriveront de la voie opposée.',
+  'Yol karşısı arsa alındı — betonla, sonra pompa/şarj kur; ilk pompayla otomatik giriş-çıkış gelir.':
+    'Parcelle d’en face achetée — bétonne-la, puis construis une pompe/borne ; la première pompe ajoute l’entrée-sortie automatique.',
+  'Zemin betonlandı — artık yapı kurabilirsin!': 'Parcelle bétonnée — tu peux construire !',
+  'Tabela büyüdü — daha çok müşteri gelecek!': 'Enseigne agrandie — plus de clients en vue !',
+  'Market açıldı!': 'Boutique ouverte !',
+  'Tuvalet hizmete girdi!': 'Les toilettes sont en service !',
+  'Sokak lambası kuruldu — gece istasyon aydınlık!': 'Lampadaire installé — la station reste éclairée la nuit !',
+  'Batarya deposu kuruldu — üretim biriktikçe dolacak.':
+    'Dépôt de batteries construit — il se remplira au fil de la production.',
+  'DC şarj ünitesi kuruldu!': 'Borne de charge DC construite !',
+  'Güneş santrali kuruldu. Paneller zamanla kirlenir!':
+    'Centrale solaire construite. Les panneaux se salissent avec le temps !',
+  'Jeneratör kuruldu. Gürültüsü EV müşterilerini kaçırabilir!':
+    'Générateur construit. Son bruit peut faire fuir les clients VE !',
+  'Reaktör devrede! BAKIMI ASLA AKSATMA — patlarsa her şey gider!':
+    'Réacteur en service ! NE SAUTE JAMAIS L’ENTRETIEN — s’il explose, tu perds tout !',
+  'Oto yıkama açıldı — müşteriler araç yıkatacak!': 'Lavage auto ouvert — les clients vont faire laver leur voiture !',
+  'Yağ değişim istasyonu açıldı!': 'Station de vidange ouverte !',
+  'Kahveci açıldı!': 'Café ouvert !',
+  'Restoran açıldı — yolcular yemek molası verecek!': 'Restaurant ouvert — les voyageurs feront une pause repas !',
+  'Tır parkı açıldı — düzenli konaklama geliri!': 'Relais routier ouvert — revenus d’hébergement réguliers !',
+  'Hava-su ünitesi kuruldu!': 'Unité air-eau construite !',
+  'Self yıkama açıldı — köpük ve su otomatik satılacak!': 'Lavage self ouvert — mousse et eau vendues automatiquement !',
+  'Otopark açıldı — müşteriler park edip tesisleri gezebilecek!':
+    'Parking ouvert — les clients pourront se garer et visiter les installations !',
   'Tekrar hoş geldin!': 'Content de te revoir !',
   'Sipariş verilemedi (tank dolu ya da para yetmiyor).': 'Commande impossible (cuve pleine ou argent insuffisant).',
   'Müşteri kibarca gönderildi.': 'Client congédié en douceur.',
   'Molacı uğurlandı — şarj yeri boşaldı.': 'Traînard congédié — la place de charge est libre.',
   'Otomatik şarj başladı.': 'Charge automatique lancée.',
-  '🚫 Buraya yerleştiremezsin — sahipli ve betonlu alana koy.':
-    '🚫 Impossible de placer ici — pose-le sur un terrain à toi et bétonné.',
+  'Buraya yerleştiremezsin — sahipli ve betonlu alana koy.':
+    'Impossible de placer ici — pose-le sur un terrain à toi et bétonné.',
   'Bu arsa zaten senin.': 'Cette parcelle est déjà à toi.',
   // state.ts (bina isim/açıklama + teminat)
   'Batarya Deposu': 'Dépôt de batteries',
@@ -2144,8 +2138,8 @@ const FR: Record<string, string> = {
   'Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.':
     'Sors le bateau de l’eau pour qu’il passe l’hiver à terre — ton plus gros poste de revenus en hiver.',
   'Önce Travel Lift kur': 'Construis d’abord le travel lift',
-  '⚓ Bağlama ₺{0} + kışlama ₺{1} tahsil edildi': '⚓ Amarrage ₺{0} + hivernage ₺{1} encaissés',
-  '⚓ Bağlama geliri: +₺{0}': '⚓ Revenus d’amarrage : +₺{0}',
+  'Bağlama ₺{0} + kışlama ₺{1} tahsil edildi': 'Amarrage ₺{0} + hivernage ₺{1} encaissés',
+  'Bağlama geliri: +₺{0}': 'Revenus d’amarrage : +₺{0}',
 
   // --- Marina: Mavi Bayrak ---
   'Eksik çevre hizmeti: {0}': 'Service environnemental manquant : {0}',
@@ -2154,27 +2148,27 @@ const FR: Record<string, string> = {
   'Mavi Bayrak geçerli': 'Pavillon Bleu valide',
   'Mavi Bayrak şartı': 'Exigence Pavillon Bleu',
   'Mavi Bayrak gerekli': 'Pavillon Bleu requis',
-  '🏳️ Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.':
-    '🏳️ Pavillon Bleu suspendu — nettoie ton dossier et tu le récupéreras.',
-  '🏳️ Sicilin temizlendi — Mavi Bayrak geri alındı!':
-    '🏳️ Ton dossier est propre — Pavillon Bleu récupéré !',
+  'Mavi Bayrak askıya alındı — sicilini temizleyince geri alırsın.':
+    'Pavillon Bleu suspendu — nettoie ton dossier et tu le récupéreras.',
+  'Sicilin temizlendi — Mavi Bayrak geri alındı!':
+    'Ton dossier est propre — Pavillon Bleu récupéré !',
 
   // --- Marina: risk olayları ---
   'Yakıt sızıntısı': 'Déversement de carburant',
-  '🛢️ Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.':
-    '🛢️ Déversement de carburant ! Sans barrage, la nappe s’est étendue en mer — amende infligée.',
+  'Yakıt sızıntısı! Bariyer yoktu, denize yayıldı — ceza kesildi.':
+    'Déversement de carburant ! Sans barrage, la nappe s’est étendue en mer — amende infligée.',
   'Lodos / fırtına': 'Vent du sud / tempête',
-  '🌊 Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.':
-    '🌊 Un coup de vent du sud a frappé — les bateaux mal amarrés ont été endommagés, indemnités payées.',
+  'Lodos vurdu — bağlantısı zayıf tekneler hasar gördü, tazminat ödendi.':
+    'Un coup de vent du sud a frappé — les bateaux mal amarrés ont été endommagés, indemnités payées.',
   'Sürüklenen tekne': 'Bateau à la dérive',
-  '⚓ Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.':
-    '⚓ Un bateau a chassé sur son mouillage et en a percuté un autre — dégâts en chaîne.',
+  'Bir tekne sürüklenip diğerine çarptı — zincirleme hasar.':
+    'Un bateau a chassé sur son mouillage et en a percuté un autre — dégâts en chaîne.',
   'Denetim': 'Contrôle',
-  '🚫 Denetim geldi — belgelerin düzgündü, sorunsuz geçti.':
-    '🚫 Un contrôle est passé — tes papiers étaient en règle, aucun souci.',
+  'Denetim geldi — belgelerin düzgündü, sorunsuz geçti.':
+    'Un contrôle est passé — tes papiers étaient en règle, aucun souci.',
   'Deniz kirliliği': 'Pollution marine',
-  '🦑 Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.':
-    '🦑 Invasion de mucilage — le trafic des bateaux de tourisme restera faible pendant 20 jours.',
+  'Müsilaj basdı — turistik tekne trafiği 20 gün düşük kalacak.':
+    'Invasion de mucilage — le trafic des bateaux de tourisme restera faible pendant 20 jours.',
 
   // --- ÖTV'siz Yakıt Alım Defteri (logbook-ui.ts + marina.ts) ---
   'Yakıt Alım Defteri': 'Carnet d’achat de carburant',
@@ -2198,39 +2192,39 @@ const FR: Record<string, string> = {
   'İNCELE': 'INSPECTER',
   'ONAYLA': 'APPROUVER',
   'REDDET': 'REFUSER',
-  '💡 İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.':
-    '💡 Astuce : INSPECTE avant de décider — un carnet défectueux laisse toujours un indice visible.',
+  'İpucu: karar vermeden önce İNCELE — kusurlu defterin mutlaka görünür bir işareti olur.':
+    'Astuce : INSPECTE avant de décider — un carnet défectueux laisse toujours un indice visible.',
   'Kota yetersiz: {0}/{1} L kullanılmış, {2} L isteniyor':
     'Quota insuffisant : {0}/{1} L déjà utilisés, {2} L demandés',
   'Vize süresi dolmuş': 'Le visa a expiré',
   'İmza uyuşmuyor': 'La signature ne correspond pas',
   'Tarih tutarsızlığı var': 'Les dates ne concordent pas',
-  "📄 Defter onaylandı — ÖTV'siz satış yapıldı (+₺{0} marj)":
-    '📄 Carnet approuvé — vente détaxée effectuée (+₺{0} de marge)',
-  '🚫 Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!':
-    '🚫 Tu as approuvé un carnet falsifié — le contrôle t’a infligé ₺{0} d’amende !',
-  '✅ Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.':
-    '✅ Tu as refusé un carnet défectueux — le client est furieux mais tu es tranquille.',
-  '❌ Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.':
-    '❌ Tu as refusé un carnet valide — ce client professionnel ne reviendra plus.',
+  "Defter onaylandı — ÖTV'siz satış yapıldı (+₺{0} marj)":
+    'Carnet approuvé — vente détaxée effectuée (+₺{0} de marge)',
+  'Sahte deftere onay verdin — denetimde ₺{0} ceza kesildi!':
+    'Tu as approuvé un carnet falsifié — le contrôle t’a infligé ₺{0} d’amende !',
+  'Kusurlu defteri reddettin — müşteri kızdı ama sen güvendesin.':
+    'Tu as refusé un carnet défectueux — le client est furieux mais tu es tranquille.',
+  'Geçerli defteri reddettin — bu ticari müşteri bir daha gelmeyecek.':
+    'Tu as refusé un carnet valide — ce client professionnel ne reviendra plus.',
 
   // --- AI rakip istasyon (rival.ts) — marka adları çevrilmez ---
   'ŞİMŞEK PETROL': 'ŞİMŞEK PETROL',
   'ANADOLU ENERJİ': 'ANADOLU ENERJİ',
   'Pazar payın': 'Ta part de marché',
   ' · kampanyada': ' · en promotion',
-  '⚔️ {0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!':
-    '⚔️ {0} a cassé ses prix : ₺{1}/L — ils tentent de reprendre des parts de marché !',
-  '📣 {0} kampanya başlattı — 5 gün boyunca daha çekici olacak.':
-    '📣 {0} a lancé une promotion — plus attractif pendant 5 jours.',
-  '💰 {0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!':
-    '💰 {0} se relâche et augmente ses prix : ₺{1}/L — c’est ta chance !',
+  '{0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!':
+    '{0} a cassé ses prix : ₺{1}/L — ils tentent de reprendre des parts de marché !',
+  '{0} kampanya başlattı — 5 gün boyunca daha çekici olacak.':
+    '{0} a lancé une promotion — plus attractif pendant 5 jours.',
+  '{0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!':
+    '{0} se relâche et augmente ses prix : ₺{1}/L — c’est ta chance !',
   'Pazara HÂKİMSİN (%{0})': 'Tu DOMINES le marché ({0} %)',
   'Öndesin (%{0})': 'Tu es en tête ({0} %)',
   'Başa baş (%{0})': 'Au coude à coude ({0} %)',
   'Geridesin (%{0})': 'Tu es distancé ({0} %)',
-  '🏁 Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.':
-    '🏁 {0} vient d’ouvrir en face — le prix devient une NÉGOCIATION. Suis ta part de marché depuis le bureau.',
+  'Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.':
+    '{0} vient d’ouvrir en face — le prix devient une NÉGOCIATION. Suis ta part de marché depuis le bureau.',
 
   // --- Marka yıldızı / devir kartı (prestij) ---
   '{0} marka yıldızı': '{0} étoiles de marque',
@@ -2260,7 +2254,6 @@ const FR: Record<string, string> = {
   'Muhasebe': 'Comptabilité',
   'İhaleler': 'Contrats',
   'Büyüme': 'Croissance',
-  'Ofisi Taşı': 'Déplacer le bureau',
 }
 
 /** Aktif dilin sözlüğü. TR kaynak dil olduğu için sözlüğü yoktur (anahtarın kendisi metindir). */
