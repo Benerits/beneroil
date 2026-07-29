@@ -1627,7 +1627,9 @@ function disposeProp(key: string) {
   serviceProps.delete(key)
 }
 const HOSE_MAT = new THREE.MeshLambertMaterial({ color: 0x2a2f36 })
-function buildHoseProp(from: THREE.Vector3, tank: THREE.Vector3, into: THREE.Vector3): THREE.Group {
+// YALNIZ TABANCA — hortum ZATEN var (yukarıdaki hoses sistemi, araç başına pompadan
+// uzanır). İkinci bir boru çizmek "2 boru görünüyor" hatası yarattı (Oğuz, 29 Tem).
+function buildHoseProp(_from: THREE.Vector3, tank: THREE.Vector3, into: THREE.Vector3): THREE.Group {
   const g = new THREE.Group()
   // tabanca: dik tutamak + araca giren ağız
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.17), HOSE_MAT)
@@ -1637,11 +1639,6 @@ function buildHoseProp(from: THREE.Vector3, tank: THREE.Vector3, into: THREE.Vec
   spout.position.copy(tank)
   spout.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), into)
   g.add(spout)
-  // hortum: pompadan tabanca tutamağına yere doğru sarkan kavis
-  const butt = grip.position.clone(); butt.z -= 0.08
-  const mid = from.clone().lerp(butt, 0.5); mid.z = Math.min(from.z, butt.z) * 0.4
-  const curve = new THREE.QuadraticBezierCurve3(from, mid, butt)
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 10, 0.032, 6), HOSE_MAT))
   return g
 }
 function syncAttendants() {
