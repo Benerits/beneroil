@@ -573,6 +573,8 @@ export class Car {
   static boatKit: Record<string, THREE.Group | null> | null = null
   /** ana döngü her karede doldurur: sert engeller (pompa, bina...) */
   static solids: { cx: number; cy: number; w: number; d: number }[] = []
+  /** yağ değişimi körüğü gibi BİNA İÇİNE sürüşlerde duvar çarpışmasını kapatır */
+  ghostSolid = false
 
   /** public sarmalayıcı — bekleme noktası üretimi katı cisimden kaçmak için kullanır (B5) */
   static isSolidAt(x: number, y: number): boolean { return Car.insideSolid(x, y) }
@@ -605,11 +607,13 @@ export class Car {
         }
       } else {
         d.normalize()
-        // sert engel: ileri adım bir objenin içine giriyorsa eksen eksen kaymayı dene
+        // sert engel: ileri adım bir objenin içine giriyorsa eksen eksen kaymayı dene.
+        // ghostSolid: yağ değişimi körüğüne GİREN araç bina duvarını yok sayar —
+        // yoksa kapıda sonsuza dek sürtünüp kalıyordu ("bugda kalıyor" raporu).
         const nx = pos.x + d.x * step
         const ny = pos.y + d.y * step
         let mx = pos.x, my = pos.y
-        if (!Car.insideSolid(nx, ny)) { mx = nx; my = ny }
+        if (this.ghostSolid || !Car.insideSolid(nx, ny)) { mx = nx; my = ny }
         else if (Math.abs(d.x) > 0.01 && !Car.insideSolid(nx, pos.y)) { mx = nx } // duvar boyunca x'te kay
         else if (Math.abs(d.y) > 0.01 && !Car.insideSolid(pos.x, ny)) { my = ny } // duvar boyunca y'de kay
         // ikisi de tıkalıysa bu kare bekle (asla içinden geçme)
@@ -1811,13 +1815,17 @@ export class CarManager {
     car.hideBubble()
     car.hideBars()
     const preStageX = car.station === 'far' ? 2 * ROAD_X - 3.0 : 3.0
+    // İKİ ETAP: kapıya kadar normal çarpışma (yoldaki binalardan geçmesin), kapı→içeri
+    // ghostSolid ile duvar yok sayılır — yoksa araç kapıda sürtünüp kalıyordu.
     car.setPath([
       new THREE.Vector3(preStageX, car.group.position.y, 0),
       entry.clone(),
-      inside.clone(),
     ], () => {
-      car.phase = 'parked'
-      car.group.rotation.z = rot
+      car.ghostSolid = true
+      car.setPath([inside.clone()], () => {
+        car.phase = 'parked'
+        car.group.rotation.z = rot
+      })
     })
     return true
   }
@@ -1878,7 +1886,8 @@ export class CarManager {
         car.group.position.addScaledVector(away, 1.25 - d / 2)
       }
     }
-    // katı cisme gömüldüyse en yakın kenardan dışarı it
+    // katı cisme gömüldüyse en yakın kenardan dışarı it (körük aracı hariç — bilerek içeride)
+    if (car.ghostSolid) { car.holdTime = 0; car.overrideT = 0; return }
     for (const s of Car.solids) {
       const dx = car.group.position.x - s.cx
       const dy = car.group.position.y - s.cy

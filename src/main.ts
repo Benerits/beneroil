@@ -4899,11 +4899,20 @@ function frame() {
   for (const [c, d] of oilPending) {
     if (c.phase !== 'toPark' && c.phase !== 'parked') { // dışarıdan uğurlandı (taşıma/yıkım)
       c.group.visible = true
+      c.ghostSolid = false
       oilBusy.delete(d.bayId); oilPending.delete(c)
       continue
     }
-    if (c.phase !== 'parked') continue
-    if (!d.started) { d.started = true; c.group.visible = false }
+    if (c.phase === 'toPark') {
+      d.t += dt
+      if (d.t > 45) { // yolda sıkıştı → vazgeç: körük serbest, araç uğurlanır
+        c.ghostSolid = false
+        oilBusy.delete(d.bayId); oilPending.delete(c)
+        cars.releaseCar(c)
+      }
+      continue
+    }
+    if (!d.started) { d.started = true; d.t = 0; c.group.visible = false }
     d.t += dt
     if (d.t > 5) {
       const m = Math.round(150 + Math.random() * 100)
@@ -4912,6 +4921,7 @@ function frame() {
       state.addRep((d.score - 3.3) * 0.08)
       c.group.visible = true
       c.group.position.copy(d.exit) // kapı önünden yola koyulur (duvardan geçmesin)
+      c.ghostSolid = false // dışarıda: duvar çarpışması normale döner
       c.showFeedback(emojiFor(d.score))
       oilBusy.delete(d.bayId); oilPending.delete(c)
       cars.releaseCar(c)
