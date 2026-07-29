@@ -3637,6 +3637,7 @@ if (isFullMode) {
 
 ui.onMaint = id => {
   if (id === 'open-order') { ui.hideBuildingCard(); openSection('order'); return } // tanka tıkla → yakıt siparişi
+  if (id === 'rename-sign') { ui.hideBuildingCard(); openRenameModal(); return } // tabelaya tıkla → isim değiştir
   if (id.startsWith('auto-pump-')) {
     const i = parseInt(id.slice(10))
     if (state.autoPumps.has(i)) {
@@ -3711,18 +3712,40 @@ ui.onToggleClosed = () => {
   persist()
 }
 
-// ---- İstasyon adı ----
-const nameInput = document.getElementById('stname') as HTMLInputElement
-
+// ---- İstasyon adı (TABELA kartından değiştirilir; ayarlardan kaldırıldı) ----
 function applyStationName(name: string, silent = false) {
   world.setStationName(name)
   state.stationName = world.stationName // hesaba bağlı: bulut kaydıyla gezer
-  nameInput.value = world.stationName
   document.title = `${world.stationName} — Benzinlik`
   if (!silent) {
     ui.toast(t('Tabela güncellendi: {0}', world.stationName), 'good')
     persist()
   }
+}
+
+/** tabelaya tıkla → küçük isim modalı (Oğuz: "ayarların içinde olmasın") */
+function openRenameModal() {
+  if (document.getElementById('renamewrap')) return
+  const o = document.createElement('div')
+  o.id = 'renamewrap'
+  o.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(9,14,20,.45);display:flex;align-items:center;justify-content:center;padding:24px'
+  o.innerHTML = `<div style="background:#faf6ec;border-radius:16px;padding:18px;max-width:340px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.28)">
+    <div style="font-weight:800;font-size:16px;margin-bottom:10px;color:#1c2530">${t('Tabela adı')}</div>
+    <input id="stname" type="text" maxlength="14" style="width:100%;box-sizing:border-box" />
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="rn-cancel" class="btn" style="flex:1;justify-content:center">${t('Vazgeç')}</button>
+      <button id="rn-ok" class="btn good" style="flex:1;justify-content:center">${t('Kaydet')}</button>
+    </div></div>`
+  document.body.appendChild(o)
+  const input = document.getElementById('stname') as HTMLInputElement
+  input.value = world.stationName
+  input.focus(); input.select()
+  const close = () => o.remove()
+  const save = () => { applyStationName(input.value); close() }
+  document.getElementById('rn-ok')?.addEventListener('click', save)
+  document.getElementById('rn-cancel')?.addEventListener('click', close)
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') close() })
+  o.addEventListener('pointerdown', e => { if (e.target === o) close() })
 }
 
 // eski tarayıcı-geneli isim kaydından hesaba göç (bir kereye mahsus)
@@ -3733,7 +3756,6 @@ applyStationName(
     : (legacyName && legacyName !== 'OPET' ? legacyName : t('BENELOIL')),
   true,
 )
-ui.onRename = name => applyStationName(name)
 
 // kâr marjı ayarı (ofis kartından): alış sabit, satışı oyuncu belirler
 function syncSignPrices() {
@@ -3899,8 +3921,10 @@ function buildingCard(id: string): BuildingCard | null {
         stats: [
           [t('Seviye'), `${state.signLevel + 1}/4`],
           [t('Trafik etkisi'), `+%${state.signLevel * 10}`, state.signLevel > 0 ? 'good' : ''],
+          [t('İsim'), world.stationName],
         ],
         priceRows: fuelPriceRows(), // tabela = fiyat panosu: yakıt + elektrik fiyatları buradan değişir
+        action: { label: t('Adı Değiştir'), maintId: 'rename-sign' },
       }
     case 'tank':
       return {

@@ -99,7 +99,6 @@ export class UI {
   onOrderQty: (f: FuelType, d: number) => void = () => {}
   onBuy: (id: string) => void = () => {}
   onMaint: (id: string) => void = () => {}
-  onRename: (name: string) => void = () => {}
   onCardClose: () => void = () => {}
   onMove: (id: string) => void = () => {}
   onReset: () => void = () => {}
@@ -189,7 +188,6 @@ export class UI {
 
     // modallar
     const setWrap = el<HTMLDivElement>('setwrap')
-    const nameInput = el<HTMLInputElement>('stname')
     el<HTMLButtonElement>('setbtn').addEventListener('click', () => setWrap.classList.add('show'))
     this.shopBtn.addEventListener('click', () => {
       this.shopOpen = true
@@ -220,12 +218,7 @@ export class UI {
       })
     }
 
-    const save = () => {
-      this.onRename(nameInput.value)
-      setWrap.classList.remove('show')
-    }
-    el<HTMLButtonElement>('stsave').addEventListener('click', save)
-    nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') save() })
+    // istasyon adı artık ayarlarda değil — TABELA kartından değiştirilir (rename-sign)
     const fbWrap = el<HTMLDivElement>('fbwrap')
     const fbBtn = el<HTMLButtonElement>('fbbtn')
     // Sorun Bildir yalnızca web'de; native app'te gizli (mobil UI temiz kalsın).
