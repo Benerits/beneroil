@@ -1797,6 +1797,31 @@ export class CarManager {
     return true
   }
 
+  /** YAĞ DEĞİŞİMİ KÖRÜĞÜ: araç garaj kapısından İÇERİ sürer (Oğuz: "arabalar yağ
+   *  değişiminin içine girsinler"). Doluluk/ödül orkestrasyonu main'de (oilPending). */
+  sendToOilBay(car: Car, entry: THREE.Vector3, inside: THREE.Vector3, rot: number): boolean {
+    if (car.slotIndex >= 0) {
+      if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
+      else this.pumpOcc[car.slotIndex] = null
+      car.slotIndex = -1
+    }
+    car.phase = 'toPark'
+    car.beingServed = false
+    car.filling = false
+    car.hideBubble()
+    car.hideBars()
+    const preStageX = car.station === 'far' ? 2 * ROAD_X - 3.0 : 3.0
+    car.setPath([
+      new THREE.Vector3(preStageX, car.group.position.y, 0),
+      entry.clone(),
+      inside.clone(),
+    ], () => {
+      car.phase = 'parked'
+      car.group.rotation.z = rot
+    })
+    return true
+  }
+
   /** otopark taşınınca/döndürülünce park etmiş araçları uğurla — eski açı/konumda
    *  asılı kalıp "döndürdüm ama araçlar hâlâ yan duruyor" görüntüsü yaratıyorlardı */
   evictParked() {

@@ -1575,6 +1575,9 @@ function facName(id: string): string {
     wash2: t('Karşı Oto Yıkama'), oil2: t('Karşı Yağ Değişimi'), coffee2: t('Karşı Kahveci'), restaurant2: t('Karşı Restoran'), toilet: t('Tuvalet'), coffee: t('Kahveci'), restaurant: t('Restoran'), oil: t('Yağ değişimi') } as Record<string, string>)[id] ?? id
 }
 const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean }>()
+// yağ değişimi körüğü: tesis başına tek araç; araç içerideyken görünmez, ~5 sn sonra çıkar
+const oilBusy = new Map<string, Car>()
+const oilPending = new Map<Car, { bayId: string; score: number; t: number; started: boolean; exit: THREE.Vector3 }>()
 
 // ---- POMPACI/ŞARJCI FİGÜRLERİ (Oğuz: "yovmiyeci varsa başına karakter koy") ----
 // KENNEY MİNİ KARAKTERLER tembel yüklenir; inene kadar (veya inmezse) walker'larla
@@ -1836,6 +1839,30 @@ function concludeService(car: Car, score: number) {
     return
   }
   trackDaily()
+  // YAĞ DEĞİŞİMİ DRIVE-IN (Oğuz: "arabalar yağ değişiminin içine girsinler"):
+  // körük boşsa araç garaj kapısından içeri sürer, işi bitince kapıdan çıkar gider.
+  // Körük dolu/tesis yoksa eski hızlı akış (vehicleServices anında öder) devam eder.
+  const oilB = (car.wantsOil && !car.isTruck) ? world.buildings.find(x =>
+    ((x.id === 'oil' && state.hasOil) || (x.id === 'oil2' && state.hasOil2))
+    && ((x.group.position.x > ROAD_X) === (car.station === 'far'))) : undefined
+  if (oilB && !oilBusy.has(oilB.id)) {
+    car.wantsOil = false // ödül körük çıkışında — vehicleServices çifte ödemesin
+    let localScore = score + missingPenalty(car) + vehicleServices(car) + 0.25
+    for (const v of facilityVisits(car)) { // diğer tesis ziyaretleri hızlı modda ödensin
+      const m = v.revenue()
+      if (m > 0) { state.addPending(v.buildingId, m, facName(v.buildingId)); ui.toast(v.toastMsg(m), 'good') }
+      localScore += v.score
+    }
+    const entry = oilB.group.localToWorld(new THREE.Vector3(3.4, 0, 0)); entry.z = 0
+    const inside = oilB.group.localToWorld(new THREE.Vector3(-0.1, 0, 0)); inside.z = 0
+    const rot = Math.atan2(inside.y - entry.y, inside.x - entry.x)
+    if (cars.sendToOilBay(car, entry, inside, rot)) {
+      oilBusy.set(oilB.id, car)
+      oilPending.set(car, { bayId: oilB.id, score: localScore, t: 0, started: false, exit: entry.clone() })
+      if (ui.activeCar === car) autoSelect(nextServableCar())
+      return
+    }
+  }
   score += missingPenalty(car) + vehicleServices(car)
   const visits = facilityVisits(car)
   if (visits.length > 0 && cars.sendToParking(car)) {
@@ -4770,6 +4797,29 @@ function frame() {
     }
   }
   updateWalkers(dt)
+
+  // yağ değişimi körüğü: içeri giren araç görünmez olur (binada), işi bitince kapıdan çıkar
+  for (const [c, d] of oilPending) {
+    if (c.phase !== 'toPark' && c.phase !== 'parked') { // dışarıdan uğurlandı (taşıma/yıkım)
+      c.group.visible = true
+      oilBusy.delete(d.bayId); oilPending.delete(c)
+      continue
+    }
+    if (c.phase !== 'parked') continue
+    if (!d.started) { d.started = true; c.group.visible = false }
+    d.t += dt
+    if (d.t > 5) {
+      const m = Math.round(150 + Math.random() * 100)
+      state.addPending(d.bayId, m, t('Yağ değişimi'))
+      ui.toast(t('Yağ değişimi: +₺{0} kumbarada', m), 'good')
+      state.addRep((d.score - 3.3) * 0.08)
+      c.group.visible = true
+      c.group.position.copy(d.exit) // kapı önünden yola koyulur (duvardan geçmesin)
+      c.showFeedback(emojiFor(d.score))
+      oilBusy.delete(d.bayId); oilPending.delete(c)
+      cars.releaseCar(c)
+    }
+  }
 
   world.update(dt)
   // trafik ışığı: görsel lamba + HUD sayacı (yalnız ışıklı şubelerde)

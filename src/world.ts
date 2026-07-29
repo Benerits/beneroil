@@ -2414,7 +2414,7 @@ export class World {
         ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 8, 0, 7); ctx.fill()
         ctx.font = '96px -apple-system, sans-serif'
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-        ctx.fillText('🔋', w / 2, h / 2 + 8)
+        ctx.fillText('', w / 2, h / 2 + 8)
       })
       battDecal.position.set(1.14, 0, 0.62 + i * 1.2)
       g.add(battDecal)
@@ -2434,7 +2434,7 @@ export class World {
       ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 12); ctx.fill()
       ctx.fillStyle = '#1c2530'; ctx.font = '800 40px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('⚡ DEPO', w / 2, h / 2)
+      ctx.fillText('DEPO', w / 2, h / 2)
     })
     warn.position.set(1.13, 0, 0.9)
     g.add(warn)
@@ -2513,7 +2513,7 @@ export class World {
       ctx.fillStyle = '#2f6fed'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 18); ctx.fill()
       ctx.fillStyle = '#fff'; ctx.font = '800 52px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText(t('🚿 OTO YIKAMA'), w / 2, h / 2 + 2)
+      ctx.fillText(t('OTO YIKAMA'), w / 2, h / 2 + 2)
     })
     sign.position.set(2.1, 0, 2.25)
     g.add(sign)
@@ -2538,7 +2538,7 @@ export class World {
       ctx.fillStyle = '#7a5738'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 16); ctx.fill()
       ctx.fillStyle = '#fff'; ctx.font = '800 50px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText(t('☕ KAHVE'), w / 2, h / 2 + 2)
+      ctx.fillText(t('KAHVE'), w / 2, h / 2 + 2)
     })
     sign.position.set(1.55, 0, 2.05)
     g.add(sign)
@@ -2565,7 +2565,7 @@ export class World {
       ctx.fillStyle = '#9c3b3b'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 18); ctx.fill()
       ctx.fillStyle = '#fff'; ctx.font = '800 50px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText(t('🍽️ RESTORAN'), w / 2, h / 2 + 2)
+      ctx.fillText(t('RESTORAN'), w / 2, h / 2 + 2)
     })
     sign.position.set(2.55, 0, 2.55)
     g.add(sign)
@@ -2591,7 +2591,7 @@ export class World {
       ctx.fillStyle = '#39424e'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 16); ctx.fill()
       ctx.fillStyle = '#fff'; ctx.font = '800 48px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText(t('🚛 TIR PARKI'), w / 2, h / 2 + 2)
+      ctx.fillText(t('TIR PARKI'), w / 2, h / 2 + 2)
     })
     sign.position.set(3.9, 0, 1.8)
     g.add(sign)
@@ -2623,7 +2623,7 @@ export class World {
       ctx.fillStyle = '#2f8fd6'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 16); ctx.fill()
       ctx.fillStyle = '#fff'; ctx.font = '800 44px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText(t('🧽 SELF YIKAMA'), w / 2, h / 2 + 2)
+      ctx.fillText(t('SELF YIKAMA'), w / 2, h / 2 + 2)
     })
     sign.position.set(2.35, 0, 2.7)
     g.add(sign)
@@ -2754,7 +2754,7 @@ export class World {
       ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 18); ctx.fill()
       ctx.fillStyle = '#1c2530'; ctx.font = '800 50px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('🔧 YAĞ DEĞİŞİMİ', w / 2, h / 2 + 2)
+      ctx.fillText('YAĞ DEĞİŞİMİ', w / 2, h / 2 + 2)
     })
     sign.position.set(1.85, 0, 2.15)
     g.add(sign)
@@ -2802,7 +2802,7 @@ export class World {
       ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 4, 0, 7); ctx.fill()
       ctx.font = '70px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('☢️', w / 2, h / 2 + 4)
+      ctx.fillText('', w / 2, h / 2 + 4)
     })
     sign.position.set(2.92, -0.8, 0.9)
     g.add(sign)
