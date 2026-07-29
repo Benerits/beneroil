@@ -766,7 +766,7 @@ function openOfficePanel() {
       // D11 (analiz): "ne kadar kaldı" görünür hedef — kilitli şubede ilerleme çubuğu
       const pct = Math.min(100, Math.round((state.money / Math.max(1, c.cash)) * 100))
       // D13 (analiz): kilitli şubenin CANLI ÖNİZLEMESİ — merak yaratır ("marina vitrini")
-      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="/gen/loc-${id}.jpg" alt="" loading="lazy" `
+      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="/gen/loc-${id}.jpg?v=2" alt="" loading="lazy"`
         + `style="width:100%;max-height:110px;object-fit:cover;border-radius:8px;border:1.5px solid var(--edge);filter:saturate(.9)" `
         + `onerror="this.parentElement.style.display='none'"></div>`
       const prog = c.reason !== 'yildiz' && !c.ok
@@ -1630,7 +1630,7 @@ function syncAttendants() {
     let fig = attendantFigs.get(key)
     if (!fig) { fig = attendantMesh(w.kind); world.scene.add(fig); attendantFigs.set(key, fig) }
     fig.position.set(bx + dx, by + dy, 0) // pompa taşınırsa figür de takip eder
-    fig.rotation.z = Math.atan2(-dy, -dx) // yüzü pompaya dönük
+    fig.rotation.z = Math.atan2(-dy, -dx) - Math.PI / 2 // tepeden 90° CW: yüzü pompaya değil, dolan ARACA dönük
   }
 }
 setInterval(syncAttendants, 2000)

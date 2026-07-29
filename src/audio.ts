@@ -135,7 +135,16 @@ class AudioMan {
     if (this.resumeHooked) return
     this.resumeHooked = true
     this.ctx?.addEventListener('statechange', () => this.resumeIfNeeded())
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.resumeIfNeeded() })
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Arka planda rAF durur → setPump(false) çağıran kalmaz, hışırtı sonsuza dek sürerdi.
+        // Loop'ları kapat + tüm context'i askıya al (müzik dahil); dönüşte resumeIfNeeded açar,
+        // pompa/dizel durumunu ilk frame'de oyun döngüsü yeniden kurar.
+        this.setPump(false)
+        this.setDiesel(false)
+        this.ctx?.suspend().catch(() => {})
+      } else this.resumeIfNeeded()
+    })
     window.addEventListener('focus', () => this.resumeIfNeeded())
     window.addEventListener('pageshow', () => this.resumeIfNeeded())
     const onGesture = () => this.resumeIfNeeded()
