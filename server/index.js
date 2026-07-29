@@ -1466,6 +1466,21 @@ async function handleVs(req, res, url) {
       const fresh = await pool.query('SELECT id, email, save, created_at, last_seen_at, sessions, banned_at FROM benzinlik_player WHERE id=$1', [id])
       return json(res, 200, userRow(fresh.rows[0]))
     }
+    // izahat kararı (admin satır aksiyonları): reject = KALICI ban (ban_reason='kalici'
+    // → izahat formu bir daha AÇILMAZ, jenerik 'askıya alınmış' görür), approve = affet.
+    if (url.startsWith('/vs/v1/appeals/') && req.method === 'POST') {
+      const m = url.match(/^\/vs\/v1\/appeals\/(\d+)\/(reject|approve)$/)
+      if (!m) return json(res, 404, { error: 'Bilinmeyen izahat aksiyonu.' })
+      const ap = await pool.query('SELECT email FROM benzinlik_appeal WHERE id=$1', [Number(m[1])])
+      if (!ap.rowCount) return json(res, 404, { error: 'İzahat bulunamadı.' })
+      const em = ap.rows[0].email
+      if (m[2] === 'reject') {
+        await pool.query(`UPDATE benzinlik_player SET banned_at=COALESCE(banned_at, now()), ban_reason='kalici' WHERE email=$1`, [em])
+        return json(res, 200, { ok: true, action: 'KALICI BAN', email: em })
+      }
+      await pool.query('UPDATE benzinlik_player SET banned_at=NULL, ban_reason=NULL WHERE email=$1', [em])
+      return json(res, 200, { ok: true, action: 'AFFEDILDI', email: em })
+    }
     // izahatlar: banlı hesapların savunmaları (admin.benerits.com İzahatlar sayfası çeker)
     if (url === '/vs/v1/appeals' && req.method === 'GET') {
       const r = await pool.query(`SELECT a.id, a.email, a.message, a.created_at,
