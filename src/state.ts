@@ -1507,6 +1507,15 @@ export class GameState {
         if (this.placeOrder(f)) ordered++
       }
     }
+    // Sv.3 FIRSATÇILIK (Oğuz: "yüksek seviye müdür yakıt indirimini kullanabilsin"):
+    // %50 alış indirimi sürerken beklemez — %80 doluluğun altındaki her tankı fulller
+    if (this.managerLevel >= 3 && this.promo?.type === 'cheapFuel') {
+      for (const f of FUELS) {
+        if (this.tanks[f] < this.fuelCapacity(f) * 0.80 && this.canOrder(f)) {
+          if (this.placeOrder(f)) ordered++
+        }
+      }
+    }
     let cleaned = false
     if (this.managerLevel >= 2 && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
       this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
@@ -1523,6 +1532,12 @@ export class GameState {
       }
     }
     return (collected > 0 || cleaned || fixed > 0 || ordered > 0) ? { collected, cleaned, fixed, ordered } : null
+  }
+  /** müdürü işten çıkar (Oğuz: oyuncular istiyor) — tazminat yok, yovmiye anında kesilir */
+  fireManager(): boolean {
+    if (this.managerLevel <= 0) return false
+    this.managerLevel = 0
+    return true
   }
   loanMonthly(principal: number, rate = LOAN_RATE): number {
     const n = LOAN_TERMS

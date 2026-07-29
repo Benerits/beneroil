@@ -736,8 +736,9 @@ function openOfficePanel() {
       const btn = mL >= 3 ? `<span class="pc">${t('MAKS')} · Sv.3</span>`
         : mLocked ? `<span class="pc" style="color:var(--muted)">${t('Önce gelir getiren tesisler kur')}</span>`
         : `<button class="btn sbuy good" id="of-hire-manager">${mL === 0 ? t('Müdür Tut') : t('Yükselt')} · ₺${tl(MANAGER_COSTS[mL])}</button>`
-      head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><svg class="ic" style="vertical-align:-3px"><use href="#i-gear"/></svg> <b>${mL === 0 ? t('Müdür') : t('Müdür Sv.{0}', String(mL))}</b>${mL > 0 ? ` <span style="color:var(--muted);font-weight:650">· ${t('yovmiye ₺{0}/gün', String(MANAGER_WAGES[mL]))}</span>` : ''}</span>${btn}`
-        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder. Sen başka şubedeyken şubeyi işletir.')}</div></div>`
+      const fireBtn = mL > 0 ? `<button class="btn sbuy" id="of-fire-manager" style="color:var(--red-dark)">${t('İşten Çıkar')}</button>` : ''
+      head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><svg class="ic" style="vertical-align:-3px"><use href="#i-gear"/></svg> <b>${mL === 0 ? t('Müdür') : t('Müdür Sv.{0}', String(mL))}</b>${mL > 0 ? ` <span style="color:var(--muted);font-weight:650">· ${t('yovmiye ₺{0}/gün', String(MANAGER_WAGES[mL]))}</span>` : ''}</span>${btn}${fireBtn}`
+        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder ve YAKIT İNDİRİMİ fırsatında tankları fulller. Sen başka şubedeyken şubeyi işletir.')}</div></div>`
     }
     if (vaultTotal > 0) {
       head = `<div class="prow"><span class="pl"><b>${t('Şube kasalarında bekleyen')}</b></span>`
@@ -934,6 +935,21 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   if ((e.target as HTMLElement).closest('#of-hire-manager')) {
     ui.onBuy('manager')
     openOfficePanel() // satır tazelensin (seviye/yovmiye değişti)
+    return
+  }
+  // MÜDÜRÜ İŞTEN ÇIKAR — iki dokunuş (yanlışlıkla kovma olmasın)
+  const fire = (e.target as HTMLElement).closest('#of-fire-manager') as HTMLButtonElement | null
+  if (fire) {
+    if (fire.dataset.armed !== '1') {
+      fire.dataset.armed = '1'
+      fire.textContent = t('Emin misin? Tekrar bas')
+      setTimeout(() => { if (fire.isConnected) { fire.dataset.armed = ''; fire.textContent = t('İşten Çıkar') } }, 4000)
+      return
+    }
+    if (state.fireManager()) {
+      ui.toast(t('Müdür işten çıkarıldı — yovmiyesi kesildi. Kumbara/sipariş işleri yine sende.'), '', true)
+      openOfficePanel(); persist()
+    }
     return
   }
   const go = (e.target as HTMLElement).closest('button[data-goloc]') as HTMLButtonElement | null
