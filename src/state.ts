@@ -537,7 +537,9 @@ export class GameState {
     // kirlenme / yıpranma
     if (this.hasSolar && this.solarDirt < 1) {
       const before = this.solarDirt
-      this.solarDirt = Math.min(1, this.solarDirt + 0.0045 * dt)
+      // 0.0045 → 0.0015: paneller ~4 oyun-gününde kirlenir (eski hâli 1,5 günde
+      // sıfırlıyordu — "paneller çok hızlı kirleniyor" şikâyeti, 29 Tem)
+      this.solarDirt = Math.min(1, this.solarDirt + 0.0015 * dt)
       if (before < 0.6 && this.solarDirt >= 0.6) this.events.push(t('Güneş panelleri iyice kirlendi, üretim düşüyor!'))
     }
     // uranyum: sipariş takibi + üretim sırasında tükenme
