@@ -1612,12 +1612,41 @@ function attendantMesh(kind: 'pump' | 'ev'): THREE.Group {
   return g
 }
 const attendantFigs = new Map<string, THREE.Group>()
+// SERVİS GÖRSELİ: dolum sürerken pompadan araca sarkan hortum + pompacının elindeki
+// tabanca tank noktasında ("tam depo doluyor gibi"). Araç kalkınca söküp figürü
+// nöbet yerine döndürür. key → prop (hortum+tabanca) + hangi araca kurulduğu.
+const serviceProps = new Map<string, { g: THREE.Group; car: Car }>()
+function disposeProp(key: string) {
+  const p = serviceProps.get(key)
+  if (!p) return
+  world.scene.remove(p.g)
+  p.g.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.() })
+  serviceProps.delete(key)
+}
+const HOSE_MAT = new THREE.MeshLambertMaterial({ color: 0x2a2f36 })
+function buildHoseProp(from: THREE.Vector3, tank: THREE.Vector3, into: THREE.Vector3): THREE.Group {
+  const g = new THREE.Group()
+  // tabanca: dik tutamak + araca giren ağız
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.17), HOSE_MAT)
+  grip.position.copy(tank).addScaledVector(into, -0.08); grip.position.z -= 0.05
+  g.add(grip)
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.16, 8), HOSE_MAT)
+  spout.position.copy(tank)
+  spout.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), into)
+  g.add(spout)
+  // hortum: pompadan tabanca tutamağına yere doğru sarkan kavis
+  const butt = grip.position.clone(); butt.z -= 0.08
+  const mid = from.clone().lerp(butt, 0.5); mid.z = Math.min(from.z, butt.z) * 0.4
+  const curve = new THREE.QuadraticBezierCurve3(from, mid, butt)
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 10, 0.032, 6), HOSE_MAT))
+  return g
+}
 function syncAttendants() {
   const want = new Map<string, { kind: 'pump' | 'ev'; bid: string; idx: number }>()
   for (const i of state.autoPumps) want.set(`p${i}`, { kind: 'pump', bid: `pump-${i}`, idx: i })
   for (const i of state.autoChargers) want.set(`c${i}`, { kind: 'ev', bid: `charger-${i}`, idx: i })
   for (const [key, fig] of attendantFigs) {
-    if (!want.has(key)) { world.scene.remove(fig); attendantFigs.delete(key) }
+    if (!want.has(key)) { world.scene.remove(fig); attendantFigs.delete(key); disposeProp(key) }
   }
   for (const [key, w] of want) {
     const b = world.buildings.find(x => x.id === w.bid)
@@ -1629,11 +1658,44 @@ function syncAttendants() {
     const dx = 0.58, dy = -0.42
     let fig = attendantFigs.get(key)
     if (!fig) { fig = attendantMesh(w.kind); world.scene.add(fig); attendantFigs.set(key, fig) }
-    fig.position.set(bx + dx, by + dy, 0) // pompa taşınırsa figür de takip eder
-    fig.rotation.z = Math.atan2(-dy, -dx) - Math.PI / 2 // tepeden 90° CW: yüzü pompaya değil, dolan ARACA dönük
+    // dolum var mı? kendi slotundaki araç pompada ve servis görüyor olmalı
+    const serving = cars.cars.find(c =>
+      (w.kind === 'ev' ? c.kind === 'ev' : c.kind !== 'ev')
+      && c.slotIndex === w.idx && c.phase === 'atPump' && (c.filling || c.beingServed))
+    if (serving) {
+      const cp = serving.group.position
+      const toPump = new THREE.Vector3(bx - cp.x, by - cp.y, 0)
+      if (toPump.lengthSq() > 0.001) toPump.normalize()
+      // tank noktası: aracın pompaya bakan yan yüzü, kapak yüksekliği.
+      // Yan mesafe araç tipine göre değişir (kamyon geniş!) → bbox'tan ölç.
+      const bb = new THREE.Box3().setFromObject(serving.group)
+      const halfW = Math.max(0.45, Math.min(1.1,
+        (bb.getSize(new THREE.Vector3()).x * Math.abs(toPump.x) + bb.getSize(new THREE.Vector3()).y * Math.abs(toPump.y)) / 2))
+      const tank = new THREE.Vector3(cp.x + toPump.x * (halfW + 0.03), cp.y + toPump.y * (halfW + 0.03), 0.52)
+      // pompacı dar boşluğa sıkışmasın: tanktan araç boyunca çaprazda durur, yüzü tanka dönük
+      const perp = new THREE.Vector3(-toPump.y, toPump.x, 0)
+      fig.position.set(tank.x + toPump.x * 0.22 + perp.x * 0.5, tank.y + toPump.y * 0.22 + perp.y * 0.5, 0)
+      fig.rotation.z = Math.atan2(tank.y - fig.position.y, tank.x - fig.position.x)
+      // hortum+tabanca yalnız FİİLEN dolum sürerken; ön serviste (cam silme vs.) el boş
+      if (serving.filling) {
+        const prev = serviceProps.get(key)
+        if (!prev || prev.car !== serving) {
+          disposeProp(key)
+          const from = new THREE.Vector3(bx, by, 0.78) // hortumun pompadan çıktığı nokta
+          const into = toPump.clone().negate() // ağız araca doğru
+          const g = buildHoseProp(from, tank, into)
+          world.scene.add(g)
+          serviceProps.set(key, { g, car: serving })
+        }
+      } else disposeProp(key)
+    } else {
+      disposeProp(key)
+      fig.position.set(bx + dx, by + dy, 0) // pompa taşınırsa figür de takip eder
+      fig.rotation.z = Math.atan2(-dy, -dx) - Math.PI / 2 // tepeden 90° CW: nöbette yola/araca bakar, eli boş
+    }
   }
 }
-setInterval(syncAttendants, 2000)
+setInterval(syncAttendants, 700)
 
 function personMesh(): THREE.Group {
   // KENNEY MİNİ KARAKTER (yüklendiyse) — 6 çeşitten rastgele; inmediyse prosedürel
@@ -3129,7 +3191,7 @@ function buyToast(id: string) {
 const isFullMode = new URLSearchParams(location.search).has('full')
 // VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
 // doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
-if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = { get state() { return state }, get cars() { return cars } }
+if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = { get state() { return state }, get cars() { return cars }, get world() { return world } }
 let saveLoaded = false
 if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   try {
