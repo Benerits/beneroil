@@ -562,7 +562,9 @@ export class GameState {
     }
     if (this.hasSMR) {
       const before = this.smrWear
-      this.smrWear = Math.min(1, this.smrWear + 0.004 * dt)
+      // 0.004 → 0.0012: eski hız ~4 dakikada kritiğe çıkıyordu — bakım koşuşturması
+      // oyunculuk değil tuzaktı ("reaktör kayboluyor" = login sonrası hızlı patlama).
+      this.smrWear = Math.min(1, this.smrWear + 0.0012 * dt)
       if (before < 0.5 && this.smrWear >= 0.5) this.events.push(t('Reaktör bakım istiyor!'))
       if (before < 0.75 && this.smrWear >= 0.75) this.events.push(t('REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!'))
       if (this.smrWear > 0.7 && Math.random() < dt * 0.012 * (this.smrWear - 0.7) / 0.3) {
@@ -962,14 +964,19 @@ export class GameState {
    *  TAVAN 8M (oyuncu raporu: tek şubenin sınırlı kalemleri ~₺1.63M — ×2 katlama bir yerde
    *  fiziksel imkânsıza dönüyordu). Eşik artık ŞİRKET GENELİ ekipmana bakar (aşağıda). */
   handoverThreshold(): number {
-    // İKİ AŞAMALI EŞİK (oyuncu raporları: "diğer şubeler sıfırlanmıyor, dolduramıyorum"
-    // + "4M'den 2.4M'ye düştü ve artmıyor"): şube-tavanına (şube başına ₺1.2M) kadar
-    // her devirde ×2; tavanı aşınca ×1.35'lik YUMUŞAK artışa geçer — eşik asla
-    // sabitlenmez (devir spam'i kapalı) ama yeni şube açmadan da duvara çarpmaz.
-    // Mutlak üst sınır ₺8M.
+    // İKİ AŞAMALI EŞİK + ULAŞILABİLİRLİK TAVANI (v4).
+    // v3'ün ×1.35 yumuşak artışı bile fiziği aşıyordu: tek şubenin KURULABİLİR maksimum
+    // ekipmanı ~₺1.4M (tüm kalemler full) — 2 şubeyle 6. yıldız ₺3.65M istiyordu, yani
+    // İMKÂNSIZDI. Üstelik kilit: Otoyol 6★ ister, 6. yıldız da otoyolsuz alınamıyordu.
+    // Yeni kural: eşik hiçbir zaman "şube sayısı × ulaşılabilir maksimumun %85'i"ni
+    // AŞAMAZ — tavana dayanınca yeni şube açılana dek orada bekler (her yıldız yine
+    // devirle sıfırdan kurulum ister; grind sürer, duvar sürmez).
     const soft = 1_200_000 * Math.max(1, this.unlockedLocs.length)
+    // tek şube full donanım ≈ ₺1.4M (ölçüldü) → %85'i gerçekçi hedef
+    const reachable = Math.round(1_400_000 * 0.85) * Math.max(1, this.unlockedLocs.length)
     let t = 250_000
     for (let i = 0; i < this.handoverCount; i++) t = t < soft ? Math.min(t * 2, Math.max(soft, t * 1.35)) : t * 1.35
+    t = Math.min(t, reachable)
     return Math.min(8_000_000, Math.round(t / 10_000) * 10_000)
   }
   /** ŞİRKET GENELİ kurulu ekipman: aktif şube + pasif şubelerin snapshot'taki değeri.

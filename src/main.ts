@@ -817,7 +817,7 @@ function openOfficePanel() {
       html += `<div class="pz-prog-head"><span>${t('Sonraki yıldıza')}</span>`
         + `<span class="pz-prog-num">₺${tl(eq)} / ₺${tl(thr)}</span></div>`
         + `<div class="pz-bar"><div class="pz-fill" style="width:${pct}%"></div></div>`
-        + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik önce ikiye katlanır; şube kapasitesine yaklaşınca %35’lik adımlarla artar (asla sabitlenmez).', tl(thr))}</div>`
+        + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik büyür ama şubelerine KURULABİLECEK toplamı asla aşmaz; tavana dayandıysa büyümesi için yeni şube açman gerekir.', tl(thr))}</div>`
     }
     pel.innerHTML = html
   }
@@ -2478,6 +2478,10 @@ let loadedSaveAt = 0
 function applySaveData(d: Record<string, unknown>) {
   loadedSaveAt = Number(d.at ?? 0)
   hydrateState(state, (d.s ?? {}) as Record<string, unknown>)
+  // GÜVENLİ GİRİŞ (oyuncu: "reaktör ertesi gün kayboluyor" = login sonrası hızlı patlama):
+  // sen yokken bakım ekibi reaktörü soğutmuş sayılır — oturum ASLA kritik yıpranmayla
+  // başlamaz, reaktör offline'da ve girişin ilk dakikalarında patlayamaz.
+  if (state.hasSMR && state.smrWear > 0.55) state.smrWear = 0.55
   setPremium(state.noAds) // remove-ads satın alındıysa interstitial kapalı
   Object.assign(placedPos, (d.placedPos ?? {}) as Record<string, [number, number]>)
   Object.assign(placedRot, (d.placedRot ?? {}) as Record<string, number>)
