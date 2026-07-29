@@ -1331,7 +1331,7 @@ async function handleVs(req, res, url) {
       })
     }
     if (url === '/vs/v1/users' && req.method === 'GET') {
-      const limit = Math.min(1000, Math.max(10, Number(u.searchParams.get('limit')) || 50))
+      const limit = Math.min(5000, Math.max(10, Number(u.searchParams.get('limit')) || 50))
       const cursor = Number(Buffer.from(u.searchParams.get('cursor') || '', 'base64url').toString() || 0) || 0
       const search = (u.searchParams.get('q') || '').toLowerCase()
       const sort = u.searchParams.get('sort') || 'signed_up_desc'
@@ -1470,16 +1470,16 @@ async function handleVs(req, res, url) {
     // → izahat formu bir daha AÇILMAZ, jenerik 'askıya alınmış' görür), approve = affet.
     if (url.startsWith('/vs/v1/appeals/') && req.method === 'POST') {
       const m = url.match(/^\/vs\/v1\/appeals\/(\d+)\/(reject|approve)$/)
-      if (!m) return json(res, 404, { error: 'Bilinmeyen izahat aksiyonu.' })
+      if (!m) return json(res, 404, { error: 'Unknown appeal action.' })
       const ap = await pool.query('SELECT email FROM benzinlik_appeal WHERE id=$1', [Number(m[1])])
-      if (!ap.rowCount) return json(res, 404, { error: 'İzahat bulunamadı.' })
+      if (!ap.rowCount) return json(res, 404, { error: 'Appeal not found.' })
       const em = ap.rows[0].email
       if (m[2] === 'reject') {
         await pool.query(`UPDATE benzinlik_player SET banned_at=COALESCE(banned_at, now()), ban_reason='kalici' WHERE email=$1`, [em])
-        return json(res, 200, { ok: true, action: 'KALICI BAN', email: em })
+        return json(res, 200, { ok: true, action: 'PERMANENT BAN', email: em })
       }
       await pool.query('UPDATE benzinlik_player SET banned_at=NULL, ban_reason=NULL WHERE email=$1', [em])
-      return json(res, 200, { ok: true, action: 'AFFEDILDI', email: em })
+      return json(res, 200, { ok: true, action: 'PARDONED', email: em })
     }
     // izahatlar: banlı hesapların savunmaları (admin.benerits.com İzahatlar sayfası çeker)
     if (url === '/vs/v1/appeals' && req.method === 'GET') {
