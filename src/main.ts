@@ -2475,42 +2475,14 @@ function applyOfflineEarnings() {
   const facilities = (state.marketLevel > 0 ? state.marketLevel : 0)
     + (state.hasCoffee ? 1 : 0) + (state.hasRestaurant ? 1 : 0) + (state.hasWash ? 1 : 0)
     + (state.hasOil ? 1 : 0) + (state.hasTruckPark ? 1 : 0) + state.selfWashCount + (state.hasSMR ? 2 : 0)
-  const pumpRate = state.pumps * 1.2
-  const ratePerSec = 1 + pumpRate + state.evChargers * 0.8 + facilities * 0.6
-  let income = Math.min(150_000, Math.round(ratePerSec * capped * 0.4)) // %40 offline verim
-
-  // ---- YAKIT GERÇEKTEN SATILIR: gelirin pompa payı kadar TANK DÜŞER ----
-  // Bu gelirin `pumps * 1.2` kısmı yakıt satışıdır; eskiden para veriliyor ama tanktan
-  // tek litre inmiyordu. Oyuncunun gördüğü tutarsızlık ("para birikiyor, tanklar dolu")
-  // tam buradan geliyordu. Artık satılan litre tanktan düşer; stok yetmezse gelir de
-  // stokla SINIRLANIR — olmayan yakıt satılamaz.
-  const fuelShare = ratePerSec > 0 ? pumpRate / ratePerSec : 0
-  let soldL = 0
-  if (fuelShare > 0 && income > 0) {
-    const stock: Record<string, number> = {}
-    let totalStock = 0
-    for (const f of OFFLINE_FUELS) { stock[f] = Math.max(0, state.tanks[f]); totalStock += stock[f] }
-    // ortalama satış fiyatı (stok ağırlıklı) → gelirden litreye çevir
-    const avgPrice = totalStock > 0
-      ? OFFLINE_FUELS.reduce((a, f) => a + state.prices[f] * stock[f], 0) / totalStock
-      : 0
-    const wantIncome = income * fuelShare
-    const wantL = avgPrice > 0 ? wantIncome / avgPrice : 0
-    soldL = Math.min(wantL, totalStock)
-    if (soldL > 0) {
-      for (const f of OFFLINE_FUELS) {
-        const sell = soldL * (stock[f] / totalStock)
-        state.tanks[f] = Math.max(0, state.tanks[f] - sell)
-        state.addContractDelivery(f, sell) // offline satış da taahhüde sayılır
-      }
-    }
-    // stok yetmediyse yakıt geliri gerçekleşen litreye göre kırpılır
-    const gotIncome = soldL * avgPrice
-    income = Math.round(income - wantIncome + gotIncome)
-  }
+  // YAKIT BURADA SATILMAZ (çifte satış fixi, oyuncu raporu "20,5 ton satılmış 50 bin gelmiş"):
+  // offline yakıt satışı TEK yerden yürür — pompacılı pompalar bloğu (litre × gerçek fiyat,
+  // tank stoğuyla sınırlı). Burası yalnız EV + tesislerin genel çalışma geliri.
+  const ratePerSec = 1 + state.evChargers * 0.8 + facilities * 0.6
+  const income = Math.min(150_000, Math.round(ratePerSec * capped * 0.4)) // %40 offline verim
   if (income < 50) return
   state.money += income
-  showOfflineModal(income, elapsedSec, Math.round(soldL))
+  showOfflineModal(income, elapsedSec, 0)
 }
 
 /** "Tekrar hoş geldin — yokken istasyonun kazandı" modalı (oyunun krem/kırmızı dili) */
@@ -3602,7 +3574,10 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
   }
 
   // ---- Offline kazanç raporu: sen yokken tesisler çalıştı ----
-  if (!isFullMode && loadedSaveAt > 0) {
+  // KAPALI İSTASYON ÇALIŞMAZ (oyuncu raporu: "kapatıp gittim, dönünce 'senin için çalıştı'
+  // bildirimi geldi") — bu blokta closed guard'ı yoktu; kumbara/idle/pompacı satışı
+  // kapalıyken de işliyordu. Artık kapalıyken hiçbir offline kazanç işlemez.
+  if (!isFullMode && loadedSaveAt > 0 && !state.closed) {
     const offSec = Math.min((Date.now() - loadedSaveAt) / 1000, 7200) // en fazla 2 saatlik birikim
     if (offSec > 90) {
       let total = 0
