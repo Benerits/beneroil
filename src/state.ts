@@ -1530,6 +1530,11 @@ export class GameState {
         if (this.money < 1000) break
         this.money -= 1000; this.brokenChargers.delete(i); fixed++
       }
+      // REAKTÖR BAKIMI (oyuncu: "Sv.3 müdürüm varken reaktör patladı") — müdür pompa
+      // tamir edip reaktöre bakmıyordu. %50 yıpranmada bakımı öder, patlama yaşanmaz.
+      if (this.hasSMR && this.smrWear >= 0.5 && this.money >= 1500) {
+        this.money -= 1500; this.smrWear = 0; fixed++
+      }
     }
     return (collected > 0 || cleaned || fixed > 0 || ordered > 0) ? { collected, cleaned, fixed, ordered } : null
   }

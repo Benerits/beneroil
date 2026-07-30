@@ -1307,12 +1307,16 @@ export class CarManager {
     for (const car of this.cars) {
       if (car.phase !== 'transit' || car.converted) continue
       const gateInY = this.opts.gateInY()
-      const decisionY = hw
-        ? gateInY - (hw.decisionDist + hw.signReach * hw.signLevel) // near: tesisten önce
-        : DECISION_Y
+      const dist = hw ? hw.decisionDist + hw.signReach * hw.signLevel : 0
+      const decisionY = hw ? gateInY - dist : DECISION_Y
+      // KARŞI ŞERİT (otoyol fixi #2, oyuncu: "karşı tarafa ne yapsam müşteri gelmiyor"):
+      // karar noktası KENDİ kapısından dist önce olmalı (araç güneye gider → kapının
+      // kuzeyi). Eski kod near kapısından −|y| türetiyordu; o nokta yolun sonundan da
+      // güneyde kaldığından karşı şeritte tryEnter HİÇ tetiklenmiyordu.
+      const farDecisionY = hw ? (this.opts.farGateInY?.() ?? APRON_OUT_Y) + dist : -DECISION_Y
       const atDecision = car.lane === 'near'
-        ? car.group.position.y > (hw ? decisionY : DECISION_Y)
-        : car.group.position.y < -(hw ? Math.abs(decisionY) : DECISION_Y)
+        ? car.group.position.y > decisionY
+        : car.group.position.y < farDecisionY
       if (!atDecision) continue
       car.converted = true
       if (!car.wantsEnter) continue
