@@ -191,9 +191,9 @@ export const THEMES: Record<LocationTheme['id'], LocationTheme> = {
       // trafik ışığı kaldırıldı (Oğuz) — boost ortalaması entryBase'e gömüldü (0.34 → 0.37)
       walkIns: { everySec: 14, min: 40, max: 110 },                   // yoğun yaya trafiği
       urban: true,
-      // Metropol'ün asıl kısıtı yer: 18 parsel yerine 6, üstelik 3.2 katı fiyata.
-      // Tesis seçimi burada gerçek bir ödünleşim olur (rapor §6.6).
-      land: { maxParcels: 6, priceMult: 3.2 },
+      // Oğuz (29 Tem): 6 parsel tavanı kaldırıldı — tam grid (9+9) alınabilir; şehrin
+      // kısıtı artık yalnız FİYAT (3.2×). Eski "alan kıtlığı" oyuncuları duvara çarptırıyordu.
+      land: { maxParcels: 18, priceMult: 3.2 },
     },
   },
 }
