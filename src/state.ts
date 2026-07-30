@@ -116,10 +116,15 @@ export const MAX_EV = 12
  *  ki eşik her zaman payla ulaşılabilir kalsın — "eşiğe erişilemiyor" kilidi bir daha
  *  oluşamasın. Yıldız farmının freni burada değil, artan şube açma bedelinde. */
 export const BRANCH_EQUIP_CAP = 1_500_000
-/** Her yeni şubenin bedel çarpanı: açık şube başına ×1.4 (bileşik).
+/** Her yeni şubenin bedel çarpanı: açık şube başına ×1.25 (bileşik).
  *  Devir eşiği tavanı şube sayısıyla büyüdüğü için tavanı yükseltmenin TEK yolu şube
- *  açmak — bedeli artan yapmak devir-çiftliğini parayla frenler. */
-export const BRANCH_COST_STEP = 1.4
+ *  açmak — bedeli artan yapmak devir-çiftliğini parayla frenler.
+ *  KALİBRASYON (30 Tem, canlı veri): 3 şubeli 15 oyuncunun medyan nakdi ₺2,87M. 1.4'te
+ *  marina ₺9,8M (medyanın 3,4 katı) normal ilerleyen oyuncuyu da cezalandırıyordu →
+ *  1.25 ile ₺7,81M. Farmın asıl freni zaten eşik tavanı + tavan devrinde %60→%30 kırpma;
+ *  şube bedeli üçüncü katman, tek başına duvar olmamalı.
+ *  Bedeller: çevreyolu ₺500k · otoyol ₺2,5M · marina ₺7,81M · metropol ₺23,44M */
+export const BRANCH_COST_STEP = 1.25
 // Batarya deposu kademeleri. Sv.3 (600 kWh) geç oyunda yetmiyordu: 12 şarj ünitesi
 // dolu kapasiteyi dakikalar içinde boşaltıyor, güneş/reaktör üretimi biriktiremiyordu.
 // Üç kademe eklendi; artış hızlanıyor ama fiyat daha hızlı artıyor (kWh başına maliyet
