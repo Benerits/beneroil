@@ -1325,8 +1325,14 @@ export class CarManager {
         // Yavaşlama şeridi kapasitesi APRON'DAKİ TÜM manevra trafiğini kapsar (slot ayırmış
         // olsun olmasın). Eskiden yalnız slotsuzlar sayılıyordu → apron'a 9 araç birikip
         // fiziksel sıkışma/buharlaşma üretiyordu; şerit dolunca araç OTOBANA DÖNMELİ.
+        // APRON YAKINLIK FİLTRESİ ("sürekli şerit doldu" spam fixi): karar spawn anında
+        // verildiğinden 60+ birim uzaktaki sürücüler de sayılıyor ve 3'lük kapasiteyi
+        // işgal ediyordu. Kapasite yalnız GERÇEKTEN apron/ramp bölgesindeki (kapıya
+        // ±24 birim) manevra trafiğini sayar.
+        const G2 = this.geom(car.station)
         const inRamp = this.cars.filter(o => o !== car && o.station === car.station
-          && (o.phase === 'driving' || o.phase === 'waiting')).length
+          && (o.phase === 'driving' || o.phase === 'waiting')
+          && Math.abs(o.group.position.y - G2.gateInY) < 24).length
         if (inRamp >= hw.rampCap) { this.opts.onRampFull?.(); continue }
       }
       this.tryEnter(car)

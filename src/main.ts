@@ -1384,7 +1384,7 @@ const cars = new CarManager(world.scene, modelLib, {
     // oyuncuyu APRON KAPASİTESİ yatırımına iter (rapor §6.4 kural 2).
     state.stats.lost++
     if (rampFullT <= 0) {
-      rampFullT = 12
+      rampFullT = 40 // 12 sn spam gibiydi (karşı yaka açılınca kayıplar arttı) — bilgi, alarm değil
       ui.toast(t('Yavaşlama şeridi doldu — müşteri otobana geri döndü! Kapasiteni büyüt.'), 'bad')
     }
   },
