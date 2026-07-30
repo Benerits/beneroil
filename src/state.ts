@@ -24,7 +24,7 @@ export const LOC_FIELDS = [
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
-  'uraniumPending', 'uraniumEta', 'closed', 'wideGates',
+  'uraniumPending', 'uraniumEta', 'closed', 'wideGates', 'smrWreck',
 ] as const
 
 /** Şube anlık görüntüsü: ekipman alanları + tank/parsel/kumbara/otomasyon kümeleri */
@@ -369,6 +369,8 @@ export class GameState {
   get hasSolar() { return this.solarCount > 0 }
   hasDiesel = false
   hasSMR = false
+  /** patlamış reaktör enkazı — temizlenene dek yeni reaktör kurulamaz (SAVE/LOC alanı) */
+  smrWreck = false
   hasWash = false
   hasOil = false
   hasCoffee = false
@@ -567,7 +569,11 @@ export class GameState {
       this.smrWear = Math.min(1, this.smrWear + 0.0012 * dt)
       if (before < 0.5 && this.smrWear >= 0.5) this.events.push(t('Reaktör bakım istiyor!'))
       if (before < 0.75 && this.smrWear >= 0.75) this.events.push(t('REAKTÖR KRİTİK! Hemen bakım yap yoksa patlayacak!'))
-      if (this.smrWear > 0.7 && Math.random() < dt * 0.012 * (this.smrWear - 0.7) / 0.3) {
+      // Sv.3 MÜDÜR GARANTİSİ (Oğuz: "Sv.3 müdür varken patlamasını istemeyiz"):
+      // müdür tesiste OLDUĞU sürece patlama zarı hiç atılmaz — parası o an yetmese
+      // bile ilk bulduğu parayla bakımı yapar, felaket ancak müdürsüz ihmalde yaşanır.
+      if (this.managerLevel < 3 && this.smrWear > 0.7
+        && Math.random() < dt * 0.012 * (this.smrWear - 0.7) / 0.3) {
         this.exploded = true
       }
     }
@@ -1038,7 +1044,7 @@ export class GameState {
     this.gridLevel = 0; this.batteryLevel = 0; this.battery = 0
     this.solarCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0; this.lampCount = 0
     this.marinaFacs = []; this.berths = {}; this.winterSlots = 0; this.marinaViolations = 0
-    this.hasDiesel = false; this.hasSMR = false; this.hasWash = false; this.hasOil = false
+    this.hasDiesel = false; this.hasSMR = false; this.smrWreck = false; this.hasWash = false; this.hasOil = false
     this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
     this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
     for (const f of FUELS) { this.tankCounts[f] = 1; this.tanks[f] = 0 }
@@ -2031,9 +2037,9 @@ export function getShopItems(s: GameState): ShopRow[] {
     s.hasDiesel ? null : DIESELGEN_COST,
     s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
   row('smr', 'i-reactor', t('Modüler Reaktör'), t('+15 kWh/sn'),
-    t('Dev üretim — bakımsız kalırsa PATLAR, her şey sıfırlanır'),
+    t('Dev üretim — bakımsız kalırsa PATLAR, her şey sıfırlanır. Sv.3 müdür bakımı üstlenir.'),
     s.hasSMR ? null : SMR_COST,
-    s.gridLevel < 2 ? t('Altyapı Sv.2 gerekli') : null)
+    s.smrWreck ? t('Önce radyoaktif enkazı temizlet') : s.gridLevel < 2 ? t('Altyapı Sv.2 gerekli') : null)
 
   return rows
 }
@@ -2113,7 +2119,7 @@ const SAVE_FIELDS = [
   'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
-  'solarDirt', 'smrWear', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
+  'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
@@ -2318,7 +2324,9 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'evcharger': s.evChargers++; break
     case 'solar': s.solarCount++; break
     case 'dieselgen': s.hasDiesel = true; break
-    case 'smr': s.hasSMR = true; s.uranium = 100; break
+    case 'smr':
+      if (s.smrWreck) { s.money += item.cost; return false } // para ÖNCE düşüldü — iade et (satır notu zaten kilitler, bu çift emniyet)
+      s.hasSMR = true; s.uranium = 100; break
     case 'wash': s.hasWash = true; break
     case 'oil': s.hasOil = true; break
     case 'coffee': s.hasCoffee = true; break

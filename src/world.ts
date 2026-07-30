@@ -2811,4 +2811,50 @@ export class World {
     this.scene.add(g)
     this.register('smr', t('REAKTÖR'), g, 7.0)
   }
+
+  /** PATLAMIŞ REAKTÖR ENKAZI (Oğuz: "enkazı para karşılığı kaldırabilelim") — kavruk
+   *  kule kütüğü + moloz + tehlike şeridi. Temizlenene dek yeni reaktör kurulamaz. */
+  buildSMRWreck(side: 'north' | 'south', pos?: THREE.Vector2) {
+    const g = new THREE.Group()
+    // yıkık soğutma kulesi: alt 1/3'ü kalmış, kavruk
+    const stump = new THREE.Mesh(new THREE.CylinderGeometry(1.30, 1.05, 1.7, 14, 1, true),
+      new THREE.MeshLambertMaterial({ color: 0x4b4a46, side: THREE.DoubleSide }))
+    stump.rotation.x = Math.PI / 2
+    stump.position.z = 0.85
+    g.add(stump)
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.28, 0.09, 8, 14),
+      new THREE.MeshLambertMaterial({ color: 0x2c2b28 }))
+    rim.position.z = 1.7
+    g.add(rim)
+    // moloz yığını
+    for (let i = 0; i < 8; i++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.45 + (i % 3) * 0.22, 0.4, 0.3),
+        new THREE.MeshLambertMaterial({ color: i % 2 ? 0x6b675f : 0x54514b }))
+      const ang = (i / 8) * Math.PI * 2
+      b.position.set(Math.cos(ang) * (1.6 + (i % 2) * 0.5), Math.sin(ang) * (1.5 + (i % 3) * 0.4), 0.16)
+      b.rotation.z = ang * 1.7
+      b.castShadow = true
+      g.add(b)
+    }
+    // sarı-siyah tehlike şeridi (yerde çember)
+    const tape = new THREE.Mesh(new THREE.RingGeometry(2.4, 2.62, 24),
+      new THREE.MeshLambertMaterial({ color: 0xe0b13e }))
+    tape.position.z = 0.02
+    g.add(tape)
+    // radyasyon uyarı tabelası
+    const sign = canvasPanel(1.2, 0.8, 240, 160, (ctx, w, h) => {
+      ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.roundRect(0, 0, w, h, 14); ctx.fill()
+      ctx.fillStyle = '#1c2530'; ctx.font = '800 40px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText(t('RADYASYON'), w / 2, h / 2 - 26)
+      ctx.font = '750 30px -apple-system, sans-serif'
+      ctx.fillText(t('GİRİLMEZ'), w / 2, h / 2 + 30)
+    })
+    sign.position.set(2.4, -1.6, 0.9)
+    g.add(sign)
+    const at = pos ?? new THREE.Vector2(1.8, side === 'south' ? -20.5 : 20.5)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('smrwreck', t('REAKTÖR ENKAZI'), g, 2.4)
+  }
 }

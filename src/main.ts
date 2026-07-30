@@ -2616,6 +2616,7 @@ function rebuildFromState() {
   }
   if (state.hasDiesel) world.buildDiesel(pv('dieselgen'))
   if (state.hasSMR) world.buildSMR(state.landNorth ? 'north' : 'south', pv('smr'))
+  else if (state.smrWreck) world.buildSMRWreck(state.landNorth ? 'north' : 'south', pv('smr')) // patlama kalıntısı — aynı temelde
   if (state.hasWash) world.buildWash(pv('wash'))
   if (state.hasOil) world.buildOil(pv('oil'))
   if (state.hasCoffee) world.buildCoffee(pv('coffee'))
@@ -3748,6 +3749,16 @@ if (isFullMode) {
 ui.onMaint = id => {
   if (id === 'open-order') { ui.hideBuildingCard(); openSection('order'); return } // tanka tıkla → yakıt siparişi
   if (id === 'rename-sign') { ui.hideBuildingCard(); openRenameModal(); return } // tabelaya tıkla → isim değiştir
+  if (id === 'clear-wreck') { // radyoaktif temizlik: enkaz kalkar, reaktör slotu yeniden açılır
+    if (state.money < 18_000) { ui.toast(t('Temizlik için ₺18.000 gerekli — kasan yetmiyor.'), 'bad'); return }
+    state.money -= 18_000
+    state.smrWreck = false
+    world.removeBuildingGroup('smrwreck')
+    ui.hideBuildingCard()
+    ui.toast(t('Radyoaktif enkaz kaldırıldı — bölge temiz, yeni reaktör kurulabilir.'), 'good', true)
+    persist()
+    return
+  }
   if (id.startsWith('auto-pump-')) {
     const i = parseInt(id.slice(10))
     if (state.autoPumps.has(i)) {
@@ -4202,6 +4213,13 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Kullanım oranı'), '~%12'],
         ],
       }
+    case 'smrwreck':
+      return {
+        icon: 'i-reactor', name: t('Reaktör Enkazı'),
+        desc: t('Patlamanın kalıntısı. Radyoaktif — temizletmeden bu bölgeye yeni reaktör kurulamaz.'),
+        stats: [[t('Durum'), t('RADYOAKTİF'), 'bad']],
+        action: { label: t('Radyoaktif Temizlik — ₺18.000'), maintId: 'clear-wreck' },
+      }
     case 'smr': {
       const risk = state.smrWear > 0.7 ? t('YÜKSEK') : state.smrWear > 0.5 ? 'Orta' : t('Düşük')
       const producing = state.uranium > 0
@@ -4620,6 +4638,7 @@ function frame() {
     // İstasyon ayakta kalır (rage-quit önleme). Riziko hâlâ ciddi: yarı kasa + itibar.
     state.exploded = false
     state.hasSMR = false
+    state.smrWreck = true // ENKAZ kalır (Oğuz) — radyoaktif temizlik ödenene dek yeni reaktör yok
     state.smrWear = 0
     state.uranium = 0
     state.money = Math.max(0, Math.round(state.money * 0.5))
