@@ -930,6 +930,7 @@ document.getElementById('of-prices')?.addEventListener('click', e => {
   if (btn) ui.onPriceChange(btn.dataset.pf as FuelType | 'elec', Number(btn.dataset.pd))
 })
 // ŞUBE: geçiş ve açma
+let locSwitching = false // şube geçişi başladı, reload bekleniyor (çift tıklama kilidi)
 document.getElementById('of-locations')?.addEventListener('click', e => {
   // MÜDÜR TUT/YÜKSELT (ofisten) — mağazadaki satın alma akışının aynısı
   if ((e.target as HTMLElement).closest('#of-hire-manager')) {
@@ -974,11 +975,18 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
     return
   }
   if (!go) return
+  // ÇİFT TIKLAMA KİLİDİ ("şubeye gidilemedi" raporu): push-confirmed reload 1.6-6 sn
+  // (kit inişinde 12 sn) sürebiliyor; bu pencerede ikinci tıklama switchLoc'u
+  // "zaten o şubedesin" durumuna düşürüp yanlış hata gösteriyordu.
+  if (locSwitching) { ui.toast(t('Sahne yükleniyor — birkaç saniye…'), '', true); return }
   const id = go.dataset.goloc as LocId
   // Şube değişimi: mevcut şubenin ekipmanı + YERLEŞİMİ saklanır, hedefin yüklenir.
   // Para/gün/itibar/prestij/kredi ŞİRKETTE kalır (tek kasa — rapor §3a kararı).
   const next = state.switchLoc(id, { placedPos, placedRot, placedRects })
   if (!next) { ui.toast(t('Şube değiştirilemedi.'), 'bad'); return }
+  locSwitching = true
+  go.disabled = true
+  go.textContent = t('Yükleniyor…')
   for (const k of Object.keys(placedPos)) delete placedPos[k]
   for (const k of Object.keys(placedRot)) delete placedRot[k]
   placedRects.length = 0
