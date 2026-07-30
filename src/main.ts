@@ -998,7 +998,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   if (state.giftToast) { ui.toast(state.giftToast, 'good', true); state.giftToast = null } // D12 hediyesi
   lastRemotePush = 0 // throttle'ı atla: şube değişimi reload'dan ÖNCE buluta yazılmalı
   persist()
-  Car.solids = hardRects()
+  try { Car.solids = hardRects() } catch { /* karma state/sahne — reload zaten sıfırdan kurar */ }
   // PUSH-CONFIRMED RELOAD (devir kalıbıyla aynı): şube değişimi buluta YAZILDIĞI
   // doğrulanmadan reload atılmaz — yazım yarışı kaybedilince bulut eski şubede
   // kalıyor, her boot oyuncuyu eski şubeye döndürüyordu ("kasabaya geri dönmüyor").
@@ -2667,15 +2667,19 @@ function unitRect(base: { x: number; y: number }, ang: number, w: number, d: num
 
 function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
   const r: { cx: number; cy: number; w: number; d: number }[] = []
+  // GEÇİŞ ANI GÜVENLİĞİ ("otoyoldan kasabaya takılı kalıyor" fixi): switchLoc state'i
+  // hedef şubeye çevirdiğinde sahne henüz eski şubedir — state.pumps sahnedeki slot
+  // sayısını aşarsa pumpSlots[i] undefined olur, s.x TypeError'ı reload kurulmadan
+  // handler'ı öldürüyordu. Eksik slot sessizce atlanır (reload zaten yeniden kurar).
   for (let i = 0; i < state.pumps; i++) {
     const b = world.pumpBase[i]
     if (b) r.push(unitRect(b, world.pumpAngles[i] ?? 0, 1.5, 3.4))
-    else { const s = world.pumpSlots[i]; r.push({ cx: s.x - 1.8, cy: s.y, w: 1.5, d: 3.4 }) }
+    else { const s = world.pumpSlots[i]; if (s) r.push({ cx: s.x - 1.8, cy: s.y, w: 1.5, d: 3.4 }) }
   }
   for (let i = 0; i < state.evChargers; i++) {
     const b = world.evBase[i]
     if (b) r.push(unitRect(b, world.evAngles[i] ?? 0, 0.9, 1.4))
-    else { const s = world.evSlots[i]; r.push({ cx: s.x - 1.1, cy: s.y, w: 0.9, d: 1.4 }) }
+    else { const s = world.evSlots[i]; if (s) r.push({ cx: s.x - 1.1, cy: s.y, w: 0.9, d: 1.4 }) }
   }
   r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.2, d: 2.2 }) // CANLI/main ile birebir
   const of = world.buildings.find(b => b.id === 'office')
