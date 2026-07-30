@@ -402,7 +402,9 @@ function maxIncomeRate(s) {
       if (lvl > 0) branch += 6 + lvl * 4
     }
   }
-  return Math.max(20, (base + branch) * 8 * SAFETY * (1 + 0.25 * stars))
+  // AZALAN VERİM (30 Tem, istemci prestigeMult ile AYNI): 10★ sonrası +%10, 20★ sonrası +%5
+  const starMult = 1 + 0.25 * Math.min(stars, 10) + 0.10 * Math.min(Math.max(stars - 10, 0), 10) + 0.05 * Math.max(stars - 20, 0)
+  return Math.max(20, (base + branch) * 8 * SAFETY * starMult)
 }
 
 /** ŞUBE KASASI CLAMP'İ: istemci tavanıyla BİREBİR (state.ts BRANCH_VAULT_HARD).
@@ -1137,7 +1139,7 @@ async function handleApi(req, res, url) {
         }
         // handoverCount de yıldızla tutarlı olmalı (kurcalanmış save ile eşik atlanmasın)
         if (typeof clean.s.handoverCount === 'number') clean.s.handoverCount = Math.min(clean.s.handoverCount, clean.s.brandStars)
-        const starMult = 1 + 0.25 * stars
+        const starMult = 1 + 0.25 * Math.min(stars, 10) + 0.10 * Math.min(Math.max(stars - 10, 0), 10) + 0.05 * Math.max(stars - 20, 0) // istemci prestigeMult ile aynı (azalan verim)
         // JETON KOVASI: allowance artık push BAŞINA değil ZAMAN başına birikiyor.
         // Kova save içinde taşınır (_ab, sunucu-sahipli alan); istemci kurcalarsa
         // aşağıda clamp'lenir. Böylece hızlı push spam'i bedava para getirmez —

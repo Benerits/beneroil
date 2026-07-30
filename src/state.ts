@@ -958,7 +958,13 @@ export class GameState {
 
   // ---- PRESTİJ: İSTASYONU DEVRET (lategame raporu §3b) ----
   /** Marka yıldızı geliri kalıcı çarpar (satış + kumbara). 4 yıldız = 2× gelir. */
-  prestigeMult(): number { return 1 + 0.25 * this.brandStars }
+  /** AZALAN VERİM (devir-çiftliği freni, 30 Tem): ilk 10★ +%25, 11-20★ +%10, 21★+ +%5.
+   *  Erken/orta oyun birebir aynı; 40★'lık farm hesabı ×11 → ×4.5'a iner. */
+  static prestigeMultFor(s: number): number {
+    s = Math.max(0, s)
+    return 1 + 0.25 * Math.min(s, 10) + 0.10 * Math.min(Math.max(s - 10, 0), 10) + 0.05 * Math.max(s - 20, 0)
+  }
+  prestigeMult(): number { return GameState.prestigeMultFor(this.brandStars) }
   /** Bir sonraki devir için gereken kurulu ekipman değeri — her yıldızda İKİYE KATLANIR
    *  (Idle Miner kalıbı: her kademe daha pahalı). Farm döngüsünü matematiksel olarak kapatır.
    *  TAVAN 8M (oyuncu raporu: tek şubenin sınırlı kalemleri ~₺1.63M — ×2 katlama bir yerde
@@ -975,10 +981,21 @@ export class GameState {
     // Oğuz kalibrasyonu (29 Tem): şube başına ~₺1.5M kurulabiliyor → tavan 1.5M × şube
     // (2 şubeyle 6. yıldız = ₺3M; sıkı ama ulaşılabilir)
     const reachable = 1_500_000 * Math.max(1, this.unlockedLocs.length)
+    // TAVAN-SONRASI TIRMANIŞ (devir-çiftliği freni, 30 Tem): sabit tavan sonsuz farm
+    // kapısı açtı (bir gecede 6★→40★, 143M vakası). Tavana dayandıktan sonraki her
+    // devir tavanı kalıcı +%15 büyütür — farm her turda yavaşlar ama duvar geri gelmez.
     let t = 250_000
-    for (let i = 0; i < this.handoverCount; i++) t = t < soft ? Math.min(t * 2, Math.max(soft, t * 1.35)) : t * 1.35
-    t = Math.min(t, reachable)
+    let overCap = 0
+    for (let i = 0; i < this.handoverCount; i++) {
+      t = t < soft ? Math.min(t * 2, Math.max(soft, t * 1.35)) : t * 1.35
+      if (t >= reachable) overCap++
+    }
+    t = Math.min(t, reachable * Math.pow(1.15, overCap))
     return Math.min(8_000_000, Math.round(t / 10_000) * 10_000)
+  }
+  /** eşik ULAŞILABİLİR tavanda/üstünde mi — tavan devri satış bedelini kırpar (farm freni) */
+  handoverAtCap(): boolean {
+    return this.handoverThreshold() >= 1_500_000 * Math.max(1, this.unlockedLocs.length)
   }
   /** ŞİRKET GENELİ kurulu ekipman: aktif şube + pasif şubelerin snapshot'taki değeri.
    *  MANTIK HATASI FİXİ: eşik tek şubeden karşılanamıyordu (maks ~1.6M sınırlı kalem);
@@ -995,7 +1012,10 @@ export class GameState {
   handoverValue(): number {
     const profit30 = Math.max(0, this.salesInPeriod(30) - this.fuelCostInPeriod(30) - this.wagesInPeriod(30))
     const perDay = profit30 / Math.min(30, Math.max(1, this.day))
-    return Math.round(this.equipmentValue() * 0.6 + Math.min(100_000, perDay * 10))
+    // TAVAN DEVRİ: satış katsayısı %60 → %30 (farm freni #3) — "bedava rebuild" kapanır,
+    // normal ilerlemedeki devirler aynen %60 alır.
+    const coef = this.handoverAtCap() ? 0.3 : 0.6
+    return Math.round(this.equipmentValue() * coef + Math.min(100_000, perDay * 10))
   }
   /** Devir şartı: eşik ekipman + borçsuzluk (gönüllü, asla zorunlu değil). */
   canHandover(): boolean {
@@ -1005,7 +1025,7 @@ export class GameState {
   handoverPreview(): { cash: number; starsAfter: number; multAfter: number; multNow: number } {
     return {
       cash: this.handoverValue(), starsAfter: this.brandStars + 1,
-      multAfter: 1 + 0.25 * (this.brandStars + 1), multNow: this.prestigeMult(),
+      multAfter: GameState.prestigeMultFor(this.brandStars + 1), multNow: this.prestigeMult(),
     }
   }
   /** DEVRET: ekipman gider, ARSA/BETON ve marka yıldızları KALIR, kasaya devir bedeli girer. */
