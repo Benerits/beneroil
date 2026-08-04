@@ -847,6 +847,12 @@ const EN: Record<string, string> = {
   'Sürüm {0}': 'Version {0}', 'yeni': 'new',
   'Bildirim Geçmişi': 'Notification History', 'Gün {0}': 'Day {0}', 'Henüz bildirim yok.': 'No notifications yet.',
   // sürüm notu maddeleri (news.ts NEWS[].items — t() üzerinden geçer)
+  'DEVİR KİLİDİ ÇÖZÜLDÜ: bir sonraki yıldızın ekipman eşiği, şubelerine sığandan fazlasını isteyebiliyordu — 3 şubeyle ₺5.950.000 istenip en fazla ~₺5.170.000 kurulabildiği için ilerlemek imkânsız hale geliyordu. Eşik artık şube başına ₺1.500.000 ile SINIRLI ve bu sınırı hiçbir koşulda aşamaz.':
+    'HANDOVER DEADLOCK FIXED: the equipment threshold for your next star could ask for more than your branches can physically hold — with 3 branches it demanded ₺5,950,000 while at most ~₺5,170,000 could be installed, making progress impossible. The threshold is now CAPPED at ₺1,500,000 per branch and can never exceed it.',
+  'Devir eşiğine takılan oyuncular kaydına dokunulmadan açıldı — oyuna girdiğinde devir düğmen çalışır durumda olacak.':
+    'Players stuck at the handover threshold are unblocked with their save untouched — your handover button will simply work next time you log in.',
+  'Yeni şube açmak artık kademeli olarak pahalı: her açık şube bir sonrakinin bedelini artırıyor. Şube açmak yıldız yolunu genişlettiği için bedeli de büyüyor.':
+    'Opening a new branch now gets progressively more expensive: every branch you own raises the price of the next one. Branches widen your path to more stars, so they cost more.',
   'Tesis kumbarası dolduğunda ciro artık kaybolmuyor — dolu kumbara üstüne gelen kazanç kısılarak da olsa birikiyor ve ne kadarının eridiği rapor ediliyor.':
     'Revenue no longer vanishes when a facility piggy bank fills up — earnings on top of a full jar still pile up (at a reduced rate) and the report shows how much melted away.',
   'İtibar 5,0\'da donmuyor: her gün sonunda o günün hizmet kalitesine göre yükseliyor ya da düşüyor.':
@@ -2131,6 +2137,12 @@ const FR: Record<string, string> = {
   'Gün {0}': 'Jour {0}',
   'Henüz bildirim yok.': 'Aucune notification pour l’instant.',
   // sürüm notu maddeleri (news.ts NEWS[].items — t() üzerinden geçer)
+  'DEVİR KİLİDİ ÇÖZÜLDÜ: bir sonraki yıldızın ekipman eşiği, şubelerine sığandan fazlasını isteyebiliyordu — 3 şubeyle ₺5.950.000 istenip en fazla ~₺5.170.000 kurulabildiği için ilerlemek imkânsız hale geliyordu. Eşik artık şube başına ₺1.500.000 ile SINIRLI ve bu sınırı hiçbir koşulda aşamaz.':
+    'BLOCAGE DE LA CESSION CORRIGÉ : le seuil d’équipement de ta prochaine étoile pouvait exiger plus que ce que tes stations peuvent contenir — avec 3 stations il demandait ₺5 950 000 alors qu’au maximum ~₺5 170 000 pouvait être installé, rendant la progression impossible. Le seuil est désormais PLAFONNÉ à ₺1 500 000 par station et ne peut jamais le dépasser.',
+  'Devir eşiğine takılan oyuncular kaydına dokunulmadan açıldı — oyuna girdiğinde devir düğmen çalışır durumda olacak.':
+    'Les joueurs bloqués au seuil de cession sont débloqués sans toucher à leur sauvegarde — ton bouton de cession fonctionnera dès ta prochaine connexion.',
+  'Yeni şube açmak artık kademeli olarak pahalı: her açık şube bir sonrakinin bedelini artırıyor. Şube açmak yıldız yolunu genişlettiği için bedeli de büyüyor.':
+    'Ouvrir une nouvelle station coûte désormais de plus en plus cher : chaque station possédée augmente le prix de la suivante. Les stations élargissent ta route vers les étoiles, donc elles coûtent plus.',
   'Tesis kumbarası dolduğunda ciro artık kaybolmuyor — dolu kumbara üstüne gelen kazanç kısılarak da olsa birikiyor ve ne kadarının eridiği rapor ediliyor.':
     'La recette ne disparaît plus quand la tirelire d’une installation est pleine — les gains qui arrivent par-dessus s’accumulent quand même (à un rythme réduit) et le rapport indique combien s’est évaporé.',
   "İtibar 5,0'da donmuyor: her gün sonunda o günün hizmet kalitesine göre yükseliyor ya da düşüyor.":
