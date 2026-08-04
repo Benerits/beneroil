@@ -1260,7 +1260,25 @@ async function handleApi(req, res, url) {
           if (ins.rowCount === 0) return json(res, 200, { ok: true, already: true })
         }
       } else {
-        console.warn('[IAP] REVENUECAT_SECRET_KEY yok — doğrulamasız grant (yalnız dev/pre-launch olmalı!)')
+        // FAIL-CLOSED (4 Ağu, ID 2432 vakası: gün-5 hesabında ₺70M): anahtar yokken
+        // uç DOĞRULAMASIZ para basıyordu — herkes curl ile sınırsız coin alabiliyordu.
+        // Artık anahtar yoksa GRANT YOK. Dev/test için IAP_ALLOW_UNVERIFIED=1 gerekir.
+        if (process.env.IAP_ALLOW_UNVERIFIED !== '1') {
+          console.warn('[IAP] REVENUECAT_SECRET_KEY yok → grant REDDEDİLDİ', email, productId)
+          auditCheat(email, 'iap-unverified', { productId: String(productId) })
+          return json(res, 503, { error: 'Satın alma doğrulaması yapılandırılmamış — destekle iletişime geç.' })
+        }
+        console.warn('[IAP] DOĞRULAMASIZ grant açık (IAP_ALLOW_UNVERIFIED=1) — yalnız dev ortamı!')
+      }
+      // Coin paketlerinde replay freni anahtar olmasa da çalışsın (dev modda bile)
+      if (productId !== 'remove_ads' && transactionId) {
+        const dup2 = await pool.query('SELECT 1 FROM benzinlik_iap_grant WHERE transaction_id=$1', [String(transactionId)])
+        if (dup2.rowCount > 0) return json(res, 200, { ok: true, already: true })
+      }
+      // hız freni: normal oyuncu saatte 5'ten fazla IAP tamamlamaz
+      if (!rateLimit('iap:' + email, 5, 3600_000)) {
+        auditCheat(email, 'iap-flood', { productId: String(productId) })
+        return json(res, 429, { error: 'Çok fazla satın alma denemesi — biraz sonra tekrar dene.' })
       }
 
       const r = await pool.query('SELECT save FROM benzinlik_player WHERE email=$1', [email])
