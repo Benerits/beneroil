@@ -50,7 +50,9 @@ they're offline; the DB write for balance/hotfix still applies, so it takes effe
 
 - **User profile** (`_user-profile` custom page, `kind=user_profile`): a `record` (stats) block +
   an `actions` block with live buttons — ⚡ +50k (canlı), 📢 Teşekkür bildirimi, 🔧 Yakıt hot-fix,
-  🔄 Zorla reload — plus DB balance + ban/unban. Edit via MCP
+  🔄 Zorla reload — plus DB balance + ban/unban. **📝 İzahat ban** posts `{reason:"izahat"}` to
+  `/vs/v1/users/:id/ban`, which is what opens the appeal form client-side (a plain ban leaves
+  `ban_reason` NULL → generic "askıya alınmış", no appeal channel). Edit via MCP
   `set_custom_page_blocks page:"_user-profile"`. Action `body` is flat `[{key,value}]`; nested
   payloads (like `patch`) aren't expressible there, which is why `hotfix-fuel` is a server-side
   kind that needs no body.

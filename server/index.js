@@ -74,6 +74,9 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS gate_converted int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS ad_views int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS session_minutes int NOT NULL DEFAULT 0`)
+  // webgl_fail: 3D bağlamı açılamayan oturum sayısı (istemci showWebGLFailure'da bump'lar).
+  // Bu olay ÖLÇÜLMÜYORDU: renderer throw edince modül ölüyor, hiçbir sayaç çalışmıyordu.
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS webgl_fail int NOT NULL DEFAULT 0`)
   await pool.query(`CREATE TABLE IF NOT EXISTS beneloil_notification (
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
@@ -852,7 +855,7 @@ async function handleApi(req, res, url) {
       // Hafif huni/oturum sayacı — yalnız BEYAZ LİSTEDEKİ kolonlar (bumpStat kolon adı
       // enterpolasyonu yapıyor; whitelist dışı girdi ASLA geçmez). IP başına saatlik tavan.
       const mb = await readBody(req).catch(() => ({}))
-      const ALLOWED = new Set(['gate_shown', 'gate_converted', 'ad_views', 'session_minutes'])
+      const ALLOWED = new Set(['gate_shown', 'gate_converted', 'ad_views', 'session_minutes', 'webgl_fail'])
       const k = String((mb && mb.k) || '')
       if (ALLOWED.has(k) && rateLimit('metric:' + k + ':' + clientIp(req), 90, 3600_000)) bumpStat(k)
       return json(res, 200, { ok: true })
@@ -1050,6 +1053,16 @@ async function handleApi(req, res, url) {
     if (url === '/api/appeal' && req.method === 'POST') {
       const email = auth(); if (!email) return
       if (!rateLimit('appeal:' + email, 3, 3600_000)) return json(res, 429, { error: 'Çok sık deneme — biraz sonra tekrar dene.' })
+      // YALNIZ İZAHAT-BANLI HESAP YAZABİLİR. Ban kontrolünün yokluğu "kilitli hesabın tek
+      // kanalı" niyetiyle konmuştu ama yan etkisi şuydu: banlı OLMAYAN herkes admin paneline
+      // serbestçe mesaj yazabiliyordu. 2 Ağu'da bir hesap (kisalt8) ban yemeden önce buradan
+      // panele "test appeal 123" → <svg onload=…> XSS payload'u → 400 karakter dolgu gönderdi
+      // (son ikisi 395 ms arayla — script). Panelin girdi yüzeyi banlı hesaplarla sınırlandı.
+      // ban_reason='kalici' de dışarıda: izahatı reddedilen hesap formu bir daha AÇMAZ.
+      const st = await pool.query('SELECT banned_at, ban_reason FROM benzinlik_player WHERE email=$1', [email])
+      if (!st.rows[0]?.banned_at || st.rows[0].ban_reason !== 'izahat') {
+        return json(res, 403, { error: 'Bu hesap için izahat kanalı açık değil.' })
+      }
       const { message } = await readBody(req)
       const msg = String(message || '').trim().slice(0, 2000)
       if (msg.length < 10) return json(res, 400, { error: 'İzahat çok kısa — lütfen durumu açıklayın.' })
