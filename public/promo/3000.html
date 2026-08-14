@@ -32,7 +32,7 @@
 <div id="brand">BENELOIL</div>
 <div id="chip"><div class="n">0</div><div class="l">BENZİN İSTASYONU</div></div>
 <div id="final">
-  <div class="s" id="subt">3.000 oyuncuya teşekkürler ❤️</div>
+  <div class="s" id="subt">3.000 oyuncumuza teşekkürler ❤️</div>
   <div class="u">beneloil.com</div>
 </div>
 <script type="module">
@@ -89,7 +89,7 @@ const W = pick.w * S, H = pick.h * S
 const toWorld = c => ({ x: (c.x - pick.w / 2) * S, z: (c.y - pick.h / 2) * S })
 
 // ---- sahne ----
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true })
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, logarithmicDepthBuffer: true }) // z-fighting titremesi (tepede flash) fixi
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0xbfe0ee)
@@ -240,7 +240,10 @@ const A = new THREE.Vector3(startCell.x, 0, startCell.z)
 const CENTER = new THREE.Vector3(0, 0, -H * 0.04)
 const END = CENTER.clone().add(new THREE.Vector3(0, W * 0.52, W * 0.31))
 const smoother = u => u * u * u * (u * (u * 6 - 15) + 10)
-const chipN = document.querySelector('#chip .n')
+// GERÇEK büyüme eğrisi: 18 Tem lansmanından beri gün gün kümülatif oyuncu (DB'den)
+const CUM = [2, 140, 854, 1194, 1468, 1660, 1713, 1794, 1865, 2019, 2059, 2082, 2124, 2157, 2163, 2172, 2184, 2196, 2201, 2223, 2252, 2254, 2259, 2285, 2300, 2305, 2744, 2952]
+const CSCALE = TARGET / CUM[CUM.length - 1]
+const chipN = document.querySelector('#chip .n'), chipL = document.querySelector('#chip .l')
 const chip = document.getElementById('chip'), fin = document.getElementById('final')
 const fmt = new Intl.NumberFormat('tr-TR')
 
@@ -269,8 +272,13 @@ function frame (now) {
     if (u >= 1) { cam.position.x += Math.sin(t * 0.3) * 6; cam.lookAt(CENTER.x, 0, CENTER.z + H * 0.16) }
   }
 
-  chip.style.opacity = (u > 0.02 && u < 0.985) ? 1 : 0
-  chipN.textContent = fmt.format(Math.round(TARGET * Math.pow(e, 1.35)))
+  chip.style.opacity = (u > 0.02 && u < 0.965) ? 1 : 0
+  { // sayaç gerçek eğriyle akar: gün ilerledikçe o güne kadar gelen oyuncu
+    const pos = e * (CUM.length - 1), i = Math.min(CUM.length - 2, Math.floor(pos)), fr = pos - i
+    const cnt = Math.round((CUM[i] + (CUM[i + 1] - CUM[i]) * fr) * CSCALE)
+    chipN.textContent = fmt.format(e >= 1 ? TARGET : cnt)
+    chipL.textContent = `OYUNCU · GÜN ${Math.min(CUM.length, Math.floor(pos) + 1)}`
+  }
   fin.style.opacity = u > 0.965 ? 1 : 0
 
   for (const c of clouds) { c.position.x += c.userData.v * 0.016; if (c.position.x > W * 0.8) c.position.x = -W * 0.8 }
