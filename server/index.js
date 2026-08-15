@@ -106,8 +106,9 @@ function verifyPassword(pass, stored) {
   const calc = crypto.scryptSync(pass, salt, 32).toString('hex')
   return crypto.timingSafeEqual(Buffer.from(h, 'hex'), Buffer.from(calc, 'hex'))
 }
+const TOKEN_TTL_MS = 90 * 24 * 3600 * 1000
 function sign(email) {
-  const exp = Date.now() + 90 * 24 * 3600 * 1000
+  const exp = Date.now() + TOKEN_TTL_MS
   const body = `${email}|${exp}`
   const mac = crypto.createHmac('sha256', SECRET).update(body).digest('hex')
   return Buffer.from(`${body}|${mac}`).toString('base64url')
@@ -121,6 +122,28 @@ function verifyToken(token) {
   } catch {
     return null
   }
+}
+
+/**
+ * ZOMBİ TOKEN GUARD — token yalnızca e-posta taşır (sign: email|exp|mac), DB'ye bakmaz.
+ * Bu yüzden hesap SİLİNİP aynı e-postayla yeniden açıldığında eski token hâlâ doğrulanıyordu:
+ * kapalı sanılan bir sekme / başka cihaz / uçuştaki gecikmeli push, YENİ hesabın kaydını
+ * ESKİ save ile eziyordu ("hesabı sildim ama eski kaydım geri geliyor" şikâyeti, 15 Ağu).
+ * Çözüm şema değiştirmeden: token'ın veriliş anı exp - TTL ile hesaplanır; hesap o andan
+ * SONRA açıldıysa token bir önceki hesaba aittir → reddedilir. Mevcut oturumlar etkilenmez.
+ */
+function tokenIssuedAt(token) {
+  try {
+    const [, exp] = Buffer.from(String(token), 'base64url').toString().split('|')
+    const e = Number(exp)
+    return Number.isFinite(e) ? e - TOKEN_TTL_MS : null
+  } catch { return null }
+}
+function staleToken(req, createdAt) {
+  if (!createdAt) return false
+  const iat = tokenIssuedAt(req.headers['x-auth'] || '')
+  if (iat === null) return false
+  return new Date(createdAt).getTime() > iat + 60_000 // 60 sn: kayıt anı ile token üretimi arası pay
 }
 
 // ---- E-posta doğrulama + şifre sıfırlama altyapısı ----
@@ -1071,7 +1094,8 @@ async function handleApi(req, res, url) {
     }
     if (url === '/api/save' && req.method === 'GET') {
       const email = auth(); if (!email) return
-      const r = await pool.query('SELECT save, updated_at, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=$1', [email])
+      const r = await pool.query('SELECT save, updated_at, created_at, banned_at, ban_reason, email_verified FROM benzinlik_player WHERE email=$1', [email])
+      if (staleToken(req, r.rows[0]?.created_at)) return json(res, 401, { error: 'Oturum geçersiz, tekrar giriş yap.' })
       if (r.rows[0]?.banned_at) return bannedJson(res, email, r.rows[0].ban_reason)
       // tek-cihaz kilidi: yükleyen cihaz oturumu DEVRALIR (session_id claim) → eski cihaz kick olur
       const sess = String(req.headers['x-session'] || '')
@@ -1089,6 +1113,7 @@ async function handleApi(req, res, url) {
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
       const prev = await pool.query('SELECT save, updated_at, created_at, banned_at, session_id, save_session FROM benzinlik_player WHERE email=$1', [email])
+      if (staleToken(req, prev.rows[0]?.created_at)) return json(res, 401, { error: 'Oturum geçersiz, tekrar giriş yap.' })
       if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
       // tek-cihaz kilidi: başka cihaz oturumu devraldıysa bu (eski) cihaz YAZMASIN → kicked.
       // Bağlantı kopması yanlış kick yapmaz: session yalnız BAŞKA cihaz GET/POST yapınca değişir.
