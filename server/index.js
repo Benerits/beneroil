@@ -585,13 +585,18 @@ function sanitizeSave(save) {
   // Tank kapasitesi = seviye hacmi × tank adedi (adet 1-4). Sabit 5000 clamp'i çok-tanklı
   // oyuncunun dolu deposunu (20.000L'ye kadar) durduk yere 5000'e düşürüyordu.
   const TANK_CAP = [800, 1500, 3000, 5000]
+  // MARİNA TEMASI FARKI (kayıt kaybı fixi — feedback 703/731/746/747/966): marina
+  // yakıt başına 8 tanka ve ×3 kapasiteye izin verir (themes.ts features). Genel 4/çarpansız
+  // clamp marina yükseltmelerini ve depodaki yakıtı her save'de SİLİYORDU (para da gitmiş oluyordu).
+  const tankMaxFor = loc => (loc === 'marina' ? 8 : 4)
+  const tankMultFor = loc => (loc === 'marina' ? 3 : 1)
   if (s.tankCounts && typeof s.tankCounts === 'object') {
-    for (const k of ['benzin', 'dizel', 'lpg']) s.tankCounts[k] = clamp(s.tankCounts[k], 1, 4, 1)
+    for (const k of ['benzin', 'dizel', 'lpg']) s.tankCounts[k] = clamp(s.tankCounts[k], 1, tankMaxFor(s.activeLoc), 1)
   }
   if (s.tanks && typeof s.tanks === 'object') {
     for (const k of ['benzin', 'dizel', 'lpg']) {
-      const cnt = (s.tankCounts && typeof s.tankCounts[k] === 'number') ? clamp(s.tankCounts[k], 1, 4, 1) : 1
-      s.tanks[k] = clamp(s.tanks[k], 0, TANK_CAP[s.tankLevel] * cnt, 0)
+      const cnt = (s.tankCounts && typeof s.tankCounts[k] === 'number') ? clamp(s.tankCounts[k], 1, tankMaxFor(s.activeLoc), 1) : 1
+      s.tanks[k] = clamp(s.tanks[k], 0, TANK_CAP[s.tankLevel] * cnt * tankMultFor(s.activeLoc), 0)
     }
   }
   if (s.pendingCash && typeof s.pendingCash === 'object') {
@@ -660,14 +665,17 @@ function sanitizeSave(save) {
       }
       clampMarina(f) // marina şubesi anlık görüntüsü de temizlenir
       clampRival(f)
+      // marina snapshot'ı da tema limitleriyle (8 tank, ×3 kapasite) — kayıt kaybı fixi
+      const snMax = k === 'marina' ? 8 : 4
+      const snMult = k === 'marina' ? 3 : 1
       if (sn.tankCounts && typeof sn.tankCounts === 'object') {
-        for (const fu of ['benzin', 'dizel', 'lpg']) sn.tankCounts[fu] = clamp(sn.tankCounts[fu], 1, 4, 1)
+        for (const fu of ['benzin', 'dizel', 'lpg']) sn.tankCounts[fu] = clamp(sn.tankCounts[fu], 1, snMax, 1)
       }
       const TANK_CAP2 = [800, 1500, 3000, 5000]
       if (sn.tanks && typeof sn.tanks === 'object') {
         for (const fu of ['benzin', 'dizel', 'lpg']) {
-          const cnt = clamp(sn.tankCounts?.[fu], 1, 4, 1)
-          sn.tanks[fu] = clamp(sn.tanks[fu], 0, TANK_CAP2[f.tankLevel || 0] * cnt, 0)
+          const cnt = clamp(sn.tankCounts?.[fu], 1, snMax, 1)
+          sn.tanks[fu] = clamp(sn.tanks[fu], 0, TANK_CAP2[f.tankLevel || 0] * cnt * snMult, 0)
         }
       }
       if (sn.pendingCash && typeof sn.pendingCash === 'object') {
@@ -1218,6 +1226,15 @@ async function handleApi(req, res, url) {
           //     bir sekmenin state'idir (oyunda gün asla azalmaz) → clobber etme.
           if (newDay < prevDay - 1 && newWealth < prevWealth * 0.5) {
             return json(res, 409, { conflict: true, save: prevSave, updatedAt: prev.rows[0]?.updated_at || null })
+          }
+        }
+        // TEŞHİS (feedback 566/900-902 'tesislerim yok oldu'): yıldız değişmeden bina
+        // değeri yarıdan fazla düşen save şüphelidir (bayat sekme / bozuk state).
+        // BLOKLAMAZ (devir/haciz meşru düşüş yaratır) — sadece denetim kaydına düşer.
+        if (!firstSave) {
+          const prevBv = buildingValue(prevSave.s)
+          if (prevBv > 20_000 && bval < prevBv * 0.5 && stars === prevStars) {
+            auditCheat(email, 'bval-drop', { prev: Math.round(prevBv), next: Math.round(bval) })
           }
         }
         let clamped = 0
