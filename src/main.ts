@@ -2241,6 +2241,7 @@ ui.onOrderFuel = f => {
   else ui.toast('Sipariş verilemedi (tank dolu ya da para yetmiyor).', 'bad')
 }
 ui.onOrderQty = (f, d) => { state.adjustOrderQty(f, d) } // −/+ sipariş miktarı (fneed sonraki karede güncellenir)
+ui.onOrderLiters = (f, liters) => { state.setOrderLiters(f, liters) } // elle litre girişi (B4)
 
 /** Karşı kapının (x≈10.3–12.9 bandı) verilen y'de mevcut bir karşı-yapıyla çakışıp çakışmadığı */
 function farGateBlockedAt(y: number): boolean {

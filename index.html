@@ -786,24 +786,30 @@
           <div class="sicon" style="color:var(--green);background:#27a05a1c;border-color:#27a05a44"><svg class="ic"><use href="#i-fuel"/></svg></div>
           <div class="sinfo"><div class="st">Benzin</div><div class="sd" id="fneed-benzin">—</div></div>
           <button class="btn pbtn forder" data-f="benzin" data-d="-1">−</button>
+          <input class="fqty" id="fqty-benzin" data-f="benzin" inputmode="numeric" pattern="[0-9]*" title="Litre — elle gir" style="width:64px;text-align:center;font-weight:800;font-size:13px;border:1.5px solid var(--line,#d8d2c2);border-radius:10px;background:var(--paper,#fdfaf2);padding:7px 2px">
           <button class="btn pbtn forder" data-f="benzin" data-d="1">+</button>
+          <button class="btn pbtn forder" data-f="benzin" data-d="max" style="font-size:10.5px;letter-spacing:.4px">MAX</button>
           <button class="btn sbuy good" id="fbtn-benzin">Sipariş</button>
         </div>
         <div class="shoprow">
           <div class="sicon" style="color:var(--orange);background:#e8862e1c;border-color:#e8862e44"><svg class="ic"><use href="#i-fuel"/></svg></div>
           <div class="sinfo"><div class="st">Dizel (Mazot)</div><div class="sd" id="fneed-dizel">—</div></div>
           <button class="btn pbtn forder" data-f="dizel" data-d="-1">−</button>
+          <input class="fqty" id="fqty-dizel" data-f="dizel" inputmode="numeric" pattern="[0-9]*" title="Litre — elle gir" style="width:64px;text-align:center;font-weight:800;font-size:13px;border:1.5px solid var(--line,#d8d2c2);border-radius:10px;background:var(--paper,#fdfaf2);padding:7px 2px">
           <button class="btn pbtn forder" data-f="dizel" data-d="1">+</button>
+          <button class="btn pbtn forder" data-f="dizel" data-d="max" style="font-size:10.5px;letter-spacing:.4px">MAX</button>
           <button class="btn sbuy warn" id="fbtn-dizel">Sipariş</button>
         </div>
         <div class="shoprow">
           <div class="sicon" style="color:var(--blue);background:#2f6fed1c;border-color:#2f6fed44"><svg class="ic"><use href="#i-fuel"/></svg></div>
           <div class="sinfo"><div class="st">LPG</div><div class="sd" id="fneed-lpg">—</div></div>
           <button class="btn pbtn forder" data-f="lpg" data-d="-1">−</button>
+          <input class="fqty" id="fqty-lpg" data-f="lpg" inputmode="numeric" pattern="[0-9]*" title="Litre — elle gir" style="width:64px;text-align:center;font-weight:800;font-size:13px;border:1.5px solid var(--line,#d8d2c2);border-radius:10px;background:var(--paper,#fdfaf2);padding:7px 2px">
           <button class="btn pbtn forder" data-f="lpg" data-d="1">+</button>
+          <button class="btn pbtn forder" data-f="lpg" data-d="max" style="font-size:10.5px;letter-spacing:.4px">MAX</button>
           <button class="btn sbuy primary" id="fbtn-lpg">Sipariş</button>
         </div>
-        <div class="sd" style="text-align:center; padding:6px 0 2px" data-i18n="Varsayılan sipariş tankı FULL doldurur — −/+ ile azaltıp artırabilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.">Varsayılan sipariş tankı FULL doldurur — −/+ ile azaltıp artırabilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.</div>
+        <div class="sd" style="text-align:center; padding:6px 0 2px" data-i18n="Litreyi elle yazabilir, −/+ ile 200L adımlayabilir ya da MAX ile depoyu fulleyebilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.">Litreyi elle yazabilir, −/+ ile 200L adımlayabilir ya da MAX ile depoyu fulleyebilirsin. Her yakıtın tankeri ayrı gelir ve boşaltır.</div>
         <!-- ALIM DEFTERİ (Oğuz: "yakıt alım defterini pompacı inceleyebilir") -->
         <div style="border-top:1.5px dashed var(--edge); margin:10px 0 0; padding-top:8px">
           <div class="sd" style="font-weight:800; margin-bottom:4px"><svg class="ic" style="vertical-align:-3px"><use href="#i-cal"/></svg> <span data-i18n="Alım Defteri">Alım Defteri</span></div>

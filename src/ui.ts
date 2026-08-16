@@ -97,6 +97,7 @@ export class UI {
   onCleanWindows: (car: Car) => void = () => {}
   onOrderFuel: (f: FuelType) => void = () => {}
   onOrderQty: (f: FuelType, d: number) => void = () => {}
+  onOrderLiters: (f: FuelType, liters: number) => void = () => {}
   onBuy: (id: string) => void = () => {}
   onMaint: (id: string) => void = () => {}
   onCardClose: () => void = () => {}
@@ -178,8 +179,14 @@ export class UI {
     // sipariş miktarı −/+ (ORDER_STEP=200L kademe → full)
     fuelWrap.addEventListener('click', e => {
       const b = (e.target as HTMLElement).closest('button.forder') as HTMLButtonElement | null
-      if (b) this.onOrderQty(b.dataset.f as FuelType, Number(b.dataset.d))
+      if (b) this.onOrderQty(b.dataset.f as FuelType, b.dataset.d === 'max' ? 9999 : Number(b.dataset.d))
     })
+    // elle litre girişi (B4): yazınca 200L partiye yuvarlanır; odaktayken sync ezmez
+    for (const f of FUELS) {
+      const inp = el<HTMLInputElement>(`fqty-${f}`)
+      inp.addEventListener('change', () => this.onOrderLiters(f, Number(inp.value) || 0))
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur() })
+    }
     this.closeBtn.addEventListener('click', () => this.onToggleClosed())
     const accWrap = el<HTMLDivElement>('accwrap')
     el<HTMLButtonElement>('accbtn').addEventListener('click', () => accWrap.classList.add('show'))
@@ -690,6 +697,10 @@ export class UI {
         this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap, need, state.buyPrice(f).toFixed(1)))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
+      }
+      {
+        const inp = el<HTMLInputElement>(`fqty-${f}`)
+        if (document.activeElement !== inp) inp.value = String(need)
       }
     }
 
