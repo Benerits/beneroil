@@ -630,13 +630,15 @@ export class Car {
           const base = Math.atan2(target.y - pos.y, target.x - pos.x)
           let best: THREE.Vector3 | null = null
           let bestScore = Infinity
-          for (const a of [50, -50, 90, -90, 130, -130, 180]) {
+          // iki yarıçap: 2.2 (dar manevra) + 3.6 (pompa SIRASININ etrafından dolanış —
+          // "arka sıradaki pompaya gidemiyor" şikayetinin fixi)
+          for (const r of [2.2, 3.6]) for (const a of [50, -50, 90, -90, 130, -130, 180]) {
             const ang = base + a * Math.PI / 180
-            const cx2 = pos.x + Math.cos(ang) * 2.2
-            const cy2 = pos.y + Math.sin(ang) * 2.2
+            const cx2 = pos.x + Math.cos(ang) * r
+            const cy2 = pos.y + Math.sin(ang) * r
             if (Car.insideSolid(cx2, cy2)) continue
-            if (Car.insideSolid(pos.x + Math.cos(ang) * 1.1, pos.y + Math.sin(ang) * 1.1)) continue
-            const score = Math.hypot(target.x - cx2, target.y - cy2) + Math.abs(a) * 0.015
+            if (Car.insideSolid(pos.x + Math.cos(ang) * r / 2, pos.y + Math.sin(ang) * r / 2)) continue
+            const score = Math.hypot(target.x - cx2, target.y - cy2) + Math.abs(a) * 0.015 + (r - 2.2) * 0.4
             if (score < bestScore) { bestScore = score; best = new THREE.Vector3(cx2, cy2, 0) }
           }
           if (best) this.path.unshift(best) // ara nokta: engelin öbür yanından dolan
