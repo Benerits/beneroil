@@ -2173,6 +2173,20 @@ ui.onChargeEV = car => startCharging(car)
 /** kademeli EV şarjı: depo → araç akışı */
 function tickEvCharging(dt: number) {
   const cap = DISCHARGE_RATE[state.batteryLevel] || 0
+  // MOLACI OTOMASYONU (25 şikayet): ünitede şarjcı varsa 8 sn'de, yoksa Sv.3 müdür
+  // 25 sn'de molacıyı kendiliğinden uğurlar. Oyuncu istersa yine elle (daha erken) gönderebilir.
+  for (const c of cars.cars) {
+    if (!c.squatting) continue
+    c.squatT += dt
+    const hasStaff = c.slotIndex >= 0 && state.autoChargers.has(c.slotIndex)
+    const limit = hasStaff ? 8 : (state.managerLevel >= 3 ? 25 : Infinity)
+    if (c.squatT >= limit) {
+      c.squatting = false
+      cars.releaseCar(c)
+      ui.toast(hasStaff ? t('Şarjcı molacıyı uğurladı — ünite boşaldı.') : t('Müdür molacıyı uğurladı — ünite boşaldı.'), 'good')
+      if (ui.activeCar === c) autoSelect(nextServableCar())
+    }
+  }
   for (const c of cars.cars) {
     if (!c.charging) continue
     if (c.phase !== 'atPump') { c.charging = false; continue }
@@ -2205,6 +2219,7 @@ function tickEvCharging(dt: number) {
       if (anyFacility && Math.random() < 0.12) {
         // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
         c.squatting = true
+        c.squatT = 0
         c.beingServed = true
         c.setCounter(t('MOLADA · GÖNDER →'))
         const visits = facilityVisits(c)

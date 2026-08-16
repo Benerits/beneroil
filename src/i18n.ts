@@ -118,6 +118,8 @@ const EN: Record<string, string> = {
   'santralden': 'from plant',
   'alış ₺{0}': 'cost ₺{0}',
   'MOLADA · GÖNDER →': 'ON BREAK · SEND →',
+  'Şarjcı molacıyı uğurladı — ünite boşaldı.': 'Charger attendant sent the squatter away — unit is free.',
+  'Müdür molacıyı uğurladı — ünite boşaldı.': 'Manager sent the squatter away — unit is free.',
   'Tank kapasitesi: {0}L': 'Tank capacity: {0}L',
 
   // --- Giriş ekranı ---
@@ -1144,6 +1146,8 @@ const FR: Record<string, string> = {
   'santralden': 'de la centrale',
   'alış ₺{0}': 'achat ₺{0}',
   'MOLADA · GÖNDER →': 'EN PAUSE · ENVOYER →',
+  'Şarjcı molacıyı uğurladı — ünite boşaldı.': "L'agent de recharge a fait partir le squatteur — borne libre.",
+  'Müdür molacıyı uğurladı — ünite boşaldı.': 'Le gérant a fait partir le squatteur — borne libre.',
   'Tank kapasitesi: {0}L': 'Capacité du réservoir : {0} L',
 
   // --- Giriş ekranı ---

@@ -294,6 +294,8 @@ export class Car {
   chargedKwh = 0
   /** EV: şarjı bitti ama tesisleri gezmeye gitti — üniteyi işgal ediyor */
   squatting = false
+  /** işgal süresi (sn) — şarjcı/müdür otomatik uğurlaması için sayar */
+  squatT = 0
   /** tır/kamyonet mi (dizel ağırlıklı, tır parkını kullanır) */
   isTruck = false
   wantsTruckPark = false
