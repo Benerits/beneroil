@@ -403,7 +403,7 @@ function maxIncomeRate(s) {
   const n = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
   const fac = (n(s.marketLevel) > 0 ? n(s.marketLevel) : 0)
     + (s.hasCoffee ? 1 : 0) + (s.hasRestaurant ? 1 : 0) + (s.hasWash ? 1 : 0)
-    + (s.hasOil ? 1 : 0) + (s.hasTruckPark ? 1 : 0) + n(s.selfWashCount)
+    + (s.hasOil ? 1 : 0) + (s.hasTruckPark ? 1 : 0) + (s.hasTruckPark2 ? 1 : 0) + n(s.selfWashCount)
     + n(s.airWaterCount) * 0.5 + (s.hasSMR ? 2 : 0)
   // MARİNA: tekne başı ciro yüksek ama frekans 10x düşük → bağlama/tesis başına pay
   const marina = (Array.isArray(s.marinaFacs) ? s.marinaFacs.length : 0) * 2
@@ -496,6 +496,7 @@ function buildingValue(s) {
   if (s.hasCoffee) v += FLAT.coffee
   if (s.hasRestaurant) v += FLAT.restaurant
   if (s.hasTruckPark) v += FLAT.truckpark
+  if (s.hasTruckPark2) v += FLAT.truckpark // karşı yaka tır parkı (istemciyle senkron)
   if (s.wideGates) v += FLAT.widegate
   // parseller DÜŞÜK tahmin: gerçek parselCost dinamik (6k-28k); düşük tutmak satın almanın
   // asla "servet artışı" gibi görünmemesini garanti eder (false-positive önlemi).

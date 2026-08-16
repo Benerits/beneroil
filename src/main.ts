@@ -2309,6 +2309,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'coffee': world.buildCoffee(pos); break
     case 'restaurant': world.buildRestaurant(pos); break
     case 'truckpark': world.buildTruckPark(pos); break
+    case 'truckpark2': world.buildTruckPark(pos, 'truckpark2'); break
     case 'airwater': world.buildAirWater(pos, id); break
     case 'lamp': world.buildStreetLamp(pos, id); break
     case 'selfwash': world.buildSelfWash(pos, id); break
@@ -2338,6 +2339,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   coffee: () => ({ w: 3.2, d: 3.2 }),
   restaurant: () => ({ w: 5.5, d: 6 }),
   truckpark: () => ({ w: 8, d: 6 }),
+  truckpark2: () => ({ w: 8, d: 6 }), // karşı yaka tır parkı
   airwater: () => ({ w: 1.6, d: 2 }),
   lamp: () => ({ w: 1.2, d: 1.2, grass: true }), // dekoratif: çimen üstüne de konabilir
   selfwash: () => ({ w: 5.5, d: 7 }),
@@ -2371,6 +2373,7 @@ function applyAwayEarnings(offSecRaw: number): number {
   // kumbaralı tesisler (topla-hook'u): tır parkı, self yıkama, oto yıkama, hava-su
   const gains: [string, string, number][] = []
   if (state.hasTruckPark) gains.push(['truckpark', t('Tır parkı'), 125 / 45])
+  if (state.hasTruckPark2) gains.push(['truckpark2', t('Karşı tır parkı'), 125 / 45])
   if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
   if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
   if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
@@ -2765,6 +2768,7 @@ function rebuildFromState() {
   if (state.hasCoffee) world.buildCoffee(pv('coffee'))
   if (state.hasRestaurant) world.buildRestaurant(pv('restaurant'))
   if (state.hasTruckPark) world.buildTruckPark(pv('truckpark'))
+  if (state.hasTruckPark2) world.buildTruckPark(pv('truckpark2'), 'truckpark2')
   for (let i = 0; i < state.airWaterCount; i++) {
     const iid = i === 0 ? 'airwater' : `airwater#${i}`
     world.buildAirWater(pv(iid), iid)
@@ -3049,7 +3053,7 @@ function landOk(x: number, y: number, grassOk: boolean): boolean {
 }
 
 /** B8: karşı yaka nüshaları YALNIZ karşı yakaya kurulabilir (ziyaretler yaka-duyarlı) */
-const FAR_ONLY = new Set(['market2', 'toilet2', 'wash2', 'oil2', 'coffee2', 'restaurant2'])
+const FAR_ONLY = new Set(['market2', 'toilet2', 'wash2', 'oil2', 'coffee2', 'restaurant2', 'truckpark2'])
 
 function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
   // Not: pompa/şarj/tank artık yol karşısına da konabilir (sahip olunan+betonlanmış karşı parsele).
@@ -3448,6 +3452,7 @@ function buyToast(id: string) {
     case 'coffee': ui.toast('Kahveci açıldı!', 'good'); break
     case 'restaurant': ui.toast('Restoran açıldı — yolcular yemek molası verecek!', 'good'); break
     case 'truckpark': ui.toast('Tır parkı açıldı — düzenli konaklama geliri!', 'good'); break
+    case 'truckpark2': ui.toast(t('Karşı tır parkı açıldı — düzenli konaklama geliri!'), 'good'); break
     case 'airwater': ui.toast('Hava-su ünitesi kuruldu!', 'good'); break
     case 'lamp': ui.toast(t('Sokak lambası kuruldu — gece istasyon aydınlık!'), 'good'); break
     case 'selfwash': ui.toast('Self yıkama açıldı — köpük ve su otomatik satılacak!', 'good'); break
@@ -4196,6 +4201,9 @@ function buildingCard(id: string): BuildingCard | null {
     case 'restaurant2':
       return { icon: 'i-food', name: t('Karşı Restoran'),
         desc: t('Karşı yakada yemek molası.'), stats: [['+₺80-160', '~%18']] }
+    case 'truckpark2':
+      return { icon: 'i-truck', name: t('Karşı Tır Parkı'),
+        desc: t('Karşı yakada tırcılar konaklar — düzenli pasif gelir.'), stats: [['+₺90-160/dk', t('pasif')]] }
     case 'market2':
       return {
         icon: 'i-market', name: t('Karşı Market Sv.{0}', state.market2Level),
@@ -4344,7 +4352,7 @@ function refreshBuildingCard() {
   if (!card) return
   const facId = selectedBuilding.split('#')[0]
   if (['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2', 'coffee', 'coffee2',
-       'restaurant', 'restaurant2', 'truckpark', 'selfwash', 'airwater'].includes(facId)) {
+       'restaurant', 'restaurant2', 'truckpark', 'truckpark2', 'selfwash', 'airwater'].includes(facId)) {
     card.stats.push([t('Bugünkü ciro'), `₺${Math.round(state.facDaily[facId] ?? 0).toLocaleString('tr-TR')}`, 'good'])
   }
   // karttan doğrudan yükseltme: ilgili mağaza kalemi alınabilir durumdaysa buton koy

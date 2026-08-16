@@ -22,7 +22,7 @@ export const LOC_FIELDS = [
   'insurance', 'decorLevel', 'wear', 'gridLevel', 'lampCount',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'rival',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
-  'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
+  'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasTruckPark2',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
   'uraniumPending', 'uraniumEta', 'closed', 'wideGates', 'smrWreck',
 ] as const
@@ -259,6 +259,7 @@ export class GameState {
   hasOil2 = false
   hasCoffee2 = false
   hasRestaurant2 = false
+  hasTruckPark2 = false // karşı yaka tır parkı (tek kurulumlu tesislerin karşı nüshası — Oğuz)
   marketingBudget = 0 // günlük reklam bütçesi ₺ (0-8000) — trafik arz+talep sink'i (ADDITIVE)
   opexStart = 0 // OPEX rampasının başladığı oyun günü (ilk yüklemede atanır — ADDITIVE)
   /** aktif B2B sözleşmesi (ADDITIVE alan; null = yok) — geç oyunun karar motoru */
@@ -402,6 +403,7 @@ export class GameState {
   /** jeton mantığı: self servis tesislerin üstünde biriken para (tıkla-topla) */
   pendingCash: Record<string, number> = {}
   private truckTimer = 45
+  private truck2Timer = 45
   private selfWashTimer = 30
 
   // arsa sistemi: 3×3 = 9 parsel; istasyon (0,1) baştan sahipli ve betonlu
@@ -617,6 +619,14 @@ export class GameState {
         this.truckTimer = 35 + Math.random() * 20
         const m = 90 + Math.floor(Math.random() * 70)
         this.addPending('truckpark', m, t('Tır parkı'))
+      }
+    }
+    if (this.hasTruckPark2) {
+      this.truck2Timer -= dt
+      if (this.truck2Timer <= 0) {
+        this.truck2Timer = 35 + Math.random() * 20
+        const m = 90 + Math.floor(Math.random() * 70)
+        this.addPending('truckpark2', m, t('Karşı tır parkı'))
       }
     }
     if (this.hasSelfWash) {
@@ -893,6 +903,7 @@ export class GameState {
       + (yes('hasCoffee') ? 600 : 0) + (yes('hasCoffee2') ? 600 : 0)
       + (yes('hasWash') ? 700 : 0) + (yes('hasWash2') ? 700 : 0)
       + (yes('hasOil') ? 400 : 0) + (yes('hasOil2') ? 400 : 0)
+      + (yes('hasTruckPark2') ? 850 : 0)
       + (yes('hasTruckPark') ? 900 : 0)
       + num('selfWashCount') * 250 + num('airWaterCount') * 120 + num('parkingCount') * 90
     // MARİNA: bağlama/kışlama pasif omurgadır, müdürsüz de mantıklı ama müdür tahsil eder
@@ -1694,6 +1705,7 @@ export class GameState {
       case 'airwater': return 250 * Math.min(6, Math.max(1, this.airWaterCount))
       case 'parking': return 300 * Math.min(6, Math.max(1, this.parkingCount))
       case 'truckpark': return 1200   // pasif yüksek kazanan
+      case 'truckpark2': return 1200
       case 'restaurant': return 1200  // ₺80-160/ziyaret
       case 'oil': return 1000         // ₺150-250/servis
       case 'wash': return 700         // ₺60-120/yıkama
@@ -1755,14 +1767,14 @@ export class GameState {
   pendingCapTotal(): number {
     let v = 0
     for (const id of ['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2',
-      'coffee', 'coffee2', 'restaurant', 'restaurant2', 'truckpark', 'selfwash', 'airwater', 'parking']) {
+      'coffee', 'coffee2', 'restaurant', 'restaurant2', 'truckpark', 'truckpark2', 'selfwash', 'airwater', 'parking']) {
       const has = (id === 'market' && this.marketLevel > 0) || (id === 'market2' && this.market2Level > 0)
         || (id === 'toilet' && this.toiletLevel > 0) || (id === 'toilet2' && this.toilet2Level > 0)
         || (id === 'wash' && this.hasWash) || (id === 'wash2' && this.hasWash2)
         || (id === 'oil' && this.hasOil) || (id === 'oil2' && this.hasOil2)
         || (id === 'coffee' && this.hasCoffee) || (id === 'coffee2' && this.hasCoffee2)
         || (id === 'restaurant' && this.hasRestaurant) || (id === 'restaurant2' && this.hasRestaurant2)
-        || (id === 'truckpark' && this.hasTruckPark) || (id === 'selfwash' && this.selfWashCount > 0)
+        || (id === 'truckpark' && this.hasTruckPark) || (id === 'truckpark2' && this.hasTruckPark2) || (id === 'selfwash' && this.selfWashCount > 0)
         || (id === 'airwater' && this.airWaterCount > 0) || (id === 'parking' && this.parkingCount > 0)
       if (has) v += this.pendingCap(id)
     }
@@ -2012,6 +2024,8 @@ export function getShopItems(s: GameState): ShopRow[] {
       t('Karşı yakadaki yolcular kahve molası verir.'), s.hasCoffee2 ? null : COFFEE_COST, s.hasCoffee)
     far('restaurant2', 'i-food', t('Karşı Restoran'), '+₺80-160',
       t('Karşı yakada yemek molası.'), s.hasRestaurant2 ? null : RESTAURANT_COST, s.hasRestaurant)
+    far('truckpark2', 'i-truck', t('Karşı Tır Parkı'), '+₺90-160/dk',
+      t('Karşı yakada tırcılar konaklar — düzenli pasif gelir.'), s.hasTruckPark2 ? null : TRUCKPARK_COST, s.hasTruckPark)
   }
 
   // ---- KATMAN 2b SİNK'LERİ: sigorta, dekorasyon, ekipman yenileme ----
@@ -2365,6 +2379,7 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'coffee': s.hasCoffee = true; break
     case 'restaurant': s.hasRestaurant = true; break
     case 'truckpark': s.hasTruckPark = true; break
+    case 'truckpark2': s.hasTruckPark2 = true; break
     case 'airwater': s.airWaterCount++; break
     case 'lamp': s.lampCount++; break
     case 'winterslot': s.winterSlots++; break
@@ -2409,6 +2424,7 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
     case 'coffee': return s.hasCoffee ? { refund: half(COFFEE_COST) } : null
     case 'restaurant': return s.hasRestaurant ? { refund: half(RESTAURANT_COST) } : null
     case 'truckpark': return s.hasTruckPark ? { refund: half(TRUCKPARK_COST) } : null
+    case 'truckpark2': return s.hasTruckPark2 ? { refund: half(TRUCKPARK_COST) } : null
     case 'dieselgen': return s.hasDiesel ? { refund: half(DIESELGEN_COST) } : null
     case 'smr': return s.hasSMR ? { refund: half(SMR_COST) } : null
     case 'solar': return s.solarCount > 0 ? { refund: half(SOLAR_COST) } : null // 2c: herhangi bir örnek satılabilir
@@ -2451,6 +2467,7 @@ export function applySell(s: GameState, id: string): number | null {
     case 'coffee': s.hasCoffee = false; break
     case 'restaurant': s.hasRestaurant = false; break
     case 'truckpark': s.hasTruckPark = false; break
+    case 'truckpark2': s.hasTruckPark2 = false; break
     case 'dieselgen': s.hasDiesel = false; break
     case 'smr': s.hasSMR = false; s.uranium = 0; s.smrWear = 0; break
     case 'solar': s.solarCount--; break

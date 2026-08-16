@@ -2575,8 +2575,8 @@ export class World {
     this.register(regId, t('RESTORAN'), g, 3.6)
   }
 
-  buildTruckPark(pos?: THREE.Vector2) {
-    const at = pos ?? new THREE.Vector2(-12.5, -4.5)
+  buildTruckPark(pos?: THREE.Vector2, regId = 'truckpark') {
+    const at = pos ?? (regId === 'truckpark2' ? new THREE.Vector2(16.5, -4.5) : new THREE.Vector2(-12.5, -4.5))
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 5.6), lam(0x565e66))
     pad.position.z = 0.02
@@ -2598,7 +2598,7 @@ export class World {
     cyl(0.08, 1.8, 0x59616b, 3.9, 0, 0.9, 'z', g)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
-    this.register('truckpark', t('TIR PARKI'), g, 2.6)
+    this.register(regId, t('TIR PARKI'), g, 2.6)
   }
 
   buildSelfWash(pos?: THREE.Vector2, regId = 'selfwash') {
