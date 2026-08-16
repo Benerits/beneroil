@@ -4165,7 +4165,7 @@ function buildingCard(id: string): BuildingCard | null {
           [t('Dolu'), `${Math.floor(state.battery)} / ${state.batteryCapacity} kWh`],
           [t('Üretim'), t('+{0} kWh/sn (şebeke dahil)', state.genRate().toFixed(1)), 'good'],
           [t('Şebeke maliyeti'), `₺${GRID_COST_PER_KWH}/kWh`, 'bad'],
-          [t('Araca akış'), `${[0, 15, 25, 40][state.batteryLevel]} kWh/sn`],
+          [t('Araca akış'), `${DISCHARGE_RATE[state.batteryLevel] ?? DISCHARGE_RATE[DISCHARGE_RATE.length - 1]} kWh/sn`], // sv4+ 'undefined kWh/sn' fixi
           [t('Üretim'), `+${rate.toFixed(1)} kWh/sn`, rate > 0 ? 'good' : ''],
           [t('Seviye'), `${state.batteryLevel}/3`],
         ],
