@@ -199,6 +199,14 @@ class AudioMan {
     notes.forEach((n, i) => this.tone(n, 0.28, 'triangle', 0.12, i * 0.09))
   }
 
+  /** ETKİNLİK JİNGLE'I (feedback 282/605/673): yakıt indirimi / müşteri patlaması
+   *  başlangıcı diğer bildirimlerden AYRIŞSIN — yükselen çift üçlü + tiz ping */
+  promo() {
+    if (!this.canSfx()) return
+    const seq: [number, number][] = [[392, 0], [523.3, 0.08], [659.3, 0.16], [523.3, 0.3], [784, 0.38], [1046.5, 0.46], [1568, 0.62]]
+    for (const [n, d] of seq) this.tone(n, 0.22, d >= 0.6 ? 'sine' : 'square', d >= 0.6 ? 0.16 : 0.09, d)
+  }
+
   build() {
     if (!this.canSfx()) return
     this.tone(200, 0.1, 'square', 0.1)

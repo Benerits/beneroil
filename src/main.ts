@@ -4688,7 +4688,7 @@ function frame() {
     if (rt) {
       const left = state.promo ? Math.max(0, Math.ceil((state.promo.until - Date.now()) / 1000)) : 0
       if (left > 0 && state.promo) {
-        if (rt.style.display !== 'flex') rt.style.display = 'flex'
+        if (rt.style.display !== 'flex') { rt.style.display = 'flex'; audio.promo() } // rozet açılırken özgün jingle
         const lbl = document.getElementById('rushlabel')
         const want = state.promo.type === 'rush' ? t('MÜŞTERİ PATLAMASI') : t('YAKIT İNDİRİMİ %50')
         if (lbl && lbl.textContent !== want) lbl.textContent = want
