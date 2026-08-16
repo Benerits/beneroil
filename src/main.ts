@@ -2342,6 +2342,75 @@ let pendingPush: number | null = null // throttle penceresinde bekleyen garanti 
 // Offline pompacı satışı sabitleri (applyOfflineEarnings + tank-düşük bildirimi aynı oranı kullanır)
 const OFFLINE_FUELS = ['benzin', 'dizel', 'lpg'] as const
 const OFFLINE_LPS = 0.3 // pompacı başına L/sn (~aktif temponun yarısı)
+
+/** Oyuncu yokken (oyun kapalı VEYA sekme arka planda) geçen süreyi pasif kazanca çevirir:
+ *  kumbaralı tesisler + idle tesis geliri + pompacı yakıt satışı. Açılıştaki offline raporla
+ *  AYNI formül/tavanlar (90 sn eşik, 2 saat cap) — tek kaynaktan yürür ki dengeler ayrışmasın.
+ *  Dönüş: oyuncuya yansıyan toplam ₺ (0 = işlemedi). */
+function applyAwayEarnings(offSecRaw: number): number {
+  if (isFullMode || state.closed) return 0
+  const offSec = Math.min(offSecRaw, 7200) // en fazla 2 saatlik birikim
+  if (offSec <= 90) return 0
+  let total = 0
+  // kumbaralı tesisler (topla-hook'u): tır parkı, self yıkama, oto yıkama, hava-su
+  const gains: [string, string, number][] = []
+  if (state.hasTruckPark) gains.push(['truckpark', t('Tır parkı'), 125 / 45])
+  if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
+  if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
+  if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
+  for (const [id, name, rate] of gains) {
+    const amt = Math.round(rate * offSec)
+    state.addPending(id, amt, name)
+    total += Math.min(amt, 600)
+  }
+  // per-müşteri tesisler: küçük düz idle gelir, doğrudan kasaya (topla-cap'li, ilerlemeyi bozmaz)
+  let idleCash = 0
+  if (state.marketLevel > 0) idleCash += 0.8 * state.marketLevel * offSec
+  if (state.hasCoffee) idleCash += 0.6 * offSec
+  if (state.hasRestaurant) idleCash += 1.2 * offSec
+  if (state.hasOil) idleCash += 0.9 * offSec
+  idleCash = Math.min(Math.round(idleCash), 4000) // idle tavanı
+  if (idleCash > 0) { state.money += idleCash; total += idleCash }
+  // POMPACILI pompalar offline YAKIT SATAR: tank gerçekten azalır, satış kasaya girer.
+  const attended = [...state.autoPumps].filter(i => !state.brokenPumps.has(i)).length // bozuk pompadaki pompacı satamaz
+  if (attended > 0) {
+    const totalStock = OFFLINE_FUELS.reduce((a, f) => a + Math.max(0, state.tanks[f]), 0)
+    const toSell = Math.min(OFFLINE_LPS * attended * offSec, totalStock, 6000)
+    if (toSell > 1 && totalStock > 0) {
+      let fuelCash = 0
+      for (const f of OFFLINE_FUELS) {
+        const share = Math.max(0, state.tanks[f]) / totalStock
+        const sell = Math.min(Math.max(0, state.tanks[f]), toSell * share)
+        state.tanks[f] -= sell
+        fuelCash += sell * state.prices[f]
+        state.addContractDelivery(f, sell) // offline satış da taahhüde sayılır (yoksa otomasyon sözleşmeyi sabote ediyordu)
+      }
+      fuelCash = Math.round(fuelCash)
+      state.money += fuelCash
+      total += fuelCash
+      ui.toast(t('Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!',
+        Math.round(toSell).toLocaleString('tr-TR'), fuelCash.toLocaleString('tr-TR')), 'good', true)
+    }
+  }
+  if (total > 0) {
+    ui.toast(t('Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!', total.toLocaleString('tr-TR')), 'good', true)
+    audio.cash()
+  }
+  return total
+}
+
+// SEKME ARKA PLAN FİXİ (oyuncu raporu: "başka sekmeye geçince oyun duruyor"):
+// rAF arka planda bilinçli durur (pil/CPU) — ama dönüşte geçen süre artık boşa gitmiyor,
+// açılıştaki offline formülüyle pasif kazanca çevriliyor.
+let tabHiddenAt = 0
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { tabHiddenAt = Date.now(); return }
+  if (!tabHiddenAt) return
+  const offSec = (Date.now() - tabHiddenAt) / 1000
+  tabHiddenAt = 0
+  if (guestPaused || exploding || cloudBlocked) return
+  if (applyAwayEarnings(offSec) > 0) persist()
+})
 // Buluttan kayıt YÜKLENEMEDİYSE (ağ/sunucu hatası) hiçbir kayıt gönderilmez —
 // taze bir oturumun ilerlemiş bulut kaydını EZMESİNİ önler (override koruması).
 let cloudBlocked = false
@@ -3706,59 +3775,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
   // KAPALI İSTASYON ÇALIŞMAZ (oyuncu raporu: "kapatıp gittim, dönünce 'senin için çalıştı'
   // bildirimi geldi") — bu blokta closed guard'ı yoktu; kumbara/idle/pompacı satışı
   // kapalıyken de işliyordu. Artık kapalıyken hiçbir offline kazanç işlemez.
-  if (!isFullMode && loadedSaveAt > 0 && !state.closed) {
-    const offSec = Math.min((Date.now() - loadedSaveAt) / 1000, 7200) // en fazla 2 saatlik birikim
-    if (offSec > 90) {
-      let total = 0
-      // kumbaralı tesisler (topla-hook'u): tır parkı, self yıkama, oto yıkama, hava-su
-      const gains: [string, string, number][] = []
-      if (state.hasTruckPark) gains.push(['truckpark', t('Tır parkı'), 125 / 45])
-      if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
-      if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
-      if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
-      for (const [id, name, rate] of gains) {
-        const amt = Math.round(rate * offSec)
-        state.addPending(id, amt, name)
-        total += Math.min(amt, 600)
-      }
-      // per-müşteri tesisler: küçük düz idle gelir, doğrudan kasaya (topla-cap'li, ilerlemeyi bozmaz)
-      let idleCash = 0
-      if (state.marketLevel > 0) idleCash += 0.8 * state.marketLevel * offSec
-      if (state.hasCoffee) idleCash += 0.6 * offSec
-      if (state.hasRestaurant) idleCash += 1.2 * offSec
-      if (state.hasOil) idleCash += 0.9 * offSec
-      idleCash = Math.min(Math.round(idleCash), 4000) // idle tavanı
-      if (idleCash > 0) { state.money += idleCash; total += idleCash }
-      // POMPACILI pompalar offline YAKIT SATAR: tank gerçekten azalır, satış kasaya girer.
-      // ("para birikiyor ama petrol azalmıyor" tutarsızlığının fixi — #512 + Oğuz.)
-      // Oran aktif temponun ~yarısı (0.3 L/sn/pompacı); tank stoğu ve 2 saat cap'iyle sınırlı.
-      const attended = [...state.autoPumps].filter(i => !state.brokenPumps.has(i)).length // bozuk pompadaki pompacı satamaz
-      if (attended > 0) {
-        const totalStock = OFFLINE_FUELS.reduce((a, f) => a + Math.max(0, state.tanks[f]), 0)
-        let toSell = Math.min(OFFLINE_LPS * attended * offSec, totalStock, 6000)
-        if (toSell > 1 && totalStock > 0) {
-          let fuelCash = 0
-          const soldTotal = toSell
-          for (const f of OFFLINE_FUELS) {
-            const share = Math.max(0, state.tanks[f]) / totalStock
-            const sell = Math.min(Math.max(0, state.tanks[f]), toSell * share)
-            state.tanks[f] -= sell
-            fuelCash += sell * state.prices[f]
-            state.addContractDelivery(f, sell) // offline satış da taahhüde sayılır (yoksa otomasyon sözleşmeyi sabote ediyordu)
-          }
-          fuelCash = Math.round(fuelCash)
-          state.money += fuelCash
-          total += fuelCash
-          ui.toast(t('Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!',
-            Math.round(soldTotal).toLocaleString('tr-TR'), fuelCash.toLocaleString('tr-TR')), 'good', true)
-        }
-      }
-      if (total > 0) {
-        ui.toast(t('Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!', total.toLocaleString('tr-TR')), 'good', true)
-        audio.cash()
-      }
-    }
-  }
+  if (loadedSaveAt > 0) applyAwayEarnings((Date.now() - loadedSaveAt) / 1000) // guard'lar fonksiyonun içinde
 }
 
 ui.onLogin = async (email, pass) => {
