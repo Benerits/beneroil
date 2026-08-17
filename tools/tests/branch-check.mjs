@@ -58,33 +58,35 @@ console.log('\n== 3) Kasa gün gün dolar ve TAVANDA DURUR ==')
   const s = twoBranch(2)
   const per = s.branchNetPerDay('otoyol').net
   const cap = s.branchVaultCap('otoyol')
+  const m0 = s.money
   s.accrueBranchVaults()
-  check('bir gün sonra kasada bir günlük var', s.branchVault.otoyol === per, `${s.branchVault.otoyol} vs ${per}`)
+  // 17 Ağu (Oğuz — "kasa tek olsun"): birikim ŞUBE KASASINA değil DOĞRUDAN ortak kasaya
+  check('bir gün sonra günlük net DOĞRUDAN kasada', s.money === m0 + per, `${s.money - m0} vs ${per}`)
+  check('şube kasası artık birikmez', (s.branchVault.otoyol ?? 0) === 0)
   for (let i = 0; i < 40; i++) s.accrueBranchVaults()
-  check('40 gün sonra kasa TAVANI GEÇMEZ', s.branchVault.otoyol <= cap, `${s.branchVault.otoyol} > ${cap}`)
-  check('kasa gerçekten tavana ulaştı', s.branchVault.otoyol === cap)
-  check('tavan mutlak sınırın altında (sunucu kovası patlamasın)',
-    cap <= GameState.BRANCH_VAULT_HARD, `${cap}`)
-  console.log(`      ↳ Sv.2 tavanı ₺${cap} (${GameState.BRANCH_VAULT_DAYS[2]} günlük)`)
+  check('40 gün sonra 41 günlük net kasada (tavansız — sunucu kovası günlük akışı zaten kapsar)',
+    s.money === m0 + per * 41, `${s.money - m0} vs ${per * 41}`)
+  check('mutlak tavan sabiti duruyor (eski kayıt göçü için)', cap <= GameState.BRANCH_VAULT_HARD, `${cap}`)
 }
 
 console.log('\n== 4) AKTİF şube kasaya yazmaz (çift sayım = anti-cheat 409) ==')
 {
   const s = twoBranch(3)
   s.managerLevel = 3           // aktif şubede de müdür var
-  s.accrueBranchVaults()
-  check('aktif şube (kasaba) için kasa oluşmadı', (s.branchVault.kasaba ?? 0) === 0)
-  check('yalnız pasif şube (otoyol) birikti', (s.branchVault.otoyol ?? 0) > 0)
+  const res = s.accrueBranchVaults()
+  check('aktif şube (kasaba) akıtmadı (çift sayım yok)', !res.some(r => r.loc === 'kasaba'))
+  check('yalnız pasif şube (otoyol) kasaya aktı', res.length === 1 && res[0].loc === 'otoyol' && res[0].added > 0)
 }
 
 console.log('\n== 5) Toplama parayı kasaya geçirir ve kasayı sıfırlar ==')
 {
+  // ESKİ birikmiş şube kasası (göç senaryosu): collect hâlâ çalışır ve tek seferliktir
   const s = twoBranch(2)
-  for (let i = 0; i < 3; i++) s.accrueBranchVaults()
-  const before = s.money, vault = s.branchVault.otoyol
+  s.branchVault.otoyol = 12_345 // eski kayıttan gelmiş bakiye
+  const before = s.money
   const got = s.collectBranchVaults()
-  check('toplanan tutar kasadaki kadar', got === vault, `${got} vs ${vault}`)
-  check('para kasaya eklendi', s.money === before + vault)
+  check('eski bakiye toplandı', got === 12_345, `${got}`)
+  check('para kasaya eklendi', s.money === before + 12_345)
   check('şube kasası sıfırlandı', (s.branchVault.otoyol ?? 0) === 0)
   check('tekrar toplamak para vermez (çift tahsilat yok)', s.collectBranchVaults() === 0)
 }
@@ -92,21 +94,18 @@ console.log('\n== 5) Toplama parayı kasaya geçirir ve kasayı sıfırlar ==')
 console.log('\n== 6) Tek şube toplama diğerine dokunmaz ==')
 {
   const s = twoBranch(2)
-  s.unlockedLocs.push('marina')
-  s.locSnapshots.marina = { ...s.locSnapshots.otoyol, f: { ...s.locSnapshots.otoyol.f, managerLevel: 1 } }
-  s.accrueBranchVaults(); s.accrueBranchVaults()
-  const mar = s.branchVault.marina
+  s.branchVault.otoyol = 5000; s.branchVault.marina = 7000 // eski bakiyeler
   s.collectBranchVaults('otoyol')
   check('otoyol boşaldı', (s.branchVault.otoyol ?? 0) === 0)
-  check('marina dokunulmadı', s.branchVault.marina === mar, `${s.branchVault.marina} vs ${mar}`)
+  check('marina dokunulmadı', s.branchVault.marina === 7000, `${s.branchVault.marina}`)
 }
 
 console.log('\n== 7) Save ADDITIVE: alan yoksa çöker mi, varsa kırpılıyor mu ==')
 {
   const s = twoBranch(2)
-  s.accrueBranchVaults()
+  s.branchVault.otoyol = 4321 // eski bakiye — göç tamamlanana dek save'de taşınmalı
   const ser = serializeState(s)
-  check('branchVault serialize ediliyor', !!ser.branchVault && ser.branchVault.otoyol > 0)
+  check('branchVault serialize ediliyor', !!ser.branchVault && ser.branchVault.otoyol === 4321)
   // ESKİ SAVE (alan yok) → varsayılan boş, çökme yok
   const old = new GameState()
   hydrateState(old, { day: 12, money: 5000 })

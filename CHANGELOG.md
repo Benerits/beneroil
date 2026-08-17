@@ -1,6 +1,9 @@
 # BenelOil — Değişiklik Günlüğü
 
 ## 17 Ağustos 2026
+- **Kasa tek** (oyuncu talebi): müdürlü pasif şubelerin günlük net geliri artık şube kasasında birikmek yerine her gün dönüşünde DOĞRUDAN ortak kasaya yazılıyor — "2. şubedeyken 1. şube AFK kalıyor" derdi bitti. Eski şube-kasası bakiyeleri ilk gün dönüşünde otomatik devredilir. (Müdürsüz şube üretmez — tasarım.)
+- **Steam anketi**: girişte hesap başına ömürde 1 kez "Steam kullanıyor musun?" modalı — cevaplar saatlik metriklere yazılıyor (steam_yes/no/skip), Steam lansman kararına veri.
+- **Çeviri borcu kapandı**: rakip mesajları (⚔️/📣/💰) EN-FR'de Türkçe kalıyordu; sipariş açıklaması + müdür açıklaması dahil tüm eksik anahtarlar tamamlandı (i18n testi 7/7).
 - **Marina tekne kuyruğu**: tekneler artık iç içe girmiyor — bekleme yuvaları tekne ölçeğinde (9'ar birim) tek sıra kuyruk, takip/durma mesafesi tekne boyuyla ölçekleniyor (süperyat 8.5 birim). Kara şubelerinde davranış birebir aynı (test kanıtlı).
 - **Arka planda oyun artık GERÇEKTEN akıyor**: sekme arkadayken simülasyon Web Worker sürücüsüyle gerçek zamanda devam eder (satışlar, pompacılar, müdür, günler — hepsi canlı). Görsel render arka planda atlanır (pil dostu). Dünkü "dönünce kazanç yaz" telafisi kaldırıldı — artık gerek yok; sayfa açılışındaki offline kazanç (tarayıcı kapalıyken) duruyor.
 

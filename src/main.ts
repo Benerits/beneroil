@@ -796,7 +796,7 @@ function openOfficePanel() {
         : `<button class="btn sbuy good" id="of-hire-manager">${mL === 0 ? t('Müdür Tut') : t('Yükselt')} · ₺${tl(MANAGER_COSTS[mL])}</button>`
       const fireBtn = mL > 0 ? `<button class="btn sbuy" id="of-fire-manager" style="color:var(--red-dark)">${t('İşten Çıkar')}</button>` : ''
       head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><svg class="ic" style="vertical-align:-3px"><use href="#i-gear"/></svg> <b>${mL === 0 ? t('Müdür') : t('Müdür Sv.{0}', String(mL))}</b>${mL > 0 ? ` <span style="color:var(--muted);font-weight:650">· ${t('yovmiye ₺{0}/gün', String(MANAGER_WAGES[mL]))}</span>` : ''}</span>${btn}${fireBtn}`
-        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder ve YAKIT İNDİRİMİ fırsatında tankları fulller. Sen başka şubedeyken şubeyi işletir.')}</div></div>`
+        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder ve YAKIT İNDİRİMİ fırsatında tankları fulller. Sen başka şubedeyken şubeyi işletir — günlük net kazancı kasana otomatik yazılır.')}</div></div>`
     }
     if (vaultTotal > 0) {
       head = `<div class="prow"><span class="pl"><b>${t('Şube kasalarında bekleyen')}</b></span>`
@@ -814,11 +814,10 @@ function openOfficePanel() {
       if (open) {
         // PASİF ŞUBE: müdür var mı, günlük net ne, kasada ne birikti
         const d = state.branchNetPerDay(id)
-        const vault = Math.round(state.branchVault[id] ?? 0)
-        const cap = Math.round(state.branchVaultCap(id))
+        const vault = Math.round(state.branchVault[id] ?? 0) // eski birikim (göç bekliyor) — varsa Topla butonu görünür
         const note = d.level > 0
-          ? t('Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}',
-              String(d.level), tl(d.net), tl(vault), tl(cap))
+          ? t('Müdür Sv.{0} · günlük net ₺{1} — her gün dönüşünde kasana OTOMATİK eklenir',
+              String(d.level), tl(d.net))
           : t('Müdür YOK — şube kapalı duruyor. Şubeye git, Ofis içindeki Şubeler sekmesinden müdür tut.')
         return `<div class="prow" style="flex-wrap:wrap"><span class="pl">${th.name}</span>`
           + (vault > 0 ? `<button class="btn sbuy good" data-collectloc="${id}">${t('Topla ₺{0}', tl(vault))}</button>` : '')
@@ -2675,6 +2674,33 @@ function applyOfflineEarnings() {
   showOfflineModal(income, elapsedSec, 0)
 }
 
+/** STEAM ANKETİ MODALI: hesap başına 1 kez. Cevap → save + sunucu metriği. */
+function showSteamPoll() {
+  if (state.steamPoll) return // başka cihazda bu arada cevaplanmış olabilir
+  const o = document.createElement('div')
+  o.style.cssText = 'position:fixed;inset:0;z-index:99996;background:#0d1420cc;display:flex;align-items:center;justify-content:center;padding:22px;font-family:var(--font,system-ui)'
+  o.innerHTML =
+    `<div style="background:linear-gradient(180deg,#fdfaf2,#f1ebdb);border:2px solid #e0d4bd;border-bottom-width:7px;border-radius:22px;padding:24px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(10,14,20,.5)">`
+    + `<div style="font-size:40px;line-height:1">🎮</div>`
+    + `<div style="font-size:21px;font-weight:800;color:#1e2a36;margin:10px 0 4px">${t('Tek soru patron!')}</div>`
+    + `<div style="font-size:14px;font-weight:700;color:#7a6152;line-height:1.5;margin-bottom:16px">${t('Steam kullanıyor musun? (BenelOil için yol haritamıza yön verecek — bir daha sormayacağız)')}</div>`
+    + `<button id="sp-yes" style="width:100%;padding:13px;border-radius:14px;border:2px solid #1e5c2f;border-bottom-width:4px;background:linear-gradient(180deg,#35b563,#27a05a);color:#fff;font-weight:800;font-size:16px;cursor:pointer;margin-bottom:9px">${t('Evet, Steam kullanıyorum')}</button>`
+    + `<button id="sp-no" style="width:100%;padding:13px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer;margin-bottom:10px">${t('Hayır, kullanmıyorum')}</button>`
+    + `<button id="sp-skip" style="background:none;border:none;font-size:12.5px;font-weight:700;color:#9aa4b0;cursor:pointer;text-decoration:underline">${t('Cevaplamak istemiyorum')}</button>`
+    + `</div>`
+  document.body.appendChild(o)
+  const answer = (v: 'yes' | 'no' | 'skip') => {
+    state.steamPoll = v
+    persist()
+    fetch('/api/metric', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: 'steam_' + v }) }).catch(() => {})
+    o.remove()
+    if (v !== 'skip') ui.toast(t('Teşekkürler patron! 🙏'), 'good')
+  }
+  o.querySelector('#sp-yes')?.addEventListener('click', () => answer('yes'))
+  o.querySelector('#sp-no')?.addEventListener('click', () => answer('no'))
+  o.querySelector('#sp-skip')?.addEventListener('click', () => answer('skip'))
+}
+
 /** "Tekrar hoş geldin — yokken istasyonun kazandı" modalı (oyunun krem/kırmızı dili) */
 function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
   const h = Math.floor(elapsedSec / 3600), m = Math.floor((elapsedSec % 3600) / 60)
@@ -3507,10 +3533,15 @@ if (saveLoaded && state.activeLoc !== locHint && !sessionStorage.getItem('benelo
 if (saveLoaded && state.activeLoc === locHint) sessionStorage.removeItem('beneloil-loc-fixed')
 if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)
-// C9 (analiz): dönen oyuncuya birikimi hatırlat — nereden toplanacağıyla birlikte
+// C9 (analiz): eski şube-kasası bakiyesi varsa haber ver (ilk gün dönüşünde otomatik devredilir)
 if (saveLoaded && state.branchVaultTotal() >= 100) {
-  ui.toast(t('Sen yokken müdürlü şubelerin ₺{0} biriktirdi — Ofis → Şubeler’den topla!',
+  ui.toast(t('Şube kasalarında ₺{0} birikmiş — gün dönüşünde otomatik kasana aktarılacak.',
     Math.round(state.branchVaultTotal()).toLocaleString('tr-TR')), 'good', true)
+}
+// STEAM ANKETİ (Oğuz 17 Ağu): hesap başına ÖMÜRDE 1 kez — Steam kitlesini ölçmek için.
+// Cevap save'e yazılır (steamPoll), sayım sunucu metriğine düşer (steam_yes/no/skip).
+if (saveLoaded && auth.loggedIn() && !state.steamPoll && !isFullMode && !isPromoMode) {
+  setTimeout(showSteamPoll, 20_000) // oyuncu oyuna otursun, açılış curcunasına denk gelmesin
 }
 // eski yerel kayıt kalıntılarını temizle (artık her şey SQL'de)
 for (const key of Object.keys(localStorage)) {
@@ -4841,20 +4872,18 @@ function frame() {
         }
       }
     }
-    // ---- ŞUBE MÜDÜRLERİ: pasif şubelerin günlük net geliri kendi kasalarına yazılır ----
-    // Aktif şube dışarıda bırakılır (orada gelir anlık işliyor; iki kez sayılırsa
-    // sunucunun servet tavanı 409 verir). Kasa dolunca birikim durur ve oyuncu uyarılır —
-    // "geri dön" çağrısı bu; sessizce buharlaşan gelir YOK.
+    // ---- ŞUBE MÜDÜRLERİ (Oğuz 17 Ağu: "kasa tek olsun"): pasif şubelerin günlük net
+    // geliri artık DOĞRUDAN ortak kasaya akar — toplama ritüeli yok, şube AFK kalmaz.
+    // Eski şube-kasası bakiyeleri ilk gün dönüşünde otomatik devredilir (tek seferlik göç).
+    {
+      const legacyVault = state.collectBranchVaults()
+      if (legacyVault > 0) ui.toast(t('Şube kasalarındaki birikim ortak kasaya aktarıldı: +₺{0}', legacyVault.toLocaleString('tr-TR')), 'good')
+    }
     const vaults = state.accrueBranchVaults()
     if (vaults.length) {
       const added = vaults.reduce((a, v) => a + v.added, 0)
-      const full = vaults.filter(v => v.full)
       if (added > 0) {
-        ui.toast(t('Şube müdürleri +₺{0} kazandı — Ofis › Şubeler\'den topla', added.toLocaleString('tr-TR')), 'good')
-      }
-      if (full.length) {
-        ui.toast(t('{0} şubesinin kasası DOLDU — uğramazsan birikmez',
-          full.map(v => THEMES[v.loc].name).join(', ')), 'bad')
+        ui.toast(t('Şube müdürlerinden kasaya +₺{0}', added.toLocaleString('tr-TR')), 'good')
       }
     }
     // İTİBAR MUTABAKATI (#456): itibar günün hizmet kalitesine çekilir — 5.0'da donmaz

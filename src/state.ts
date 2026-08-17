@@ -238,6 +238,7 @@ export class GameState {
   /** o günün başındaki toplam ciro (günlük satış = stats.revenue - dayStartRevenue) */
   dayStartRevenue = 0
   noAds = false // "Reklamları Kaldır" satın alındı mı (IAP) — interstitial gösterilmez
+  steamPoll = '' // Steam anketi cevabı ('yes'|'no'|'skip') — hesap başına ömürde 1 kez sorulur
   orders: Record<FuelType, { pending: boolean; eta: number; arrived: boolean; delivering: boolean; amount: number }> = {
     benzin: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
     dizel: { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 },
@@ -935,8 +936,11 @@ export class GameState {
   }
 
   /**
-   * Gün dönüşünde pasif şubelerin kasasını doldur. Aktif şube DAHİL DEĞİL
-   * (orada gelir zaten anlık işliyor; iki kez sayılırsa anti-cheat 409 verir).
+   * Gün dönüşünde pasif (müdürlü) şubelerin NET geliri DOĞRUDAN ortak kasaya akar
+   * (Oğuz 17 Ağu — oyuncu talebi: "kasa tek olsun, şube AFK kalmasın"). Eski şube-kasası
+   * birikimi kaldırıldı; birikmiş bakiyeler gün dönüşünde otomatik devredilir (main.ts).
+   * Aktif şube DAHİL DEĞİL (orada gelir anlık işliyor; iki kez sayılırsa anti-cheat 409).
+   * Sunucu uyumu: günlük net, kovanın şube terimi (maxIncomeRate) içinde zaten hesaplı.
    */
   accrueBranchVaults(): { loc: LocId; added: number; full: boolean }[] {
     const out: { loc: LocId; added: number; full: boolean }[] = []
@@ -944,12 +948,10 @@ export class GameState {
       if (loc === this.activeLoc) continue
       const d = this.branchNetPerDay(loc)
       if (d.level <= 0 || d.net <= 0) continue
-      const cap = this.branchVaultCap(loc)
-      const cur = this.branchVault[loc] ?? 0
-      const next = Math.min(cap, cur + d.net)
-      const added = Math.round(next - cur)
-      this.branchVault[loc] = Math.round(next)
-      if (added > 0 || next >= cap) out.push({ loc, added, full: next >= cap - 1 })
+      const added = Math.round(d.net)
+      this.money += added
+      this.stats.revenue += added
+      out.push({ loc, added, full: false })
     }
     return out
   }
@@ -2168,7 +2170,7 @@ const SAVE_FIELDS = [
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
+  'wagesPaid', 'fuelSpent', 'noAds', 'steamPoll', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
 ] as const
 

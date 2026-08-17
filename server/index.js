@@ -71,6 +71,10 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS guest_signups int NOT NULL DEFAULT 0`)
   // ÖLÇÜM BORCU (analiz E14-15): huni + oturum + reklam sayaçları
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS gate_shown int NOT NULL DEFAULT 0`)
+  // STEAM ANKETİ (Oğuz 17 Ağu): hesap başına 1 kez sorulan "Steam kullanıyor musun?"
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS steam_yes int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS steam_no int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS steam_skip int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS gate_converted int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS ad_views int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS session_minutes int NOT NULL DEFAULT 0`)
@@ -887,7 +891,7 @@ async function handleApi(req, res, url) {
       // Hafif huni/oturum sayacı — yalnız BEYAZ LİSTEDEKİ kolonlar (bumpStat kolon adı
       // enterpolasyonu yapıyor; whitelist dışı girdi ASLA geçmez). IP başına saatlik tavan.
       const mb = await readBody(req).catch(() => ({}))
-      const ALLOWED = new Set(['gate_shown', 'gate_converted', 'ad_views', 'session_minutes', 'webgl_fail'])
+      const ALLOWED = new Set(['gate_shown', 'gate_converted', 'ad_views', 'session_minutes', 'webgl_fail', 'steam_yes', 'steam_no', 'steam_skip'])
       const k = String((mb && mb.k) || '')
       if (ALLOWED.has(k) && rateLimit('metric:' + k + ':' + clientIp(req), 90, 3600_000)) bumpStat(k)
       return json(res, 200, { ok: true })
