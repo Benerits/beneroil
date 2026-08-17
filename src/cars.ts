@@ -837,6 +837,7 @@ export class Tanker {
 // katı cisme denk gelirse koridor boyunca kayar (oyuncu oraya bina koyunca araç binanın
 // içinde bekliyordu). Ofsetler kapıdan istasyon içine doğru mesafedir.
 const WAIT_OFFSETS = [3.2, 6.0, 12.6, 15.4]
+const WAIT_OFFSETS_WATER = [4, 13, 22, 31] // tekne kuyruğu: boy ortalaması + pay (süperyat 8.5)
 const WAIT_SPOTS = [
   new THREE.Vector3(3.4, -4.6, 0), new THREE.Vector3(3.4, -7.4, 0),
   new THREE.Vector3(3.4, -16.8, 0), new THREE.Vector3(3.4, -19.6, 0),
@@ -971,9 +972,13 @@ export class CarManager {
    *  Katı cisme (oyuncunun koyduğu bina) denk gelirse koridor boyunca kayar. */
   private waitSpotAt(i: number, st: 'near' | 'far'): THREE.Vector3 {
     const G = this.geom(st)
-    // MARİNA: bekleme yuvası SUDA (ada doğu kıyısı 5.3 + pay) — tekne rıhtım tahtasına çıkmaz
-    const x = this.opts.isWater?.() && st === 'near' ? 6.9 : G.gateX + G.sideSign * 0.8
-    let y = G.gateInY + G.dirY * WAIT_OFFSETS[Math.min(i, WAIT_OFFSETS.length - 1)]
+    // MARİNA: bekleme yuvası SUDA (ada doğu kıyısı 5.3 + pay) — tekne rıhtım tahtasına çıkmaz.
+    // Aralıklar TEKNE ölçeğinde (Oğuz: "arka arkaya kuyruk"): süperyat 8.5 birim, araba
+    // aralığı (2.8) tekneleri iç içe bindiriyordu → suda 9'ar birim arayla tek sıra.
+    const water = this.opts.isWater?.() && st === 'near'
+    const x = water ? 6.9 : G.gateX + G.sideSign * 0.8
+    const offs = water ? WAIT_OFFSETS_WATER : WAIT_OFFSETS
+    let y = G.gateInY + G.dirY * offs[Math.min(i, offs.length - 1)]
     for (let k = 0; k < 6 && Car.isSolidAt(x, y); k++) y += G.dirY * 1.4
     return new THREE.Vector3(x, y, 0)
   }
@@ -1021,12 +1026,12 @@ export class CarManager {
   private neighborBuf: Car[] = []
   /** (x,y) çevresindeki 3×3 hücrede bulunan araçlar — dönen dizi YENİDEN KULLANILIR
    *  (çağıran, sonucu saklamadan aynı karede tüketmeli) */
-  private neighbors(x: number, y: number): Car[] {
+  private neighbors(x: number, y: number, ring = 1): Car[] {
     const out = this.neighborBuf
     out.length = 0
     const gx = Math.floor(x / CarManager.CELL), gy = Math.floor(y / CarManager.CELL)
-    for (let i = -1; i <= 1; i++) {
-      for (let j = -1; j <= 1; j++) {
+    for (let i = -ring; i <= ring; i++) {
+      for (let j = -ring; j <= ring; j++) {
         const list = this.carGrid.get((gx + i + 256) * 512 + (gy + j + 256))
         if (list) for (const c of list) out.push(c)
       }
@@ -1115,16 +1120,24 @@ export class CarManager {
       if (!dir) continue
       const cp = c.group.position
       let nearest: Car | null = null, nearestF = Infinity
-      for (const o of this.neighbors(cp.x, cp.y)) {
+      // MARİNA (Oğuz: "tekneler iç içe giriyor"): mesafeler tekne BOYUYLA ölçeklenir —
+      // jetski araba gibi, süperyat 8.5 birim; takip/durma aralığı ikilinin boy ortalaması.
+      const lenC = c.boat ? BOAT_LEN[c.boat] : 0
+      for (const o of this.neighbors(cp.x, cp.y, c.boat ? 3 : 1)) {
         if (o === c || o.phase === 'gone') continue
         if (o.phase === 'parked' && (c.phase === 'toPark' || c.phase === 'leaving')) continue
         const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
         const forward = dx * dir.x + dy * dir.y
-        if (forward < 0.4 || forward > 3.6) continue
+        const lenO = o.boat ? BOAT_LEN[o.boat] : 0
+        const sep = (lenC || lenO) ? (lenC + lenO) / 2 + 1.6 : 0
+        const fwdMax = sep ? sep * 1.5 : 3.6
+        const latMax = sep ? 1.9 : 1.25
+        const holdAt = sep || 1.5
+        if (forward < 0.4 || forward > fwdMax) continue
         const lx = dx - dir.x * forward, ly = dy - dir.y * forward
-        if (lx * lx + ly * ly < 1.25 * 1.25) {
-          if (forward < 1.5) { if (forward < nearestF) { nearestF = forward; nearest = o } }
-          else c.speedScale = Math.min(c.speedScale, 0.3 + 0.7 * ((forward - 1.5) / 2.1))
+        if (lx * lx + ly * ly < latMax * latMax) {
+          if (forward < holdAt) { if (forward < nearestF) { nearestF = forward; nearest = o } }
+          else c.speedScale = Math.min(c.speedScale, 0.3 + 0.7 * ((forward - holdAt) / (fwdMax - holdAt)))
         }
       }
       if (nearest) { c.hold = true; blockers.set(c, nearest) }

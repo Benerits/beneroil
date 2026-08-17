@@ -1,6 +1,7 @@
 # BenelOil — Değişiklik Günlüğü
 
 ## 17 Ağustos 2026
+- **Marina tekne kuyruğu**: tekneler artık iç içe girmiyor — bekleme yuvaları tekne ölçeğinde (9'ar birim) tek sıra kuyruk, takip/durma mesafesi tekne boyuyla ölçekleniyor (süperyat 8.5 birim). Kara şubelerinde davranış birebir aynı (test kanıtlı).
 - **Arka planda oyun artık GERÇEKTEN akıyor**: sekme arkadayken simülasyon Web Worker sürücüsüyle gerçek zamanda devam eder (satışlar, pompacılar, müdür, günler — hepsi canlı). Görsel render arka planda atlanır (pil dostu). Dünkü "dönünce kazanç yaz" telafisi kaldırıldı — artık gerek yok; sayfa açılışındaki offline kazanç (tarayıcı kapalıyken) duruyor.
 
 ## 16 Ağustos 2026 — Büyük Feedback Paketi
