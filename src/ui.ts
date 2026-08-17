@@ -78,6 +78,9 @@ const CATEGORY_MAP: Record<string, string> = {
   insurance: 'istasyon', renew: 'istasyon', fueldock: 'istasyon',
   market: 'tesis', market2: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
   coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis', decor: 'tesis',
+  // KARŞI YAKA NÜSHALARI (görünmezlik fixi): CATEGORY_MAP'te olmayan id hiçbir sekmeye
+  // düşmüyor ve İnşaat'ta HİÇ listelenmiyordu — market2 eklenmiş, kardeşleri unutulmuştu
+  toilet2: 'tesis', wash2: 'tesis', oil2: 'tesis', coffee2: 'tesis', restaurant2: 'tesis', truckpark2: 'tesis',
   chandlery: 'tesis', shower: 'tesis', clubhouse: 'tesis', icebait: 'tesis',
   travelift: 'tesis', pumpout: 'tesis', wasteoil: 'tesis', boom: 'tesis',
   grid: 'enerji', battery: 'enerji', evcharger: 'enerji', solar: 'enerji', dieselgen: 'enerji', smr: 'enerji',
