@@ -3481,7 +3481,19 @@ function buyToast(id: string) {
 const isFullMode = new URLSearchParams(location.search).has('full')
 // VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
 // doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
-if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = { get state() { return state }, get cars() { return cars }, get world() { return world }, get att() { return attendantFigs } }
+if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
+  get state() { return state }, get cars() { return cars }, get world() { return world }, get att() { return attendantFigs },
+  // SİNEMATİK KAMERA (video stüdyosu için — yalnız vitrin modunda): pürüzsüz zoom/pan
+  cine: {
+    getCam() { return { x: camX, y: camY, zoom: camera.zoom } },
+    setCam(x: number, y: number, zoom?: number) {
+      camX = x; camY = y
+      if (typeof zoom === 'number') camera.zoom = Math.min(2.6, Math.max(0.4, zoom))
+      updateCamera()
+      camera.updateProjectionMatrix()
+    },
+  },
+}
 let saveLoaded = false
 if (!isFullMode && !isPromoMode && auth.loggedIn()) {
   try {
