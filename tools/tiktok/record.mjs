@@ -49,9 +49,23 @@ await ctx.addInitScript(() => {
     localStorage.setItem('beneloil-lang', 'tr')
   } catch { /* boş */ }
   const inject = () => {
+    // "Neler Yeni" + kayıt CTA'sı çekimde görünmesin. AUTH KAPISI GİZLENMEZ:
+    // gizlenirse buton tıklanamıyor ve oyun guestPaused donmasında kalıyor (öğrenildi).
     const st = document.createElement('style')
-    st.textContent = '#authgate, #newswrap, #guestcta { display: none !important }'
+    st.textContent = '#newswrap, #guestcta { display: none !important }'
     document.head.appendChild(st)
+    // OTO-MİSAFİR: kapı her açıldığında (ilk açılış + ₺10k teaser'ı) AYNI KAREDE
+    // "Misafir devam"a bas → oyun hiç durmaz, kapı ekranda belirmeden kapanır.
+    const arm = () => {
+      const gate = document.getElementById('authgate')
+      const btn = () => document.getElementById('gguest')
+      if (!gate) return void setTimeout(arm, 200)
+      const clickIfOpen = () => { if (gate.style.display === 'flex') btn()?.click() }
+      new MutationObserver(clickIfOpen).observe(gate, { attributes: true, attributeFilter: ['style'] })
+      const iv = setInterval(clickIfOpen, 250) // gözlemciyi ıskalayan ilk açılış için emniyet
+      setTimeout(() => clearInterval(iv), 20000)
+    }
+    arm()
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', inject)
   else inject()
@@ -64,6 +78,11 @@ await page.locator('#gguest').click().catch(() => {})
 await page.waitForTimeout(700)
 await page.getByText(/Continue as guest anyway|Yine de misafir olarak devam/i).first().click().catch(() => {})
 await page.waitForTimeout(RECIPE.warmupMs ?? 6000) // kit + vitrin kurulumu + ilk trafik
+const snap = async tag => console.log(`[state:${tag}]`, JSON.stringify(await page.evaluate(() => {
+  const s = window.__dbg?.state
+  return s ? { money: Math.round(s.money), benzin: Math.round(s.tanks.benzin), pumps: s.pumps, auto: s.autoPumps.size, served: s.stats?.served } : { dbg: false }
+}).catch(e => ({ err: String(e).slice(0, 80) }))))
+await snap('warmup-sonu')
 
 // ---- senaryo adımları ----
 const wheel = async (n, dy) => { for (let i = 0; i < n; i++) { await page.mouse.wheel(0, dy); await page.waitForTimeout(30) } }
@@ -88,10 +107,12 @@ for (const step of RECIPE.steps ?? []) {
       await page.evaluate(sec => { window.__dbg.state.promo = { type: 'cheapFuel', until: Date.now() + sec * 1000 } }, step.sec ?? 60)
       break
     case 'money': await page.evaluate(m => { window.__dbg.state.money = m }, step.amount ?? 1_000_000); break
-    case 'eval': await page.evaluate(step.js); break                   // serbest kanca (dikkatli kullan)
+    case 'eval': // serbest kanca: tarif JS'i sayfada yeni Function olarak koşulur (çok satır güvenli)
+      await page.evaluate(code => { new Function(code)() }, step.js); break
   }
 }
 
+await snap('steps-sonu')
 await page.waitForTimeout(300)
 await ctx.close() // videoyu diske yazar
 await b.close()

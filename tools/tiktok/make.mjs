@@ -20,7 +20,7 @@ const R = JSON.parse(readFileSync(RECIPE_PATH, 'utf8'))
 
 let FFMPEG = process.env.FFMPEG
 if (!FFMPEG) { try { FFMPEG = (await import('ffmpeg-static')).default } catch { FFMPEG = 'ffmpeg' } }
-const FONT = process.env.FONT || '/System/Library/Fonts/Supplemental/Arial Bold.ttf'
+const FONT = process.env.FONT || '/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf'
 
 const tmp = mkdtempSync(join(tmpdir(), 'tiktok-'))
 const rawWebm = join(tmp, 'raw.webm')
@@ -46,10 +46,11 @@ if (R.hook) {
 // ZAMANLI ALTYAZILAR: alt üçte birlik bantta
 for (let i = 0; i < (R.captions ?? []).length; i++) {
   const c = R.captions[i]
+  // CapCut stili: kutu yok, kalın siyah konturlu beyaz yazı + hızlı pop-in
   filters.push(`drawtext=fontfile='${esc(FONT)}':textfile='${esc(tf(`cap${i}.txt`, c.text))}'` +
-    `:fontsize=52:fontcolor=white:borderw=3:bordercolor=black@0.7` +
-    `:box=1:boxcolor=black@0.45:boxborderw=16` +
-    `:x=(w-text_w)/2:y=h-430:enable='between(t,${c.from},${c.to})'`)
+    `:fontsize=${c.size ?? 58}:fontcolor=${c.color ?? 'white'}:borderw=7:bordercolor=black` +
+    `:alpha='min(1,(t-${c.from})*6)'` +
+    `:x=(w-text_w)/2:y=${c.y ?? 'h-560'}:enable='between(t,${c.from},${c.to})'`)
 }
 // FİLİGRAN: köşede sürekli beneloil.com
 filters.push(`drawtext=fontfile='${esc(FONT)}':text='beneloil.com'` +
@@ -64,8 +65,9 @@ filters.push(`drawtext=fontfile='${esc(FONT)}':textfile='${esc(tf('end2.txt', R.
   `:fontsize=54:fontcolor=white:box=1:boxcolor=0xd64545@0.95:boxborderw=18` +
   `:x=(w-text_w)/2:y=(h/2)+30:enable='gte(t,${endFrom})'`)
 
+const TRIM = R.trimStart ?? 0
 execFileSync(FFMPEG, [
-  '-y', '-i', rawWebm, '-i', musicWav,
+  '-y', '-ss', String(TRIM), '-i', rawWebm, '-i', musicWav,
   '-t', String(R.seconds),
   '-vf', filters.join(','),
   '-af', `afade=t=out:st=${R.seconds - 1.4}:d=1.4,loudnorm=I=-14:TP=-1.5`,

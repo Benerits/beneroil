@@ -1,27 +1,29 @@
 {
-  "name": "musteri-patlamasi",
-  "seconds": 28,
-  "warmupMs": 7000,
-  "musicSeed": 7,
-  "hook": "POV: benzin istasyonu\nimparatorluğu kuruyorsun",
-  "hookFrom": 0.4,
-  "hookTo": 4.6,
+  "name": "musteri-patlamasi-v2",
+  "seconds": 24,
+  "trimStart": 11,
+  "warmupMs": 6000,
+  "musicSeed": 11,
+  "hook": "benzinlik simulasyonu yaptim\nve iyice abarttim",
+  "hookFrom": 0.2,
+  "hookTo": 3.8,
   "captions": [
-    { "from": 5.5, "to": 9.5, "text": "her şey sakin..." },
-    { "from": 10.2, "to": 14.5, "text": ">>> MUSTERI PATLAMASI <<<" },
-    { "from": 15.0, "to": 19.5, "text": "pompalar costu, para akiyor" },
-    { "from": 20.0, "to": 24.5, "text": "tarayıcıda ücretsiz — link profilde" }
+    { "from": 4.5, "to": 7.5, "text": "pompacilar is basinda" },
+    { "from": 8.2, "to": 11.5, "text": "MUSTERI PATLAMASI!", "size": 72, "color": "yellow" },
+    { "from": 12.2, "to": 15.5, "text": "kasa susmuyor: +250 +480 +320" },
+    { "from": 16.2, "to": 20.5, "text": "tarayicida ucretsiz - kurulum yok" }
   ],
   "endTitle": "BENELOIL",
-  "endSub": "beneloil.com — ücretsiz oyna",
+  "endSub": "beneloil.com - ucretsiz oyna",
   "steps": [
-    { "do": "zoom", "n": 8, "dy": -240 },
-    { "do": "wait", "ms": 3500 },
-    { "do": "pan", "from": [400, 480], "to": [180, 420], "ms": 1400 },
-    { "do": "wait", "ms": 3000 },
-    { "do": "rush", "sec": 60 },
-    { "do": "wait", "ms": 5000 },
-    { "do": "pan", "from": [160, 450], "to": [380, 500], "ms": 1600 },
+    { "do": "eval", "js": "const s=window.__dbg.state; s.money=184250; for(const f of ['benzin','dizel','lpg']) s.tanks[f]=s.fuelCapacity(f); for(let i=0;i<s.pumps;i++) s.autoPumps.add(i); for(let i=0;i<s.evChargers;i++) s.autoChargers.add(i); s.battery=s.batteryCapacity;" },
+    { "do": "rush", "sec": 90 },
+    { "do": "zoom", "n": 12, "dy": -240 },
+    { "do": "pan", "from": [300, 620], "to": [330, 380], "ms": 1200 },
+    { "do": "wait", "ms": 9000 },
+    { "do": "pan", "from": [400, 500], "to": [250, 520], "ms": 1800 },
+    { "do": "wait", "ms": 11000 },
+    { "do": "pan", "from": [250, 500], "to": [420, 460], "ms": 1600 },
     { "do": "wait", "ms": 12000 }
   ]
 }
