@@ -1,0 +1,27 @@
+{
+  "name": "musteri-patlamasi",
+  "seconds": 28,
+  "warmupMs": 7000,
+  "musicSeed": 7,
+  "hook": "POV: benzin istasyonu\nimparatorluğu kuruyorsun",
+  "hookFrom": 0.4,
+  "hookTo": 4.6,
+  "captions": [
+    { "from": 5.5, "to": 9.5, "text": "her şey sakin..." },
+    { "from": 10.2, "to": 14.5, "text": ">>> MUSTERI PATLAMASI <<<" },
+    { "from": 15.0, "to": 19.5, "text": "pompalar costu, para akiyor" },
+    { "from": 20.0, "to": 24.5, "text": "tarayıcıda ücretsiz — link profilde" }
+  ],
+  "endTitle": "BENELOIL",
+  "endSub": "beneloil.com — ücretsiz oyna",
+  "steps": [
+    { "do": "zoom", "n": 8, "dy": -240 },
+    { "do": "wait", "ms": 3500 },
+    { "do": "pan", "from": [400, 480], "to": [180, 420], "ms": 1400 },
+    { "do": "wait", "ms": 3000 },
+    { "do": "rush", "sec": 60 },
+    { "do": "wait", "ms": 5000 },
+    { "do": "pan", "from": [160, 450], "to": [380, 500], "ms": 1600 },
+    { "do": "wait", "ms": 12000 }
+  ]
+}
