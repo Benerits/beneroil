@@ -23,7 +23,7 @@ if (!FFMPEG) { try { FFMPEG = (await import('ffmpeg-static')).default } catch { 
 const FONT = process.env.FONT || '/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf'
 
 const tmp = mkdtempSync(join(tmpdir(), 'tiktok-'))
-const rawWebm = join(tmp, 'raw.webm')
+const rawWebm = join(tmp, 'raw.mp4') // CDP screencast → h264 (record.mjs muxlar)
 const musicWav = join(tmp, 'music.wav')
 
 // 1) kayıt + 2) müzik
@@ -36,34 +36,8 @@ const tf = (name, text) => { const p = join(tmp, name); writeFileSync(p, text); 
 const esc = p => p.replace(/([:\\])/g, '\\$1').replace(/'/g, "\\\\'")
 
 const filters = ['scale=1080:1920:flags=lanczos', 'fps=30']
-// HOOK: ilk saniyelerde üstte büyük kutu yazı
-if (R.hook) {
-  filters.push(`drawtext=fontfile='${esc(FONT)}':textfile='${esc(tf('hook.txt', R.hook))}'` +
-    `:fontsize=62:fontcolor=white:borderw=3:bordercolor=black@0.65` +
-    `:box=1:boxcolor=0xd64545@0.92:boxborderw=22` +
-    `:x=(w-text_w)/2:y=170:enable='between(t,${R.hookFrom ?? 0.4},${R.hookTo ?? 4.6})'`)
-}
-// ZAMANLI ALTYAZILAR: alt üçte birlik bantta
-for (let i = 0; i < (R.captions ?? []).length; i++) {
-  const c = R.captions[i]
-  // CapCut stili: kutu yok, kalın siyah konturlu beyaz yazı + hızlı pop-in
-  filters.push(`drawtext=fontfile='${esc(FONT)}':textfile='${esc(tf(`cap${i}.txt`, c.text))}'` +
-    `:fontsize=${c.size ?? 58}:fontcolor=${c.color ?? 'white'}:borderw=7:bordercolor=black` +
-    `:alpha='min(1,(t-${c.from})*6)'` +
-    `:x=(w-text_w)/2:y=${c.y ?? 'h-560'}:enable='between(t,${c.from},${c.to})'`)
-}
-// FİLİGRAN: köşede sürekli beneloil.com
-filters.push(`drawtext=fontfile='${esc(FONT)}':text='beneloil.com'` +
-  `:fontsize=34:fontcolor=white@0.85:borderw=2:bordercolor=black@0.5:x=w-text_w-28:y=64`)
-// KAPANIŞ: son 2.5 sn kararan zemin + büyük çağrı
-const endFrom = R.seconds - 2.5
-filters.push(`drawbox=x=0:y=0:w=iw:h=ih:color=black@0.55:t=fill:enable='gte(t,${endFrom})'`)
-filters.push(`drawtext=fontfile='${esc(FONT)}':textfile='${esc(tf('end1.txt', R.endTitle ?? 'BENELOIL'))}'` +
-  `:fontsize=110:fontcolor=white:borderw=4:bordercolor=0xd64545` +
-  `:x=(w-text_w)/2:y=(h/2)-140:enable='gte(t,${endFrom})'`)
-filters.push(`drawtext=fontfile='${esc(FONT)}':textfile='${esc(tf('end2.txt', R.endSub ?? 'beneloil.com — ücretsiz oyna'))}'` +
-  `:fontsize=54:fontcolor=white:box=1:boxcolor=0xd64545@0.95:boxborderw=18` +
-  `:x=(w-text_w)/2:y=(h/2)+30:enable='gte(t,${endFrom})'`)
+// YAZILAR ARTIK TARAYICIDA (overlay motoru, record.mjs) — Baloo 2 + emoji + spring
+// animasyonlarla. ffmpeg yalnız ölçek + müzik + fade yapar.
 
 const TRIM = R.trimStart ?? 0
 execFileSync(FFMPEG, [

@@ -1,0 +1,116 @@
+{
+  "name": "pompa-patlamasi",
+  "seconds": 23,
+  "trimStart": 3.2,
+  "warmupMs": 6000,
+  "musicSeed": 11,
+  "steps": [
+    {
+      "do": "eval",
+      "js": "const s=window.__dbg.state; s.money=184250; for(const f of ['benzin','dizel','lpg']) s.tanks[f]=s.fuelCapacity(f); for(let i=0;i<s.pumps;i++) s.autoPumps.add(i); for(let i=0;i<s.evChargers;i++) s.autoChargers.add(i); s.battery=s.batteryCapacity;"
+    },
+    {
+      "do": "rush",
+      "sec": 90
+    },
+    {
+      "do": "zoom",
+      "n": 13,
+      "dy": -240
+    },
+    {
+      "do": "pan",
+      "from": [
+        330,
+        700
+      ],
+      "to": [
+        330,
+        460
+      ],
+      "ms": 1100
+    },
+    {
+      "do": "overlay",
+      "kind": "wm",
+      "text": "beneloil.com",
+      "dur": 40
+    },
+    {
+      "do": "wait",
+      "ms": 2300
+    },
+    {
+      "do": "overlay",
+      "kind": "hook",
+      "text": "benzinlik simülasyonu yaptım\nve iyice abarttım ⛽",
+      "dur": 4.0
+    },
+    {
+      "do": "wait",
+      "ms": 4300
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "⛽ pompacılar benzin-mazot dolduruyor",
+      "dur": 3.2
+    },
+    {
+      "do": "wait",
+      "ms": 3600
+    },
+    {
+      "do": "overlay",
+      "kind": "badge",
+      "text": "🚨 MÜŞTERİ PATLAMASI 🚨",
+      "dur": 3.4
+    },
+    {
+      "do": "wait",
+      "ms": 3800
+    },
+    {
+      "do": "pan",
+      "from": [
+        420,
+        520
+      ],
+      "to": [
+        300,
+        560
+      ],
+      "ms": 1400
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "💸 kasa susmuyor: +₺250 +₺480",
+      "dur": 3.2
+    },
+    {
+      "do": "wait",
+      "ms": 3600
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "tarayıcıda ücretsiz — kurulum yok 👇",
+      "dur": 3.2
+    },
+    {
+      "do": "wait",
+      "ms": 3400
+    },
+    {
+      "do": "endcard",
+      "title": "BENELOIL",
+      "sub": "beneloil.com — ücretsiz oyna",
+      "dur": 0
+    },
+    {
+      "do": "wait",
+      "ms": 3200
+    }
+  ]
+}
