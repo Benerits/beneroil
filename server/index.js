@@ -1591,6 +1591,26 @@ async function handleVs(req, res, url) {
       return json(res, 200, { data: r.rows })
     }
     // izahatlar: banlı hesapların savunmaları (admin.benerits.com İzahatlar sayfası çeker)
+    if (url === '/vs/v1/steam-poll' && req.method === 'GET') {
+      // STEAM ANKETİ SONUÇLARI (Oğuz 17 Ağu): admin custom-page bu tabloyu çizer.
+      // İlk satır TOPLAM, altı gün gün kırılım.
+      const r = await pool.query(`SELECT (hour AT TIME ZONE 'Europe/Istanbul')::date AS d,
+          COALESCE(SUM(steam_yes),0)::int AS yes, COALESCE(SUM(steam_no),0)::int AS no,
+          COALESCE(SUM(steam_skip),0)::int AS skip
+        FROM benzinlik_stat_hourly
+        WHERE steam_yes > 0 OR steam_no > 0 OR steam_skip > 0
+        GROUP BY 1 ORDER BY 1 DESC LIMIT 60`)
+      const pct = (y, n) => (y + n > 0 ? Math.round(100 * y / (y + n)) : 0)
+      const tot = r.rows.reduce((a, x) => ({ yes: a.yes + x.yes, no: a.no + x.no, skip: a.skip + x.skip }), { yes: 0, no: 0, skip: 0 })
+      const data = [{
+        tarih: 'TOPLAM', evet: tot.yes, hayir: tot.no, atlayan: tot.skip,
+        cevap: tot.yes + tot.no, steam_orani: `%${pct(tot.yes, tot.no)}`,
+      }, ...r.rows.map(x => ({
+        tarih: String(x.d).slice(0, 10), evet: x.yes, hayir: x.no, atlayan: x.skip,
+        cevap: x.yes + x.no, steam_orani: `%${pct(x.yes, x.no)}`,
+      }))]
+      return json(res, 200, { data })
+    }
     if (url === '/vs/v1/appeals' && req.method === 'GET') {
       const r = await pool.query(`SELECT a.id, a.email, a.message, a.created_at,
           p.id AS player_id, p.banned_at, p.ban_reason,
