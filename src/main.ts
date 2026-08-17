@@ -2418,18 +2418,9 @@ function applyAwayEarnings(offSecRaw: number): number {
   return total
 }
 
-// SEKME ARKA PLAN FİXİ (oyuncu raporu: "başka sekmeye geçince oyun duruyor"):
-// rAF arka planda bilinçli durur (pil/CPU) — ama dönüşte geçen süre artık boşa gitmiyor,
-// açılıştaki offline formülüyle pasif kazanca çevriliyor.
-let tabHiddenAt = 0
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { tabHiddenAt = Date.now(); return }
-  if (!tabHiddenAt) return
-  const offSec = (Date.now() - tabHiddenAt) / 1000
-  tabHiddenAt = 0
-  if (guestPaused || exploding || cloudBlocked) return
-  if (applyAwayEarnings(offSec) > 0) persist()
-})
+// SEKME ARKA PLAN (Oğuz, 17 Ağu): oyun arka planda artık GERÇEKTEN akıyor (worker
+// sürücüsü, frame döngüsünün sonunda) — dönüşte "kazanç yaz" telafisi KALDIRILDI (çifte
+// ödeme olurdu). applyAwayEarnings yalnız SAYFA AÇILIŞINDA çalışır (tarayıcı kapalıyken).
 // Buluttan kayıt YÜKLENEMEDİYSE (ağ/sunucu hatası) hiçbir kayıt gönderilmez —
 // taze bir oturumun ilerlemiş bulut kaydını EZMESİNİ önler (override koruması).
 let cloudBlocked = false
@@ -4660,19 +4651,27 @@ function nightFactor(t: number): number {
 }
 
 let bootRemoved = false
+let frameQueued = false
+function scheduleFrame() {
+  if (frameQueued) return
+  frameQueued = true
+  requestAnimationFrame(() => { frameQueued = false; frame() })
+}
 function frame() {
-  requestAnimationFrame(frame)
+  scheduleFrame()
   // AÇILIŞ MASKESİ — KOŞULSUZ KALDIRMA (KRİTİK regresyon fixi): eski kaldırma satırı
   // yalnız TOKEN'SIZ akışın (auth kapısı kurulumunun) içindeydi → KAYITLI her oyuncuda
   // maske sonsuza dek kalıyordu. İlk render karesi = sahne gerçekten hazır; kim olursan
   // ol maske burada kalkar.
   if (!bootRemoved) { bootRemoved = true; document.getElementById('boot')?.remove() }
-  // sekme/uygulama arka planda: hesaplama+render durur (pil/CPU tasarrufu, ısınma azalır).
-  // dt zaten 0.05 ile capli → geri dönünce güvenli devam.
-  if (document.hidden) { clock.getDelta(); return }
-  const dt = Math.min(clock.getDelta(), 0.05)
+  // SEKME ARKA PLANDA OYUN AKAR (Oğuz, 17 Ağu — "dümdüz devam etsin"): rAF arka planda
+  // durur; Web Worker zamanlayıcısı (aşağıda, döngü başlatma noktasında) frame()'i
+  // ~250 ms'de bir çağırıp simülasyonu GERÇEK ZAMANDA sürdürür. Görsel render arka planda
+  // atlanır (GPU boşa çalışmasın); dt tavanı arka planda 0.34 ki 4 fps worker temposu
+  // gerçek zamanı yakalasın. Ön planda 0.05 tavan aynen korunur (görsel stabilite).
+  const dt = Math.min(clock.getDelta(), document.hidden ? 0.34 : 0.05)
   promoTick?.(dt)
-  if (exploding) { composer!.render(); return }
+  if (exploding) { if (!document.hidden) composer!.render(); return }
 
   dayTime += dt
   const nightNow = nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE)
@@ -4711,7 +4710,7 @@ function frame() {
     // girmez, ilerleme/ekonomi işlemez). Eskiden cars.update hiç çağrılmıyordu — gate
     // arkasında ve gate'i yeni geçen misafirde yol BOMBOŞTU ("araçları göremiyorum").
     cars.update(dt)
-    composer!.render()
+    if (!document.hidden) composer!.render()
     return
   }
   state.tick(dt)
@@ -5161,13 +5160,19 @@ function frame() {
     evap: cars.evapStats,
     reserve: cars.graphRef.stats,
   }, dt)
-  composer!.render()
+  if (!document.hidden) composer!.render()
 }
 // §6.1 trafik hata ayıklama katmanı — YALNIZ ?traffic=1 ile kurulur (normal oyunda kod çalışmaz)
 const trafficDbg = trafficDebugOn ? new TrafficDebug(world.scene) : null
 mountNewsButtons()  // Ayarlar'a "Yenilikler" + "Bildirim Geçmişi" düğmeleri
 maybeShowNews()     // sürüm değiştiyse notları bir kez göster (#465)
-frame()
+scheduleFrame()
+// ARKA PLAN SÜRÜCÜSÜ: worker zamanlayıcıları tarayıcı tarafından KISILMAZ (ana thread
+// zamanlayıcılarının aksine). Sekme gizliyken frame()'i doğrudan çağırır — oyun akar.
+try {
+  const bgWorker = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(0)},250)'], { type: 'text/javascript' })))
+  bgWorker.onmessage = () => { if (document.hidden) frame() }
+} catch { /* worker kurulamazsa (CSP vb.): arka planda eski davranış (durur) */ }
 
 
 // REKLAM MODU (?promo=1): oyun kendi reklamını oynar — tek pompadan nükleer çağa.

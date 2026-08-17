@@ -1,5 +1,8 @@
 # BenelOil — Değişiklik Günlüğü
 
+## 17 Ağustos 2026
+- **Arka planda oyun artık GERÇEKTEN akıyor**: sekme arkadayken simülasyon Web Worker sürücüsüyle gerçek zamanda devam eder (satışlar, pompacılar, müdür, günler — hepsi canlı). Görsel render arka planda atlanır (pil dostu). Dünkü "dönünce kazanç yaz" telafisi kaldırıldı — artık gerek yok; sayfa açılışındaki offline kazanç (tarayıcı kapalıyken) duruyor.
+
 ## 16 Ağustos 2026 — Büyük Feedback Paketi
 770 açık oyuncu feedback'i tek tek okundu, anlamca gruplandı ve en çok istenenler bu pakette çözüldü.
 
