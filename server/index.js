@@ -1601,13 +1601,14 @@ async function handleVs(req, res, url) {
         WHERE steam_yes > 0 OR steam_no > 0 OR steam_skip > 0
         GROUP BY 1 ORDER BY 1 DESC LIMIT 60`)
       const pct = (y, n) => (y + n > 0 ? Math.round(100 * y / (y + n)) : 0)
+      const iso = d => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10))
       const tot = r.rows.reduce((a, x) => ({ yes: a.yes + x.yes, no: a.no + x.no, skip: a.skip + x.skip }), { yes: 0, no: 0, skip: 0 })
       const data = [{
-        tarih: 'TOPLAM', evet: tot.yes, hayir: tot.no, atlayan: tot.skip,
-        cevap: tot.yes + tot.no, steam_orani: `%${pct(tot.yes, tot.no)}`,
+        date: 'TOTAL', yes: tot.yes, no: tot.no, skipped: tot.skip,
+        answered: tot.yes + tot.no, steam_rate: `${pct(tot.yes, tot.no)}%`,
       }, ...r.rows.map(x => ({
-        tarih: String(x.d).slice(0, 10), evet: x.yes, hayir: x.no, atlayan: x.skip,
-        cevap: x.yes + x.no, steam_orani: `%${pct(x.yes, x.no)}`,
+        date: iso(x.d), yes: x.yes, no: x.no, skipped: x.skip,
+        answered: x.yes + x.no, steam_rate: `${pct(x.yes, x.no)}%`,
       }))]
       return json(res, 200, { data })
     }
