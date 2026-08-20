@@ -837,9 +837,22 @@ export class GameState {
   /** seviye → verim (0 = müdür yok). Aktif oynamanın hep üstünde kalması BİLİNÇLİ. */
   static readonly BRANCH_MANAGER_EFF = [0, 0.45, 0.65, 0.85]
   /** seviye → şube kasası tavanı. Yüksek seviye daha uzun süre uzak kalmayı satar. */
-  static readonly BRANCH_VAULT_DAYS = [0, 2, 3, 5]
+  /**
+   * Kasa kaç GÜNLÜK net geliri biriktirir (müdür seviyesine göre).
+   * Oyuncu raporu (21 şikayet, 3 gün): "başka şubeye gidince öncekisi çalışmıyor".
+   * Sebep tavanın erken dolmasıydı — 1. seviye müdür yalnız 2 gün biriktirip duruyordu,
+   * oyuncu ertesi gün döndüğünde şube gerçekten durmuş oluyordu. Süreler iki katına
+   * çıkarıldı; müdüre yatırım yapmak hâlâ anlamlı ama şube bir hafta sonra da yaşıyor.
+   */
+  static readonly BRANCH_VAULT_DAYS = [0, 5, 8, 12]
   /** mutlak tavan: tek toplamada sunucunun izin verdiği sıçramanın (₺260.000) altında */
-  static readonly BRANCH_VAULT_HARD = 220_000
+  /**
+   * Mutlak tavan: tek toplamada sunucunun izin verdiği sıçramanın (ALLOW_BURST ₺260.000)
+   * GÜVENLİ ALTINDA kalmalı — üstüne çıkarsa toplama anında anti-cheat kaydı reddeder ve
+   * oyuncu parayı da ilerlemeyi de kaybeder. Gün sayısını artırmak asıl çözüm; bu tavan
+   * yalnız çok büyük şubelerde devreye girer ve orada oyuncu kasa dolunca uyarılır.
+   */
+  static readonly BRANCH_VAULT_HARD = 240_000
 
   /** Şube kasaları: pasif şubelerin biriken net geliri (ADDITIVE save alanı). */
   branchVault: Partial<Record<LocId, number>> = {}
@@ -931,6 +944,17 @@ export class GameState {
       this.stats.revenue += total
     }
     return total
+  }
+
+  /** Bir şubenin kasa doluluğu (0..1) — dolmak üzereyken oyuncuyu uyarmak için */
+  branchVaultFill(loc: LocId): number {
+    const cap = this.branchVaultCap(loc)
+    if (cap <= 0) return 0
+    return Math.max(0, Math.min(1, (this.branchVault[loc] ?? 0) / cap))
+  }
+  /** Kasası dolmuş (gelir akışı durmuş) şubeler */
+  fullBranchVaults(): LocId[] {
+    return this.unlockedLocs.filter(l => l !== this.activeLoc && this.branchVaultFill(l) >= 0.999)
   }
 
   /** Toplanmayı bekleyen toplam (HUD/ofis göstergesi) */

@@ -16,7 +16,8 @@ import {
 } from './state'
 import { loadModels, loadStatics, loadCharacters, fitCharacter } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
-import { isNativePlatform } from './platform'
+import { isNativePlatform, isInstantGames, isLightMode, asset } from './platform'
+import { guardContextLoss } from './fbinstant'
 import { THEMES } from './themes'
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
@@ -313,14 +314,19 @@ setInterval(() => {
 }
 
 const app = document.getElementById('app')!
-const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)) // performans: 2x retina yerine 1.5x yeterli
-renderer.shadowMap.enabled = true
+// LIGHT MOD (Meta/Instant Games): antialias + gölge + post-processing kapalı, pixelRatio 1.
+// Instant Games düşük seviye Android'de iframe içinde çalışıyor; bloom ve PCFSoft gölge
+// oradaki en pahalı iki iş. Web/iOS'ta hiçbir şey değişmez.
+const LIGHT = isLightMode()
+const renderer = new THREE.WebGLRenderer({ antialias: !LIGHT, powerPreference: LIGHT ? 'low-power' : 'default' })
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LIGHT ? 1 : 1.5)) // performans: 2x retina yerine 1.5x yeterli
+renderer.shadowMap.enabled = !LIGHT
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 renderer.localClippingEnabled = true // küre tank sıvısı: yatay düzlemle alttan-yukarı dolum kırpması
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 1.1
 app.appendChild(renderer.domElement)
+if (isInstantGames()) guardContextLoss(renderer.domElement) // iframe'de bağlam kaybı sık
 
 // Kamera: (1x, 2y, 1z) yönünden ortografik; tekerlek = zoom, sürükle = kaydır
 const VIEW = 26
@@ -758,9 +764,19 @@ function openOfficePanel() {
         const d = state.branchNetPerDay(id)
         const vault = Math.round(state.branchVault[id] ?? 0)
         const cap = Math.round(state.branchVaultCap(id))
+        // KASA DOLULUĞU GÖRÜNÜR OLSUN: oyuncular "şube çalışmıyor" diye şikâyet ediyordu,
+        // aslında kasa dolduğu için birikim durmuştu. Dolu/doluyor uyarısı ve kalan gün burada.
+        const doluluk = state.branchVaultFill(id)
+        const kalanGun = d.net > 0 ? Math.max(0, Math.ceil((cap - vault) / d.net)) : 0
+        const bar = `<span style="display:inline-block;width:54px;height:6px;border-radius:3px;`
+          + `background:var(--line);vertical-align:middle;overflow:hidden">`
+          + `<i style="display:block;height:100%;width:${Math.round(doluluk * 100)}%;`
+          + `background:${doluluk >= 0.999 ? 'var(--red)' : 'var(--green)'}"></i></span>`
         const note = d.level > 0
-          ? t('Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3}',
-              String(d.level), tl(d.net), tl(vault), tl(cap))
+          ? (doluluk >= 0.999
+              ? t('Müdür Sv.{0} · KASA DOLDU ₺{1} — topla ki şube tekrar kazansın', String(d.level), tl(vault))
+              : t('Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3} {4} · {5} gün sonra dolar',
+                  String(d.level), tl(d.net), tl(vault), tl(cap), bar, String(kalanGun)))
           : t('Müdür YOK — şube kapalı duruyor. Şubeye git, Ofis içindeki Şubeler sekmesinden müdür tut.')
         return `<div class="prow" style="flex-wrap:wrap"><span class="pl">${th.name}</span>`
           + (vault > 0 ? `<button class="btn sbuy good" data-collectloc="${id}">${t('Topla ₺{0}', tl(vault))}</button>` : '')
@@ -773,7 +789,7 @@ function openOfficePanel() {
       // D11 (analiz): "ne kadar kaldı" görünür hedef — kilitli şubede ilerleme çubuğu
       const pct = Math.min(100, Math.round((state.money / Math.max(1, c.cash)) * 100))
       // D13 (analiz): kilitli şubenin CANLI ÖNİZLEMESİ — merak yaratır ("marina vitrini")
-      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="/gen/loc-${id}.jpg?v=2" alt="" loading="lazy"`
+      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="${asset(`/gen/loc-${id}.jpg`)}?v=2" alt="" loading="lazy"`
         + `style="width:100%;max-height:110px;object-fit:cover;border-radius:8px;border:1.5px solid var(--edge);filter:saturate(.9)" `
         + `onerror="this.parentElement.style.display='none'"></div>`
       const prog = c.reason !== 'yildiz' && !c.ok
@@ -1336,11 +1352,19 @@ let exploding = false
 let selectedBuilding: string | null = null
 let cardRefreshT = 0
 
-composer = new EffectComposer(renderer)
-composer.addPass(new RenderPass(world.scene, camera))
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.24, 0.4, 0.93)) // yarı çözünürlük bloom: gözle fark yok, kat kat hızlı
-composer.addPass(new OutputPass())
-composer.setSize(window.innerWidth, window.innerHeight)
+// LIGHT MOD'da composer HİÇ kurulmaz → bloom pass'i yok, ara render target'ları yok.
+if (!LIGHT) {
+  composer = new EffectComposer(renderer)
+  composer.addPass(new RenderPass(world.scene, camera))
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.24, 0.4, 0.93)) // yarı çözünürlük bloom: gözle fark yok, kat kat hızlı
+  composer.addPass(new OutputPass())
+  composer.setSize(window.innerWidth, window.innerHeight)
+}
+/** Tek kare çiz. Composer varsa post-processing zinciri, yoksa doğrudan render. */
+function renderFrame() {
+  if (composer) composer.render()
+  else renderer.render(world.scene, camera)
+}
 
 const cars = new CarManager(world.scene, modelLib, {
   pumpCount: () => state.pumps,
@@ -2654,6 +2678,35 @@ function rebuildFromState() {
   for (const [id, rot] of Object.entries(placedRot))
     if (!id.startsWith('charger-') && !id.startsWith('pump-')) world.rotateBuilding(id, rot)
   world.setClosed(state.closed)
+  konumlariSabitle()
+}
+
+/**
+ * KONUM SABİTLEME (oyuncu raporu: "karşı tuvalet/tır parkı gir-çık yapınca yerine dönüyor").
+ *
+ * Bir yapı satın alınıp yerleştirildiğinde konumu placedPos'a yazılır. Ama yükseltme,
+ * şube dönüşü ya da yarıda kalan yerleştirme gibi yollarda alan yazılmadan kalabiliyordu;
+ * o zaman rebuildFromState yapıyı VARSAYILAN yerine koyuyor ve oyuncunun taşıdığı yer
+ * kayboluyordu. Canlı kayıtlarda karşı yaka tesislerinin ~%14'ünde konum alanı boştu.
+ *
+ * Çözüm: yeniden kurulum bittikten sonra sahnedeki GERÇEK konumu placedPos'a yaz. Böylece
+ * konumu olmayan yapılar bir defa sabitlenir ve bir daha yer değiştirmez; mevcut bozuk
+ * kayıtlar da ilk açılışta kendini onarır.
+ */
+function konumlariSabitle() {
+  let yazildi = 0
+  for (const b of world.buildings) {
+    const id = b.id
+    if (!id || placedPos[id]) continue
+    if (id.startsWith('pump-') || id.startsWith('charger-')) continue   // bunların kendi tabloları var
+    const g = b.group as THREE.Object3D | undefined
+    if (!g) continue
+    const x = Number(g.position.x), y = Number(g.position.y)
+    if (!isFinite(x) || !isFinite(y)) continue
+    placedPos[id] = [x, y]
+    yazildi++
+  }
+  if (yazildi) persist()   // onarım kalıcı olsun, bir dahaki açılışta tekrar gerekmesin
 }
 
 /** araçların ASLA içinden geçemeyeceği katı objeler (fiziksel gövdeler) */
@@ -3451,6 +3504,9 @@ function applyLivePatch(p: Record<string, unknown>) {
 let liveWs: WebSocket | null = null
 let liveRetry = 0
 function connectLive() {
+  // META: canlı kanal kendi backend'imize bağlanır — Instant Games'te böyle bir sunucu yok
+  // (kayıt FBInstant player data'sında, bkz. fbinstant.ts). NEZP altında dış bağlantı istemiyoruz.
+  if (isInstantGames()) return
   if (isFullMode || isPromoMode || cloudBlocked || !auth.loggedIn()) return
   const token = localStorage.getItem('benzinlik-token')
   if (!token) return
@@ -4573,7 +4629,7 @@ function frame() {
   if (document.hidden) { clock.getDelta(); return }
   const dt = Math.min(clock.getDelta(), 0.05)
   promoTick?.(dt)
-  if (exploding) { composer!.render(); return }
+  if (exploding) { renderFrame(); return }
 
   dayTime += dt
   const nightNow = nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE)
@@ -4612,7 +4668,7 @@ function frame() {
     // girmez, ilerleme/ekonomi işlemez). Eskiden cars.update hiç çağrılmıyordu — gate
     // arkasında ve gate'i yeni geçen misafirde yol BOMBOŞTU ("araçları göremiyorum").
     cars.update(dt)
-    composer!.render()
+    renderFrame()
     return
   }
   state.tick(dt)
@@ -5062,7 +5118,7 @@ function frame() {
     evap: cars.evapStats,
     reserve: cars.graphRef.stats,
   }, dt)
-  composer!.render()
+  renderFrame()
 }
 // §6.1 trafik hata ayıklama katmanı — YALNIZ ?traffic=1 ile kurulur (normal oyunda kod çalışmaz)
 const trafficDbg = trafficDebugOn ? new TrafficDebug(world.scene) : null

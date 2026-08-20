@@ -1,5 +1,7 @@
 /**
- * Reklam katmanı — İKİ hedef:
+ * Reklam katmanı — ÜÇ hedef:
+ *  - META (Facebook Instant Games): FBInstant interstitial + rewarded (bkz. fbinstant.ts).
+ *    Placement ID'ler App Dashboard'dan alınıp .env.meta'ya girilir.
  *  - NATIVE (iOS/Android, Capacitor): Google AdMob (@capacitor-community/admob plugin).
  *    Gerçek ad-unit ID'leri /api/config → ads.admob ile gelir; yoksa Google resmi TEST
  *    reklamları kullanılır (demo çalışır, sen sonra gerçek key'leri girersin).
@@ -9,7 +11,8 @@
  * min ara (150 sn), oturum başına cap, KAYIP günde gösterme, premium'da hiç gösterme.
  * Rewarded (fırsatlar): opt-in, sınırsız, gün 1'den — "reklam = değer" hissi.
  */
-import { isNativePlatform } from './platform'
+import { isNativePlatform, isInstantGames } from './platform'
+import { instantAdsEnabled, instantRewardedReady, showInstantInterstitial, showInstantRewarded } from './fbinstant'
 
 // --- Google resmi TEST ad unit'leri (gerçek key'ler gelene dek demo) ---
 const TEST_UNITS = {
@@ -38,11 +41,14 @@ function capPlugin(name: string): any {
   return (window as unknown as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins?.[name] ?? null
 }
 
-export function adsEnabled(): boolean { return !!webClient || !!admob }
+export function adsEnabled(): boolean { return !!webClient || !!admob || instantAdsEnabled() }
 export function setPremium(v: boolean) { premium = v }
 
 /** Reklam altyapısını başlat. cfg: sunucu /api/config'ten (adsense pub + admob unit'leri). */
 export async function initAds(cfg: { adsensePub?: string; admob?: AdMobCfg; test?: boolean } = {}) {
+  // META (Instant Games): reklamlar FBInstant SDK'sından gelir, placement ID'ler derleme
+  // zamanı env'iyle girilir → burada yapılacak bir şey yok (önyükleme fbinstant.ts'te).
+  if (isInstantGames()) return
   native = isNativePlatform()
   if (native) {
     const AdMob = capPlugin('AdMob')
@@ -118,6 +124,8 @@ export function interstitial(name: string, opts: { day: number; won: boolean }, 
   if (native) { done?.(); return }
   if (!mayShowInterstitial(opts.day, opts.won)) { done?.(); return }
   lastInterstitialAt = Date.now(); shownThisSession++
+  // META: web ile aynı pacing politikası (gün 3+, ısınma, min ara, oturum cap'i)
+  if (isInstantGames()) { showInstantInterstitial(done); return }
   if (native && admob) {
     admob.showInterstitial().catch(() => {}).finally(() => { prepareInterstitial(); done?.() })
     return
@@ -133,6 +141,10 @@ function countAdView() {
 }
 
 export function rewarded(name: string, onReward: () => void, onDone?: (watched: boolean) => void) {
+  if (isInstantGames()) {
+    showInstantRewarded(() => { countAdView(); onReward() }, onDone)
+    return
+  }
   if (native && admob) {
     let ok = false
     // capacitor-community/admob: rewarded ödülü event ile gelir; basitleştirilmiş akış
@@ -158,4 +170,8 @@ export function rewarded(name: string, onReward: () => void, onDone?: (watched: 
 }
 
 /** rewarded reklam hazır mı (buton göstermek için) — native'de her zaman dene, web'de client varsa */
-export function rewardedReady(): boolean { return adsEnabled() }
+export function rewardedReady(): boolean {
+  // META: reklam önden yüklenmemişse buton gösterme (tıklayınca "yok" demek kötü UX)
+  if (isInstantGames()) return instantRewardedReady()
+  return adsEnabled()
+}

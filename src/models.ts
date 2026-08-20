@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js'
+import { asset } from './platform'
 
 // Kenney Car Kit (CC0, kenney.nl) — modeller Y-up ve +Z'ye bakar.
 // Bizim dünya: z yukarı, araç ileri yönü +x. Sarmalayıcı gruplarla çeviriyoruz.
@@ -38,7 +39,7 @@ export async function loadModels(): Promise<ModelLib | null> {
   try {
     const loader = new GLTFLoader()
     const load = (name: string) =>
-      loader.loadAsync(`/kenney/${name}.glb`).then(g => convert(g.scene as unknown as THREE.Group))
+      loader.loadAsync(asset(`/kenney/${name}.glb`)).then(g => convert(g.scene as unknown as THREE.Group))
 
     const cars = await Promise.all(CAR_FILES.map(load))
     const tankerBase = await load('truck-flat').catch(() => null)
@@ -81,7 +82,7 @@ export async function loadCharacters(): Promise<THREE.Group[] | null> {
     const NAMES = ['character-male-a', 'character-male-b', 'character-male-c',
       'character-female-a', 'character-female-b', 'character-female-c']
     const list = await Promise.all(NAMES.map(n =>
-      loader.loadAsync(`/kenney/characters/${n}.glb`).then(g => convert(g.scene as unknown as THREE.Group))))
+      loader.loadAsync(asset(`/kenney/characters/${n}.glb`)).then(g => convert(g.scene as unknown as THREE.Group))))
     return list
   } catch (err) {
     console.warn('Mini karakterler yüklenemedi, prosedürel figürler kullanılacak:', err)
@@ -106,7 +107,7 @@ export async function loadStatics(): Promise<StaticLib | null> {
   try {
     const loader = new GLTFLoader()
     const load = (path: string) =>
-      loader.loadAsync(`/kenney/city/${path}.glb`)
+      loader.loadAsync(asset(`/kenney/city/${path}.glb`))
         .then(g => convert(g.scene as unknown as THREE.Group))
         .catch(() => null)
 

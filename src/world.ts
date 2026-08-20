@@ -4,6 +4,7 @@ import { StaticLib, fitModel } from './models'
 import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 import { LocationTheme, activeTheme } from './themes'
 import type { Kit } from './kits'
+import { asset, texture } from './platform'
 import { SCENE_PLANS, type Placement } from './scenery'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
@@ -371,7 +372,7 @@ export class World {
     // dokulu zeminler: nano banana PNG'leri; yüklenemezse prosedürel benek
     const aiGround = (url: string, rx: number, ry: number, fallback: THREE.Texture) => {
       const mat = new THREE.MeshLambertMaterial({ map: fallback })
-      new THREE.TextureLoader().load(url, t => {
+      new THREE.TextureLoader().load(texture(url), t => {
         t.wrapS = t.wrapT = THREE.RepeatWrapping
         t.repeat.set(rx, ry)
         t.colorSpace = THREE.SRGBColorSpace

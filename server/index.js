@@ -409,7 +409,7 @@ function maxIncomeRate(s) {
 
 /** ŞUBE KASASI CLAMP'İ: istemci tavanıyla BİREBİR (state.ts BRANCH_VAULT_HARD).
  *  Kurcalanmış save'de branchVault sonsuz para kapısı olmasın. */
-const BRANCH_VAULT_HARD = 220_000
+const BRANCH_VAULT_HARD = 240_000
 const VALID_LOCS = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
 function clampBranchVault(s) {
   if (!s) return
@@ -1773,6 +1773,7 @@ const server = http.createServer(async (req, res) => {
   if (url === '/terms') url = '/terms.html'
   if (url === '/privacy') url = '/privacy.html'
   if (url === '/support') url = '/support.html' // ASC Support URL (App Store şartı)
+  if (url === '/data-deletion') url = '/data-deletion.html' // Meta Data Deletion Instructions URL
   // statik dosyalar + SPA fallback
   let file = path.join(DIST, path.normalize(url).replace(/^([.][.][/\\])+/, ''))
   if (!file.startsWith(DIST)) file = path.join(DIST, 'index.html')

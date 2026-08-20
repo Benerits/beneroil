@@ -1,0 +1,196 @@
+[gd_scene load_steps=21 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://assets/props/detail-tank.glb" id="5_tank"]
+[ext_resource type="Script" path="res://scripts/traffic.gd" id="6_traffic"]
+[ext_resource type="Script" path="res://scripts/iso_camera.gd" id="7_iso"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+sky_top_color = Color(0.25, 0.45, 0.78, 1)
+sky_horizon_color = Color(0.72, 0.79, 0.85, 1)
+ground_horizon_color = Color(0.72, 0.79, 0.85, 1)
+ground_bottom_color = Color(0.28, 0.28, 0.3, 1)
+sun_angle_max = 12.0
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_sky_contribution = 0.65
+tonemap_mode = 3
+ssao_enabled = true
+
+[sub_resource type="PlaneMesh" id="GroundMesh"]
+size = Vector2(120, 120)
+
+[sub_resource type="StandardMaterial3D" id="AsphaltMat"]
+albedo_color = Color(0.16, 0.17, 0.19, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="PadMesh"]
+size = Vector3(26, 0.2, 17)
+
+[sub_resource type="StandardMaterial3D" id="ConcreteMat"]
+albedo_color = Color(0.62, 0.62, 0.6, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="CanopyMesh"]
+size = Vector3(18, 0.6, 10)
+
+[sub_resource type="StandardMaterial3D" id="WhiteMat"]
+albedo_color = Color(0.93, 0.93, 0.92, 1)
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="StripeMesh"]
+size = Vector3(18.4, 0.4, 10.4)
+
+[sub_resource type="StandardMaterial3D" id="RedMat"]
+albedo_color = Color(0.78, 0.14, 0.13, 1)
+roughness = 0.5
+
+[sub_resource type="BoxMesh" id="ColumnMesh"]
+size = Vector3(0.45, 5.2, 0.45)
+
+[sub_resource type="BoxMesh" id="IslandMesh"]
+size = Vector3(7, 0.35, 2.2)
+
+[sub_resource type="BoxMesh" id="PumpMesh"]
+size = Vector3(0.7, 2, 1.2)
+
+[sub_resource type="StandardMaterial3D" id="PumpMat"]
+albedo_color = Color(0.22, 0.24, 0.27, 1)
+metallic = 0.3
+roughness = 0.45
+
+[sub_resource type="BoxMesh" id="ShopMesh"]
+size = Vector3(11, 4.2, 7)
+
+[sub_resource type="StandardMaterial3D" id="ShopMat"]
+albedo_color = Color(0.85, 0.82, 0.74, 1)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="SignMesh"]
+size = Vector3(6.5, 1.7, 0.35)
+
+[sub_resource type="StandardMaterial3D" id="SignMat"]
+albedo_color = Color(0.9, 0.2, 0.15, 1)
+emission_enabled = true
+emission = Color(0.9, 0.25, 0.18, 1)
+emission_energy_multiplier = 0.6
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.58123815, -0.5882458, 0.56225353, 0, 0.6909554, 0.7228974, -0.81373346, -0.42017555, 0.40160966, 14, 18, 10)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+script = ExtResource("7_iso")
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("GroundMesh")
+material_override = SubResource("AsphaltMat")
+
+[node name="Station" type="Node3D" parent="."]
+
+[node name="Pad" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+mesh = SubResource("PadMesh")
+material_override = SubResource("ConcreteMat")
+
+[node name="CanopyStripe" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.05, 0)
+mesh = SubResource("StripeMesh")
+material_override = SubResource("RedMat")
+
+[node name="Canopy" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.55, 0)
+mesh = SubResource("CanopyMesh")
+material_override = SubResource("WhiteMat")
+
+[node name="ColumnA" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.6, 2.7, 4.2)
+mesh = SubResource("ColumnMesh")
+material_override = SubResource("RedMat")
+
+[node name="ColumnB" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.6, 2.7, 4.2)
+mesh = SubResource("ColumnMesh")
+material_override = SubResource("RedMat")
+
+[node name="ColumnC" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.6, 2.7, -4.2)
+mesh = SubResource("ColumnMesh")
+material_override = SubResource("RedMat")
+
+[node name="ColumnD" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.6, 2.7, -4.2)
+mesh = SubResource("ColumnMesh")
+material_override = SubResource("RedMat")
+
+[node name="IslandFront" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.375, 3)
+mesh = SubResource("IslandMesh")
+material_override = SubResource("ConcreteMat")
+
+[node name="IslandBack" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.375, -3)
+mesh = SubResource("IslandMesh")
+material_override = SubResource("ConcreteMat")
+
+[node name="Pump1" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.2, 1.55, 3)
+mesh = SubResource("PumpMesh")
+material_override = SubResource("PumpMat")
+
+[node name="Pump2" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.2, 1.55, 3)
+mesh = SubResource("PumpMesh")
+material_override = SubResource("PumpMat")
+
+[node name="Pump3" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.2, 1.55, -3)
+mesh = SubResource("PumpMesh")
+material_override = SubResource("PumpMat")
+
+[node name="Pump4" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.2, 1.55, -3)
+mesh = SubResource("PumpMesh")
+material_override = SubResource("PumpMat")
+
+[node name="Shop" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, -13)
+mesh = SubResource("ShopMesh")
+material_override = SubResource("ShopMat")
+
+[node name="ShopSign" type="MeshInstance3D" parent="Station"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, -9.6)
+mesh = SubResource("SignMesh")
+material_override = SubResource("SignMat")
+
+[node name="FuelTank" parent="Station" instance=ExtResource("5_tank")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -17, 0, -9)
+
+[node name="Traffic" type="Node3D" parent="."]
+script = ExtResource("6_traffic")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Info" type="Label" parent="HUD"]
+offset_left = 28.0
+offset_top = 20.0
+offset_right = 900.0
+offset_bottom = 140.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.05, 0.05, 0.06, 1)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 32
+text = "₺0"

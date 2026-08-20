@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:meta": "node tools/build-meta.mjs",
+    "test:meta": "node tools/tests/meta-smoke.mjs",
     "preview": "vite preview",
     "assets": "node tools/gen-assets.mjs",
     "test:faz": "tsx tools/tests/faz-checks.mjs",

@@ -1,5 +1,7 @@
 node_modules
 dist
+dist-meta
+.env.meta
 .DS_Store
 # tanıtım videoları repoya girmez (yedek: yerel promo/)
 promo/*.mp4
