@@ -37,6 +37,7 @@
     "test:konum": "tsx tools/tests/konum-check.mjs",
     "test:tasima": "tsx tools/tests/tasima-check.mjs",
     "test:branch": "tsx tools/tests/branch-check.mjs",
+    "ses:export": "node tools/ses-export.mjs",
     "shots": "node tools/shot/shoot.mjs"
   },
   "dependencies": {
