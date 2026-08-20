@@ -1854,6 +1854,17 @@ export class GameState {
   // ÇÖZÜM: her gün sonunda itibar, O GÜNÜN hizmet kalitesine doğru çekilir. Artık 5.0'da
   // kalmak için kayıpsız gün gerekir; istasyonu ihmal etmek itibarı gerçekten düşürür.
   private repMark = { served: 0, lost: 0 }
+  /** İTİBAR ŞEFFAFLIĞI (#1025 "ne yaptıysam ne düşürebildim ne de arttırabildim"):
+   *  itibar gün sonunda O GÜNÜN kayıp oranına doğru çekiliyor. Kayıpsız oynayan oyuncuda
+   *  hedef zaten 5.0 olduğu için değer kıpırdamıyordu ve bu hiçbir yerde yazmıyordu.
+   *  Panel artık bugünkü kayıp oranını ve gün sonu hedefini gösteriyor. */
+  repToday(): { served: number; lost: number; target: number } {
+    const served = this.stats.served - this.repMark.served
+    const lost = this.stats.lost - this.repMark.lost
+    const total = served + lost
+    const target = total < 3 ? 3.0 : Math.max(1, 5 - (lost / total) * 7)
+    return { served, lost, target }
+  }
   /** son mutabakatın yönü — arayüzde ok göstermek için (+1 arttı, -1 düştü, 0 sabit) */
   repTrend = 0
 

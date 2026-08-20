@@ -534,12 +534,31 @@ export class World {
     // SU ŞUBESİ (marina): asfalt/refüj/şerit HİÇ çizilmez — yolun yerini seyir kanalı alır.
     // Bu blok atlanmazsa denizin üstünde asfalt şerit görünüyordu.
     const isWater = th.lane.kind === 'water'
-    const roadW = th.lane.service ? 6.0 : 4.6
+    // ASFALT GENİŞLİĞİ ŞERİT SAYISINDAN TÜRER (#1075 "Otoyol eklenmiş ama tek şerit,
+    // en az çift şerit olması iyi olur"): eskiden yalnızca 'service' bandı olan temalar
+    // (çevre yolu/metropol) geniş çiziliyordu; otoyol lane.count = 3 olmasına rağmen
+    // kasaba yoluyla AYNI 4.6 birimlik tek şeritli asfaltı alıyordu.
+    const seritSayisi = Math.max(1, th.lane.count ?? 1)
+    // 3+ şeritte 6.8 birimde duruyoruz: karşı yaka kapısı FAR_GATE_X = 11.6'da ve
+    // asfaltın kenarı (ROAD_X + 3.4 = 11.3) onun altında kalmalı — yoksa kapı pedi
+    // asfaltın üstüne biniyor.
+    const roadW = th.lane.service ? 6.0 : seritSayisi >= 3 ? 6.8 : seritSayisi === 2 ? 6.0 : 4.6
     if (!isWater) {
       const road = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 220), roadMat)
       road.position.set(ROAD_X, 0, 0.01)
       road.receiveShadow = true
       s.add(road)
+      // ARSA ↔ ASFALT BOŞLUĞU (#1030 "2. haritada ortada çimler vs kaldı"): arsa x=5.0'da
+      // bitiyor, asfalt tema genişliğine göre başlıyor. Kentsel temalarda arada açıklanamayan
+      // ince bir ÇİM ŞERİDİ kalıyordu. Kasabada bu bant BİLEREK duruyor (kır istasyonu
+      // imzası); diğerlerinde beton payla kapatılır.
+      const asfaltBasi = ROAD_X - roadW / 2
+      if (th.id !== 'kasaba' && asfaltBasi > 5.0) {
+        const pay = new THREE.Mesh(new THREE.PlaneGeometry(asfaltBasi - 5.0 + 0.12, 220), this.concreteMat)
+        pay.position.set((5.0 + asfaltBasi) / 2, 0, 0.014)
+        pay.receiveShadow = true
+        s.add(pay)
+      }
     }
     if (th.lane.median && !isWater) {
       // ---- KENTSEL YOL (çevre yolu/metropol): orta REFÜJ + şerit çizgileri (rapor §6.3) ----
@@ -570,9 +589,20 @@ export class World {
       // ŞERİT AYIRICI KESİKLER: 4 şeritli yolda her yönün İKİ şeridi arasına, tek
       // şeritlide eski konumlarına. Konum temadan türer, elle sabit yok.
       const dashPerLane = 44
-      const dashOff = th.lane.service
+      // Yön başına (count-1) ayırıcı: 3 şeritli otoyolda her yönde iki kesikli çizgi.
+      const yariGen = roadW / 2, medYari = medW / 2
+      const seritGen = (yariGen - medYari) / seritSayisi
+      const dashOff: number[] = th.lane.service
         ? [ROAD_X - 2.32, ROAD_X + 2.32]   // 4 şerit: yön başına iki şeridin arası
-        : [ROAD_X - 1.15, ROAD_X + 1.15]   // tek şerit (mevcut görünüm)
+        : seritSayisi === 1
+        ? [ROAD_X - 1.15, ROAD_X + 1.15]   // tek şerit (kasaba görünümü — değişmedi)
+        : (() => {
+            const o: number[] = []
+            for (let i = 1; i < seritSayisi; i++) {
+              o.push(ROAD_X - medYari - seritGen * i, ROAD_X + medYari + seritGen * i)
+            }
+            return o
+          })()
       mkInst(new THREE.PlaneGeometry(0.08, 2.4), lam(0xe8e4d8), dashPerLane * dashOff.length, (m, i) => {
         const k = i % dashPerLane
         m.makeTranslation(dashOff[Math.floor(i / dashPerLane)], -107 + k * 5, 0.021)
@@ -590,7 +620,7 @@ export class World {
       }
     }
     // kenar çizgileri asfalt kenarına oturur (yol genişleyince onlar da kayar)
-    const edgeOff = (th.lane.service ? 6.0 : 4.6) / 2 - 0.14
+    const edgeOff = roadW / 2 - 0.14
     for (const off of isWater ? [] : [-edgeOff, edgeOff]) {
       const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 220), lam(0xe8e4d8))
       edgeLine.position.set(ROAD_X + off, 0, 0.02)

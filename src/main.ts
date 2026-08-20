@@ -809,6 +809,22 @@ function openOfficePanel() {
       + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`
           + (state.repTrend > 0 ? ' ▲' : state.repTrend < 0 ? ' ▼' : ''),
           state.repTrend > 0 ? 'good' : state.repTrend < 0 ? 'bad' : '')
+      // #1025: itibar gün sonunda BUGÜNÜN kayıp oranına çekilir; kayıpsız oynayanda
+      // hedef zaten 5.0 olduğu için değer kıpırdamıyor ve sebebi hiçbir yerde yazmıyordu
+      + (() => {
+          const r = state.repToday()
+          const toplam = r.served + r.lost
+          const oran = toplam > 0 ? Math.round(100 * r.lost / toplam) : 0
+          return row(t('Bugün servis / kaçan'), `${r.served} / ${r.lost}${toplam >= 3 ? ` (%${oran})` : ''}`,
+              r.lost === 0 ? 'good' : oran > 10 ? 'bad' : '')
+            + row(t('Gün sonu itibar hedefi'), r.target.toFixed(1),
+                r.target > state.reputation + 0.05 ? 'good' : r.target < state.reputation - 0.05 ? 'bad' : '')
+            + (toplam < 3
+                ? `<div class="sd" style="padding:6px 2px; color:var(--muted); font-weight:700">${t('Bugün neredeyse hiç müşteri görmedin — itibar yavaşça 3.0\'a doğru aşınır.')}</div>`
+                : r.lost === 0
+                ? `<div class="sd" style="padding:6px 2px; color:var(--muted); font-weight:700">${t('Kayıpsız gün: itibar 5.0\'a doğru gidiyor. Düşmesi için müşteri kaçırman gerekir.')}</div>`
+                : '')
+        })()
       // §6.2 kasaba imzası: müdavim payı yalnız mekaniğin açık olduğu şubede görünür
       + (state.regularsShare() > 0
           ? row(t('Müdavim müşteri'), `%${Math.round(state.regularsShare() * 100)}`, 'good')

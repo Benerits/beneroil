@@ -24,6 +24,10 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Bugün servis / kaçan": "Served / lost today",
+  "Gün sonu itibar hedefi": "End-of-day reputation target",
+  "Bugün neredeyse hiç müşteri görmedin — itibar yavaşça 3.0'a doğru aşınır.": "Barely any customers today — reputation slowly drifts toward 3.0.",
+  "Kayıpsız gün: itibar 5.0'a doğru gidiyor. Düşmesi için müşteri kaçırman gerekir.": "A day without losses: reputation is heading to 5.0. It only drops if you turn customers away.",
   "Otel açıldı! Doluluk itibarınla artar — günlük işletme gideri de var.": "Hotel is open! Occupancy rises with your reputation — it also carries a daily running cost.",
   "Temizlikçi işe alındı — bakım özeni düşmeyecek, paneller kendiliğinden silinecek.": "Cleaner hired — upkeep won't slip and the solar panels stay clean on their own.",
   "Otel": "Hotel",
@@ -1140,6 +1144,10 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Bugün servis / kaçan": "Servis / perdus aujourd'hui",
+  "Gün sonu itibar hedefi": "Objectif de réputation en fin de journée",
+  "Bugün neredeyse hiç müşteri görmedin — itibar yavaşça 3.0'a doğru aşınır.": "Presque aucun client aujourd'hui — la réputation glisse lentement vers 3,0.",
+  "Kayıpsız gün: itibar 5.0'a doğru gidiyor. Düşmesi için müşteri kaçırman gerekir.": "Journée sans perte : la réputation monte vers 5,0. Elle ne baisse que si tu perds des clients.",
   "Otel açıldı! Doluluk itibarınla artar — günlük işletme gideri de var.": "L'hôtel est ouvert ! Le taux d'occupation suit ta réputation — il y a aussi un coût d'exploitation quotidien.",
   "Temizlikçi işe alındı — bakım özeni düşmeyecek, paneller kendiliğinden silinecek.": "Agent d'entretien embauché — la maintenance ne baisse plus et les panneaux restent propres.",
   "Otel": "Hôtel",
