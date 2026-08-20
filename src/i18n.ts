@@ -24,6 +24,18 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Müdür Sv.{0} · KASA DOLDU ₺{1} — topla ki şube tekrar kazansın":
+    "Manager Lv.{0} · VAULT FULL ₺{1} — collect so the branch earns again",
+  "Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3} {4} · {5} gün sonra dolar":
+    "Manager Lv.{0} · daily net ₺{1} · vault ₺{2}/{3} {4} · full in {5} days",
+  "Taşıma modu: yön butonları ya da dokun · R veya ⟳ döndür · ✓ yerleştir":
+    "Move mode: arrows or tap · R or ⟳ to rotate · ✓ to place",
+  "⚔️ {0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!":
+    "⚔️ {0} cut prices: ₺{1}/L — trying to win back market share.",
+  "📣 {0} kampanya başlattı — 5 gün boyunca daha çekici olacak.":
+    "📣 {0} launched a campaign — more attractive for the next 5 days.",
+  "💰 {0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!":
+    "💰 {0} eased off and raised prices: ₺{1}/L — your chance!",
   // ŞUBE MÜDÜRÜ (pasif şube işletmesi)
   'Şube kasalarında bekleyen': 'Waiting in branch tills',
   'Hepsini Topla': 'Collect All',
@@ -1044,6 +1056,18 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Müdür Sv.{0} · KASA DOLDU ₺{1} — topla ki şube tekrar kazansın":
+    "Gérant niv.{0} · COFFRE PLEIN ₺{1} — encaissez pour que la succursale reprenne",
+  "Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3} {4} · {5} gün sonra dolar":
+    "Gérant niv.{0} · net/jour ₺{1} · coffre ₺{2}/{3} {4} · plein dans {5} j",
+  "Taşıma modu: yön butonları ya da dokun · R veya ⟳ döndür · ✓ yerleştir":
+    "Mode déplacement : flèches ou toucher · R ou ⟳ pour pivoter · ✓ pour poser",
+  "⚔️ {0} fiyat kırdı: ₺{1}/L — pazar payını geri almaya çalışıyor!":
+    "⚔️ {0} a baissé ses prix : ₺{1}/L — il tente de reprendre des parts de marché.",
+  "📣 {0} kampanya başlattı — 5 gün boyunca daha çekici olacak.":
+    "📣 {0} a lancé une campagne — plus attractif pendant 5 jours.",
+  "💰 {0} rahatladı ve zam yaptı: ₺{1}/L — senin için fırsat!":
+    "💰 {0} a relâché la pression et augmenté : ₺{1}/L — à vous de jouer !",
   // GÉRANT DE SUCCURSALE (exploitation passive)
   'Şube kasalarında bekleyen': 'En attente dans les caisses',
   'Hepsini Topla': 'Tout encaisser',
