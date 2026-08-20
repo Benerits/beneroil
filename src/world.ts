@@ -2871,6 +2871,45 @@ export class World {
     this.berthGroup = g
   }
 
+  /** YOL KENARI OTELİ (#1011 "otel ekleyebilirsin") — tır parkının üst ligi: iki katlı
+   *  konaklama bloğu, giriş saçağı, ışıklı tabela. Gece pencereleri yanar. */
+  buildHotel(pos?: THREE.Vector2, regId = 'hotel') {
+    const at = pos ?? new THREE.Vector2(-14.5, -12.5)
+    const g = new THREE.Group()
+    box(6.4, 9.0, 5.2, 0xeee3cd, 0, 0, 2.6, g)              // ana blok (2 kat)
+    box(6.8, 9.4, 0.28, 0x9c3b3b, 0, 0, 5.34, g)            // saçak
+    box(6.6, 0.16, 0.20, 0xd8cdb4, 0, 0, 2.62, g)           // kat ayrım silmesi
+    // oda pencereleri: iki kat × dört oda, deniz/yol tarafına bakar
+    const isik: [number, number, number][] = []
+    for (let kat = 0; kat < 2; kat++) {
+      for (let i = 0; i < 4; i++) {
+        const py = -3.2 + i * 2.1, pz = 1.5 + kat * 2.5
+        box(0.06, 1.3, 1.0, 0x8ed0e8, 3.24, py, pz, g)
+        isik.push([3.26, py, pz])
+      }
+    }
+    // giriş: kanopi + iki direk + basamak
+    box(2.6, 3.0, 0.22, 0x9c3b3b, 4.5, 0, 3.0, g)
+    cyl(0.12, 3.0, 0xd8cdb4, 5.6, -1.3, 1.5, 'z', g)
+    cyl(0.12, 3.0, 0xd8cdb4, 5.6, 1.3, 1.5, 'z', g)
+    box(1.8, 2.6, 0.14, 0xcfc6b0, 4.6, 0, 0.07, g)
+    box(0.06, 1.8, 2.1, 0x6f5a3f, 3.24, 0, 1.05, g)         // giriş kapısı
+    // çatı üstü ışıklı tabela
+    const tab = canvasPanel(3.6, 0.86, 520, 124, (ctx, cw, ch) => {
+      ctx.fillStyle = '#9c3b3b'; ctx.beginPath(); ctx.roundRect(0, 0, cw, ch, 20); ctx.fill()
+      ctx.fillStyle = '#fff'; ctx.font = '800 62px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText(t('OTEL'), cw / 2, ch / 2 + 2)
+    })
+    tab.position.set(0, 0, 6.1)
+    g.add(tab)
+    cyl(0.09, 0.9, 0xb7ae99, 0, 0, 5.65, 'z', g)            // tabela direği
+    this.facadeLights(g, isik, 0.9, 0.65)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register(regId, t('OTEL'), g, 7.0)
+  }
+
   buildParking(pos?: THREE.Vector2, regId = 'parking') {
     const at = pos ?? new THREE.Vector2(0.4, -0.2)
     const g = new THREE.Group()

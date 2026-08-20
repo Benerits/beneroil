@@ -24,6 +24,19 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Otel açıldı! Doluluk itibarınla artar — günlük işletme gideri de var.": "Hotel is open! Occupancy rises with your reputation — it also carries a daily running cost.",
+  "Temizlikçi işe alındı — bakım özeni düşmeyecek, paneller kendiliğinden silinecek.": "Cleaner hired — upkeep won't slip and the solar panels stay clean on their own.",
+  "Otel": "Hotel",
+  "OTEL": "HOTEL",
+  "Yol Kenarı Oteli": "Roadside Hotel",
+  "Yolcular geceler. Doluluk itibarına bağlıdır — ihmal edilen istasyonde oda boş kalır.": "Travellers stay the night. Occupancy follows your reputation — a neglected station leaves rooms empty.",
+  "Yolcular geceler. Doluluk itibarınla artar; günlük ₺{0} işletme gideri vardır. Tır parkı şart.": "Travellers stay the night. Occupancy rises with reputation; running cost is ₺{0} per day. Requires a truck stop.",
+  "Doluluk": "Occupancy",
+  "Günlük gider": "Daily cost",
+  "Temizlikçi Tut": "Hire a Cleaner",
+  "bakım + panel": "upkeep + panels",
+  "Sürekli bakım özeni: arıza olasılığı düşer, güneş panelleri kendiliğinden silinir. Günlük ₺{0} yovmiye.": "Constant upkeep: fewer breakdowns and the solar panels clean themselves. ₺{0} per day in wages.",
+  "Önce Tır Parkı kur": "Build a truck stop first",
   "az önce": "just now",
   "{0} dk önce": "{0} min ago",
   "{0} sa önce": "{0} h ago",
@@ -1127,6 +1140,19 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Otel açıldı! Doluluk itibarınla artar — günlük işletme gideri de var.": "L'hôtel est ouvert ! Le taux d'occupation suit ta réputation — il y a aussi un coût d'exploitation quotidien.",
+  "Temizlikçi işe alındı — bakım özeni düşmeyecek, paneller kendiliğinden silinecek.": "Agent d'entretien embauché — la maintenance ne baisse plus et les panneaux restent propres.",
+  "Otel": "Hôtel",
+  "OTEL": "HÔTEL",
+  "Yol Kenarı Oteli": "Hôtel de bord de route",
+  "Yolcular geceler. Doluluk itibarına bağlıdır — ihmal edilen istasyonde oda boş kalır.": "Les voyageurs passent la nuit. Le taux d'occupation suit ta réputation — une station négligée reste vide.",
+  "Yolcular geceler. Doluluk itibarınla artar; günlük ₺{0} işletme gideri vardır. Tır parkı şart.": "Les voyageurs passent la nuit. L'occupation suit la réputation ; coût de ₺{0} par jour. Nécessite un relais routier.",
+  "Doluluk": "Occupation",
+  "Günlük gider": "Coût quotidien",
+  "Temizlikçi Tut": "Embaucher un agent d'entretien",
+  "bakım + panel": "entretien + panneaux",
+  "Sürekli bakım özeni: arıza olasılığı düşer, güneş panelleri kendiliğinden silinir. Günlük ₺{0} yovmiye.": "Entretien permanent : moins de pannes et les panneaux se nettoient seuls. ₺{0} de salaire par jour.",
+  "Önce Tır Parkı kur": "Construis d'abord un relais routier",
   "az önce": "à l'instant",
   "{0} dk önce": "il y a {0} min",
   "{0} sa önce": "il y a {0} h",

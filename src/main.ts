@@ -2452,6 +2452,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'coffee': world.buildCoffee(pos); break
     case 'restaurant': world.buildRestaurant(pos); break
     case 'truckpark': world.buildTruckPark(pos); break
+    case 'hotel': world.buildHotel(pos); break
     case 'airwater': world.buildAirWater(pos, id); break
     case 'lamp': world.buildStreetLamp(pos, id); break
     case 'selfwash': world.buildSelfWash(pos, id); break
@@ -2487,6 +2488,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   coffee: () => ({ w: 3.2, d: 3.2 }),
   restaurant: () => ({ w: 5.5, d: 6 }),
   truckpark: () => ({ w: 8, d: 6 }),
+  hotel: () => ({ w: 7, d: 10 }), // iki katlı blok + giriş kanopisi
   airwater: () => ({ w: 1.6, d: 2 }),
   lamp: () => ({ w: 1.2, d: 1.2, grass: true }), // dekoratif: çimen üstüne de konabilir
   selfwash: () => ({ w: 5.5, d: 7 }),
@@ -2845,6 +2847,7 @@ function rebuildFromState() {
   if (state.hasCoffee) world.buildCoffee(pv('coffee'))
   if (state.hasRestaurant) world.buildRestaurant(pv('restaurant'))
   if (state.hasTruckPark) world.buildTruckPark(pv('truckpark'))
+  if (state.hasHotel) world.buildHotel(pv('hotel'))
   for (let i = 0; i < state.airWaterCount; i++) {
     const iid = i === 0 ? 'airwater' : `airwater#${i}`
     world.buildAirWater(pv(iid), iid)
@@ -3582,6 +3585,8 @@ function buyToast(id: string) {
     case 'coffee': ui.toast('Kahveci açıldı!', 'good'); break
     case 'restaurant': ui.toast('Restoran açıldı — yolcular yemek molası verecek!', 'good'); break
     case 'truckpark': ui.toast('Tır parkı açıldı — düzenli konaklama geliri!', 'good'); break
+    case 'hotel': ui.toast(t('Otel açıldı! Doluluk itibarınla artar — günlük işletme gideri de var.'), 'good', true); break
+    case 'cleaner': ui.toast(t('Temizlikçi işe alındı — bakım özeni düşmeyecek, paneller kendiliğinden silinecek.'), 'good'); break
     case 'airwater': ui.toast('Hava-su ünitesi kuruldu!', 'good'); break
     case 'lamp': ui.toast(t('Sokak lambası kuruldu — gece istasyon aydınlık!'), 'good'); break
     case 'selfwash': ui.toast('Self yıkama açıldı — köpük ve su otomatik satılacak!', 'good'); break
@@ -3933,6 +3938,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
       // kumbaralı tesisler (topla-hook'u): tır parkı, self yıkama, oto yıkama, hava-su
       const gains: [string, string, number][] = []
       if (state.hasTruckPark) gains.push(['truckpark', t('Tır parkı'), 125 / 45])
+      if (state.hasHotel) gains.push(['hotel', t('Otel'), 370 / 58])
       if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
       if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
       if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
@@ -4016,7 +4022,7 @@ if (isFullMode) {
     'tank', 'tank', 'tank', 'market', 'market', 'toilet', 'toilet', 'grid', 'grid',
     'battery', 'battery', 'battery', 'evcharger', 'evcharger', 'evcharger', 'evcharger',
     'solar', 'dieselgen', 'smr', 'wash', 'oil',
-    'airwater', 'selfwash', 'coffee', 'restaurant', 'truckpark', 'parking',
+    'airwater', 'selfwash', 'coffee', 'restaurant', 'truckpark', 'hotel', 'cleaner', 'parking',
   ]
   state.money = 10_000_000
   for (const id of FULL_ORDER) {
@@ -4452,6 +4458,15 @@ function buildingCard(id: string): BuildingCard | null {
         desc: t('Tırcılar konaklar; sen hiçbir şey yapmadan düzenli gelir akar.'),
         stats: [['Pasif gelir', '₺90-160 / ~45sn'], ['Trafik etkisi', '+%2']],
       }
+    case 'hotel':
+      return {
+        icon: 'i-hotel', name: t('Yol Kenarı Oteli'),
+        desc: t('Yolcular geceler. Doluluk itibarına bağlıdır — ihmal edilen istasyonde oda boş kalır.'),
+        stats: [[t('Pasif gelir'), '₺260-480 / ~58sn'],
+                [t('Doluluk'), `%${Math.round((0.45 + 0.13 * Math.min(4, state.reputation)) * 100)}`],
+                [t('Günlük gider'), '₺900', 'bad'],
+                [t('Trafik etkisi'), '+%5']],
+      }
     case 'lamp':
       // Oyuncu raporu: "can't move street lamp" — kartı yoktu, tıklanınca hiçbir şey
       // açılmıyordu; Taşı/Yık butonları bu karta genel akıştan otomatik eklenir.
@@ -4531,7 +4546,7 @@ function refreshBuildingCard() {
   if (!card) return
   const facId = selectedBuilding.split('#')[0]
   if (['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2', 'coffee', 'coffee2',
-       'restaurant', 'restaurant2', 'truckpark', 'selfwash', 'airwater'].includes(facId)) {
+       'restaurant', 'restaurant2', 'truckpark', 'hotel', 'selfwash', 'airwater'].includes(facId)) {
     card.stats.push([t('Bugünkü ciro'), `₺${Math.round(state.facDaily[facId] ?? 0).toLocaleString('tr-TR')}`, 'good'])
     // SESSİZ GELİR SIFIRI (#1065 "Market üretim yapmıyor, yönünü değiştirdim çözüm olmadı"):
     // müşteri YAYA olarak yol karşısına geçmez. Tesis yolun bir yakasındayken o yakada

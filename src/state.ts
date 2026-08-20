@@ -22,7 +22,7 @@ export const LOC_FIELDS = [
   'insurance', 'decorLevel', 'wear', 'gridLevel', 'lampCount',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'rival',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
-  'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark',
+  'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
   'uraniumPending', 'uraniumEta', 'closed', 'wideGates', 'smrWreck',
 ] as const
@@ -190,6 +190,14 @@ const OIL_COST = 12000
 const COFFEE_COST = 7000
 const RESTAURANT_COST = 15000
 const TRUCKPARK_COST = 12000
+// OTEL (#1011 "otel ekleyebilirsin"): tır parkının bir üst ligi — yolcuyu geceletir.
+// Pasif omurga ama BEDAVA değil: her gün oda bakımı/personeli OPEX'e yazılır.
+const HOTEL_COST = 260_000
+const HOTEL_OPEX = 900          // günlük işletme gideri
+// TEMİZLİKÇİ (#1010 "temizlikçi ekleyebilirsin"): bakım özenini sürekli yüksek tutar,
+// güneş panelini siler. Yovmiyesi vardır — otomasyonun bedeli var.
+const CLEANER_HIRE = 9_000
+const CLEANER_WAGE = 320        // günlük yovmiye
 const AIRWATER_COST = 1500
 const SELFWASH_COST = 6000
 const PARKING_COST = 1200
@@ -380,6 +388,9 @@ export class GameState {
   hasCoffee = false
   hasRestaurant = false
   hasTruckPark = false
+  hasHotel = false
+  hotelTimer = 40
+  hasCleaner = false
   airWaterCount = 0
   selfWashCount = 0
   get hasAirWater() { return this.airWaterCount > 0 }
@@ -615,6 +626,22 @@ export class GameState {
         this.addPending('truckpark', m, t('Tır parkı'))
       }
     }
+    // OTEL: tır parkından daha seyrek ama çok daha yüklü (oda geliri)
+    if (this.hasHotel) {
+      this.hotelTimer -= dt
+      if (this.hotelTimer <= 0) {
+        this.hotelTimer = 45 + Math.random() * 25
+        // itibar doluluk oranını belirler: kötü otel boş kalır (pasif gelir "bedava" olmasın)
+        const doluluk = 0.45 + 0.13 * Math.min(4, this.reputation)
+        const m = Math.round((260 + Math.random() * 220) * doluluk)
+        this.addPending('hotel', m, t('Otel'))
+      }
+    }
+    // TEMİZLİKÇİ: bakım özenini yüksek tutar, paneli siler — arıza olasılığını düşürür
+    if (this.hasCleaner) {
+      this.maintCare = Math.min(1, this.maintCare + 0.0012 * dt)
+      if (this.hasSolar) this.solarDirt = Math.max(0, this.solarDirt - 0.0011 * dt)
+    }
     if (this.hasSelfWash) {
       this.selfWashTimer -= dt
       if (this.selfWashTimer <= 0) {
@@ -694,7 +721,7 @@ export class GameState {
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
       + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
       + (this.hasCoffee ? 0.02 : 0) + (this.hasRestaurant ? 0.03 : 0)
-      + (this.hasTruckPark ? 0.02 : 0) + 0.02 * Math.min(this.airWaterCount, 3)
+      + (this.hasTruckPark ? 0.02 : 0) + (this.hasHotel ? 0.05 : 0) + 0.02 * Math.min(this.airWaterCount, 3)
       + 0.02 * Math.min(this.selfWashCount, 3)
     // Fiyat esnekliği TÜM akışı çarpar. Eskiden yalnız taban terimi çarpıyordu —
     // gelişmiş istasyonda tesis terimleri fiyattan bağımsız kalınca tavan fiyat
@@ -1087,6 +1114,7 @@ export class GameState {
     this.marinaFacs = []; this.berths = {}; this.winterSlots = 0; this.marinaViolations = 0
     this.hasDiesel = false; this.hasSMR = false; this.smrWreck = false; this.hasWash = false; this.hasOil = false
     this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
+    this.hasHotel = false; this.hasCleaner = false
     this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
     for (const f of FUELS) { this.tankCounts[f] = 1; this.tanks[f] = 0 }
     this.brokenPumps.clear(); this.brokenChargers.clear()
@@ -1268,15 +1296,18 @@ export class GameState {
    *  Yovmiye AYRI kalemde kalır (çifte sayım yok); şebeke faturası canlı kesiliyor.
    *  opexStart'tan itibaren 10 günde %0→%100 rampalanır (enflasyon şoku yok). */
   dailyOpex(): number {
+    // otel odaları her gün toplanıyor/temizleniyor: pasif gelirin sabit karşı gideri
     const ramp = Math.min(1, Math.max(0, (this.day - this.opexStart) / 10))
-    if (ramp <= 0) return 0
-    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp) + this.insuranceDaily()
+    const otel = this.hasHotel ? HOTEL_OPEX : 0
+    if (ramp <= 0) return otel
+    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp) + this.insuranceDaily() + otel
   }
   /** kurulu ekipman+tesis alış değeri (sunucu buildingValue ile aynı felsefe, istemce tablolarından) */
   equipmentValue(): number {
     const sum = (arr: number[], k: number) => arr.slice(0, Math.max(0, Math.min(arr.length, Math.floor(k) || 0))).reduce((a, b) => a + b, 0)
     let v = 0
     v += sum(PUMP_COSTS, this.pumps)
+    if (this.hasCleaner) v += CLEANER_HIRE
     v += sum(SIGN_COSTS, this.signLevel) + sum(TANK_COSTS, this.tankLevel)
     v += sum(MARKET_COSTS, this.marketLevel) + sum(MARKET_COSTS, this.market2Level)
     v += sum(TOILET_COSTS, this.toiletLevel) + sum(GRID_COSTS, this.gridLevel)
@@ -1293,6 +1324,7 @@ export class GameState {
     if (this.hasCoffee) v += COFFEE_COST
     if (this.hasRestaurant) v += RESTAURANT_COST
     if (this.hasTruckPark) v += TRUCKPARK_COST
+    if (this.hasHotel) v += HOTEL_COST
     if (this.wideGates) v += WIDEGATE_COST
     return v
   }
@@ -1366,7 +1398,7 @@ export class GameState {
     const c: [string, string][] = [
       ['market', t('Market')], ['toilet', t('Tuvalet')], ['battery', t('Batarya Deposu')],
       ['wash', t('Oto Yıkama')], ['oil', t('Yağ Değişimi')], ['coffee', t('Kahveci')],
-      ['restaurant', t('Restoran')], ['truckpark', t('Tır Parkı')], ['dieselgen', t('Jeneratör')], ['smr', t('Reaktör')],
+      ['restaurant', t('Restoran')], ['truckpark', t('Tır Parkı')], ['hotel', t('Otel')], ['dieselgen', t('Jeneratör')], ['smr', t('Reaktör')],
     ]
     if (this.evChargers > 0) c.push([`charger#${this.evChargers - 1}`, t('DC Şarj')])
     if (this.solarCount > 0) c.push([`solar#${this.solarCount - 1}`, t('Güneş Santrali')])
@@ -1385,7 +1417,7 @@ export class GameState {
     const staffMul = 1 + 0.35 * (this.staffLevel - 1)
     const wm = this.theme().econ.wageMult ?? 1
     return Math.round((Math.round((this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE) * staffMul)
-      + MANAGER_WAGES[Math.min(3, this.managerLevel)]) * wm)
+      + MANAGER_WAGES[Math.min(3, this.managerLevel)] + (this.hasCleaner ? CLEANER_WAGE : 0)) * wm)
   }
   /** EKİPMAN YAŞLANMASI: yıpranma arttıkça verim düşer (%100'de -%40) */
   wearEfficiency(): number { return 1 - 0.4 * Math.min(1, Math.max(0, this.wear)) }
@@ -1715,6 +1747,7 @@ export class GameState {
       case 'airwater': return 250 * Math.min(6, Math.max(1, this.airWaterCount))
       case 'parking': return 300 * Math.min(6, Math.max(1, this.parkingCount))
       case 'truckpark': return 1200   // pasif yüksek kazanan
+      case 'hotel': return 3000       // en yüklü pasif kalem — tavanı da yüksek
       case 'restaurant': return 1200  // ₺80-160/ziyaret
       case 'oil': return 1000         // ₺150-250/servis
       case 'wash': return 700         // ₺60-120/yıkama
@@ -1776,14 +1809,15 @@ export class GameState {
   pendingCapTotal(): number {
     let v = 0
     for (const id of ['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2',
-      'coffee', 'coffee2', 'restaurant', 'restaurant2', 'truckpark', 'selfwash', 'airwater', 'parking']) {
+      'coffee', 'coffee2', 'restaurant', 'restaurant2', 'truckpark', 'hotel', 'selfwash', 'airwater', 'parking']) {
       const has = (id === 'market' && this.marketLevel > 0) || (id === 'market2' && this.market2Level > 0)
         || (id === 'toilet' && this.toiletLevel > 0) || (id === 'toilet2' && this.toilet2Level > 0)
         || (id === 'wash' && this.hasWash) || (id === 'wash2' && this.hasWash2)
         || (id === 'oil' && this.hasOil) || (id === 'oil2' && this.hasOil2)
         || (id === 'coffee' && this.hasCoffee) || (id === 'coffee2' && this.hasCoffee2)
         || (id === 'restaurant' && this.hasRestaurant) || (id === 'restaurant2' && this.hasRestaurant2)
-        || (id === 'truckpark' && this.hasTruckPark) || (id === 'selfwash' && this.selfWashCount > 0)
+        || (id === 'truckpark' && this.hasTruckPark) || (id === 'hotel' && this.hasHotel)
+        || (id === 'selfwash' && this.selfWashCount > 0)
         || (id === 'airwater' && this.airWaterCount > 0) || (id === 'parking' && this.parkingCount > 0)
       if (has) v += this.pendingCap(id)
     }
@@ -2032,6 +2066,16 @@ export function getShopItems(s: GameState): ShopRow[] {
     s.hasRestaurant ? null : RESTAURANT_COST, null)
   row('truckpark', 'i-truck', t('Tır Parkı'), '+₺90-160/dk', t('Tırcılar konaklar — düzenli pasif gelir'),
     s.hasTruckPark ? null : TRUCKPARK_COST, null)
+  // OTEL (#1011): tır parkının üst ligi. Doluluk İTİBARA bağlı, günlük OPEX'i var —
+  // pasif gelir "bedava" olmasın, ihmal edilen istasyonda otel zarar eder.
+  row('hotel', 'i-hotel', t('Yol Kenarı Oteli'), '+₺260-480/dk',
+    t('Yolcular geceler. Doluluk itibarınla artar; günlük ₺{0} işletme gideri vardır. Tır parkı şart.', String(HOTEL_OPEX)),
+    s.hasHotel ? null : HOTEL_COST,
+    s.hasTruckPark ? null : t('Önce Tır Parkı kur'))
+  // TEMİZLİKÇİ (#1010): otomasyon kalemi — bakım özeni düşmez, panel kendi kendine silinir
+  row('cleaner', 'i-clean', t('Temizlikçi Tut'), t('bakım + panel'),
+    t('Sürekli bakım özeni: arıza olasılığı düşer, güneş panelleri kendiliğinden silinir. Günlük ₺{0} yovmiye.', String(CLEANER_WAGE)),
+    s.hasCleaner ? null : CLEANER_HIRE, null)
 
   // elektrik zinciri (teknoloji sırası korunur, arsa şartı yok)
   // ---- B8: karşı yaka nüshaları (yalnız karşıda betonlu arsa varken görünür) ----
@@ -2287,7 +2331,7 @@ const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'pumpSpeedLevel', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
   'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
-  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
+  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
   'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
@@ -2502,6 +2546,8 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'coffee': s.hasCoffee = true; break
     case 'restaurant': s.hasRestaurant = true; break
     case 'truckpark': s.hasTruckPark = true; break
+    case 'hotel': s.hasHotel = true; break
+    case 'cleaner': s.hasCleaner = true; break
     case 'airwater': s.airWaterCount++; break
     case 'lamp': s.lampCount++; break
     case 'winterslot': s.winterSlots++; break
@@ -2546,6 +2592,7 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
     case 'coffee': return s.hasCoffee ? { refund: half(COFFEE_COST) } : null
     case 'restaurant': return s.hasRestaurant ? { refund: half(RESTAURANT_COST) } : null
     case 'truckpark': return s.hasTruckPark ? { refund: half(TRUCKPARK_COST) } : null
+    case 'hotel': return s.hasHotel ? { refund: half(HOTEL_COST) } : null
     case 'dieselgen': return s.hasDiesel ? { refund: half(DIESELGEN_COST) } : null
     case 'smr': return s.hasSMR ? { refund: half(SMR_COST) } : null
     case 'solar': return s.solarCount > 0 ? { refund: half(SOLAR_COST) } : null // 2c: herhangi bir örnek satılabilir
@@ -2588,6 +2635,7 @@ export function applySell(s: GameState, id: string): number | null {
     case 'coffee': s.hasCoffee = false; break
     case 'restaurant': s.hasRestaurant = false; break
     case 'truckpark': s.hasTruckPark = false; break
+    case 'hotel': s.hasHotel = false; break
     case 'dieselgen': s.hasDiesel = false; break
     case 'smr': s.hasSMR = false; s.uranium = 0; s.smrWear = 0; break
     case 'solar': s.solarCount--; break
