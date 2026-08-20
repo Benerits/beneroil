@@ -543,6 +543,9 @@ function openSection(sec: string) {
   else if (sec === 'profile') document.getElementById('accbtn')?.click()
   else if (sec === 'roadmap') ui.toast(t('Yol haritası yakında!'), '')
 }
+// MASAÜSTÜ OFİS BUTONU (#1076 "mobilde görünen ofis grubu neden web pc'de görünmüyor,
+// şubeleri görmek istiyorum"): PC'de ofise yalnız 3B ofis binasına tıklayarak girilebiliyordu.
+document.getElementById('officebtn')?.addEventListener('click', () => openSection('office'))
 for (const elx of document.querySelectorAll<HTMLElement>('#navbar .navbtn, #sheettabs .stab')) {
   const sec = elx.id ? elx.id.replace('nav-', '') : elx.dataset.sec
   if (sec) elx.addEventListener('click', () => openSection(sec))
@@ -1031,8 +1034,7 @@ document.getElementById('of-staff')?.addEventListener('click', e => {
 document.getElementById('accbtn')?.addEventListener('click', renderProfile)
 // GÖREV ROZETİ → Ofis › Görevler (mobilde rozet tek giriş kapısı)
 document.getElementById('questchip')?.addEventListener('click', () => {
-  openOfficePanel()
-  document.getElementById('officewrap')?.classList.add('is-on')
+  openSection('office')
   document.querySelector<HTMLButtonElement>('#oftabs .tab[data-oftab="gorev"]')?.click()
 })
 // Ofis fiyat yönetimi butonları officewrap içinde de çalışsın (bina kartıyla aynı handler)
@@ -4467,7 +4469,23 @@ function refreshBuildingCard() {
   }
   const si = sellInfo(state, selectedBuilding)
   if (si) card.sell = { label: t('Yık — +₺{0}', si.refund.toLocaleString('tr-TR')), id: selectedBuilding }
+  ui.setCardAnchor(binaEkranNoktasi(selectedBuilding))
   ui.showBuildingCard(card)
+}
+
+/** Seçili yapının ekran koordinatı — bilgi kartı onun üstünde açılsın diye (#1020). */
+function binaEkranNoktasi(id: string): { x: number; y: number } | null {
+  const b = world.buildings.find(x => x.id === id)
+  if (!b) return null
+  const g = b.group as THREE.Object3D
+  g.updateMatrixWorld(true)
+  // yapının tepesi: etiket yüksekliğini kullan (her bina kendi labelZ'sini veriyor)
+  const p = new THREE.Vector3(0, 0, b.labelZ ?? 2.5).applyMatrix4(g.matrixWorld).project(camera)
+  if (p.z > 1) return null                        // kamera arkasında
+  return {
+    x: (p.x * 0.5 + 0.5) * renderer.domElement.clientWidth,
+    y: (-p.y * 0.5 + 0.5) * renderer.domElement.clientHeight,
+  }
 }
 
 // ---- Ödüllü reklam: izle → müşteri patlaması ----
@@ -4768,6 +4786,8 @@ function frame() {
   // maske sonsuza dek kalıyordu. İlk render karesi = sahne gerçekten hazır; kim olursan
   // ol maske burada kalkar.
   if (!bootRemoved) { bootRemoved = true; document.getElementById('boot')?.remove() }
+  // bilgi kartı seçili yapıya TUTUNUR (#1020): kamera kaydırıp yakınlaştıkça kart da kayar
+  if (selectedBuilding && ui.buildingCardVisible) ui.setCardAnchor(binaEkranNoktasi(selectedBuilding))
   // sekme/uygulama arka planda: hesaplama+render durur (pil/CPU tasarrufu, ısınma azalır).
   // dt zaten 0.05 ile capli → geri dönünce güvenli devam.
   if (document.hidden) { clock.getDelta(); return }

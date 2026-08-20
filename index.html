@@ -99,7 +99,7 @@
       /* Sorun Bildir (web'de görünür) navbar'ı örtmesin — dar ekranda navbar üstüne al */
       #fbbtn { bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
       /* alt navbar: mobilde HUD'dan taşınan butonlar gizli, navbar görünür */
-      #closebtn, #orderbtn, #shopbtn, #accbtn { display: none !important; }
+      #closebtn, #orderbtn, #shopbtn, #accbtn, #officebtn { display: none !important; }
 
       /* ---- Sol-üst düzen: takvim+para bir satır; altında benzin/dizel/lpg/kwh alt alta (küçük) ---- */
       #onlinechip { display: none !important; }
@@ -668,6 +668,7 @@
     <button id="closebtn" class="btn" style="width:118px; justify-content:center"><svg class="ic"><use href="#i-power"/></svg><span id="closelabel" data-i18n="Açık">Açık</span></button>
     <button id="orderbtn" class="btn warn" style="width:158px; justify-content:center"><svg class="ic"><use href="#i-truck"/></svg><span id="orderlabel" data-i18n="Yakıt Siparişi">Yakıt Siparişi</span></button>
     <button id="shopbtn" class="btn primary" style="width:118px; justify-content:center; position:relative"><svg class="ic"><use href="#i-build"/></svg><span id="shoplabel" data-i18n="İnşaat">İnşaat</span><span id="shopdot"></span></button>
+    <button id="officebtn" class="btn" style="width:118px; justify-content:center"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Ofis">Ofis</span></button>
     <button id="accbtn" class="btn" title="Hesabım"><svg class="ic" style="margin:0"><use href="#i-user"/></svg></button>
     <button id="setbtn" class="btn" title="Ayarlar"><svg class="ic" style="margin:0"><use href="#i-sliders"/></svg></button>
   </div>

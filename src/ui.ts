@@ -515,6 +515,36 @@ export class UI {
       this.currentSell = null
     }
     this.infoCard.classList.add('show')
+    this.anchorInfoCard()
+  }
+
+  /** BİNANIN ÜSTÜNDE POPUP (#1020 "bir şeye tıkladığımızda sol altta çıkıyor, onu direkt
+   *  onun üstünde popup olarak çıkarsak daha güzel olur"): kart artık seçilen yapının
+   *  ekran konumuna tutunur. Mobilde CSS alt-sheet kuralları geçerli kalır (dar ekranda
+   *  yüzen kart parmağın altında kalıyordu) — orada konumlandırma uygulanmaz. */
+  private cardAnchor: { x: number; y: number } | null = null
+  setCardAnchor(p: { x: number; y: number } | null) {
+    this.cardAnchor = p
+    if (this.buildingCardVisible) this.anchorInfoCard()
+  }
+  anchorInfoCard() {
+    const c = this.infoCard
+    const dar = window.matchMedia('(max-width: 820px)').matches
+    if (dar || !this.cardAnchor) {                 // mobil: CSS'e bırak
+      c.style.left = ''; c.style.top = ''; c.style.bottom = ''; c.style.transform = ''
+      return
+    }
+    const k = c.getBoundingClientRect()
+    const g = 14
+    let x = this.cardAnchor.x - k.width / 2
+    let y = this.cardAnchor.y - k.height - 18     // yapının ÜSTÜNDE
+    if (y < g) y = Math.min(this.cardAnchor.y + 24, window.innerHeight - k.height - g)  // yer yoksa altına
+    x = Math.max(g, Math.min(x, window.innerWidth - k.width - g))
+    y = Math.max(g, Math.min(y, window.innerHeight - k.height - g))
+    c.style.left = `${Math.round(x)}px`
+    c.style.top = `${Math.round(y)}px`
+    c.style.bottom = 'auto'
+    c.style.transform = 'none'
   }
 
   private accountEmail: string | null = null
@@ -534,6 +564,7 @@ export class UI {
 
   hideBuildingCard() {
     this.infoCard.classList.remove('show')
+    this.cardAnchor = null
     this.currentAction = null
     this.currentMove = null
     this.currentSell = null
