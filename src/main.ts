@@ -546,6 +546,74 @@ function openSection(sec: string) {
 // MASAÜSTÜ OFİS BUTONU (#1076 "mobilde görünen ofis grubu neden web pc'de görünmüyor,
 // şubeleri görmek istiyorum"): PC'de ofise yalnız 3B ofis binasına tıklayarak girilebiliyordu.
 document.getElementById('officebtn')?.addEventListener('click', () => openSection('office'))
+// MESAJ KUTUSU (#1018 "uyarıyı gözden kaçırdım, tekrar bakmam için bir mesaj kutusu olsun")
+function mesajKutusuAc() {
+  const liste = document.getElementById('inbox-list')
+  if (liste) {
+    const kayitlar = [...ui.inbox].reverse()
+    liste.innerHTML = kayitlar.length
+      ? kayitlar.map(m => {
+          const dk = Math.floor((Date.now() - m.t) / 60000)
+          const ne = dk < 1 ? t('az önce') : dk < 60 ? t('{0} dk önce', String(dk)) : t('{0} sa önce', String(Math.floor(dk / 60)))
+          return `<div class="ibrow ${m.kind}"><span class="ibdot"></span>`
+            + `<span class="ibtx">${m.text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))}</span>`
+            + `<span class="ibtm">${ne}</span></div>`
+        }).join('')
+      : `<div id="inbox-empty">${t('Henüz mesaj yok.')}</div>`
+  }
+  document.getElementById('inboxwrap')?.classList.add('show')
+  ui.markInboxRead()
+}
+document.getElementById('inboxbtn')?.addEventListener('click', mesajKutusuAc)
+
+// HIZLI ŞUBE GEÇİŞİ (#1038 "ANASAYFADA MAPLER ARASINDA HIZLI GEÇİŞ OLSA SÜPER OLUR"):
+// şube değiştirmek için Ofis › Şubeler'e girmek gerekiyordu. Artık HUD'dan tek dokunuş.
+function subeMenusunuCiz() {
+  const m = document.getElementById('locmenu')
+  const btn = document.getElementById('locbtn')
+  if (!m || !btn) return
+  const kasa = state.branchVaultTotal()
+  m.innerHTML = state.unlockedLocs.map(id => {
+    const th = THEMES[id as LocId]
+    const aktif = id === state.activeLoc
+    const kasaTutar = aktif ? 0 : Math.round(state.branchVault[id] ?? 0)
+    const alt = aktif ? t('şu an buradasın')
+      : kasaTutar > 0 ? t('kasada ₺{0} birikti', kasaTutar.toLocaleString('tr-TR'))
+      : t('müdür kasası boş')
+    return `<button data-qloc="${id}" class="${aktif ? 'cur' : ''}"${aktif ? ' disabled' : ''}>`
+      + `<svg class="ic"><use href="#i-map"/></svg>`
+      + `<span class="lm-tx">${th?.name ?? id}<span class="lm-sub">${alt}</span></span></button>`
+  }).join('')
+    + (state.unlockedLocs.length < 5
+      ? `<button data-qloc="__ofis"><svg class="ic"><use href="#i-office"/></svg>`
+        + `<span class="lm-tx">${t('Yeni şube aç…')}<span class="lm-sub">${t('Ofis › Şubeler')}</span></span></button>`
+      : '')
+  const r = btn.getBoundingClientRect()
+  m.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 240))}px`
+  m.style.top = `${r.bottom + 8}px`
+  if (kasa > 0) { /* kasa rozeti ayrı gösterilmiyor; alt satırlar zaten yazıyor */ }
+}
+{ // HUD butonundaki şube adı
+  const lbl = document.getElementById('loclabel')
+  if (lbl) lbl.textContent = THEMES[state.activeLoc]?.name ?? state.activeLoc
+}
+document.getElementById('locbtn')?.addEventListener('click', e => {
+  e.stopPropagation()
+  const m = document.getElementById('locmenu')
+  if (!m) return
+  if (m.classList.contains('show')) { m.classList.remove('show'); return }
+  subeMenusunuCiz()
+  m.classList.add('show')
+})
+document.getElementById('locmenu')?.addEventListener('click', e => {
+  const b = (e.target as HTMLElement).closest('button[data-qloc]') as HTMLButtonElement | null
+  if (!b) return
+  const id = b.dataset.qloc!
+  document.getElementById('locmenu')?.classList.remove('show')
+  if (id === '__ofis') { openSection('office'); document.querySelector<HTMLButtonElement>('#oftabs .tab[data-oftab="buyume"]')?.click(); return }
+  subeyeGec(id as LocId)
+})
+document.addEventListener('click', () => document.getElementById('locmenu')?.classList.remove('show'))
 for (const elx of document.querySelectorAll<HTMLElement>('#navbar .navbtn, #sheettabs .stab')) {
   const sec = elx.id ? elx.id.replace('nav-', '') : elx.dataset.sec
   if (sec) elx.addEventListener('click', () => openSection(sec))
@@ -1088,18 +1156,23 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
     return
   }
   if (!go) return
+  subeyeGec(go.dataset.goloc as LocId, go)
+})
+
+/** Şube geçişi — hem Ofis › Şubeler butonları hem HUD hızlı geçiş menüsü buradan geçer
+ *  (#1038 "anasayfada mapler arasında hızlı geçiş olsa süper olur"). */
+function subeyeGec(id: LocId, go?: HTMLButtonElement) {
   // ÇİFT TIKLAMA KİLİDİ ("şubeye gidilemedi" raporu): push-confirmed reload 1.6-6 sn
   // (kit inişinde 12 sn) sürebiliyor; bu pencerede ikinci tıklama switchLoc'u
   // "zaten o şubedesin" durumuna düşürüp yanlış hata gösteriyordu.
   if (locSwitching) { ui.toast(t('Sahne yükleniyor — birkaç saniye…'), '', true); return }
-  const id = go.dataset.goloc as LocId
   // Şube değişimi: mevcut şubenin ekipmanı + YERLEŞİMİ saklanır, hedefin yüklenir.
   // Para/gün/itibar/prestij/kredi ŞİRKETTE kalır (tek kasa — rapor §3a kararı).
   const next = state.switchLoc(id, { placedPos, placedRot, placedRects })
   if (!next) { ui.toast(t('Şube değiştirilemedi.'), 'bad'); return }
   locSwitching = true
-  go.disabled = true
-  go.textContent = t('Yükleniyor…')
+  if (go) { go.disabled = true; go.textContent = t('Yükleniyor…') }
+  document.getElementById('locmenu')?.classList.remove('show')
   for (const k of Object.keys(placedPos)) delete placedPos[k]
   for (const k of Object.keys(placedRot)) delete placedRot[k]
   placedRects.length = 0
@@ -1135,7 +1208,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
     loadKit(id).catch(() => null).then(goReload)
     setTimeout(goReload, 12000) // ağ takılırsa oyuncuyu bekletme
   } else setTimeout(goReload, 1600) // sahne temadan yeniden kurulsun
-})
+}
 
 // PRESTİJ: İstasyonu Devret — iki aşamalı onay (geri dönüşü yok, gönüllü)
 let handoverArmedAt = 0
@@ -3265,7 +3338,12 @@ function repositionPlacing(x: number, y: number) {
     const odd = placing.rot % 2 === 1
     const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
     // yalnız BİNA/pompa üstüne binmesin (servis şeridi hariç — tabela şeritte araç engeli değil)
-    placing.valid = !placedRects.some(o => o.id !== 'sign' && overlaps(eff, o))
+    // ANA YOL HARİÇ (#1032 "bug - tabela yola da dikiliyor"): servis şeridi serbest kaldı
+    // ama ASFALTIN ORTASI değil. Yol bandı ROAD_X çevresinde ±2.6 birim; tabela artık
+    // oraya dikilemiyor, kaldırım/refüj payı korunuyor.
+    const yolBandi = Math.abs(eff.cx - ROAD_X) < 2.6 + eff.w / 2
+    placing.valid = !yolBandi
+      && !placedRects.some(o => o.id !== 'sign' && overlaps(eff, o))
       && !fixedObstacles('sign').some(o => !(o.cx === 4.3 && o.d === 48) && !(o.cx === 11.6 && o.d === 48) && overlaps(eff, o))
   } else {
     placing.cx = Math.round(x)
@@ -4455,6 +4533,19 @@ function refreshBuildingCard() {
   if (['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2', 'coffee', 'coffee2',
        'restaurant', 'restaurant2', 'truckpark', 'selfwash', 'airwater'].includes(facId)) {
     card.stats.push([t('Bugünkü ciro'), `₺${Math.round(state.facDaily[facId] ?? 0).toLocaleString('tr-TR')}`, 'good'])
+    // SESSİZ GELİR SIFIRI (#1065 "Market üretim yapmıyor, yönünü değiştirdim çözüm olmadı"):
+    // müşteri YAYA olarak yol karşısına geçmez. Tesis yolun bir yakasındayken o yakada
+    // hiç pompa/şarj yoksa geliri MATEMATİKSEL OLARAK sıfırdır — ama hiçbir yerde
+    // yazmıyordu, oyuncu binayı döndürüp duruyordu. Artık kart açıkça söylüyor.
+    const b = world.buildings.find(x => x.id === selectedBuilding)
+    if (b) {
+      const karsida = b.group.position.x > ROAD_X
+      const oYakadaUnite = world.pumpSlots.slice(0, state.pumps).some(p => (p.x > ROAD_X) === karsida)
+        || world.evSlots.slice(0, state.evChargers).some(p => (p.x > ROAD_X) === karsida)
+      if (!oYakadaUnite) {
+        card.stats.push([t('UYARI'), t('Bu yakada pompa/şarj yok — müşteri karşıya yürümez, gelir sıfır kalır. Tesisi taşı.'), 'bad'])
+      }
+    }
   }
   // karttan doğrudan yükseltme: ilgili mağaza kalemi alınabilir durumdaysa buton koy
   const shopId = selectedBuilding.startsWith('pump-') ? 'pump'

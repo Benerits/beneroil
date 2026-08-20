@@ -24,6 +24,18 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "az önce": "just now",
+  "{0} dk önce": "{0} min ago",
+  "{0} sa önce": "{0} h ago",
+  "Henüz mesaj yok.": "No messages yet.",
+  "şu an buradasın": "you're here now",
+  "kasada ₺{0} birikti": "₺{0} waiting in the vault",
+  "müdür kasası boş": "manager's vault is empty",
+  "Yeni şube aç…": "Open a new branch…",
+  "Ofis › Şubeler": "Office › Branches",
+  "Mesajlar": "Messages",
+  "UYARI": "WARNING",
+  "Bu yakada pompa/şarj yok — müşteri karşıya yürümez, gelir sıfır kalır. Tesisi taşı.": "No pump or charger on this side — customers won't walk across the road, so this earns nothing. Move it.",
   "Günlük yovmiye": "Daily wages",
   "Tüm pompalara pompacı (₺{0})": "Attendant on every pump (₺{0})",
   "Tüm pompalarda pompacı var": "Every pump already has an attendant",
@@ -1115,6 +1127,18 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "az önce": "à l'instant",
+  "{0} dk önce": "il y a {0} min",
+  "{0} sa önce": "il y a {0} h",
+  "Henüz mesaj yok.": "Aucun message pour l'instant.",
+  "şu an buradasın": "tu es ici",
+  "kasada ₺{0} birikti": "₺{0} en attente dans le coffre",
+  "müdür kasası boş": "le coffre du gérant est vide",
+  "Yeni şube aç…": "Ouvrir une nouvelle station…",
+  "Ofis › Şubeler": "Bureau › Stations",
+  "Mesajlar": "Messages",
+  "UYARI": "AVERTISSEMENT",
+  "Bu yakada pompa/şarj yok — müşteri karşıya yürümez, gelir sıfır kalır. Tesisi taşı.": "Aucune pompe ni borne de ce côté — les clients ne traversent pas la route, ce bâtiment ne rapporte rien. Déplace-le.",
   "Günlük yovmiye": "Salaires journaliers",
   "Tüm pompalara pompacı (₺{0})": "Un pompiste par pompe (₺{0})",
   "Tüm pompalarda pompacı var": "Chaque pompe a déjà un pompiste",

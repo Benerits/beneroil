@@ -195,7 +195,11 @@ const SELFWASH_COST = 6000
 const PARKING_COST = 1200
 export const URANIUM_COST = 2500
 export const URANIUM_ETA = 20 // saniye
-const URANIUM_DRAIN_PER_S = 100 / 300 // tam yük ~5 dakika sürer
+// #1043/#1044 "uranyum çok hızlı tükeniyor · 15-20 saniyede %1 azalıyor": tam çubuk
+// 300 sn = 5 dakika sürüyordu, yani 2 oyun gününden az. ₺2.500'lük çubuk için sipariş
+// döngüsü bunaltıcıydı. Yeni ömür 720 sn ≈ 4.5 oyun günü; Sv.3 müdür de artık kendi
+// sipariş ediyor (managerTick), yani reaktör "sürekli yakıt bekleyen" tesis olmaktan çıktı.
+const URANIUM_DRAIN_PER_S = 100 / 720
 
 export class GameState {
   money = START_MONEY
@@ -1558,7 +1562,11 @@ export class GameState {
   managerTick(dt: number): { collected: number; cleaned: boolean; fixed: number; ordered: number } | null {
     if (this.managerLevel <= 0) return null
     this.managerT += dt
-    if (this.managerT < 45) return null // 45 sn'de bir tur (gün ≈ 160 sn)
+    // TUR SIKLIĞI SEVİYEYLE ARTAR (#988 "otomatik toplayacak bir şey ekleyelim, sürekli
+    // kumbaralar doluyor"): tek sabit 45 sn'lik tur, 10 tesisli istasyonda kumbaraların
+    // dolmasına yetişemiyordu. Sv.1 45 sn · Sv.2 32 sn · Sv.3 22 sn.
+    const turSuresi = [45, 45, 32, 22][Math.min(3, this.managerLevel)]
+    if (this.managerT < turSuresi) return null // gün ≈ 160 sn
     this.managerT = 0
     let collected = 0
     for (const id of Object.keys(this.pendingCash)) collected += this.collectPending(id)

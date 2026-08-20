@@ -774,7 +774,32 @@ export class UI {
     }
   }
 
+  /** MESAJ KUTUSU (#1018 "uyarıyı gözden kaçırdım, tekrar bakmam için bir mesaj kutusu
+   *  olsun"): toast 3.5 sn sonra siliniyordu ve geri dönüşü yoktu. Her toast artık burada
+   *  da birikiyor; son 60 kayıt saklanır. */
+  readonly inbox: { text: string; kind: string; t: number }[] = []
+  private inboxUnread = 0
+  get unreadCount() { return this.inboxUnread }
+  markInboxRead() { this.inboxUnread = 0; this.syncInboxBadge() }
+  private syncInboxBadge() {
+    const b = document.getElementById('inboxdot')
+    if (b) {
+      b.textContent = this.inboxUnread > 9 ? '9+' : String(this.inboxUnread)
+      b.style.display = this.inboxUnread > 0 ? 'flex' : 'none'
+    }
+  }
+
   toast(msg: string, kind: 'good' | 'bad' | '' = '', silent = false) {
+    {
+      const kayit = stripEmoji(t(msg))
+      const son = this.inbox[this.inbox.length - 1]
+      if (!son || son.text !== kayit) {
+        this.inbox.push({ text: kayit, kind, t: Date.now() })
+        if (this.inbox.length > 60) this.inbox.shift()
+        this.inboxUnread++
+        this.syncInboxBadge()
+      }
+    }
     if (!silent) {
       if (kind === 'good') audio.cash()
       else if (kind === 'bad') audio.bad()

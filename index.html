@@ -100,6 +100,11 @@
       #fbbtn { bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
       /* alt navbar: mobilde HUD'dan taşınan butonlar gizli, navbar görünür */
       #closebtn, #orderbtn, #shopbtn, #accbtn, #officebtn { display: none !important; }
+      /* mesaj kutusu mobilde de KALIR: kaçan uyarıya dönüş tek yolu (#1018) */
+      #inboxbtn { width: 42px !important; }
+      /* hızlı şube geçişi mobilde de kalır, etiketi gizlenir */
+      #locbtn { width: 42px !important; }
+      #locbtn #loclabel { display: none; }
 
       /* ---- Sol-üst düzen: takvim+para bir satır; altında benzin/dizel/lpg/kwh alt alta (küçük) ---- */
       #onlinechip { display: none !important; }
@@ -603,6 +608,7 @@
   <div id="app"></div>
 
   <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 9.5h17M8 2.8v4M16 2.8v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
@@ -668,6 +674,8 @@
     <button id="closebtn" class="btn" style="width:118px; justify-content:center"><svg class="ic"><use href="#i-power"/></svg><span id="closelabel" data-i18n="Açık">Açık</span></button>
     <button id="orderbtn" class="btn warn" style="width:158px; justify-content:center"><svg class="ic"><use href="#i-truck"/></svg><span id="orderlabel" data-i18n="Yakıt Siparişi">Yakıt Siparişi</span></button>
     <button id="shopbtn" class="btn primary" style="width:118px; justify-content:center; position:relative"><svg class="ic"><use href="#i-build"/></svg><span id="shoplabel" data-i18n="İnşaat">İnşaat</span><span id="shopdot"></span></button>
+    <button id="locbtn" class="btn" title="Şube değiştir" style="justify-content:center; position:relative"><svg class="ic"><use href="#i-map"/></svg><span id="loclabel">Kasaba</span></button>
+    <button id="inboxbtn" class="btn" title="Mesajlar" style="width:52px; justify-content:center; position:relative"><svg class="ic" style="margin:0"><use href="#i-bell"/></svg><span id="inboxdot"></span></button>
     <button id="officebtn" class="btn" style="width:118px; justify-content:center"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Ofis">Ofis</span></button>
     <button id="accbtn" class="btn" title="Hesabım"><svg class="ic" style="margin:0"><use href="#i-user"/></svg></button>
     <button id="setbtn" class="btn" title="Ayarlar"><svg class="ic" style="margin:0"><use href="#i-sliders"/></svg></button>
@@ -814,6 +822,21 @@
           <div id="fueldefter" style="max-height:170px; overflow-y:auto"></div>
           <div class="sd" id="fueldefter-sum" style="text-align:right; font-weight:800; margin-top:4px"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD hızlı şube geçişi (#1038): ofis panelini açmadan haritalar arası geçiş -->
+  <div id="locmenu"></div>
+
+  <div class="backdrop" id="inboxwrap">
+    <div class="modal">
+      <div class="mhead">
+        <h3 data-i18n="Mesajlar">Mesajlar</h3>
+        <button class="mclose" data-close="inboxwrap"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="mbody">
+        <div id="inbox-list"></div>
       </div>
     </div>
   </div>
@@ -1162,6 +1185,36 @@ Sorun / Öneri Bildir
     .mvok { width:auto; padding:0 16px; background:#27a05a; color:#fff; border-color:#1c7d45; font-size:15px; }
     .mvcancel { background:#e2574d; color:#fff; border-color:#c33; }
   
+    /* HIZLI ŞUBE GEÇİŞİ (#1038) */
+    #locmenu { position:fixed; z-index:31; display:none; background:var(--paper);
+      border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:var(--r-lg);
+      box-shadow:var(--shadow); padding:6px; min-width:210px; max-width:min(280px, 92vw) }
+    #locmenu.show { display:block }
+    #locmenu button { display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+      background:none; border:0; border-radius:10px; padding:9px 10px; cursor:pointer;
+      font:inherit; font-weight:800; font-size:13px; color:var(--ink) }
+    #locmenu button:hover:not(:disabled) { background:var(--paper-2) }
+    #locmenu button:disabled { opacity:.55; cursor:default }
+    #locmenu button.cur { background:var(--paper-2); color:var(--red) }
+    #locmenu .lm-sub { display:block; font-size:11px; font-weight:700; color:var(--muted) }
+    #locmenu .lm-tx { flex:1; min-width:0 }
+
+    /* MESAJ KUTUSU (#1018) */
+    #inboxdot { display:none; position:absolute; top:-6px; right:-6px; min-width:18px; height:18px;
+      padding:0 4px; border-radius:99px; background:var(--red); color:#fff; font-size:11px;
+      font-weight:900; align-items:center; justify-content:center; line-height:1 }
+    .ibrow { display:flex; gap:9px; align-items:flex-start; padding:9px 2px;
+      border-bottom:1px solid var(--line) }
+    .ibrow:last-child { border-bottom:0 }
+    .ibrow .ibdot { width:8px; height:8px; border-radius:99px; background:var(--muted); margin-top:6px;
+      flex:none }
+    .ibrow.good .ibdot { background:var(--green) }
+    .ibrow.bad .ibdot { background:var(--red) }
+    .ibrow .ibtx { flex:1; font-size:13px; font-weight:700; line-height:1.45 }
+    .ibrow .ibtm { font-size:11px; font-weight:800; color:var(--muted); white-space:nowrap;
+      font-variant-numeric:tabular-nums }
+    #inbox-empty { color:var(--muted); font-weight:700; padding:18px 2px; text-align:center }
+
     /* GÖREV & HEDEF SATIRLARI (#1004 / #1063) — ofis › Görevler */
     .qrow { display:flex; align-items:center; gap:10px; padding:9px 2px;
             border-bottom:1px solid var(--line) }
