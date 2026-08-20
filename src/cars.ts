@@ -575,6 +575,10 @@ export class Car {
   static solids: { cx: number; cy: number; w: number; d: number }[] = []
   /** yağ değişimi körüğü gibi BİNA İÇİNE sürüşlerde duvar çarpışmasını kapatır */
   ghostSolid = false
+  /** üst üste sıkışma sayacı — ikinciden sonra kısa süreli araç-araç geçişi açılır */
+  stuckHits = 0
+  /** >0 iken bu araç DİĞER ARAÇLARDAN geçebilir (binalar hariç): kilidi kırma penceresi */
+  softPassT = 0
 
   /** public sarmalayıcı — bekleme noktası üretimi katı cisimden kaçmak için kullanır (B5) */
   static isSolidAt(x: number, y: number): boolean { return Car.insideSolid(x, y) }
@@ -1107,6 +1111,9 @@ export class CarManager {
     this.rebuildCarGrid()
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked' || c.phase === 'waiting') continue
+      // KİLİT KIRMA PENCERESİ: iki kez üst üste aynı yerde takılan araç kısa süre diğer
+      // araçlardan geçer. Binalar (Car.solids) hâlâ katı — yalnız araç-araç kilidi açılır.
+      if (c.softPassT > 0) continue
       const dir = c.headingDir()
       if (!dir) continue
       const cp = c.group.position
@@ -1352,18 +1359,31 @@ export class CarManager {
         car.stayT -= dt
         if (car.stayT <= 0) this.leaveTruckPark(car)
       }
-      // sıkışma bekçisi: hareket etmesi gereken araç 6 sn'dir yerindeyse kurtar
-      if (car.phase === 'driving' || car.phase === 'toPark' || car.phase === 'leaving') {
+      // SIKIŞMA BEKÇİSİ. Oyuncu raporu (12 şikayet): "araçlar pompaya takılıp kalıyor",
+      // "her yerde sıkışıyor". Eşik 6 sn'ydi — oyuncu çoktan görüp şikâyet ediyordu; ayrıca
+      // 'transit' fazı hiç kapsanmıyordu, yolda tıkanan araç ancak buharlaşarak temizleniyordu.
+      // Artık 2.2 sn'de müdahale var ve transit dahil; tekrarlayan sıkışmada araç kısa süre
+      // hayalet olup (yalnız araç-araç) kilidi kırıyor — kimse 6 saniye çakılı kalmıyor.
+      if (car.phase === 'driving' || car.phase === 'toPark' || car.phase === 'leaving'
+          || car.phase === 'transit') {
         car.watchT += dt
-        if (car.watchT >= 6) {
-          if (car.group.position.distanceTo(car.watchPos) < 0.35) this.recoverStuck(car)
+        if (car.watchT >= 2.2) {
+          if (car.group.position.distanceTo(car.watchPos) < 0.3) {
+            car.stuckHits++
+            this.recoverStuck(car)
+            // ikinci kez aynı yerde takıldıysa: 1.2 sn araç-araç geçişine izin ver.
+            // Bina/pompa çarpışması (Car.solids) AÇIK kalır — yapıların içinden geçilmez.
+            if (car.stuckHits >= 2) car.softPassT = Math.max(car.softPassT, 1.2)
+          } else { car.stuckHits = 0 }
           car.watchPos.copy(car.group.position)
           car.watchT = 0
         }
       } else {
         car.watchT = 0
+        car.stuckHits = 0
         car.watchPos.copy(car.group.position)
       }
+      if (car.softPassT > 0) car.softPassT = Math.max(0, car.softPassT - dt)
       car.update(dt)
       // NİHAİ SİGORTA: hareket etmesi gereken araç 18 sn boyunca yerinden oynayamadıysa
       // sessizce sahneden çekilir — trafik ne olursa olsun kalıcı kilitlenemez.
