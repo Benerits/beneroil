@@ -3035,16 +3035,23 @@ function startPlacement(id: string, move = false) {
     root.add(preview)
   }
   world.scene.add(root)
-  placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, valid: false, cx: 0, cy: 0, rot: placedRot[id] ?? 0 }
+  // TAŞIMA YAPININ BULUNDUĞU YERDEN BAŞLAR. Oyuncu raporu (#1008): "taşı diyince yerinden
+  // kaldırıyor" — hayalet (0,0)'dan başladığı için yapı istasyonun ortasına zıplıyordu ve
+  // sadece döndürmek isteyen oyuncu yerini kaybediyordu. Artık mevcut konum başlangıç noktası;
+  // dokunmadan ⟳ + ✓ yapılırsa yapı yerinde kalır, yalnız yönü değişir.
+  const mevcut = placedPos[id]
+  const bx = move && mevcut ? mevcut[0] : 0
+  const by = move && mevcut ? mevcut[1] : 0
+  placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, valid: false, cx: bx, cy: by, rot: placedRot[id] ?? 0 }
   root.rotation.z = placing.rot * Math.PI / 2
   world.showGrid(true)
   showReserves(id) // görünmez rezervler (araç yolu/yuva) turuncu görünür — "boş ama kırmızı" bitti
   ui.closeShop()
   ui.hideBuildingCard()
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'block'
-  repositionPlacing(placing.cx, placing.cy) // ilk geçerlilik/renk
+  repositionPlacing(placing.cx, placing.cy) // mevcut konumda başlar: geçerlilik/renk hesaplanır
   ui.toast(move
-    ? t('Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir')
+    ? t('Taşıma modu: yön butonları ya da dokun · R veya ⟳ döndür · ✓ yerleştir')
     : t('Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir'), '')
   if (!reserveHintShown) {
     reserveHintShown = true
