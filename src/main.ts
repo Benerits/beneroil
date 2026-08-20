@@ -3234,8 +3234,17 @@ function confirmZone() {
     world.paveParcel(z.c, z.r)
     ui.toast('Zemin betonlandı — artık yapı kurabilirsin!', 'good')
   }
-  cancelPlacement()
   persist()
+  // ZİNCİRLEME ALIM (oyuncu: "her arsa için mağazayı tekrar tekrar açmak işkence"):
+  // alım başarılıysa mod AÇIK kalır, sıradaki parsele dokunup devam edilir. Bir sonraki
+  // adım imkânsızsa (para bitti / sınır doldu / betonsuz arsa kalmadı) kendiliğinden kapanır.
+  const devam = z.kind === 'land'
+    ? !state.parcelLimitReached() && state.ownedParcels.size < 18 && state.money >= parcelCost(0, 0, state)
+    : state.ownedParcels.size > state.pavedParcels.size && state.money >= PAVE_COST
+  if (!devam) { cancelPlacement(); return }
+  zoneMode = { kind: z.kind, ghost: z.ghost, c: -1, r: -1, valid: false }
+  const zc2 = document.getElementById('zonecost')
+  if (zc2) { zc2.style.color = 'var(--ink)'; zc2.textContent = z.kind === 'land' ? t('Parsele dokun…') : t('Arsana dokun…') }
 }
 
 window.addEventListener('keydown', e => {

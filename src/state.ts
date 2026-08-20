@@ -608,7 +608,12 @@ export class GameState {
       if (this.selfWashTimer <= 0) {
         this.selfWashTimer = 25 + Math.random() * 20
         const m = (30 + Math.floor(Math.random() * 30)) * this.selfWashCount
-        this.addPending('selfwash', m, t('Self yıkama'))
+        // Etikette ünite sayısı GÖRÜNÜR: gelir zaten ünite başına çarpılıyor (ölçüldü:
+        // ×1 ₺1.200, ×2 ₺2.400, ×4 ₺4.800) ama tek bildirim geldiği için oyuncular
+        // "ne kadar eklesek de tek birinin parasını ödüyor" sanıyordu.
+        this.addPending('selfwash', m, this.selfWashCount > 1
+          ? t('Self yıkama ×{0}', String(this.selfWashCount))
+          : t('Self yıkama'))
       }
     }
 
@@ -1584,6 +1589,15 @@ export class GameState {
       // tamir edip reaktöre bakmıyordu. %50 yıpranmada bakımı öder, patlama yaşanmaz.
       if (this.hasSMR && this.smrWear >= 0.5 && this.money >= 1500) {
         this.money -= 1500; this.smrWear = 0; fixed++
+      }
+      // URANYUM SİPARİŞİ (iki ayrı oyuncu raporu: "müdür uranyum sipariş etmiyor").
+      // Reaktör yakıtsız kalınca üretim duruyordu; müdür pompayı tamir edip reaktörü
+      // yakıtsız bırakmak tutarsızdı. Kritik seviyede kendisi sipariş verir.
+      if (this.hasSMR && this.uranium <= 20 && !this.uraniumPending && this.money >= URANIUM_COST) {
+        this.money -= URANIUM_COST
+        this.uraniumPending = true
+        this.uraniumEta = URANIUM_ETA
+        ordered++
       }
     }
     return (collected > 0 || cleaned || fixed > 0 || ordered > 0) ? { collected, cleaned, fixed, ordered } : null

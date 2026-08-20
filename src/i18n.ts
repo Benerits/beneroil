@@ -24,6 +24,7 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Self yıkama ×{0}": "Self-service wash ×{0}",
   "Müdür Sv.{0} · KASA DOLDU ₺{1} — topla ki şube tekrar kazansın":
     "Manager Lv.{0} · VAULT FULL ₺{1} — collect so the branch earns again",
   "Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3} {4} · {5} gün sonra dolar":
@@ -1056,6 +1057,7 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Self yıkama ×{0}": "Lavage automatique ×{0}",
   "Müdür Sv.{0} · KASA DOLDU ₺{1} — topla ki şube tekrar kazansın":
     "Gérant niv.{0} · COFFRE PLEIN ₺{1} — encaissez pour que la succursale reprenne",
   "Müdür Sv.{0} · günlük net ₺{1} · kasa ₺{2}/{3} {4} · {5} gün sonra dolar":
