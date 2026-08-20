@@ -24,6 +24,23 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Önce iskeleyi büyüt (4 bağlama yeri)": "Expand the dock first (4 berths)",
+  "İskeleye bir dolum noktası daha — aynı anda bir tekne fazla alırsın. 3. pompadan itibaren iskelenin büyümüş olması gerekir.": "One more fuelling point on the dock — you serve one extra boat at a time. From the 3rd pump on, the dock must already have grown.",
+  "Denizciler karaya çıkınca ilk aradıkları yer — memnuniyeti ve itibarı artırır.": "The first thing sailors look for ashore — raises satisfaction and reputation.",
+  "Marina Tabelası Sv.{0}": "Marina Sign Lv.{0}",
+  "Kıyıdan görünen marina tabelası — seyir hâlindeki tekneler uğramaya daha meyilli olur.": "A marina sign visible from the water — passing boats are more likely to stop by.",
+  "YAT KULÜBÜ": "YACHT CLUB",
+  "MALZEMECİ": "CHANDLERY",
+  "DUŞ & ÇAMAŞIR": "SHOWERS & LAUNDRY",
+  "BUZ & YEM": "ICE & BAIT",
+  "ATIK YAĞ": "WASTE OIL",
+  "TRAVEL LIFT": "TRAVEL LIFT",
+  "YAKIT İSKELESİ": "FUEL DOCK",
+  "ATIK SU TAHLİYESİ": "PUMP-OUT STATION",
+  "ATIK SU": "PUMP-OUT",
+  "SIZINTI BARİYERİ": "SPILL BOOM",
+  "DUŞ": "SHOWERS",
+  "YAKIT": "FUEL",
   "Self yıkama ×{0}": "Self-service wash ×{0}",
   "Müdür Sv.{0} · KASA DOLDU ₺{1} — topla ki şube tekrar kazansın":
     "Manager Lv.{0} · VAULT FULL ₺{1} — collect so the branch earns again",
@@ -1057,6 +1074,23 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Önce iskeleyi büyüt (4 bağlama yeri)": "Agrandis d'abord le ponton (4 postes)",
+  "İskeleye bir dolum noktası daha — aynı anda bir tekne fazla alırsın. 3. pompadan itibaren iskelenin büyümüş olması gerekir.": "Un poste de ravitaillement de plus — un bateau supplémentaire à la fois. À partir de la 3e pompe, le ponton doit déjà être agrandi.",
+  "Denizciler karaya çıkınca ilk aradıkları yer — memnuniyeti ve itibarı artırır.": "La première chose que cherchent les marins à terre — augmente la satisfaction et la réputation.",
+  "Marina Tabelası Sv.{0}": "Enseigne de marina niv.{0}",
+  "Kıyıdan görünen marina tabelası — seyir hâlindeki tekneler uğramaya daha meyilli olur.": "Une enseigne visible depuis la mer — les bateaux de passage s'arrêtent plus volontiers.",
+  "YAT KULÜBÜ": "CLUB NAUTIQUE",
+  "MALZEMECİ": "SHIPCHANDLER",
+  "DUŞ & ÇAMAŞIR": "DOUCHES & LAVERIE",
+  "BUZ & YEM": "GLACE & APPÂTS",
+  "ATIK YAĞ": "HUILE USAGÉE",
+  "TRAVEL LIFT": "TRAVEL LIFT",
+  "YAKIT İSKELESİ": "QUAI CARBURANT",
+  "ATIK SU TAHLİYESİ": "STATION DE POMPAGE",
+  "ATIK SU": "POMPAGE",
+  "SIZINTI BARİYERİ": "BARRAGE ANTI-POLLUTION",
+  "DUŞ": "DOUCHES",
+  "YAKIT": "CARBURANT",
   "Self yıkama ×{0}": "Lavage automatique ×{0}",
   "Müdür Sv.{0} · KASA DOLDU ₺{1} — topla ki şube tekrar kazansın":
     "Gérant niv.{0} · COFFRE PLEIN ₺{1} — encaissez pour que la succursale reprenne",

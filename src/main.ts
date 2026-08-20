@@ -6,7 +6,7 @@ import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './new
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
 import { shareLabel } from './rival'
 import { openLogbook } from './logbook-ui'
-import { makeLogbook, resolveLogbook, logbookFlags } from './marina'
+import { makeLogbook, resolveLogbook, logbookFlags, type MarinaFacId } from './marina'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
@@ -2264,6 +2264,12 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'selfwash': world.buildSelfWash(pos, id); break
     case 'parking': world.buildParking(pos, id); break
     case 'office': world.buildOffice(pos); break
+    default:
+      // MARİNA: tesis kurulunca ada üzerinde yapısı belirsin (7 rapor: "yat klübü
+      // açtım ama gözükmüyor"). Bağlama yerleri de sahnede uzayan iskele olur.
+      if (state.isMarina && state.hasMarinaFac(base as MarinaFacId)) world.buildMarinaFac(base, pos)
+      else if (base.startsWith('berth_') || base === 'winterslot') world.updateBerthVisual(state.berths)
+      break
   }
 }
 
@@ -2661,6 +2667,10 @@ function rebuildFromState() {
   for (let i = 0; i < state.parkingCount; i++) {
     const iid = i === 0 ? 'parking' : `parking#${i}`
     world.buildParking(pv(iid), iid)
+  }
+  if (state.isMarina) {
+    for (const fid of state.marinaFacs) world.buildMarinaFac(fid, pv('mfac-' + fid))
+    world.updateBerthVisual(state.berths)
   }
   if (placedPos.office) {
     world.removeBuildingGroup('office')

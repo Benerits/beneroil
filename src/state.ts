@@ -1886,11 +1886,19 @@ export function getShopItems(s: GameState): ShopRow[] {
     row('winterslot', 'i-parking', s.winterSlots ? t('Karada Kışlama ({0})', String(s.winterSlots)) : t('Karada Kışlama'),
       t('+₺900/gün (kışın)'), t('Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.'),
       8_000, s.hasMarinaFac('travelift') ? null : t('Önce Travel Lift kur'))
-    // 2. POMPA (Oğuz: "2 tane pompaya izin verelim marinada") — iskele boyu sınırlı: maks 2
-    row('pump', 'i-fuel', t('İskele Pompası #{0}', Math.min(s.pumps + 1, 2)), t('+1 pompa'),
-      t('İskeleye ikinci dolum noktası — aynı anda iki tekne alırsın.'),
-      s.pumps >= 2 ? null : PUMP_COSTS[s.pumps],
-      s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    // İSKELE POMPASI — sınır 2'ydi, iki ayrı rapor ("marinaya pompa koyabilelim artık,
+    // 100k ciroyla dönmüyor" / "pompa artırılmıyor") tavanın erken geldiğini gösterdi.
+    // Yeni tavan 4; 3. ve 4. pompa için iskelenin BÜYÜMÜŞ olması şart (bağlama yeri),
+    // yani sınır kalkmadı — genişleyen marinaya bağlandı.
+    const MARINA_MAX_PUMP = 4
+    const iskeleBoyu = Object.values(s.berths).reduce((a, v) => a + (v || 0), 0)
+    const pompaKilit = !s.hasMarinaFac('fueldock') ? t('Önce Yakıt İskelesi kur')
+      : (s.pumps >= 2 && iskeleBoyu < 4) ? t('Önce iskeleyi büyüt (4 bağlama yeri)')
+      : null
+    row('pump', 'i-fuel', t('İskele Pompası #{0}', Math.min(s.pumps + 1, MARINA_MAX_PUMP)), t('+1 pompa'),
+      t('İskeleye bir dolum noktası daha — aynı anda bir tekne fazla alırsın. 3. pompadan itibaren iskelenin büyümüş olması gerekir.'),
+      s.pumps >= MARINA_MAX_PUMP ? null : PUMP_COSTS[Math.min(s.pumps, PUMP_COSTS.length - 1)],
+      pompaKilit)
     // DEPO (Oğuz: "marinada tanka tıklayıp seviye artırılabilmeli") — kara ile aynı
     row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
       t('Depo büyür (tüm yakıtlar), daha seyrek sipariş verirsin'),
@@ -1915,6 +1923,16 @@ export function getShopItems(s: GameState): ShopRow[] {
       t('Yüksek debili pompa donanımı: dolum hızlanır, aynı sürede daha çok müşteri bitirirsin. Tüm pompalara uygulanır.'),
       s.pumpSpeedLevel >= 3 ? null : PUMPSPEED_COSTS[s.pumpSpeedLevel],
       s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    // TUVALET (#1033: "Marinada wc yok müşteri şikayet ediyo") — kara ile aynı mekanik.
+    // Denizciler tesise çıkıyor; WC yokluğu memnuniyeti düşürüyordu ama satın alınamıyordu.
+    row('toilet', 'i-toilet', s.toiletLevel === 0 ? t('Tuvalet') : t('Tuvalet Sv.2'), t('+moral'),
+      t('Denizciler karaya çıkınca ilk aradıkları yer — memnuniyeti ve itibarı artırır.'),
+      s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel], null)
+    // TABELA (#1034: "marinanın tabela geliştirilmiyo") — marina mağazasında satır YOKTU,
+    // oyuncu tabelaya tıklayıp yükseltme arıyordu. Marinada tabela = seyir feneri/pilon.
+    row('sign', 'i-sign', t('Marina Tabelası Sv.{0}', Math.min(s.signLevel + 1, 3)), t('+%10 trafik'),
+      t('Kıyıdan görünen marina tabelası — seyir hâlindeki tekneler uğramaya daha meyilli olur.'),
+      s.signLevel >= 3 ? null : SIGN_COSTS[s.signLevel], null)
     // MARKET (Oğuz: "marinaya market koyabilelim") — kara marketiyle aynı mekanik
     row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1),
       `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
