@@ -86,8 +86,10 @@
       #money { font-size: 15px; }
       .chip .ic { width: 13px; height: 13px; }
       .bar { width: 40px; height: 7px; }
-      /* günlük görev + itibar + online: mobilde ikincil, gizle (mağaza/ayarlarda görünür) */
-      #onlinechip, #questchip, #repchip { display: none; }
+      /* itibar + online: mobilde ikincil, gizle. GÖREV rozeti KALIR — gizliyken oyuncular
+         "günlük görev var gözüküyor ama yok gibi" diyordu (#1004); dokununca liste açılır. */
+      #onlinechip, #repchip { display: none; }
+      #questchip { min-width: 78px !important; }
       /* aksiyon butonları ikon-only: metni gizle, kare yap */
       .hud > .btn { width: 42px !important; padding: 8px 0; justify-content: center; }
       .hud > .btn > span { display: none; }
@@ -601,6 +603,7 @@
   <div id="app"></div>
 
   <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 9.5h17M8 2.8v4M16 2.8v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5v9M9 10.2l6-1.6M9 13.4l6-1.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -657,7 +660,7 @@
     </div>
     <div class="chip" id="onlinechip" style="min-width:72px; display:none"><span class="cl" data-i18n="OYUNDA">OYUNDA</span><span class="cv"><svg class="ic"><use href="#i-user"/></svg> <span id="hud-online">0</span></span></div>
     <div class="chip" id="repchip" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
-    <div class="chip" id="questchip" style="min-width:104px"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
+    <div class="chip" id="questchip" style="min-width:104px; cursor:pointer" title="Günlük görevler"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
     <div class="spacer"></div>
     <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Reklam İzle: Müşteri Patlaması">Reklam İzle: Müşteri Patlaması</span></button>
     <button id="editbtn" class="btn" title="Düzenleme modu" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-move"/></svg></button>
@@ -827,6 +830,7 @@
         <button class="tab" data-oftab="fiyat" data-i18n="Fiyat">Fiyat</button>
         <button class="tab" data-oftab="muhasebe" data-i18n="Muhasebe">Muhasebe</button>
         <button class="tab" data-oftab="ihale" data-i18n="İhaleler">İhaleler</button>
+        <button class="tab" data-oftab="gorev" data-i18n="Görevler">Görevler</button>
         <button class="tab" data-oftab="buyume" data-i18n="Şubeler">Şubeler</button>
       </div>
       <div class="mbody">
@@ -857,6 +861,13 @@
         <div class="ofpane" data-ofpane="ihale">
           <div class="ofsec" data-i18n="Kurumsal Sözleşmeler">Kurumsal Sözleşmeler</div>
           <div id="of-contracts"></div>
+        </div>
+
+        <div class="ofpane" data-ofpane="gorev">
+          <div class="ofsec" data-i18n="Bugünün Görevleri">Bugünün Görevleri</div>
+          <div id="of-quests"></div>
+          <div class="ofsec" data-i18n="Sıradaki Hedefler">Sıradaki Hedefler</div>
+          <div id="of-goals"></div>
         </div>
 
         <div class="ofpane" data-ofpane="buyume">
@@ -1147,7 +1158,23 @@ Sorun / Öneri Bildir
     #mv-rot { background:#2f6fed; color:#fff; border-color:#2456c0; }
     .mvok { width:auto; padding:0 16px; background:#27a05a; color:#fff; border-color:#1c7d45; font-size:15px; }
     .mvcancel { background:#e2574d; color:#fff; border-color:#c33; }
-  </style>
+  
+    /* GÖREV & HEDEF SATIRLARI (#1004 / #1063) — ofis › Görevler */
+    .qrow { display:flex; align-items:center; gap:10px; padding:9px 2px;
+            border-bottom:1px solid var(--line) }
+    .qrow:last-child { border-bottom:0 }
+    .qrow .qtxt { flex:1; min-width:0 }
+    .qrow .qlbl { font-weight:800; font-size:13px; display:block }
+    .qrow .qbar { height:7px; border-radius:99px; background:var(--line); margin-top:5px;
+                  overflow:hidden }
+    .qrow .qbar > i { display:block; height:100%; border-radius:99px; background:var(--red);
+                      transition:width .25s ease }
+    .qrow.is-done .qbar > i { background:var(--green, #1c7a41) }
+    .qrow .qnum { font-size:11px; font-weight:800; color:var(--muted);
+                  font-variant-numeric:tabular-nums }
+    .qrow .qrew { font-size:12px; font-weight:900; white-space:nowrap }
+    .qrow.is-done .qrew { color:var(--green, #1c7a41) }
+</style>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 import { Car } from './cars'
 import { t } from './i18n'
-import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems } from './state'
+import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems, dailyQuests } from './state'
 import { audio } from './audio'
 import * as auth from './auth'
 import { isNativePlatform } from './platform'
@@ -646,7 +646,12 @@ export class UI {
       if (state.loginStreak >= 2) this.setText(el<HTMLSpanElement>('streak-n'), `${state.loginStreak}`)
     }
     this.setText(this.rep, state.reputation.toFixed(1))
-    this.setText(el<HTMLSpanElement>('quest'), state.dailyDone ? t('TAMAM') : `${state.dailyServed}/15`)
+    // rozet artık ÜÇ görevin kaçının bittiğini gösterir (eski hâli tek sabit 15-müşteri
+    // sayacıydı ve mobilde hiç görünmüyordu — #1004)
+    {
+      const bitti = dailyQuests(state).filter(q => q.done).length
+      this.setText(el<HTMLSpanElement>('quest'), bitti >= 3 ? t('TAMAM') : `${bitti}/3`)
+    }
     if (this.activeCar) this.refreshPanel()
     const ts = this.tankerStatus()
     const tpanel = el<HTMLDivElement>('tankerpanel')

@@ -402,6 +402,14 @@ export class GameState {
   dailyDate = ''
   dailyServed = 0
   dailyDone = false
+  /** GÜNLÜK GÖREVLER (#1004 "günlük görev var gözüküyor ama yok gibi bi şey"):
+   *  tek bir 15-müşteri sayacı vardı, mobilde rozet de gizliydi — oyuncu görevi hiç
+   *  göremiyordu. Artık her gün 3 görev seçiliyor, ilerlemeleri bu sayaçlardan okunuyor. */
+  dailyRevenue = 0      // bugün kazanılan ciro
+  dailyLiters = 0       // bugün satılan litre
+  dailyCollected = 0    // bugün toplanan kumbara sayısı
+  dailyPerfect = 0      // bugün 5 yıldızlı servis
+  dailyClaimed: string[] = []   // ödülü alınmış görev id'leri (çift ödül olmaz)
   /** süreli fırsat: cheapFuel = yakıt maliyeti %50, rush = müşteri patlaması */
   promo: { type: 'cheapFuel' | 'rush'; until: number } | null = null
   private promoTimer = 150
@@ -2159,6 +2167,103 @@ const ACHIEVEMENTS: [string, string, (s: GameState) => boolean][] = [
   ['chain', t('Zincir başladı — İkinci şuben açık!'), s => s.unlockedLocs.length >= 2],
 ]
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GÜNLÜK GÖREVLER (#1004) ve KARİYER HEDEFLERİ (#1063)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Görev şablonu: hedef sayı oyuncunun ölçeğine göre büyür (yeni oyuncuya 15 müşteri
+ *  hedefi anlamlıydı, 10 pompalı oyuncuya değil — "görev yok gibi" hissinin bir sebebi
+ *  de buydu: tek sabit hedef günün ilk dakikasında bitiyordu). */
+export interface DailyQuest {
+  id: string; label: string; have: number; need: number; reward: number; done: boolean
+}
+type QuestTpl = {
+  id: string
+  /** ölçek = pompalar + tesisler; hedef buna göre büyür */
+  need: (s: GameState) => number
+  have: (s: GameState) => number
+  label: (need: number) => string
+  reward: (need: number) => number
+}
+const QUEST_TPLS: QuestTpl[] = [
+  { id: 'serve', need: s => 10 + 4 * s.pumps, have: s => s.dailyServed,
+    label: n => t('{0} müşteriye servis yap', String(n)), reward: n => n * 90 },
+  { id: 'revenue', need: s => 4_000 + 1_800 * s.pumps, have: s => Math.floor(s.dailyRevenue),
+    label: n => t('Bugün ₺{0} ciro yap', n.toLocaleString('tr-TR')), reward: n => Math.round(n * 0.12) },
+  { id: 'liters', need: s => 400 + 150 * s.pumps, have: s => Math.floor(s.dailyLiters),
+    label: n => t('{0} litre yakıt sat', n.toLocaleString('tr-TR')), reward: n => n * 3 },
+  { id: 'collect', need: () => 6, have: s => s.dailyCollected,
+    label: n => t('{0} kumbara topla', String(n)), reward: () => 1_200 },
+  { id: 'perfect', need: s => 3 + Math.floor(s.pumps / 2), have: s => s.dailyPerfect,
+    label: n => t('{0} kez 5 yıldızlı servis ver', String(n)), reward: n => n * 400 },
+  { id: 'rep', need: () => 1, have: s => (s.reputation >= 4.5 ? 1 : 0),
+    label: () => t('Günü 4.5+ itibarla kapat'), reward: () => 2_000 },
+]
+
+/** Günün 3 görevi — TARİHE bağlı deterministik seçim: aynı gün her açılışta aynı görevler
+ *  gelir (rastgele olsaydı sayfa yenilendikçe görev değişir, ilerleme kaybolmuş görünürdü). */
+export function dailyQuests(s: GameState): DailyQuest[] {
+  let tohum = 0
+  for (const ch of (s.dailyDate || 'gun')) tohum = (tohum * 31 + ch.charCodeAt(0)) >>> 0
+  const havuz = [...QUEST_TPLS]
+  const secili: QuestTpl[] = []
+  for (let i = 0; i < 3 && havuz.length; i++) {
+    tohum = (tohum * 1103515245 + 12345) >>> 0
+    secili.push(...havuz.splice(tohum % havuz.length, 1))
+  }
+  return secili.map(q => {
+    const need = Math.max(1, Math.round(q.need(s)))
+    const have = Math.max(0, q.have(s))
+    return { id: q.id, label: q.label(need), have: Math.min(have, need), need,
+             reward: q.reward(need), done: have >= need }
+  })
+}
+
+/** Tamamlanan görevlerin ödülünü bir kez öder; yeni tamamlananları döner (toast için). */
+export function claimDailyQuests(s: GameState): DailyQuest[] {
+  const yeni: DailyQuest[] = []
+  for (const q of dailyQuests(s)) {
+    if (!q.done || s.dailyClaimed.includes(q.id)) continue
+    s.dailyClaimed.push(q.id)
+    s.money += q.reward
+    yeni.push(q)
+  }
+  // üçünü de bitiren gün rozetini kazanır (eski dailyDone alanı korunur)
+  if (!s.dailyDone && dailyQuests(s).every(q => q.done)) s.dailyDone = true
+  return yeni
+}
+
+/** KARİYER HEDEFLERİ (#1063 "oyunda devam edecek bi amacım kalmadı"): sıradaki üç
+ *  büyük kilometre taşı her zaman görünür olsun. Başarımlardan farkı: ilerleme ÇUBUĞU
+ *  var ve sırayla gelirler — oyuncu "şimdi ne yapmalıyım"ı bir bakışta görür. */
+export interface CareerGoal { label: string; have: number; need: number; done: boolean }
+export function careerGoals(s: GameState, adet = 3): CareerGoal[] {
+  const g = (label: string, have: number, need: number): CareerGoal =>
+    ({ label, have: Math.min(have, need), need, done: have >= need })
+  const hepsi: CareerGoal[] = [
+    g(t('₺100.000 kasa'), Math.floor(s.money), 100_000),
+    g(t('4 pompaya çık'), s.pumps, 4),
+    g(t('İlk şarj ünitesini kur'), s.evChargers, 1),
+    g(t('Market Sv.3'), s.marketLevel, 3),
+    g(t('İkinci şubeni aç'), s.unlockedLocs.length, 2),
+    g(t('Müdür Sv.3 yetiştir'), s.managerLevel, 3),
+    g(t('9 arsanın tamamını al'), s.ownedParcels.size, 9),
+    g(t('₺1.000.000 kasa'), Math.floor(s.money), 1_000_000),
+    g(t('Güneş + batarya ile kendi elektriğini üret'), s.solarCount > 0 && s.batteryLevel > 0 ? 1 : 0, 1),
+    g(t('Reaktör kur (SMR)'), s.hasSMR ? 1 : 0, 1),
+    g(t('5 ihale tamamla'), s.contractsDone, 5),
+    g(t('Dört şubeye ulaş'), s.unlockedLocs.length, 4),
+    g(t('Marina şubesi aç'), s.unlockedLocs.includes('marina') ? 1 : 0, 1),
+    g(t('10 marka yıldızı topla'), s.brandStars, 10),
+    g(t('Beş şubenin hepsini aç'), s.unlockedLocs.length, 5),
+    g(t('25 marka yıldızı topla'), s.brandStars, 25),
+    g(t('₺25.000.000 servet'), Math.floor(s.money + s.equipmentValue()), 25_000_000),
+  ]
+  const kalan = hepsi.filter(x => !x.done)
+  // hepsi bittiyse son üçü "tamam" olarak göster (boş liste umutsuzluk hissi verir)
+  return kalan.length ? kalan.slice(0, adet) : hepsi.slice(-adet)
+}
+
 export function checkAchievements(s: GameState) {
   for (const [id, title, cond] of ACHIEVEMENTS) {
     if (!s.achievements.has(id) && cond(s)) {
@@ -2176,7 +2281,8 @@ const SAVE_FIELDS = [
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
-  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
+  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
+  'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
 ] as const

@@ -11,6 +11,7 @@ import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
+  dailyQuests, claimDailyQuests, careerGoals,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
 } from './state'
@@ -654,6 +655,37 @@ function openOfficePanel() {
     + row(t('Kasa'), `₺${tl(state.money)}`)
     + row(t('Günlük gider (yovmiye+OPEX+reklam)'), `₺${tl(state.dailyWages() + state.dailyOpex() + state.marketingBudget)}`, 'bad')
 
+  // 1b) GÖREVLER (#1004) ve KARİYER HEDEFLERİ (#1063)
+  // Eskiden tek satırlık "15 müşteri" sayacıydı ve mobilde rozeti de gizliydi; oyuncular
+  // "görev var gözüküyor ama yok gibi" diyordu. Artık günün üç görevi ilerleme çubuklu
+  // listelenir, altında da sıradaki büyük hedefler durur ("amacım kalmadı" fixi).
+  const qEl = document.getElementById('of-quests')
+  if (qEl) {
+    const qs = dailyQuests(state)
+    qEl.innerHTML = qs.map(q => {
+      const yuzde = Math.round(100 * q.have / q.need)
+      return `<div class="qrow${q.done ? ' is-done' : ''}">`
+        + `<svg class="ic"><use href="#${q.done ? 'i-check' : 'i-cal'}"/></svg>`
+        + `<span class="qtxt"><span class="qlbl">${q.label}</span>`
+        + `<span class="qbar"><i style="width:${yuzde}%"></i></span>`
+        + `<span class="qnum">${q.have.toLocaleString('tr-TR')} / ${q.need.toLocaleString('tr-TR')}</span></span>`
+        + `<span class="qrew">${q.done ? t('ALINDI') : `+₺${tl(q.reward)}`}</span></div>`
+    }).join('')
+      + `<div class="sd" style="padding:8px 2px 0; color:var(--muted); font-weight:700">`
+      + `${t('Görevler her gün yenilenir. Ödül tamamlandığı anda kasaya geçer.')}</div>`
+  }
+  const gEl = document.getElementById('of-goals')
+  if (gEl) {
+    gEl.innerHTML = careerGoals(state).map(h => {
+      const yuzde = Math.round(100 * h.have / h.need)
+      return `<div class="qrow${h.done ? ' is-done' : ''}">`
+        + `<svg class="ic"><use href="#${h.done ? 'i-check' : 'i-star'}"/></svg>`
+        + `<span class="qtxt"><span class="qlbl">${h.label}</span>`
+        + `<span class="qbar"><i style="width:${yuzde}%"></i></span>`
+        + `<span class="qnum">${h.have.toLocaleString('tr-TR')} / ${h.need.toLocaleString('tr-TR')}</span></span></div>`
+    }).join('')
+  }
+
   // 2) Yakıt satış fiyatları (+/-)
   const pricesEl = document.getElementById('of-prices')
   if (pricesEl && card?.priceRows) {
@@ -936,10 +968,16 @@ function renderProfile() {
   if (acc) acc.innerHTML =
     row(t('Giriş serisi'), `${state.loginStreak} gün`)
     + row(t('Başarımlar'), `${state.achievements.size} / 9`)
-    + row(t('Günlük görev'), state.dailyDone ? t('tamamlandı ✓') : `${state.dailyServed}/15`)
+    + row(t('Günlük görev'), `${dailyQuests(state).filter(q => q.done).length}/3`)
     + `<div class="pf-synced"><svg class="ic" style="vertical-align:-3px"><use href="#i-cloud"/></svg> ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
 }
 document.getElementById('accbtn')?.addEventListener('click', renderProfile)
+// GÖREV ROZETİ → Ofis › Görevler (mobilde rozet tek giriş kapısı)
+document.getElementById('questchip')?.addEventListener('click', () => {
+  openOfficePanel()
+  document.getElementById('officewrap')?.classList.add('is-on')
+  document.querySelector<HTMLButtonElement>('#oftabs .tab[data-oftab="gorev"]')?.click()
+})
 // Ofis fiyat yönetimi butonları officewrap içinde de çalışsın (bina kartıyla aynı handler)
 document.getElementById('of-prices')?.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
@@ -1892,21 +1930,38 @@ ui.onStartFull = car => {
 }
 
 /** servis bitti: skoru bağla, tesis ziyareti varsa otoparka çek, yoksa uğurla */
-function trackDaily() {
+function gunlukSayaclariSifirla() {
+  state.dailyServed = 0
+  state.dailyDone = false
+  state.dailyRevenue = 0
+  state.dailyLiters = 0
+  state.dailyCollected = 0
+  state.dailyPerfect = 0
+  state.dailyClaimed = []
+}
+
+function trackDaily(score = 0) {
   state.dailyServed++
-  if (!state.dailyDone && state.dailyServed >= 15) {
-    state.dailyDone = true
-    state.money += 1000
-    ui.toast('GÜNLÜK GÖREV TAMAM: 15 müşteri — ödül +₺1.000!', 'good', true)
+  if (score >= 4.8) state.dailyPerfect++
+  gorevOdulle()
+}
+
+/** Tamamlanan günlük görevlerin ödülünü öder ve haber verir (#1004). Görev sayaçlarını
+ *  değiştiren HER yerden çağrılır — ödül gecikmesin, oyuncu "görev yok gibi" demesin. */
+function gorevOdulle() {
+  const yeni = claimDailyQuests(state)
+  for (const q of yeni) {
+    ui.toast(t('GÖREV TAMAM: {0} — ödül +₺{1}', q.label, q.reward.toLocaleString('tr-TR')), 'good', true)
     audio.achieve()
-  } else if (!state.dailyDone && state.dailyServed % 5 === 0) {
-    ui.toast(t('Günlük görev: {0}/15 müşteri', state.dailyServed), '', true)
+  }
+  if (yeni.length && dailyQuests(state).every(q => q.done)) {
+    ui.toast(t('Günün üç görevi de bitti — yarın yenileri gelecek!'), 'good', true)
   }
 }
 
 function concludeService(car: Car, score: number) {
   if (car.isTruck && state.hasTruckPark && car.phase === 'atPump' && Math.random() < 0.45) {
-    trackDaily()
+    trackDaily(score)
     state.addRep((score - 3.3) * 0.1)
     car.showFeedback(emojiFor(score))
     car.hideBubble()
@@ -1917,7 +1972,7 @@ function concludeService(car: Car, score: number) {
     cars.releaseCar(car)
     return
   }
-  trackDaily()
+  trackDaily(score)
   // YAĞ DEĞİŞİMİ DRIVE-IN (Oğuz: "arabalar yağ değişiminin içine girsinler"):
   // körük boşsa araç garaj kapısından içeri sürer, işi bitince kapıdan çıkar gider.
   // Körük dolu/tesis yoksa eski hızlı akış (vehicleServices anında öder) devam eder.
@@ -2049,9 +2104,10 @@ function finishSale(car: Car) {
       state.money += revenue
       state.stats.served++
       state.stats.revenue += revenue
+    state.dailyRevenue += revenue
       state.addSideRevenue(car.station === 'far', revenue)
       if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
-      if (car.nozzle) state.stats.liters[car.nozzle] += car.filled
+      if (car.nozzle) { state.stats.liters[car.nozzle] += car.filled; state.dailyLiters += car.filled }
       car.filling = false
       concludeService(car, score)
       return
@@ -2073,10 +2129,11 @@ function finishSale(car: Car) {
   state.money += revenue
   state.stats.served++
   state.stats.revenue += revenue
+  state.dailyRevenue += revenue
   state.addSideRevenue(car.station === 'far', revenue) // #317: yaka bazlı ciro ayrımı
   // aktif sözleşme: bu satışın litresi taahhüde sayılır (yalnız sözleşmenin yakıtı)
   if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
-  if (car.nozzle) state.stats.liters[car.nozzle] += car.filled
+  if (car.nozzle) { state.stats.liters[car.nozzle] += car.filled; state.dailyLiters += car.filled }
   car.filling = false
   concludeService(car, score)
 }
@@ -2161,6 +2218,7 @@ function tickEvCharging(dt: number) {
       state.stats.served++
       state.stats.kwh += c.demandKwh
       state.stats.revenue += revenue
+    state.dailyRevenue += revenue
       // Oyuncu raporu: "muhasebede karşı istasyon 0" — EV geliri yaka sayacına
       // hiç yazılmıyordu; karşı yakada yalnız şarj olan kurulumda pay hep 0 kalıyordu.
       state.addSideRevenue(c.station === 'far', revenue)
@@ -3712,8 +3770,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
         ui.toast(t('Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000'), 'good', true)
       }
       state.dailyDate = today
-      state.dailyServed = 0
-      state.dailyDone = false
+      gunlukSayaclariSifirla()
       persist()
     } else {
       state.lastLoginDate = today // teaser günde 1 kez görünsün
@@ -3722,8 +3779,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
   }
   if (state.dailyDate !== today) {
     state.dailyDate = today
-    state.dailyServed = 0
-    state.dailyDone = false
+    gunlukSayaclariSifirla()
   }
 
   // ---- Offline kazanç raporu: sen yokken tesisler çalıştı ----
@@ -4588,6 +4644,8 @@ function handleClick(e: PointerEvent) {
       const amt = state.collectPending(cashFor)
       state.addSideRevenue(/2$/.test(cashFor.split('#')[0]), amt) // #317
       if (amt > 0) {
+        state.dailyCollected++
+        gorevOdulle()
         audio.cash()
         // çok üniteli tesiste kumbara ORTAKTIR (gelir zaten adetle çarpılır) — bunu söyle,
         // yoksa oyuncu "3 üniteden sadece 1'i kazanıyor" sanıyor (13 feedback)
