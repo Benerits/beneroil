@@ -836,11 +836,13 @@ export class Tanker {
 // B5: bekleme noktaları artık SABİT DÜNYA KOORDİNATI değil — kapıya göreli üretilir ve
 // katı cisme denk gelirse koridor boyunca kayar (oyuncu oraya bina koyunca araç binanın
 // içinde bekliyordu). Ofsetler kapıdan istasyon içine doğru mesafedir.
-const WAIT_OFFSETS = [3.2, 6.0, 12.6, 15.4]
-const WAIT_SPOTS = [
-  new THREE.Vector3(3.4, -4.6, 0), new THREE.Vector3(3.4, -7.4, 0),
-  new THREE.Vector3(3.4, -16.8, 0), new THREE.Vector3(3.4, -19.6, 0),
-]
+// İÇ BEKLEME KORİDORU — #1028 ("istasyonda alan olmasına rağmen pompa doluysa sıradaki
+// araç istasyonun GİRİŞ ALANINDA bekliyor, içeri gelmiyor"): iç koridorda yalnız 4 yuva
+// vardı. 5. araçtan itibaren tryEnter yer bulamıyor, araç ya kapıda bekliyor ya yoluna
+// gidiyordu — 10 pompalı istasyonda bile kuyruk dışarıda kalıyordu. Yuva sayısı 8'e çıktı;
+// offsetler pompa hattıyla çakışırsa waitSpotAt zaten katı cisimden kaçırıyor.
+const WAIT_OFFSETS = [3.2, 6.0, 8.8, 12.6, 15.4, 18.2, 21.0, 23.8]
+const WAIT_SPOTS = WAIT_OFFSETS.map(o => new THREE.Vector3(3.4, -8 - o + 3.4, 0))
 
 export interface CarManagerOpts {
   pumpCount: () => number

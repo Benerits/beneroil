@@ -933,6 +933,12 @@ export class World {
   // ---- kayıt / etiket / uyarı ----
 
   private register(id: string, name: string, group: THREE.Object3D, labelZ: number) {
+    // karşı yakada kurulan tesis daha ilk karede doğru yöne baksın (pompa/şarj kendi
+    // flip'ini zaten hesaplıyor, onları ellemiyoruz)
+    if (!id.startsWith('pump-') && !id.startsWith('charger-')
+        && (group as THREE.Group).rotation.z === 0 && this.farFlip(group)) {
+      (group as THREE.Group).rotation.z = Math.PI
+    }
     const label = labelSprite(name)
     label.position.z = labelZ
     label.visible = false // isim sadece bina seçilince görünür
@@ -1993,9 +1999,19 @@ export class World {
   }
 
   /** yerleştirmede seçilen yöne döndür (90° adımlar) */
+  /** KARŞI YAKA DÖNÜŞÜ (#1019 "karşı dükkanlar ters duruyor"): tesisler yola göre
+   *  AYNALANIP konumlanıyor ama açıları dönmüyordu — vitrin/tente/kapı karşı istasyonun
+   *  içine değil, dışarı bakıyordu. Pompalarda bu düzeltme vardı (far → +PI), dükkanlarda
+   *  yoktu. Flip'i rotateBuilding'e gömüyoruz: oyuncu binayı döndürse de kaybolmuyor. */
+  private farFlip(g: THREE.Object3D) {
+    // marinada "yol karşısı" diye bir şey yok — ada tek parça; flip yalnız kara şubelerinde
+    if (this.theme.lane.kind === 'water') return 0
+    return g.position.x > ROAD_X ? Math.PI : 0
+  }
+
   rotateBuilding(id: string, rot: number) {
     const b = this.buildings.find(x => x.id === id)
-    if (b) (b.group as THREE.Group).rotation.z = rot * Math.PI / 2
+    if (b) (b.group as THREE.Group).rotation.z = rot * Math.PI / 2 + this.farFlip(b.group)
   }
 
   /** istasyon giriş/çıkış kapısı — oyuncu yerini belirler, trafik buna uyar */

@@ -655,6 +655,33 @@ function openOfficePanel() {
     + row(t('Kasa'), `₺${tl(state.money)}`)
     + row(t('Günlük gider (yovmiye+OPEX+reklam)'), `₺${tl(state.dailyWages() + state.dailyOpex() + state.marketingBudget)}`, 'bad')
 
+  // 1a) PERSONEL — TOPLU İŞE ALIM (#1019 "toplu olarak sarjcı ve pompacı tutabilsek")
+  // Tek tek her pompanın kartını açıp tıklamak 10 pompalı istasyonda 10 ayrı işlemdi.
+  const stEl = document.getElementById('of-staff')
+  if (stEl) {
+    const bosPompa: number[] = []
+    for (let i = 0; i < state.pumps; i++) if (!state.autoPumps.has(i)) bosPompa.push(i)
+    const bosSarj: number[] = []
+    for (let i = 0; i < state.evChargers; i++) if (!state.autoChargers.has(i)) bosSarj.push(i)
+    const pMaliyet = bosPompa.length * POMPACI_HIRE
+    const sMaliyet = bosSarj.length * EV_ATTENDANT_HIRE
+    stEl.innerHTML =
+      row(t('Pompacı'), `${state.autoPumps.size} / ${state.pumps}`)
+      + row(t('Şarjcı'), `${state.autoChargers.size} / ${state.evChargers}`)
+      + row(t('Günlük yovmiye'), `₺${tl(state.dailyWages())}`, 'bad')
+      + `<div class="row" style="display:flex; gap:8px; margin-top:10px">`
+      + `<button class="btn" id="of-hire-pumps" style="flex:1; justify-content:center"${bosPompa.length ? '' : ' disabled'}>`
+      + `<svg class="ic"><use href="#i-fuel"/></svg><span>${bosPompa.length
+          ? t('Tüm pompalara pompacı (₺{0})', tl(pMaliyet)) : t('Tüm pompalarda pompacı var')}</span></button>`
+      + `</div>`
+      + `<div class="row" style="display:flex; gap:8px; margin-top:8px">`
+      + `<button class="btn" id="of-hire-chargers" style="flex:1; justify-content:center"${bosSarj.length ? '' : ' disabled'}>`
+      + `<svg class="ic"><use href="#i-charger"/></svg><span>${state.evChargers === 0
+          ? t('Önce DC şarj ünitesi kur') : bosSarj.length
+          ? t('Tüm şarjlara şarjcı (₺{0})', tl(sMaliyet)) : t('Tüm şarjlarda şarjcı var')}</span></button>`
+      + `</div>`
+  }
+
   // 1b) GÖREVLER (#1004) ve KARİYER HEDEFLERİ (#1063)
   // Eskiden tek satırlık "15 müşteri" sayacıydı ve mobilde rozeti de gizliydi; oyuncular
   // "görev var gözüküyor ama yok gibi" diyordu. Artık günün üç görevi ilerleme çubuklu
@@ -971,6 +998,36 @@ function renderProfile() {
     + row(t('Günlük görev'), `${dailyQuests(state).filter(q => q.done).length}/3`)
     + `<div class="pf-synced"><svg class="ic" style="vertical-align:-3px"><use href="#i-cloud"/></svg> ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
 }
+// TOPLU PERSONEL ALIMI (#1019): parası yeten kadar alır, kalanı söyler
+function topluIseAl(tur: 'pump' | 'charger') {
+  const bedel = tur === 'pump' ? POMPACI_HIRE : EV_ATTENDANT_HIRE
+  const kume = tur === 'pump' ? state.autoPumps : state.autoChargers
+  const adet = tur === 'pump' ? state.pumps : state.evChargers
+  let alinan = 0, atlanan = 0
+  for (let i = 0; i < adet; i++) {
+    if (kume.has(i)) continue
+    if (state.money < bedel) { atlanan++; continue }
+    state.money -= bedel
+    kume.add(i)
+    alinan++
+  }
+  if (alinan) {
+    audio.build()
+    ui.toast(tur === 'pump'
+      ? t('{0} pompacı işe alındı (-₺{1})', String(alinan), (alinan * bedel).toLocaleString('tr-TR'))
+      : t('{0} şarjcı işe alındı (-₺{1})', String(alinan), (alinan * bedel).toLocaleString('tr-TR')), 'good', true)
+  }
+  if (atlanan) ui.toast(t('{0} birim için para yetmedi — kasa dolunca tekrar dene.', String(atlanan)), 'bad')
+  if (!alinan && !atlanan) ui.toast(t('Zaten hepsinde personel var.'), '')
+  openOfficePanel()
+  persist()
+}
+// butonlar her render'da yeniden yazılıyor → dinleyici SABİT kapsayıcıda (delegasyon)
+document.getElementById('of-staff')?.addEventListener('click', e => {
+  const el = e.target as HTMLElement
+  if (el.closest('#of-hire-pumps')) topluIseAl('pump')
+  else if (el.closest('#of-hire-chargers')) topluIseAl('charger')
+})
 document.getElementById('accbtn')?.addEventListener('click', renderProfile)
 // GÖREV ROZETİ → Ofis › Görevler (mobilde rozet tek giriş kapısı)
 document.getElementById('questchip')?.addEventListener('click', () => {
@@ -1409,7 +1466,10 @@ const cars = new CarManager(world.scene, modelLib, {
   evCount: () => state.evChargers,
   // misafir gate'i açıkken kimse İSTASYONA girmez (ilerleme donuk) ama yol trafiği akar
   entryChance: () => (guestPaused ? 0 : state.entryChance() * (isPromoMode ? 2.5 : 1)),
-  evShare: () => (state.evChargers > 0 ? Math.min(0.5, 0.15 + 0.09 * state.evChargers) * state.evPriceFactor() : 0),
+  // EV PAYI (#1023 "elektrikli araba sayısı çok az gibi"): taban %15'ti ve tek şarj
+  // ünitesiyle akışın ancak %16'sı EV oluyordu — oyuncu ₺'lik yatırımın karşılığını
+  // sahnede göremiyordu. Taban %20, ünite başı katkı %11, tavan %60.
+  evShare: () => (state.evChargers > 0 ? Math.min(0.60, 0.20 + 0.11 * state.evChargers) * state.evPriceFactor() : 0),
   isPumpBroken: i => state.brokenPumps.has(i),
   isChargerBroken: i => state.brokenChargers.has(i),
   parkSpots: () => world.getParkingSpots(),

@@ -24,6 +24,19 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Günlük yovmiye": "Daily wages",
+  "Tüm pompalara pompacı (₺{0})": "Attendant on every pump (₺{0})",
+  "Tüm pompalarda pompacı var": "Every pump already has an attendant",
+  "Önce DC şarj ünitesi kur": "Install a DC charger first",
+  "Tüm şarjlara şarjcı (₺{0})": "Attendant on every charger (₺{0})",
+  "Tüm şarjlarda şarjcı var": "Every charger already has an attendant",
+  "{0} pompacı işe alındı (-₺{1})": "{0} attendants hired (-₺{1})",
+  "{0} şarjcı işe alındı (-₺{1})": "{0} charger attendants hired (-₺{1})",
+  "{0} birim için para yetmedi — kasa dolunca tekrar dene.": "Not enough cash for {0} units — try again once your till fills up.",
+  "Zaten hepsinde personel var.": "They all have staff already.",
+  "Personel": "Staff",
+  "Pompacı": "Pump attendant",
+  "Şarjcı": "Charger attendant",
   "ALINDI": "CLAIMED",
   "Görevler her gün yenilenir. Ödül tamamlandığı anda kasaya geçer.": "Quests refresh every day. The reward lands in your cash the moment you finish one.",
   "GÖREV TAMAM: {0} — ödül +₺{1}": "QUEST DONE: {0} — reward +₺{1}",
@@ -1104,6 +1117,19 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Günlük yovmiye": "Salaires journaliers",
+  "Tüm pompalara pompacı (₺{0})": "Un pompiste par pompe (₺{0})",
+  "Tüm pompalarda pompacı var": "Chaque pompe a déjà un pompiste",
+  "Önce DC şarj ünitesi kur": "Installe d'abord une borne DC",
+  "Tüm şarjlara şarjcı (₺{0})": "Un agent par borne (₺{0})",
+  "Tüm şarjlarda şarjcı var": "Chaque borne a déjà un agent",
+  "{0} pompacı işe alındı (-₺{1})": "{0} pompistes embauchés (-₺{1})",
+  "{0} şarjcı işe alındı (-₺{1})": "{0} agents de borne embauchés (-₺{1})",
+  "{0} birim için para yetmedi — kasa dolunca tekrar dene.": "Fonds insuffisants pour {0} unités — réessaie quand la caisse se remplit.",
+  "Zaten hepsinde personel var.": "Ils ont déjà tous du personnel.",
+  "Personel": "Personnel",
+  "Pompacı": "Pompiste",
+  "Şarjcı": "Agent de borne",
   "ALINDI": "OBTENU",
   "Görevler her gün yenilenir. Ödül tamamlandığı anda kasaya geçer.": "Les missions se renouvellent chaque jour. La récompense arrive en caisse dès qu'elle est terminée.",
   "GÖREV TAMAM: {0} — ödül +₺{1}": "MISSION ACCOMPLIE : {0} — récompense +₺{1}",
