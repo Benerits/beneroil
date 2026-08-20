@@ -22,7 +22,7 @@ export const LOC_FIELDS = [
   'insurance', 'decorLevel', 'wear', 'gridLevel', 'lampCount',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'rival',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
-  'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner',
+  'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'supplier',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
   'uraniumPending', 'uraniumEta', 'closed', 'wideGates', 'smrWreck',
 ] as const
@@ -189,6 +189,19 @@ const WASH_COST = 8000
 const OIL_COST = 12000
 const COFFEE_COST = 7000
 const RESTAURANT_COST = 15000
+// TEDARİKÇİLER (#1067 "akaryakıt alımı için birkaç farklı marka satıcı olabilir"):
+// gerçek marka adları kullanılmıyor (ticari marka) — üç kurgusal dağıtımcı, klasik
+// hız/fiyat takası. Seçim kalıcıdır ve tüm yakıtlara uygulanır.
+export const SUPPLIERS = {
+  ekonomi:  { label: t('Toptancı Depo'), priceMult: 0.92, etaMult: 1.7,
+              desc: t('En ucuz litre fiyatı ama tanker geç gelir — stoğunu erken planla.') },
+  standart: { label: t('Standart Dağıtım'), priceMult: 1.00, etaMult: 1.0,
+              desc: t('Piyasa fiyatı, normal teslimat süresi.') },
+  hizli:    { label: t('Hızlı Lojistik'), priceMult: 1.07, etaMult: 0.55,
+              desc: t('Pahalı ama tanker yarı sürede kapıda — tank kurutmadan doldurur.') },
+} as const
+export type SupplierId = keyof typeof SUPPLIERS
+
 const TRUCKPARK_COST = 12000
 // OTEL (#1011 "otel ekleyebilirsin"): tır parkının bir üst ligi — yolcuyu geceletir.
 // Pasif omurga ama BEDAVA değil: her gün oda bakımı/personeli OPEX'e yazılır.
@@ -388,6 +401,7 @@ export class GameState {
   hasCoffee = false
   hasRestaurant = false
   hasTruckPark = false
+  supplier: SupplierId = 'standart'
   hasHotel = false
   hotelTimer = 40
   hasCleaner = false
@@ -1349,12 +1363,14 @@ export class GameState {
    *  büyük tanklı oyuncu 'tanker çağıramıyor' kalmaz (buton asla salt fiyat yüzünden kilitlenmez). */
   orderNeed(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
-    const affordable = Math.max(0, Math.floor(this.money / (this.buyPrice(f) * disc)) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
+    const affordable = Math.max(0, Math.floor(this.money / (this.buyPrice(f) * disc * this.supplierMult())) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
     return Math.floor(Math.max(0, Math.min(this.orderQty[f] * ORDER_STEP, this.fuelCapacity(f) - this.tanks[f], affordable)))
   }
+  /** seçili tedarikçinin litre çarpanı (#1067) */
+  supplierMult() { return SUPPLIERS[this.supplier]?.priceMult ?? 1 }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
-    return Math.ceil(this.orderNeed(f) * this.buyPrice(f) * disc) // piyasa fiyatı (Katman 4b)
+    return Math.ceil(this.orderNeed(f) * this.buyPrice(f) * disc * this.supplierMult()) // piyasa fiyatı (Katman 4b)
   }
 
   canOrder(f: FuelType) {
@@ -1374,7 +1390,7 @@ export class GameState {
     this.fuelLog.push({ day: this.day, f, liters: need, cost })
     if (this.fuelLog.length > 40) this.fuelLog.shift()
     this.orders[f].pending = true
-    this.orders[f].eta = ORDER_ETA
+    this.orders[f].eta = Math.round(ORDER_ETA * (SUPPLIERS[this.supplier]?.etaMult ?? 1))
     this.orders[f].amount = need // teslimatta bu kadar eklenecek (parti miktarı)
     return true
   }
@@ -2342,7 +2358,7 @@ const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'pumpSpeedLevel', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
   'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
-  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'airWaterCount', 'selfWashCount', 'parkingCount',
+  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'supplier', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
   'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
@@ -2500,6 +2516,8 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])
   if (Array.isArray(data.brokenPumps)) s.brokenPumps = new Set((data.brokenPumps as number[]).filter(n => Number.isInteger(n)))
   if (Array.isArray(data.brokenChargers)) s.brokenChargers = new Set((data.brokenChargers as number[]).filter(n => Number.isInteger(n)))
+  // kurcalanmış/eski kayıt: bilinmeyen tedarikçi standarda düşer (fiyat çarpanı NaN olmasın)
+  if (!(s.supplier in SUPPLIERS)) s.supplier = 'standart'
 }
 
 export function doMaintenance(s: GameState, id: string): boolean {

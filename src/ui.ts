@@ -1,6 +1,6 @@
 import { Car } from './cars'
 import { t } from './i18n'
-import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems, dailyQuests } from './state'
+import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems, dailyQuests, SUPPLIERS } from './state'
 import { audio } from './audio'
 import * as auth from './auth'
 import { isNativePlatform } from './platform'
@@ -723,10 +723,30 @@ export class UI {
         btn.disabled = true
       } else {
         // oyuncu isteği: sipariş ekranında ALIŞ fiyatı görünsün
-        this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap, need, state.buyPrice(f).toFixed(1)))
+        this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap,
+          need, (state.buyPrice(f) * state.supplierMult()).toFixed(1)))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }
+    }
+    // TEDARİKÇİ SATIRI (#1067): hız/fiyat takası; teslimat bekleyen sipariş varken
+    // değiştirmek yolda olan tankerin süresini değiştirmez (eta zaten yazılmış).
+    {
+      const row = document.getElementById('supplierrow')
+      if (row) {
+        const html = (Object.keys(SUPPLIERS) as (keyof typeof SUPPLIERS)[]).map(id => {
+          const sp = SUPPLIERS[id]
+          const fark = Math.round((sp.priceMult - 1) * 100)
+          return `<button class="btn${id === state.supplier ? ' primary' : ''}" data-sup="${id}"`
+            + ` style="flex:1; justify-content:center; flex-direction:column; gap:2px; height:auto; padding:7px 4px">`
+            + `<span style="font-size:12px">${t(sp.label)}</span>`
+            + `<span style="font-size:11px; opacity:.75">${fark === 0 ? t('piyasa') : `${fark > 0 ? '+' : ''}%${fark}`}`
+            + ` · ${sp.etaMult < 1 ? t('hızlı') : sp.etaMult > 1 ? t('yavaş') : t('normal')}</span></button>`
+        }).join('')
+        if (row.dataset.sup !== state.supplier) { row.innerHTML = html; row.dataset.sup = state.supplier }
+      }
+      const d = document.getElementById('supplierdesc')
+      if (d) this.setText(d as HTMLDivElement, t(SUPPLIERS[state.supplier].desc))
     }
 
     this.setText(this.closeLabel, state.closed ? t('KAPALI') : t('Açık'))

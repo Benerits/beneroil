@@ -24,6 +24,18 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Tedarikçi: {0}": "Supplier: {0}",
+  "Tedarikçi": "Supplier",
+  "Toptancı Depo": "Wholesale Depot",
+  "En ucuz litre fiyatı ama tanker geç gelir — stoğunu erken planla.": "Cheapest per litre, but the tanker takes its time — plan your stock early.",
+  "Standart Dağıtım": "Standard Distribution",
+  "Piyasa fiyatı, normal teslimat süresi.": "Market price, normal delivery time.",
+  "Hızlı Lojistik": "Express Logistics",
+  "Pahalı ama tanker yarı sürede kapıda — tank kurutmadan doldurur.": "Pricier, but the tanker arrives in half the time — refills before the tank runs dry.",
+  "piyasa": "market",
+  "hızlı": "fast",
+  "yavaş": "slow",
+  "normal": "normal",
   "Bugün servis / kaçan": "Served / lost today",
   "Gün sonu itibar hedefi": "End-of-day reputation target",
   "Bugün neredeyse hiç müşteri görmedin — itibar yavaşça 3.0'a doğru aşınır.": "Barely any customers today — reputation slowly drifts toward 3.0.",
@@ -1144,6 +1156,18 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Tedarikçi: {0}": "Fournisseur : {0}",
+  "Tedarikçi": "Fournisseur",
+  "Toptancı Depo": "Dépôt de gros",
+  "En ucuz litre fiyatı ama tanker geç gelir — stoğunu erken planla.": "Le litre le moins cher, mais le camion prend son temps — anticipe ton stock.",
+  "Standart Dağıtım": "Distribution standard",
+  "Piyasa fiyatı, normal teslimat süresi.": "Prix du marché, délai de livraison normal.",
+  "Hızlı Lojistik": "Logistique express",
+  "Pahalı ama tanker yarı sürede kapıda — tank kurutmadan doldurur.": "Plus cher, mais le camion arrive deux fois plus vite — remplit avant la panne sèche.",
+  "piyasa": "marché",
+  "hızlı": "rapide",
+  "yavaş": "lent",
+  "normal": "normal",
   "Bugün servis / kaçan": "Servis / perdus aujourd'hui",
   "Gün sonu itibar hedefi": "Objectif de réputation en fin de journée",
   "Bugün neredeyse hiç müşteri görmedin — itibar yavaşça 3.0'a doğru aşınır.": "Presque aucun client aujourd'hui — la réputation glisse lentement vers 3,0.",

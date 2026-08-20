@@ -10,7 +10,7 @@ import { makeLogbook, resolveLogbook, logbookFlags, type MarinaFacId } from './m
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
-  parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
+  parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements, SUPPLIERS,
   dailyQuests, claimDailyQuests, careerGoals,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
@@ -463,8 +463,25 @@ function scheduleBackgroundReminders() {
   }
   if (notifs.length) { try { P.LocalNotifications.schedule({ notifications: notifs }) } catch { /* yok say */ } }
 }
+let gizlendiT = 0
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { scheduleBackgroundReminders(); return } // arka plana geçerken yaklaşan olayları planla
+  if (document.hidden) {
+    gizlendiT = Date.now()
+    scheduleBackgroundReminders() // arka plana geçerken yaklaşan olayları planla
+    return
+  }
+  // ARKA PLAN TELAFİSİ (#1014/#1016): sekme kapalıyken oyun duruyor; dönüşte o süre
+  // offline verimle ödenir. Reload gerekmiyor.
+  if (gizlendiT) {
+    const gecen = (Date.now() - gizlendiT) / 1000
+    gizlendiT = 0
+    if (gecen >= 120) {
+      applyOfflineEarnings(gecen)
+      // aynı süre bir de reload'da ödenmesin: kaydın zaman damgası ŞİMDİ sayılır
+      loadedSaveAt = Date.now()
+      persist()
+    }
+  }
   document.title = `${world?.stationName ?? 'Benzinlik'} — Benzinlik`
   // odağa dönünce: başka cihaz save'i ilerlettiyse en güncele senkronla (ilerleme karışmasın)
   if (auth.loggedIn() && !syncedConflict) {
@@ -565,6 +582,17 @@ function mesajKutusuAc() {
   ui.markInboxRead()
 }
 document.getElementById('inboxbtn')?.addEventListener('click', mesajKutusuAc)
+// TEDARİKÇİ SEÇİMİ (#1067 "akaryakıt alımı için birkaç farklı marka satıcı olabilir"):
+// gerçek marka adı kullanılmıyor (ticari marka) — kurgusal üç dağıtımcı, hız/fiyat takası.
+document.getElementById('supplierrow')?.addEventListener('click', e => {
+  const b = (e.target as HTMLElement).closest('button[data-sup]') as HTMLButtonElement | null
+  if (!b) return
+  const id = b.dataset.sup as keyof typeof SUPPLIERS
+  if (!SUPPLIERS[id] || state.supplier === id) return
+  state.supplier = id
+  ui.toast(t('Tedarikçi: {0}', t(SUPPLIERS[id].label)), 'good')
+  persist()
+})
 
 // HIZLI ŞUBE GEÇİŞİ (#1038 "ANASAYFADA MAPLER ARASINDA HIZLI GEÇİŞ OLSA SÜPER OLUR"):
 // şube değiştirmek için Ofis › Şubeler'e girmek gerekiyordu. Artık HUD'dan tek dokunuş.
@@ -2761,9 +2789,15 @@ function applySaveData(d: Record<string, unknown>) {
  * En fazla 6 saat + ₺150.000 tavan. İstasyon kapalıysa gelir yok.
  * Anti-cheat uyumlu: income ≤ 150k, sunucu allowance'ı (50k + elapsed×600) hep kapsar.
  */
-function applyOfflineEarnings() {
-  if (state.closed || !loadedSaveAt) return
-  const elapsedSec = (Date.now() - loadedSaveAt) / 1000
+/** Yokken geçen süre kadar pasif gelir. Parametresiz çağrılınca kayıt zamanından, açık
+ *  parametreyle sekme/uygulama arka planda kaldığı süreden hesaplar (#1014/#1016
+ *  "oyun arka planda çalışmıyor, sekme değiştirsek duruyor"): oyun arka planda rAF'ı
+ *  durduruyor (pil/ısınma kararı) ama dönüşte hiçbir telafi YOKTU — yalnız sayfa
+ *  yeniden yüklenirse offline gelir işliyordu. */
+function applyOfflineEarnings(gecenSn?: number) {
+  if (state.closed) return
+  if (gecenSn === undefined && !loadedSaveAt) return
+  const elapsedSec = gecenSn ?? (Date.now() - loadedSaveAt!) / 1000
   if (elapsedSec < 120) return // <2 dk: anlamsız
   const capped = Math.min(elapsedSec, 6 * 3600) // en fazla 6 saat
   const facilities = (state.marketLevel > 0 ? state.marketLevel : 0)
