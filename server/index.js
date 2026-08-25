@@ -52,6 +52,13 @@ async function initDb() {
   // izahat sistemi: şüpheli hesap banlanır (ban_reason='izahat'), oyuncunun savunması buraya düşer
   await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_appeal(
     id serial PRIMARY KEY, email text NOT NULL, message text NOT NULL, created_at timestamptz DEFAULT now())`)
+  // HİLE FRENİ KAYDI: eskiden yalnız bellekteydi (son 200 olay) ve sunucu yeniden
+  // başlayınca siliniyordu; tek kalıcı iz docker log'uydu. 25 Ağu'da yanlış ban verilen
+  // oyuncuyu aklamak için 151 bin satırlık log eşelemek gerekti — bir daha gerekmesin.
+  await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_cheatlog(
+    id bigserial PRIMARY KEY, email text NOT NULL, kind text NOT NULL,
+    amount bigint, rate int, created_at timestamptz DEFAULT now())`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS benzinlik_cheatlog_email_idx ON benzinlik_cheatlog(email, created_at DESC)`)
   // YILDIZ GEÇMİŞİ: brandStars her değişimde loglanır (devir/clamp/anomali izi —
   // "yıldızım silindi" şikâyetleri artık kanıtla incelenebilir)
   await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_starlog(
@@ -400,6 +407,12 @@ function auditCheat(email, kind, info) {
   cheatLog.push({ at: new Date().toISOString(), email, kind, ...info })
   if (cheatLog.length > 200) cheatLog.shift()
   console.warn(`[hile-freni] ${kind} ${email}`, info)
+  // KALICI KAYIT: inceleme docker log rotasyonuna bağlı kalmasın. Yazım hatası oyun
+  // akışını ASLA bozmamalı — bilerek await edilmiyor ve hata yutuluyor.
+  const amount = Math.round(Number(info?.clamped ?? info?.excess ?? 0)) || null
+  const rate = Math.round(Number(info?.rate ?? 0)) || null
+  pool.query('INSERT INTO benzinlik_cheatlog(email, kind, amount, rate) VALUES($1,$2,$3,$4)',
+    [String(email || '').slice(0, 200), String(kind).slice(0, 40), amount, rate]).catch(() => {})
 }
 
 function maxIncomeRate(s) {
@@ -459,6 +472,26 @@ function clampBranchVault(s) {
 
 /** Jeton kovası tavanı: tek seferlik meşru sıçramayı (gün dönüşü + sözleşme ödemesi) karşılar */
 const ALLOW_BURST = 260_000
+
+/**
+ * KOVA TAVANI ŞUBE SAYISINA GÖRE BÜYÜR (25 Ağu — canlı hata düzeltmesi).
+ *
+ * Sabit 260.000'lik tavan çok şubeli oyuncuyu HAKSIZ kırpıyordu: pasif şube kasası
+ * başına tavan 240.000 (BRANCH_VAULT_HARD) ve oyuncu hepsini TEK dokunuşta topluyor.
+ * 4 pasif şubeli oyuncuda bu ₺960.000 demek → kovaya sığmıyor, her tam toplamada
+ * ₺700.000 MEŞRU kazanç yanıyordu. Ardından istemci kendi doğru bakiyesini tutmaya
+ * devam ettiği için fark her kayıtta büyüyor ve "enjeksiyon rampası"na benzeyen bir
+ * kartopu oluşuyordu (30 günde 151.109 kırpma olayının kaynağı buydu; 1,34 milyar
+ * ciro yapmış bir oyuncu bu yüzden yanlışlıkla banlandı).
+ *
+ * Yeni tavan: taban + pasif şube başına bir kasa dolusu. Hile freni korunuyor —
+ * oyuncunun GERÇEKTEN biriktirebileceği en büyük tek seferlik meşru tutar kadar.
+ */
+function burstCap(s) {
+  const locs = Array.isArray(s?.unlockedLocs) ? s.unlockedLocs.length : 1
+  const pasif = Math.max(0, Math.min(5, locs) - 1)
+  return ALLOW_BURST + pasif * BRANCH_VAULT_HARD
+}
 
 function marinaValue(s) {
   let v = 0
@@ -551,8 +584,10 @@ function sanitizeSave(save) {
   // _ab (jeton kovası) SUNUCU-SAHİPLİ: istemci ne yazarsa yazsın sınırlanır.
   if ('_ab' in s) {
     const a = s._ab
+    // Üst sınır burstCap ile AYNI olmalı: sabit 260000 kalırsa çok şubeli oyuncunun
+    // büyütülmüş kovası her kayıtta buraya takılıp geri kırpılır ve düzeltme etkisiz kalır.
     s._ab = (a && typeof a === 'object' && !Array.isArray(a))
-      ? { t: clamp(a.t, 0, 4e12, 0), b: clamp(a.b, 0, 260000, 0) } : null
+      ? { t: clamp(a.t, 0, 4e12, 0), b: clamp(a.b, 0, burstCap(s), 0) } : null
   }
   if ('licenseDueDay' in s) s.licenseDueDay = clamp(s.licenseDueDay, 0, 100000, 30)
   if ('insurance' in s) s.insurance = !!s.insurance
@@ -1198,10 +1233,11 @@ async function handleApi(req, res, url) {
         const rate = maxIncomeRate(clean.s)
         const prevAb = (prevSave && prevSave.s && prevSave.s._ab) || null
         const abT = prevAb && typeof prevAb.t === 'number' ? prevAb.t : 0
-        const abB = prevAb && typeof prevAb.b === 'number' ? clamp(prevAb.b, 0, ALLOW_BURST, 0) : ALLOW_BURST
+        const kova = burstCap(clean.s)   // şube sayısına göre büyüyen tavan
+        const abB = prevAb && typeof prevAb.b === 'number' ? clamp(prevAb.b, 0, kova, 0) : kova
         const nowMs = Date.now()
         const refillSec = abT > 0 ? Math.max(0, (nowMs - abT) / 1000) : elapsed
-        let bucket = Math.min(ALLOW_BURST, abB + refillSec * rate)
+        let bucket = Math.min(kova, abB + refillSec * rate)
         const allowance = firstSave
           ? (60_000 + gameDays * 40_000) * starMult   // misafirden taşınan ilk save: serbest
           : bucket

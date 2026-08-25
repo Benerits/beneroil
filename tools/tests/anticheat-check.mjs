@@ -90,8 +90,26 @@ check(`taze hesap saatte ${Math.round(tazeHile.saatlik / 1000)}k'dan fazla basam
   tazeHile.saatlik <= 500_000, `${Math.round(tazeHile.saatlik).toLocaleString('tr-TR')} ₺/saat`)
 
 console.log('\n== 4) Kova sunucu-sahipli (istemci kurcalayamaz) ==')
-check('_ab sanitizeSave içinde clamp\'leniyor', /'_ab' in s[\s\S]{0,240}clamp\(a\.b, 0, 260000/.test(src))
-check('kova tavanı sabit (ALLOW_BURST)', /const ALLOW_BURST = 260_000/.test(src))
+check('_ab sanitizeSave içinde clamp\'leniyor', /'_ab' in s[\s\S]{0,400}clamp\(a\.b, 0, burstCap\(s\)/.test(src))
+check('kova tabanı ALLOW_BURST', /const ALLOW_BURST = 260_000/.test(src))
+// 25 Ağu CANLI HATA: sabit 260k tavan, 4 pasif şubesi olan oyuncunun tek dokunuşta
+// topladığı ₺960.000'lik kasayı taşımıyordu → her toplamada ₺700.000 MEŞRU kazanç
+// yanıyor, ardından istemci/sunucu farkı kartopu gibi büyüyüp "enjeksiyon" gibi
+// görünüyordu. 1,34 milyar ciro yapmış bir oyuncu bu yüzden yanlışlıkla banlandı.
+check('kova tavanı ŞUBE SAYISINA göre büyüyor', /function burstCap\(s\)/.test(src))
+check('sanitizeSave ile push yolu AYNI tavanı kullanıyor',
+  (src.match(/burstCap\(/g) || []).length >= 3)
+{
+  const VAULT = 240_000
+  const cap = n => ALLOW_BURST + Math.max(0, Math.min(5, n) - 1) * VAULT
+  for (const n of [2, 3, 4, 5]) {
+    const kasa = (n - 1) * VAULT
+    check(`${n} şubede tam kasa toplama kovaya SIĞIYOR (₺${kasa.toLocaleString('tr-TR')} ≤ ₺${cap(n).toLocaleString('tr-TR')})`,
+      kasa <= cap(n))
+  }
+  check('tek şubede taban değişmedi (mevcut denge korunuyor)', cap(1) === ALLOW_BURST)
+  check('kova sınırsız büyümüyor (5 şube tavanı)', cap(9) === cap(5))
+}
 check('kabul edilen artış kovadan DÜŞÜLÜYOR', /bucket = Math\.max\(0, bucket - gain\)/.test(src))
 check('kova her push\'ta save\'e yazılıyor', /clean\.s\._ab = \{ t: nowMs/.test(src))
 check('kırpma ve enjeksiyon DENETİM kaydına giriyor',
