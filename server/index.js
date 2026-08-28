@@ -1890,7 +1890,9 @@ async function handleGodotFeedback(req, res, url) {
     if (!rateLimit('gfb:' + ip, 10, 3600_000)) return json(res, 429, { error: 'Çok sık bildirim — biraz sonra tekrar dene.' })
     let body
     try { body = await readBody(req) } catch { return json(res, 400, { error: 'Gövde okunamadı.' }) }
-    const message = String(body.message || '').trim().slice(0, 2000)
+    // SINIRSIZ DEĞİL AMA GENİŞ: ilk beta raporu (3-4 saatlik oyun) 2000
+    // karakterde kesildi ve devamı kayboldu. Gövde tavanı zaten 1 MB.
+    const message = String(body.message || '').trim().slice(0, 50_000)
     if (message.length < 3) return json(res, 400, { error: 'Mesaj çok kısa.' })
     const contact = String(body.contact || '').trim().slice(0, 120)
     const version = String(body.version || '').slice(0, 32)
