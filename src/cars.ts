@@ -63,7 +63,8 @@ function extrude(points: [number, number][], width: number, color: number): THRE
   geo.translate(0, 0, -width / 2)
   const m = new THREE.Mesh(geo, lam(color))
   m.rotation.x = Math.PI / 2
-  m.castShadow = true
+  // GÖLGE YOK (30 Ağu): gölge haritası dondurulduğu için hareketli gölge yerinde kalırdı.
+  m.castShadow = false
   return m
 }
 
@@ -100,7 +101,7 @@ export function buildBoatMesh(kind: BoatKind): THREE.Group {
   // gövde: burnu sivri kutu (dört köşeli kutudan farkı burun daralması)
   const hull = new THREE.Mesh(new THREE.BoxGeometry(sp.len, sp.beam, sp.beam * 0.55), mat(sp.hull))
   hull.position.z = sp.beam * 0.28
-  hull.castShadow = true
+  hull.castShadow = false
   g.add(hull)
   const bow = new THREE.Mesh(new THREE.ConeGeometry(sp.beam * 0.5, sp.len * 0.32, 4), mat(sp.hull))
   bow.rotation.z = -Math.PI / 2
@@ -130,7 +131,7 @@ export function buildCarMesh(kind: BodyKind, color: number): THREE.Group {
   for (const wx of [spec.wheelX, -spec.wheelX]) for (const wy of [spec.width / 2, -spec.width / 2]) {
     const t = new THREE.Mesh(tire, lam(0x22262a))
     t.position.set(wx, wy, spec.wheelR)
-    t.castShadow = true
+    t.castShadow = false
     g.add(t)
     const h = new THREE.Mesh(hub, lam(0xc8ccd0))
     h.position.set(wx, wy, spec.wheelR)
@@ -730,7 +731,7 @@ export class Tanker {
       const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 2.4, 14), lam(tint))
       tank.rotation.z = Math.PI / 2
       tank.position.set(-0.4, 0, 1.6)
-      tank.castShadow = true
+      tank.castShadow = false
       g.add(tank)
     } else if (lib?.tankerBase) {
       g = new THREE.Group()
@@ -738,7 +739,7 @@ export class Tanker {
       const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.5, 16), lam(tint))
       tank.rotation.z = Math.PI / 2
       tank.position.set(-0.55, 0, 0.95)
-      tank.castShadow = true
+      tank.castShadow = false
       g.add(tank)
       const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.15, 10), lam(0x8f979e))
       cap.rotation.x = Math.PI / 2
@@ -748,10 +749,10 @@ export class Tanker {
     } else {
       g = new THREE.Group()
       const cab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.5, 1.5), lam(0xd64545))
-      cab.position.set(1.9, 0, 0.95); cab.castShadow = true; g.add(cab)
+      cab.position.set(1.9, 0, 0.95); cab.castShadow = false; g.add(cab)
       const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 3.4, 18), lam(tint))
       tank.rotation.z = Math.PI / 2
-      tank.position.set(-0.6, 0, 1.15); tank.castShadow = true; g.add(tank)
+      tank.position.set(-0.6, 0, 1.15); tank.castShadow = false; g.add(tank)
       const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.4, 0.3), lam(0x2b2f33))
       chassis.position.set(0, 0, 0.45); g.add(chassis)
       const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.25, 14)

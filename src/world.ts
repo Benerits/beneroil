@@ -30,15 +30,50 @@ export const APRON_IN_Y = -8
 export const APRON_OUT_Y = 8
 export const APRON_SOUTH_Y = -16
 
-const lam = (color: number) => new THREE.MeshLambertMaterial({ color })
+/**
+ * PERFORMANS — MATERYAL PAYLAŞIMI (30 Ağu, ölçüme dayalı).
+ *
+ * Ölçüm: dolu istasyonda sahnede 621 BENZERSİZ materyal vardı. Oysa palet dar (~15 renk);
+ * aynı kırmızıdan onlarca ayrı MeshLambertMaterial nesnesi üretiliyordu. Her materyal
+ * ayrı shader bağlama + uniform yüklemesi demek — bu maliyet CPU tarafında ve oyuncuların
+ * "işlemci fullde çalışıyor" (#105), "iyi bilgisayarım var ama 30fps altında" (#813)
+ * şikayetlerinin doğrudan sebebi.
+ *
+ * Artık renk başına TEK materyal paylaşılıyor. DİKKAT: paylaşılan materyalin opacity/color
+ * alanı tek tek değiştirilemez — hayalet/seçim gibi yerler zaten kendi clone'unu yapıyor.
+ * Gece ışığı için kullanılan glow() ayrı kalır (her biri kendi emissive'ini animasyonlar).
+ */
+const matKese = new Map<number, THREE.MeshLambertMaterial>()
+const lam = (color: number) => {
+  let m = matKese.get(color)
+  if (!m) { m = new THREE.MeshLambertMaterial({ color }); matKese.set(color, m) }
+  return m
+}
+
+/**
+ * GEOMETRİ PAYLAŞIMI: ölçümde 911 benzersiz geometri çıktı. box()/cyl() her çağrıda yeni
+ * BufferGeometry üretiyordu; oysa hepsi birim küp/silindirin ölçeklenmiş hâli. Tek geometri
+ * paylaşılıp mesh.scale ile boyutlandırılıyor — bellek ve GC baskısı düşüyor, ayrıca
+ * geometri paylaşan mesh'ler ileride InstancedMesh'e çevrilmeye hazır hâle geliyor.
+ */
+const BIRIM_KUTU = new THREE.BoxGeometry(1, 1, 1)
+const silindirKese = new Map<string, THREE.CylinderGeometry>()
+const birimSilindir = (segment: number) => {
+  const k = `s${segment}`
+  let g = silindirKese.get(k)
+  if (!g) { g = new THREE.CylinderGeometry(1, 1, 1, segment); silindirKese.set(k, g) }
+  return g
+}
 
 function glow(color: number, intensity: number) {
   return new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: intensity })
 }
 
+// Paylaşılan birim geometri + scale: her kutu için ayrı BufferGeometry üretilmiyor.
 function box(w: number, d: number, h: number, color: number, x: number, y: number, z: number, parent: THREE.Object3D,
              mat?: THREE.Material) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, d, h), mat ?? lam(color))
+  const m = new THREE.Mesh(BIRIM_KUTU, mat ?? lam(color))
+  m.scale.set(w, d, h)
   m.position.set(x, y, z)
   m.castShadow = true
   m.receiveShadow = true
@@ -47,7 +82,9 @@ function box(w: number, d: number, h: number, color: number, x: number, y: numbe
 }
 
 function cyl(r: number, len: number, color: number, x: number, y: number, z: number, axis: 'x' | 'y' | 'z', parent: THREE.Object3D) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 16), lam(color))
+  // birim silindir (r=1, h=1) → yarıçap XZ'de, uzunluk Y'de ölçeklenir
+  const m = new THREE.Mesh(birimSilindir(16), lam(color))
+  m.scale.set(r, len, r)
   if (axis === 'x') m.rotation.z = Math.PI / 2
   if (axis === 'z') m.rotation.x = Math.PI / 2
   m.position.set(x, y, z)
@@ -735,7 +772,8 @@ export class World {
       this.decor.push({ obj: g, x, y })
     }
     const crate = (w: number, d: number, h: number, c: number, x: number, y: number, z: number) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, d, h), lam(c))
+      const m = new THREE.Mesh(BIRIM_KUTU, lam(c))   // paylaşılan geometri + scale
+      m.scale.set(w, d, h)
       m.position.set(x, y, z); m.castShadow = true
       return m
     }

@@ -24,11 +24,31 @@ export function isInstantGames(): boolean {
   return typeof (window as unknown as { FBInstant?: unknown }).FBInstant !== 'undefined'
 }
 
-/** LIGHT MOD: Meta'da post-processing/gölge/antialias kapalı, dokular küçük.
- *  Instant Games düşük seviye Android'de bir iframe içinde çalışıyor — bloom + gölge
- *  en olası donma/çökme sebebi. Web ve iOS mevcut görünümünü aynen korur. */
+/** MOBİL CİHAZ (telefon/tablet) — dokunmatik + dar ekran.
+ *  Capacitor (iOS/Android uygulaması) ve mobil tarayıcı ikisini de kapsar. */
+export function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false
+  const cap = (window as unknown as { Capacitor?: { getPlatform?: () => string } }).Capacitor
+  const plat = cap?.getPlatform?.()
+  if (plat === 'ios' || plat === 'android') return true
+  const ua = navigator.userAgent || ''
+  const dokunmatik = (navigator.maxTouchPoints ?? 0) > 0
+  return dokunmatik && (/iPhone|iPad|iPod|Android/i.test(ua) || Math.min(screen.width, screen.height) <= 820)
+}
+
+/** LIGHT MOD: post-processing/gölge/antialias kapalı, dokular küçük.
+ *
+ *  30 Ağu — MOBİL DE KAPSAMA ALINDI. Ölçüm: dolu istasyonda 971 ayrı mesh + 621 materyal
+ *  çiziliyor ve gölge haritası her karede sıfırdan üretiliyordu; sahne fiilen iki kez
+ *  çiziliyor. Oyuncu şikayetleri bunu doğruluyor: "şarj normal oyunlara göre aşırı
+ *  derecede" (#739, iPhone), "iphone'da da mac air'de de inanılmaz ısı" (#752),
+ *  "başlarda ısıtmıyordu şimdi baya ısınıyor" (#959). Ayrıca iPhone'da devicePixelRatio
+ *  3 — 1.5'e sınırlamak bile ~740k piksel demek; LIGHT modda 1.0'a inince doldurma
+ *  maliyeti 2.25× düşüyor.
+ *
+ *  Masaüstü tarayıcı görünümü AYNEN korunur. */
 export function isLightMode(): boolean {
-  return isInstantGames()
+  return isInstantGames() || isMobileDevice()
 }
 
 /** Doku yolu. Light modda optimize edilmiş 512px JPEG'e yönlendirir

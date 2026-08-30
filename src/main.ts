@@ -384,6 +384,20 @@ try {
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, LIGHT ? 1 : 1.5)) // performans: 2x retina yerine 1.5x yeterli
 renderer.shadowMap.enabled = !LIGHT
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
+/**
+ * GÖLGE DONDURMA (30 Ağu — en yüksek kazançlı optimizasyon).
+ *
+ * autoUpdate açıkken sahnenin TAMAMI her karede iki kez çiziliyordu: bir gölge geçişi,
+ * bir normal geçiş. Ölçüm: 971 mesh × 2. Oysa sahnenin %95'i hareketsiz — binalar,
+ * ağaçlar, kayalar, tanklar, pompalar. Yalnız araçlar hareket ediyor ve onların gölgesi
+ * bu ölçekte gözle takip edilmiyor.
+ *
+ * Artık gölge haritası yalnız SAHNE DEĞİŞTİĞİNDE bir kare güncelleniyor:
+ * yapı kurulunca/taşınınca/yıkılınca, şube değişince, gün-gece geçişinde.
+ * golgeTazele() bunu tetikler.
+ */
+renderer.shadowMap.autoUpdate = false
+renderer.shadowMap.needsUpdate = true   // ilk kare: gölgeler bir kez çizilsin
 renderer.localClippingEnabled = true // küre tank sıvısı: yatay düzlemle alttan-yukarı dolum kırpması
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 1.1
@@ -1552,6 +1566,7 @@ document.getElementById('bank-body')?.addEventListener('click', e => {
  *  görseli kaldırılır — aksi halde ortadaki görsel silinip fazlalık bina sahnede "işlevsiz" kalır (#495).
  *  Satış ve HACİZ bu tek yoldan geçer; eskiden haciz kendi (eksik) kopyasını kullanıyordu. */
 function removeBuildingVisual(id: string) {
+  golgeTazele()
   const base = id.split('#')[0]
   if (base === 'pump') cars.evictSlot('fuel', Number(id.slice(5)))
   else if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
@@ -1579,7 +1594,8 @@ function seizeCollateral() {
   }
   state.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
   Car.solids = hardRects()
-  cars.rerouteForGates() // dünya değişti: rotalar tazelensin (eski konuma süren araç kalmasın)
+  cars.rerouteForGates()
+  golgeTazele() // haciz: yapılar alındı, gölge haritası tazelenmeli
   ui.toast(t('Ödeme yapılamadı — teminatların HACZEDİLDİ ve istasyondan alındı!'), 'bad')
   if (selectedBuilding) refreshBuildingCard()
   persist()
@@ -2525,7 +2541,11 @@ function enableFarStationClear() {
 }
 
 /** satın alma sonrası sahnedeki görsel karşılığını kurar */
+/** Sahne değişti: gölge haritasını BİR KARE güncelle (autoUpdate kapalı, bkz. renderer kurulumu). */
+function golgeTazele() { renderer.shadowMap.needsUpdate = true }
+
 function buildVisual(id: string, pos?: THREE.Vector2) {
+  golgeTazele()
   const base = id.split('#')[0]
   if (base.startsWith('pump-') && pos) {
     world.addPump(parseInt(base.slice(5)), new THREE.Vector2(pos.x - 0.9, pos.y))
@@ -2997,6 +3017,7 @@ function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
 
 /** kayıttan gelen state'e göre sahneyi yeniden kurar */
 function rebuildFromState() {
+  golgeTazele()
   const validParcel = (c: number, r: number) => Number.isInteger(c) && Number.isInteger(r) && c >= 0 && c < PARCEL_COLS.length && r >= 0 && r < PARCEL_ROWS.length
   for (const key of state.ownedParcels) {
     const [c, r] = key.split(',').map(Number)
@@ -3626,6 +3647,7 @@ function confirmPlacement() {
   }
   cancelPlacement()
   persist()
+  golgeTazele()
 }
 
 function confirmZone() {
