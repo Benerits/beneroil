@@ -47,7 +47,8 @@
     "test:branch": "tsx tools/tests/branch-check.mjs",
     "ses:export": "node tools/ses-export.mjs",
     "shots": "node tools/shot/shoot.mjs",
-    "test:gerilim": "tsx tools/tests/gerilim-check.mjs"
+    "test:gerilim": "tsx tools/tests/gerilim-check.mjs",
+    "test:mobil": "node tools/tests/mobil-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

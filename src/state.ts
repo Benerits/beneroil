@@ -418,6 +418,15 @@ export class GameState {
   combo = 0
   /** oyun-içi saat (0-24), main.ts gün döngüsünden her karede tazeler */
   hourOfDay = 6
+  // ── ÖDÜLLÜ REKLAM GÜNLÜK HAKLARI ──
+  // Mobilde gelir reklamdan geldiği için teklifler oyunun KRİZ anlarına bağlı, ama
+  // sınırlı: nadir olan değerli görünür, sınırsız kurtarma mekaniği de anlamsızlaştırır.
+  adSeriUsed = 0        // "seriyi kurtar" — günde en fazla 2
+  adVipUsed = 0         // "VIP'yi elde tut" — günde en fazla 2
+  static readonly AD_SERI_LIMIT = 2
+  static readonly AD_VIP_LIMIT = 2
+  get adSeriHak() { return Math.max(0, GameState.AD_SERI_LIMIT - this.adSeriUsed) }
+  get adVipHak() { return Math.max(0, GameState.AD_VIP_LIMIT - this.adVipUsed) }
 
   /** seri çarpanı: 3 servis → ×1.1, 6 → ×1.25, 10+ → ×1.5 */
   comboMult(): number {
@@ -2482,6 +2491,8 @@ const SAVE_FIELDS = [
   // GERİLİM (ADDITIVE): gün sonu raporundaki "bugün kaçırdıkların" satırı. Eski kayıtta
   // alan yok → applySaveData dokunmaz, sınıf varsayılanı (0) kalır.
   'dayLostCount', 'dayLostMoney',
+  // ödüllü reklam günlük hakları (ADDITIVE; eski kayıtta yok → 0'dan başlar)
+  'adSeriUsed', 'adVipUsed',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {

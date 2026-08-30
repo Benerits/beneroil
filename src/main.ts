@@ -1833,7 +1833,17 @@ const cars = new CarManager(world.scene, modelLib, {
     ekranFlasi()
     // SERİ KIRILIR (Faz 3.1): kaçan müşterinin bedeli artık soyut değil — biriktirdiğin
     // çarpanı da götürüyor. Kayıp acısının asıl kaynağı bu.
-    if (state.combo >= 3) ui.toast(t('Seri koptu! ×{0} çarpanı gitti.', state.comboMult().toFixed(2)), 'bad')
+    // SERİ KURTARMA TEKLİFİ: oyunun en güçlü duygusal anı — kayıp taze ve oyuncu
+    // kaybettiğinin değerini RAKAMLA biliyor. Teklif reddedilirse seri gerçekten gider.
+    if (state.combo >= 3) {
+      const mult = state.comboMult()
+      ui.toast(t('Seri koptu! ×{0} çarpanı gitti.', mult.toFixed(2)), 'bad')
+      if (state.adSeriHak > 0 && rewardedReady() && adBtn.style.display === 'none') {
+        seriYedek = state.combo
+        teklifT = 8
+        showAdOffer('seri', mult)
+      }
+    }
     state.combo = 0
     ui.toast(t('Müşteri beklemekten sıkıldı ve gitti!'), 'bad', true)
     audio.miss()
@@ -1841,6 +1851,18 @@ const cars = new CarManager(world.scene, modelLib, {
     if (ui.activeCar === car) autoSelect(nextServableCar())
   },
   patienceMult: () => state.patienceMult(),
+  // VIP OLASILIĞI: günde ~1-2 VIP. Hakkı bitmişse yine doğar (VIP'i reklama bağımlı
+  // yapmıyoruz — hızlı oyuncu reklamsız da kazanır), sadece teklif çıkmaz.
+  vipChance: () => (state.day >= 3 ? 0.035 : 0),
+  onVip: car => {
+    ui.toast(t('VIP MÜŞTERİ geldi — büyük sipariş, KISA sabır!'), 'good', true)
+    audio.promo()
+    if (state.adVipHak > 0 && rewardedReady() && adBtn.style.display === 'none') {
+      vipAday = car
+      teklifT = 12                     // teklif kısa ömürlü: kriz anı geçince anlamsızlaşır
+      showAdOffer('vip', car.demandAmount)
+    }
+  },
   onTurnedAway: () => {
     // KUYRUK DOLU (Faz 2.3): içeri hiç giremeyen müşteri KAÇANDAN AYRI sayılır —
     // ikisi farklı sorunlar: biri "yavaşsın", diğeri "kapasiten yetmiyor".
@@ -5015,22 +5037,43 @@ const adBtn = document.getElementById('adbtn') as HTMLButtonElement
 const adBtnLabel = adBtn.querySelector('span') as HTMLSpanElement
 let adCooldown = 120 // ilk fırsat: 2. dakika (baştan değil, biraz ilerleyince)
 // fırsat-temelli ödüllü reklam teklifi (tycoon tarzı): müşteri patlaması VEYA gün kârını 2x
-let adOffer: { kind: 'rush' | 'double'; profit: number } = { kind: 'rush', profit: 0 }
+let adOffer: { kind: 'rush' | 'double' | 'vip' | 'seri'; profit: number } = { kind: 'rush', profit: 0 }
+// MOBİL GELİR REKLAMDAN: teklifler oyunun KRİZ anlarına bağlı (VIP kaçmak üzere,
+// seri kırıldı). İkisi de OPT-IN ve günlük sınırlı — nadir olan değerli görünür.
+let vipAday: Car | null = null       // ekranda teklifi bekleyen VIP
+let seriYedek = 0                    // kırılan seri, reklam izlenirse geri verilir
+let teklifT = 0                      // teklifin ekranda kalma süresi (sn)
 let doubleOfferT = 0 // 2x teklifi ekranda kalma süresi
 
-function showAdOffer(kind: 'rush' | 'double', profit = 0) {
+function showAdOffer(kind: 'rush' | 'double' | 'vip' | 'seri', profit = 0) {
   adOffer = { kind, profit }
-  adBtnLabel.textContent = kind === 'double'
-    ? t('Reklam İzle: Günü 2x Yap (+₺{0})', profit.toLocaleString('tr-TR'))
+  adBtnLabel.textContent =
+      kind === 'double' ? t('Reklam İzle: Günü 2x Yap (+₺{0})', profit.toLocaleString('tr-TR'))
+    : kind === 'vip' ? t('Reklam İzle: VIP\'yi Elde Tut (₺{0})', profit.toLocaleString('tr-TR'))
+    : kind === 'seri' ? t('Reklam İzle: Seriyi Koru (×{0})', profit.toFixed(2))
     : t('Reklam İzle: Müşteri Patlaması')
   adBtn.style.display = 'flex'
 }
 adBtn.addEventListener('click', () => {
   adBtn.disabled = true
   const offer = adOffer
-  rewarded(offer.kind === 'double' ? 'gun-2x' : 'musteri-patlamasi',
+  rewarded(offer.kind === 'double' ? 'gun-2x' : offer.kind === 'vip' ? 'vip' : offer.kind === 'seri' ? 'seri' : 'musteri-patlamasi',
     () => {
-      if (offer.kind === 'double') {
+      if (offer.kind === 'vip') {
+        // ÖDÜL = FIRSAT, nakit değil: sabır tazelenir + kuyrukta öne geçer. Ekonomiyi
+        // şişirmediği için denge bozulmaz; oyuncu parayı yine SERVİS EDEREK kazanır.
+        if (vipAday && vipAday.phase !== 'gone') {
+          cars.vipKurtar(vipAday)
+          state.adVipUsed++
+          ui.toast(t('VIP müşteri elde tutuldu — sırayı ona verdik!'), 'good')
+        }
+        vipAday = null
+      } else if (offer.kind === 'seri') {
+        state.combo = seriYedek
+        state.adSeriUsed++
+        ui.toast(t('Seri kurtarıldı — ×{0} devam ediyor!', state.comboMult().toFixed(2)), 'good')
+        seriYedek = 0
+      } else if (offer.kind === 'double') {
         state.money += offer.profit
         ui.toast(t('Günün kârı 2 katına çıktı: +₺{0}!', offer.profit.toLocaleString('tr-TR')), 'good')
       } else {
@@ -5043,6 +5086,10 @@ adBtn.addEventListener('click', () => {
       adBtn.disabled = false
       adBtn.style.display = 'none'
       doubleOfferT = 0
+      teklifT = 0
+      // vazgeçilen kriz teklifleri geri gelmez: aynı an bir kez sorulur, ısrar edilmez
+      if (adOffer.kind === 'vip') vipAday = null
+      if (adOffer.kind === 'seri') seriYedek = 0
       if (adOffer.kind === 'rush') adCooldown = watched ? 420 : 90 // izlediyse 7 dk, vazgeçtiyse 1.5 dk sonra tekrar
     })
 })
@@ -5055,6 +5102,21 @@ function offerDoubleProfit(profit: number) {
 
 function tickAdOffer(dt: number) {
   if (!adsEnabled() || isFullMode || isPromoMode) return
+  // KRİZ TEKLİFLERİ SÜRELİ (VIP / seri): an geçince teklif anlamını yitirir, ısrar edilmez.
+  // VIP zaten sahneden çıktıysa teklif de anında iner.
+  if (teklifT > 0) {
+    teklifT -= dt
+    const vipGitti = adOffer.kind === 'vip' && (!vipAday || vipAday.phase === 'gone')
+    if (teklifT <= 0 || vipGitti) {
+      teklifT = 0
+      if (adOffer.kind === 'vip' || adOffer.kind === 'seri') {
+        adBtn.style.display = 'none'
+        vipAday = null; seriYedek = 0
+        adCooldown = Math.max(adCooldown, 45)   // kriz sonrası hemen 'rush' teklifi çıkmasın
+      }
+    }
+    return
+  }
   // 2x teklifi süreli
   if (doubleOfferT > 0) {
     doubleOfferT -= dt
@@ -5325,7 +5387,7 @@ function frame() {
   }
   const dt = Math.min(clock.getDelta(), document.hidden ? 0.34 : 0.05)
   promoTick?.(dt)
-  if (exploding) { if (!document.hidden) composer!.render(); return }
+  if (exploding) { if (!document.hidden) renderFrame(); return }
 
   dayTime += dt
   const nightNow = nightFactor((dayTime % DAY_CYCLE) / DAY_CYCLE)
@@ -5384,7 +5446,7 @@ function frame() {
     // girmez, ilerleme/ekonomi işlemez). Eskiden cars.update hiç çağrılmıyordu — gate
     // arkasında ve gate'i yeni geçen misafirde yol BOMBOŞTU ("araçları göremiyorum").
     cars.update(dt)
-    if (!document.hidden) composer!.render()
+    if (!document.hidden) renderFrame()
     return
   }
   state.tick(dt)
@@ -5447,6 +5509,8 @@ function frame() {
     }
     state.dayLostCount = 0
     state.dayLostMoney = 0
+    state.adSeriUsed = 0      // ödüllü reklam hakları her gün tazelenir
+    state.adVipUsed = 0
     // B6 (analiz): İLK GÜN raporu = duygusal kontrol noktası — misafire kayıp-anı
     // hatırlatması (oturumda tek gate: 10k gate'i zaten çıktıysa tekrarlama)
     if (!auth.loggedIn() && state.day === 2 && profit > 0 && !firstTenGateShown && !guestGateShown) {
@@ -5840,7 +5904,7 @@ function frame() {
     evap: cars.evapStats,
     reserve: cars.graphRef.stats,
   }, dt)
-  if (!document.hidden) composer!.render()
+  if (!document.hidden) renderFrame()
 }
 // §6.1 trafik hata ayıklama katmanı — YALNIZ ?traffic=1 ile kurulur (normal oyunda kod çalışmaz)
 const trafficDbg = trafficDebugOn ? new TrafficDebug(world.scene) : null

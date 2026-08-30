@@ -402,6 +402,11 @@ export class Car {
   /** SABIR HIZI (Faz 2): kuyruk uzunluğu ve son dilim hızlanması bunu değiştirir.
    *  1 = normal. CarManager her karede bekleyen araçlar için tazeler. */
   sabirHizi = 1
+  /** VIP MÜŞTERİ: nadir, yüksek tutarlı, SABRI KISA müşteri. Ödüllü reklamın
+   *  bağlandığı kriz anını üretir — oyuncu büyük kazancı gözünün önünde kaybetmek üzeredir. */
+  vip = false
+  /** pompa önceliği: VIP kurtarıldığında kuyrukta öne geçer */
+  oncelikli = false
 
   // cam temizleme (bahşiş şansını artırır) — diğer mekaniklerden bağımsız
   windowsCleaned = false
@@ -418,7 +423,7 @@ export class Car {
 
   constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE,
               segments: CarSegment[] | null = null, boat: BoatKind | null = null,
-              patienceMult = 1) {
+              patienceMult = 1, vip = false) {
     this.kind = kind
     this.boat = boat
     this.prices = { ...prices }
@@ -498,6 +503,15 @@ export class Car {
     // veriyordu. Taban indirildi; yeni oyuncu boğulmasın diye state.patienceMult()
     // ilk günlerde (gün ≤2 ×1.6, ≤5 ×1.3) süreyi uzatıyor.
     this.maxPatience = (kind === 'ev' ? 32 : 45) * patienceMult
+    // VIP: tutar 4 KAT ama sabır YARI. Reklamsız da kazanılabilir (hızlı davranırsan) —
+    // reklam yalnız kurtarmayı KOLAYLAŞTIRIR, tek yol olmaz.
+    if (vip) {
+      this.vip = true
+      this.demandAmount = Math.round(this.demandAmount * 4 / 10) * 10
+      this.demandKwh = Math.round(this.demandKwh * 3)
+      this.demandLiters = this.demandAmount / this.prices[this.demandType]
+      this.maxPatience *= 0.55
+    }
     this.patience = this.maxPatience
     this.wantsMarket = Math.random() < 0.35
     this.wantsToilet = Math.random() < 0.12
@@ -522,6 +536,14 @@ export class Car {
     }
     this.patienceBg = mkBar(0x1c2530, 2.0, 10)
     this.patienceFill = mkBar(0x4dc36b, 2.01, 11)
+    // VIP işareti: sahnede AYRIŞSIN — oyuncu kalabalıkta bir bakışta seçebilmeli
+    if (this.vip) {
+      const tac = emojiSprite('👑')
+      tac.scale.set(1.05, 1.05, 1)
+      tac.position.z = 3.35
+      tac.renderOrder = 14
+      this.group.add(tac)
+    }
   }
 
   get filledValue(): number {
@@ -1040,6 +1062,10 @@ export interface CarManagerOpts {
   onCarLost: (car: Car) => void
   /** SABIR ÇARPANI (Faz 2): yeni oyuncuya daha uzun sabır. Verilmezse 1 (nötr). */
   patienceMult?: () => number
+  /** VIP MÜŞTERİ olasılığı (0..1). Verilmezse VIP hiç doğmaz. */
+  vipChance?: () => number
+  /** VIP sahneye girdi — ödüllü reklam teklifi burada tetiklenir */
+  onVip?: (car: Car) => void
   /** kuyruk dolu olduğu için içeri hiç giremeyen müşteri (kaçandan AYRI sayılır) */
   onTurnedAway?: () => void
 }
@@ -1514,8 +1540,10 @@ export class CarManager {
     for (let i = 0; i < this.opts.pumpCount(); i++) {
       if (this.pumpOcc[i] || this.opts.isPumpBroken(i)) continue
       const st = this.pumpStation(i)
-      const waiting = this.cars.find(c => c.station === st && c.waitIndex >= 0 && c.slotIndex === -1 && c.patience > 0
-        && (c.phase === 'waiting' || c.phase === 'driving'))
+      const uygun = (c: Car) => c.station === st && c.waitIndex >= 0 && c.slotIndex === -1 && c.patience > 0
+        && (c.phase === 'waiting' || c.phase === 'driving')
+      // ÖNCELİK: reklamla kurtarılan VIP kuyrukta öne geçer (teklifin somut karşılığı).
+      const waiting = this.cars.find(c => c.oncelikli && uygun(c)) ?? this.cars.find(uygun)
       if (waiting) this.sendToSlot(waiting, i)
     }
 
@@ -1600,6 +1628,13 @@ export class CarManager {
 
   private onLost(car: Car) { this.opts.onCarLost(car) }
 
+  /** VIP KURTARMA (ödüllü reklam karşılığı): sabrı tazelenir ve kuyrukta öne geçer.
+   *  Para vermez — ekonomiyi şişirmemek için ödül "fırsat"tır, "nakit" değil. */
+  vipKurtar(car: Car) {
+    car.patience = car.maxPatience
+    car.oncelikli = true
+  }
+
   /**
    * İstasyon kalabalıkken yanaşma olasılığını düşüren çarpan (0.05..1).
    * Boş pompa/bekleme yeri (EV için şarj yuvası) ve HÂLÂ yaklaşmakta olan
@@ -1666,7 +1701,8 @@ export class CarManager {
     // Tekne varsa TUTAR da o segmentten gelir: tek elemanlı liste veriyoruz ki Car'ın
     // kendi zarı model ile parayı AYRIŞTIRMASIN (jet ski süperyat parası ödemesin).
     const segs = boatSeg ? [{ ...boatSeg, share: 1 }] : (this.opts.segments?.() ?? null)
-    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), segs, boat, this.opts.patienceMult?.() ?? 1)
+    const vipOl = !boat && Math.random() < (this.opts.vipChance?.() ?? 0)
+    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), segs, boat, this.opts.patienceMult?.() ?? 1, vipOl)
     car.lane = lane
     car.phase = 'transit'
     // 4 ŞERİTLİ YOL (çevre yolu): giriş kararı şerit seçiminden ÖNCE verilir, çünkü
@@ -1685,6 +1721,9 @@ export class CarManager {
       const temelSans = this.opts.entryChance()
       const zar = Math.random()
       car.wantsEnter = zar < temelSans * (this.opts.highway?.() ? Math.max(0.75, crowd) : crowd)
+      // VIP yoldan geçip gitmez: nadir olduğu için kalabalık frenine takılırsa oyuncu
+      // teklifi hiç görmez. Girer, ama sabrı kısa olduğu için baskı yine gerçek.
+      if (car.vip) car.wantsEnter = true
       if (!car.wantsEnter && crowd <= 0.05 && zar < temelSans) this.opts.onTurnedAway?.()
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
       // SU ŞUBESİ: transit de SERVİS şeridini kullanır (Oğuz: "yanaşma yerinden
@@ -1942,6 +1981,7 @@ export class CarManager {
       : (this.opts.pumpAngle?.(car.slotIndex) ?? 0)
     car.group.rotation.z = (car.station === 'far' ? -Math.PI / 2 : Math.PI / 2) + ang
     car.showBubble()
+    if (car.vip) this.opts.onVip?.(car)
     this.opts.onCarReady(car)
   }
 
