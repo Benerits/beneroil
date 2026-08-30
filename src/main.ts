@@ -1833,18 +1833,20 @@ const cars = new CarManager(world.scene, modelLib, {
   // Araçlar birbirinin içinden geçer (ölçüm: servis 267→363, tıkanma 41→0).
   // ?collide=1 ile eski davranış açılır.
   // ÇARPIŞMA: KAPALI (ÖLÇÜLMÜŞ ÜRÜN KARARI — Faz 4.1 GERİ ALINDI).
-  // "Araçlar iç içe geçiyor" şikâyeti üzerine çarpışmayı varsayılan AÇIK yapmıştım.
-  // Üretim konfigüyle koşulan yük testi bunun bedelini ölçtü (aynı tohum, 10 dk):
+  // ARAÇ-ARAÇ ÇARPIŞMASI ARTIK VARSAYILAN AÇIK ("araçlar iç içe geçiyor" şikâyeti).
+  // Daha önce açmak akışı %30 çökertiyordu (aynı tohum, 10 dk, üretim konfigü):
   //     çarpışma AÇIK : servis 268 · buharlaşan 11 · kalıcı sıkışan 2 · token reddi 58.663
   //     çarpışma KAPALI: servis 384 · buharlaşan  0 · kalıcı sıkışan 0 · token reddi    367
-  // Yani akış %30 çöküyor ve müşteri SESSİZCE siliniyor (evaporate onCarLost çağırmaz →
-  // oyuncu kaybı görmez, sadece geliri düşer). Görünmez gelir kaybı, görünen iç içe
-  // geçmeden daha kötü. Kurtarma eşiklerini agresifleştirmek 268→365'e çıkardı ama
-  // kalıcı sıkışmayı ve rezervasyon thrash'ini bitirmedi.
-  // DOĞRU ÇÖZÜM (yapılacak): apron/kuyruk koridorlarını da rezervasyon grafiğine almak —
-  // bugün yalnız kapı ağzı rezerve ediliyor, apron içi çakışma tamamen reaktif katmana
-  // (dodge/override/evaporate) bırakılmış durumda.
-  carsPassThrough: () => !new URLSearchParams(location.search).has('collide'),
+  // KÖK NEDEN (ölçüldü): apron 2.4 birim dar; seyir şeridi, ünite hattı ve bekleme kuyruğu
+  // tek araç genişliğine biniyor. Duran araç trafikte "nesne" sayıldığı için pompadaki HER
+  // araç apron'un tek geçiş yolunu tıkıyor, kuyruk kapıdan taşıp çıkış birleşmesini
+  // öldürüyordu (reddin %95'i gate-out bölgesindeydi).
+  // ÇÖZÜM (cars.ts): duran araç (pompada/kuyrukta/parkta) trafiğin parçası değildir —
+  // hareket eden araçlar arasında çarpışma TAM AÇIK. Artı pompa başına yaklaşma bölgeleri
+  // (traffic-graph.ts) manevrayı sıraya sokar. YENİ ÖLÇÜM (çarpışma AÇIK):
+  //     T1 servis 239 · T2 390 · T3 346 — buharlaşan 0, kalıcı sıkışan 0, token reddi 253
+  // ?nocollide ile eski (içinden geçen) davranışa dönülür — acil valf.
+  carsPassThrough: () => new URLSearchParams(location.search).has('nocollide'),
   trafficLight: () => {
     const tl = state.theme().features?.trafficLight
     return tl ? { red: state.lightRed(), y: tl.y } : null
