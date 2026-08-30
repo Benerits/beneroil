@@ -93,11 +93,11 @@ function ensureShell(): HTMLDivElement {
   wrap.className = 'backdrop'
   wrap.id = 'newswrap'
   wrap.innerHTML = `
-    <div class="modal" style="height:auto; max-height:84vh">
+    <div class="modal" style="height:auto; max-height:72vh">
       <div class="mhead"><h3 id="news-title"></h3>
         <button class="mclose" id="news-close"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
-      <div class="mbody" id="news-body"></div>
+      <div class="mbody" id="news-body" style="overflow-y:auto"></div>
     </div>`
   document.body.appendChild(wrap)
   const close = () => wrap!.classList.remove('show')

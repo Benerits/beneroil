@@ -121,6 +121,10 @@
 
       /* ---- Popuplar navbarın ÜSTÜNDE; oyun üstte ufaktan görünmeye devam etsin ---- */
       #panel, #infocard { z-index: 25 !important; bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
+      /* YENİLİK NOTLARI mobilde TÜM EKRANI kaplıyordu (84vh + uzun sürüm listesi).
+         Alt-sheet olarak yarım ekranda kalsın, içerik kendi içinde kaysın. */
+      #newswrap .modal { max-height: 62vh !important; }
+      #newswrap .mbody { overflow-y: auto; -webkit-overflow-scrolling: touch; }
       /* bina kartları mobilde ORTALI açılsın (eskiden sola yaslıydı, garip duruyordu) */
       #infocard { left: 50% !important; right: auto !important; transform: translateX(-50%) !important;
         width: min(360px, 92vw) !important; max-height: 74vh; overflow-y: auto; }
@@ -144,6 +148,13 @@
       #fab-scrim { position: fixed; inset: 0; z-index: 21; pointer-events: none; opacity: 0;
         background: radial-gradient(130% 100% at 14% 100%, rgba(15,22,30,.36), rgba(15,22,30,0) 58%); transition: opacity .3s; }
       .navbar.fab-open + #fab-scrim { opacity: 1; pointer-events: auto; }
+      /* MENÜ AÇIKKEN ALT KÖŞE BUTONLARI GERİ ÇEKİLİR (Oğuz): "Şimdi Kayıt Ol" z-index 35
+         ile navbar'ın (22) ÜSTÜNDE kalıyordu — açılan menünün üstüne biniyordu.
+         Gizlemek yerine soluklaştırıp tıklanamaz yapıyoruz: menü kapanınca geri gelir. */
+      body:has(.navbar.fab-open) #guestcta,
+      body:has(.navbar.fab-open) #fbbtn {
+        opacity: 0; pointer-events: none; transition: opacity .18s;
+      }
       /* ana tetikleyici — yakıt ikonu, açılınca X'e cross-fade + hafif nabız halkası */
       .fab-main { position: absolute; left: 0; bottom: 0; width: 62px; height: 62px; z-index: 3; cursor: pointer;
         display: flex; align-items: center; justify-content: center; border-radius: 50%;
