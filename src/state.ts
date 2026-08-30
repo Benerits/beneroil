@@ -419,6 +419,27 @@ export class GameState {
   hasCoffee = false
   hasRestaurant = false
   hasTruckPark = false
+  /**
+   * MÜDÜR TALİMATLARI (#1145 "müdürün ne yapabileceğine BİZ karar vermeliyiz",
+   * #1126 "keşke %10 gibi rakamlar versek ona göre sipariş verse", #1143 "kaç litre
+   * kaldığında alması gerektiği talimatı verilebilir", #1122 "en fazla dizel gidiyor
+   * ama gidip benzini fulluyor").
+   *
+   * Müdür eskiden sabit davranıyordu: tank %20'nin altına düşünce FULL dolduruyordu.
+   * Artık eşiği ve miktarı oyuncu belirliyor; hangi işleri yapacağı da açılıp kapanıyor.
+   * Varsayılanlar eski davranışla BİREBİR aynı — mevcut kayıtlarda hiçbir şey değişmez.
+   */
+  managerPolicy: {
+    fuelAt: number        // tank bu oranın altına düşünce sipariş ver (0.10 / 0.20 / 0.35 / 0.50)
+    fuelFull: boolean     // true = depoyu fulle, false = yarısına kadar al
+    orderFuel: boolean    // yakıt siparişi versin mi
+    collect: boolean      // kumbaraları toplasın mı
+    cleanSolar: boolean   // güneş panellerini temizlesin mi (Sv.2+)
+    fixBroken: boolean    // arızaları tamir etsin mi (Sv.3)
+    buyUranium: boolean   // uranyum sipariş etsin mi (Sv.3)
+    grabPromo: boolean    // yakıt indiriminde tankları fullesin mi (Sv.3)
+  } = { fuelAt: 0.20, fuelFull: true, orderFuel: true, collect: true,
+        cleanSolar: true, fixBroken: true, buyUranium: true, grabPromo: true }
   supplier: SupplierId = 'standart'
   hasHotel = false
   hotelTimer = 40
@@ -1666,19 +1687,29 @@ export class GameState {
     const turSuresi = [45, 45, 32, 22][Math.min(3, this.managerLevel)]
     if (this.managerT < turSuresi) return null // gün ≈ 160 sn
     this.managerT = 0
+    const pol = this.managerPolicy
     let collected = 0
-    for (const id of Object.keys(this.pendingCash)) collected += this.collectPending(id)
+    if (pol.collect) for (const id of Object.keys(this.pendingCash)) collected += this.collectPending(id)
     // YAKIT SİPARİŞİ (Oğuz: "müdür yakıt siparişini versin") — Sv.1'den itibaren:
     // tank %20'nin altına düşen her yakıt için sipariş verir (bütçe elveriyorsa)
     let ordered = 0
-    for (const f of FUELS) {
-      if (this.tanks[f] < this.fuelCapacity(f) * 0.20 && this.canOrder(f)) {
-        if (this.placeOrder(f)) ordered++
+    if (pol.orderFuel) {
+      for (const f of FUELS) {
+        if (this.tanks[f] >= this.fuelCapacity(f) * pol.fuelAt) continue
+        // MİKTAR TALİMATI: full = depoyu doldur, yarım = kapasitenin yarısına kadar al.
+        // orderQty geçici olarak ayarlanır, sipariş sonrası eski değere döner.
+        const eski = this.orderQty[f]
+        if (!pol.fuelFull) {
+          const hedef = this.fuelCapacity(f) * 0.5 - this.tanks[f]
+          this.orderQty[f] = Math.max(1, Math.ceil(hedef / ORDER_STEP))
+        }
+        if (this.canOrder(f) && this.placeOrder(f)) ordered++
+        this.orderQty[f] = eski
       }
     }
     // Sv.3 FIRSATÇILIK (Oğuz: "yüksek seviye müdür yakıt indirimini kullanabilsin"):
     // %50 alış indirimi sürerken beklemez — %80 doluluğun altındaki her tankı fulller
-    if (this.managerLevel >= 3 && this.promo?.type === 'cheapFuel') {
+    if (this.managerLevel >= 3 && pol.grabPromo && this.promo?.type === 'cheapFuel') {
       for (const f of FUELS) {
         if (this.tanks[f] < this.fuelCapacity(f) * 0.80 && this.canOrder(f)) {
           if (this.placeOrder(f)) ordered++
@@ -1686,11 +1717,11 @@ export class GameState {
       }
     }
     let cleaned = false
-    if (this.managerLevel >= 2 && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
+    if (this.managerLevel >= 2 && pol.cleanSolar && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
       this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
     }
     let fixed = 0
-    if (this.managerLevel >= 3) {
+    if (this.managerLevel >= 3 && pol.fixBroken) {
       for (const i of [...this.brokenPumps]) {
         if (this.money < 800) break
         this.money -= 800; this.brokenPumps.delete(i); fixed++
@@ -1707,7 +1738,7 @@ export class GameState {
       // URANYUM SİPARİŞİ (iki ayrı oyuncu raporu: "müdür uranyum sipariş etmiyor").
       // Reaktör yakıtsız kalınca üretim duruyordu; müdür pompayı tamir edip reaktörü
       // yakıtsız bırakmak tutarsızdı. Kritik seviyede kendisi sipariş verir.
-      if (this.hasSMR && this.uranium <= 20 && !this.uraniumPending && this.money >= URANIUM_COST) {
+      if (pol.buyUranium && this.hasSMR && this.uranium <= 20 && !this.uraniumPending && this.money >= URANIUM_COST) {
         this.money -= URANIUM_COST
         this.uraniumPending = true
         this.uraniumEta = URANIUM_ETA
@@ -2412,7 +2443,7 @@ const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'pumpSpeedLevel', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
   'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
-  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'supplier', 'airWaterCount', 'selfWashCount', 'parkingCount',
+  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'supplier', 'managerPolicy', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
   'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
@@ -2572,6 +2603,23 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (Array.isArray(data.brokenChargers)) s.brokenChargers = new Set((data.brokenChargers as number[]).filter(n => Number.isInteger(n)))
   // kurcalanmış/eski kayıt: bilinmeyen tedarikçi standarda düşer (fiyat çarpanı NaN olmasın)
   if (!(s.supplier in SUPPLIERS)) s.supplier = 'standart'
+  // MÜDÜR TALİMATLARI: eski kayıtta yok, kurcalanmışta bozuk olabilir → alan alan doğrula.
+  // Eksik alanlar varsayılana döner, böylece eski kayıtlar eski davranışı aynen sürdürür.
+  {
+    const v = new GameState().managerPolicy
+    const p2 = (s.managerPolicy ?? {}) as Partial<typeof v>
+    const oran = Number(p2.fuelAt)
+    s.managerPolicy = {
+      fuelAt: [0.10, 0.20, 0.35, 0.50].includes(oran) ? oran : v.fuelAt,
+      fuelFull: typeof p2.fuelFull === 'boolean' ? p2.fuelFull : v.fuelFull,
+      orderFuel: typeof p2.orderFuel === 'boolean' ? p2.orderFuel : v.orderFuel,
+      collect: typeof p2.collect === 'boolean' ? p2.collect : v.collect,
+      cleanSolar: typeof p2.cleanSolar === 'boolean' ? p2.cleanSolar : v.cleanSolar,
+      fixBroken: typeof p2.fixBroken === 'boolean' ? p2.fixBroken : v.fixBroken,
+      buyUranium: typeof p2.buyUranium === 'boolean' ? p2.buyUranium : v.buyUranium,
+      grabPromo: typeof p2.grabPromo === 'boolean' ? p2.grabPromo : v.grabPromo,
+    }
+  }
 }
 
 export function doMaintenance(s: GameState, id: string): boolean {

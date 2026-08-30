@@ -1031,6 +1031,30 @@ function openOfficePanel() {
       const fireBtn = mL > 0 ? `<button class="btn sbuy" id="of-fire-manager" style="color:var(--red-dark)">${t('İşten Çıkar')}</button>` : ''
       head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><svg class="ic" style="vertical-align:-3px"><use href="#i-gear"/></svg> <b>${mL === 0 ? t('Müdür') : t('Müdür Sv.{0}', String(mL))}</b>${mL > 0 ? ` <span style="color:var(--muted);font-weight:650">· ${t('yovmiye ₺{0}/gün', String(MANAGER_WAGES[mL]))}</span>` : ''}</span>${btn}${fireBtn}`
         + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder ve YAKIT İNDİRİMİ fırsatında tankları fulller. Sen başka şubedeyken şubeyi işletir — günlük net kazancı kasana otomatik yazılır.')}</div></div>`
+      // ── MÜDÜR TALİMATLARI (#1145 "müdürün ne yapabileceğine biz karar vermeliyiz") ──
+      if (mL > 0) {
+        const pol = state.managerPolicy
+        const anahtar = (k: string, etiket: string, acik: boolean, kilit = false) =>
+          `<button class="btn mp-t${acik ? ' good' : ''}" data-mpol="${k}"${kilit ? ' disabled' : ''} `
+          + `style="font-size:11px;padding:5px 9px;opacity:${kilit ? .45 : 1}">${acik ? '✓' : '○'} ${etiket}</button>`
+        const esik = (v: number) =>
+          `<button class="btn mp-t${pol.fuelAt === v ? ' good' : ''}" data-mpfuel="${v}" `
+          + `style="font-size:11px;padding:5px 9px;min-width:42px">%${Math.round(v * 100)}</button>`
+        head += `<div class="prow" style="flex-wrap:wrap; gap:5px; padding-top:2px">`
+          + `<span class="pl" style="flex:1 0 100%; font-size:11.5px; color:var(--muted); font-weight:700">`
+          + `${t('MÜDÜRE TALİMAT — neyi yapsın, ne zaman sipariş versin')}</span>`
+          + anahtar('collect', t('Kumbara topla'), pol.collect)
+          + anahtar('orderFuel', t('Yakıt sipariş et'), pol.orderFuel)
+          + anahtar('cleanSolar', t('Panel temizle'), pol.cleanSolar, mL < 2)
+          + anahtar('fixBroken', t('Arıza tamir et'), pol.fixBroken, mL < 3)
+          + anahtar('buyUranium', t('Uranyum al'), pol.buyUranium, mL < 3)
+          + anahtar('grabPromo', t('İndirimde stokla'), pol.grabPromo, mL < 3)
+          + `<span style="flex:1 0 100%; font-size:11px; color:var(--muted); font-weight:700; margin-top:4px">`
+          + `${t('Tank şu orana düşünce sipariş versin:')}</span>`
+          + esik(0.10) + esik(0.20) + esik(0.35) + esik(0.50)
+          + anahtar('fuelFull', pol.fuelFull ? t('Depoyu FULLE') : t('YARIM doldur'), pol.fuelFull)
+          + `</div>`
+      }
     }
     if (vaultTotal > 0) {
       head = `<div class="prow"><span class="pl"><b>${t('Şube kasalarında bekleyen')}</b></span>`
@@ -1265,6 +1289,23 @@ document.getElementById('of-prices')?.addEventListener('click', e => {
 // ŞUBE: geçiş ve açma
 let locSwitching = false // şube geçişi başladı, reload bekleniyor (çift tıklama kilidi)
 document.getElementById('of-locations')?.addEventListener('click', e => {
+  // MÜDÜR TALİMATLARI: aç/kapa ve sipariş eşiği
+  const mp = (e.target as HTMLElement).closest('[data-mpol]') as HTMLElement | null
+  if (mp) {
+    const k = mp.dataset.mpol as keyof typeof state.managerPolicy
+    if (typeof state.managerPolicy[k] === 'boolean') {
+      (state.managerPolicy[k] as boolean) = !state.managerPolicy[k]
+      audio.click(); persist(); openOfficePanel()
+    }
+    return
+  }
+  const mf = (e.target as HTMLElement).closest('[data-mpfuel]') as HTMLElement | null
+  if (mf) {
+    state.managerPolicy.fuelAt = Number(mf.dataset.mpfuel)
+    audio.click(); persist(); openOfficePanel()
+    ui.toast(t('Müdür tank %{0} altına düşünce sipariş verecek.', String(Math.round(state.managerPolicy.fuelAt * 100))), 'good', true)
+    return
+  }
   // MÜDÜR TUT/YÜKSELT (ofisten) — mağazadaki satın alma akışının aynısı
   if ((e.target as HTMLElement).closest('#of-hire-manager')) {
     ui.onBuy('manager')

@@ -24,6 +24,17 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "MÜDÜRE TALİMAT — neyi yapsın, ne zaman sipariş versin": "MANAGER ORDERS — what to do, when to reorder",
+  "Kumbara topla": "Collect cash boxes",
+  "Yakıt sipariş et": "Order fuel",
+  "Panel temizle": "Clean panels",
+  "Arıza tamir et": "Fix breakdowns",
+  "Uranyum al": "Buy uranium",
+  "İndirimde stokla": "Stock up on discounts",
+  "Tank şu orana düşünce sipariş versin:": "Reorder when the tank drops to:",
+  "Depoyu FULLE": "Fill it UP",
+  "YARIM doldur": "Fill HALF",
+  "Müdür tank %{0} altına düşünce sipariş verecek.": "The manager will reorder when the tank drops below {0}%.",
   "Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.": "Doesn't fit here — rotating would overlap another building or the vehicle lane. Move it first.",
   "Döndürüldü ({0}°)": "Rotated ({0}°)",
   "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Move mode: arrows/tap to move · R key or ⟳ to ROTATE · ✓ to place",
@@ -1201,6 +1212,17 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "MÜDÜRE TALİMAT — neyi yapsın, ne zaman sipariş versin": "CONSIGNES AU GÉRANT — quoi faire, quand recommander",
+  "Kumbara topla": "Encaisser les tirelires",
+  "Yakıt sipariş et": "Commander du carburant",
+  "Panel temizle": "Nettoyer les panneaux",
+  "Arıza tamir et": "Réparer les pannes",
+  "Uranyum al": "Acheter de l'uranium",
+  "İndirimde stokla": "Stocker pendant les remises",
+  "Tank şu orana düşünce sipariş versin:": "Recommander quand la cuve tombe à :",
+  "Depoyu FULLE": "Remplir à FOND",
+  "YARIM doldur": "Remplir à MOITIÉ",
+  "Müdür tank %{0} altına düşünce sipariş verecek.": "Le gérant recommandera quand la cuve descend sous {0} %.",
   "Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.": "Ça ne rentre pas ici — en pivotant, ça chevaucherait un autre bâtiment ou la voie. Déplace-le d'abord.",
   "Döndürüldü ({0}°)": "Pivoté ({0}°)",
   "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Mode déplacement : flèches/toucher pour bouger · touche R ou ⟳ pour PIVOTER · ✓ pour placer",
