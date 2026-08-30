@@ -405,7 +405,37 @@ export class GameState {
   /** ömür boyu istatistikler */
   stats = {
     served: 0, lost: 0, kwh: 0, revenue: 0,
+    // GERİLİM SAYAÇLARI (ADDITIVE): kaybın parasal karşılığı ve kuyruk dolduğu için
+    // içeri hiç giremeyen müşteri. Eski kayıtlarda yoklar → 0'dan başlarlar.
+    lostMoney: 0, turnedAway: 0,
     liters: { benzin: 0, dizel: 0, lpg: 0 } as Record<FuelType, number>,
+  }
+  // ── GÜNLÜK KAYIP (gün sonu raporu için; gün dönüşünde sıfırlanır) ──
+  dayLostCount = 0
+  dayLostMoney = 0
+  /** SERİ (combo): hızlı servisler üst üste gelince büyür, kaçan müşteri sıfırlar.
+   *  KAYDA GİRMEZ — oturum içi ritim aracı; F5'te sıfırdan başlaması doğru davranış. */
+  combo = 0
+  /** oyun-içi saat (0-24), main.ts gün döngüsünden her karede tazeler */
+  hourOfDay = 6
+
+  /** seri çarpanı: 3 servis → ×1.1, 6 → ×1.25, 10+ → ×1.5 */
+  comboMult(): number {
+    return this.combo >= 10 ? 1.5 : this.combo >= 6 ? 1.25 : this.combo >= 3 ? 1.1 : 1
+  }
+
+  /** YOĞUN SAAT: sabah 07-09 ve akşam 17-19 doğal müşteri yığılması.
+   *  Promo'dan (reklamla açılan "müşteri patlaması") bağımsızdır — oyuncu güne
+   *  hazırlanmayı öğrensin diye her gün AYNI saatlerde tekrar eder. */
+  get rushHour(): boolean {
+    const h = this.hourOfDay
+    return (h >= 7 && h < 9) || (h >= 17 && h < 19)
+  }
+
+  /** SABIR ÇARPANI: yeni oyuncu boğulmasın — ilk günlerde müşteri daha sabırlı.
+   *  Taban sabır 45 sn'ye indirildiği için bu kademe olmadan ilk gün cezalandırıcı olur. */
+  patienceMult(): number {
+    return this.day <= 2 ? 1.6 : this.day <= 5 ? 1.3 : 1
   }
   battery = 0 // kWh
   solarCount = 0
@@ -2449,6 +2479,9 @@ const SAVE_FIELDS = [
   'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'steamPoll', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
+  // GERİLİM (ADDITIVE): gün sonu raporundaki "bugün kaçırdıkların" satırı. Eski kayıtta
+  // alan yok → applySaveData dokunmaz, sınıf varsayılanı (0) kalır.
+  'dayLostCount', 'dayLostMoney',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -2508,7 +2541,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (Array.isArray(data.autoPumps)) s.autoPumps = new Set((data.autoPumps as number[]).filter(n => Number.isInteger(n)))
   const st = data.stats as { liters?: Record<string, number> } & Record<string, number> | undefined
   if (st && typeof st === 'object') {
-    for (const k of ['served', 'lost', 'kwh', 'revenue'] as const) {
+    for (const k of ['served', 'lost', 'kwh', 'revenue', 'lostMoney', 'turnedAway'] as const) {
       if (typeof st[k] === 'number') s.stats[k] = st[k]
     }
     if (st.liters) Object.assign(s.stats.liters, st.liters)

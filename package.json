@@ -46,7 +46,8 @@
     "test:tasima": "tsx tools/tests/tasima-check.mjs",
     "test:branch": "tsx tools/tests/branch-check.mjs",
     "ses:export": "node tools/ses-export.mjs",
-    "shots": "node tools/shot/shoot.mjs"
+    "shots": "node tools/shot/shoot.mjs",
+    "test:gerilim": "tsx tools/tests/gerilim-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

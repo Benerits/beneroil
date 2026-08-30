@@ -238,18 +238,45 @@ function textSprite(text: string, accent: string): THREE.Sprite {
   return sp
 }
 
-function emojiSprite(emoji: string): THREE.Sprite {
+// EMOJİ DOKU ÖNBELLEĞİ: duygu göstergesi artık her müşteride kademe kademe değişiyor,
+// yani emojiSprite() saniyede onlarca kez çağrılabiliyor. Her çağrıda canvas + texture
+// üretmek GPU'ya yeni doku yüklemek demek — aynı emoji için doku tek kez üretilir.
+// (Dokular paylaşıldığı için sprite atılırken ASLA dispose edilmez.)
+const EMOJI_TEX = new Map<string, THREE.Texture>()
+function emojiTexture(emoji: string): THREE.Texture {
+  let tex = EMOJI_TEX.get(emoji)
+  if (tex) return tex
   const c = document.createElement('canvas')
   c.width = 128; c.height = 128
   const ctx = c.getContext('2d')!
   ctx.font = '100px -apple-system, sans-serif'
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   ctx.fillText(emoji, 64, 70)
-  const tex = new THREE.CanvasTexture(c)
+  tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }))
+  EMOJI_TEX.set(emoji, tex)
+  return tex
+}
+
+function emojiSprite(emoji: string): THREE.Sprite {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(emoji), depthTest: false }))
   sp.scale.set(1.15, 1.15, 1)
   return sp
+}
+
+// ── SABIR GÖSTERGESİ EŞİKLERİ (Faz 1) ──
+// Çubuk ancak müşteri huzursuzlanınca belirir: her aracın üstünde sürekli bar olsa
+// sahne okunmaz hale gelir ve gösterge anlamını yitirir. Duygu kademeleri de aynı
+// eşiklere oturur, böylece renk ve yüz aynı hikâyeyi anlatır.
+export const SABIR_GOSTER = 0.65   // bu oranın altında çubuk + yüz belirir
+const SABIR_AMBER = 0.42           // sarı: "acele et"
+const SABIR_KIRMIZI = 0.20         // kırmızı + nabız: "son uyarı"
+/** sabır oranından duygu emojisi — eşik dışında null (yüz gösterilmez) */
+function moodEmoji(frac: number): string | null {
+  if (frac >= SABIR_GOSTER) return null
+  if (frac >= SABIR_AMBER) return '😐'
+  if (frac >= SABIR_KIRMIZI) return '😠'
+  return '😡'
 }
 
 import { ModelLib, cloneModel, CAR_FILES, fitModel } from './models'
@@ -364,6 +391,17 @@ export class Car {
   private patienceFill: THREE.Sprite
   private feedback: THREE.Sprite | null = null
   private feedbackT = 0
+  /** kayıp yazısının tek kullanımlık dokusu — sprite düşerken serbest bırakılır
+   *  (emoji dokuları önbellekli ve paylaşımlı olduğu için onlar ASLA dispose edilmez) */
+  private feedbackTex: THREE.Texture | null = null
+  // DUYGU YÜZÜ (Faz 1): feedback'ten AYRI — feedback servis sonu tek atışlık tepki,
+  // bu ise bekleyen müşterinin canlı ruh hali. Yalnız kademe değişince sprite yenilenir.
+  private mood: THREE.Sprite | null = null
+  private moodKey: string | null = null
+  private nabizT = 0
+  /** SABIR HIZI (Faz 2): kuyruk uzunluğu ve son dilim hızlanması bunu değiştirir.
+   *  1 = normal. CarManager her karede bekleyen araçlar için tazeler. */
+  sabirHizi = 1
 
   // cam temizleme (bahşiş şansını artırır) — diğer mekaniklerden bağımsız
   windowsCleaned = false
@@ -379,7 +417,8 @@ export class Car {
   boat: BoatKind | null = null
 
   constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE,
-              segments: CarSegment[] | null = null, boat: BoatKind | null = null) {
+              segments: CarSegment[] | null = null, boat: BoatKind | null = null,
+              patienceMult = 1) {
     this.kind = kind
     this.boat = boat
     this.prices = { ...prices }
@@ -455,7 +494,10 @@ export class Car {
     this.wantsFull = kind === 'fuel' && Math.random() < 0.10
     // FULLE isteyenler dolu depo boşaltır: ₺500-1000 arası (kusuratlı) yakıt alır
     if (this.wantsFull) this.hiddenNeedL = (250 + Math.random() * 250) / this.prices[this.demandType]
-    this.maxPatience = kind === 'ev' ? 45 : 75
+    // SABIR TABANI (Faz 2): eskiden 75 sn (EV 45) sabitti — oyuncuya "acele etme" izni
+    // veriyordu. Taban indirildi; yeni oyuncu boğulmasın diye state.patienceMult()
+    // ilk günlerde (gün ≤2 ×1.6, ≤5 ×1.3) süreyi uzatıyor.
+    this.maxPatience = (kind === 'ev' ? 32 : 45) * patienceMult
     this.patience = this.maxPatience
     this.wantsMarket = Math.random() < 0.35
     this.wantsToilet = Math.random() < 0.12
@@ -466,16 +508,20 @@ export class Car {
     this.wantsAir = kind === 'fuel' && Math.random() < 0.2
     scene.add(this.group)
 
-    const mkBar = (c: number, z: number) => {
+    // depthTest KAPALI olduğu için z farkı çizim sırasını belirlemiyor: dolgu, koyu
+    // zeminin ALTINDA kalıp çubuk tamamen siyah görünüyordu. renderOrder sırayı
+    // kesinleştirir (zemin önce, dolgu üstüne).
+    const mkBar = (c: number, z: number, sira: number) => {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ color: c, depthTest: false }))
-      sp.scale.set(1.5, 0.16, 1)
+      sp.scale.set(1.5, 0.2, 1)
       sp.position.z = z
+      sp.renderOrder = sira
       sp.visible = false
       this.group.add(sp)
       return sp
     }
-    this.patienceBg = mkBar(0x1c2530, 2.0)
-    this.patienceFill = mkBar(0x4dc36b, 2.01)
+    this.patienceBg = mkBar(0x1c2530, 2.0, 10)
+    this.patienceFill = mkBar(0x4dc36b, 2.01, 11)
   }
 
   get filledValue(): number {
@@ -502,6 +548,9 @@ export class Car {
     this.barsOn = false
     this.patienceBg.visible = false
     this.patienceFill.visible = false
+    // duygu yüzü de çubukla birlikte iner (servise alınan müşteri artık huzursuz değil)
+    if (this.mood) { this.group.remove(this.mood); this.mood = null }
+    this.moodKey = null
   }
 
   /** gidilen yönün birim vektörü (durunca null) */
@@ -542,8 +591,37 @@ export class Car {
     if (this.feedback) this.group.remove(this.feedback)
     this.feedback = emojiSprite(emoji)
     this.feedback.position.z = 2.6
+    this.feedback.renderOrder = 13
     this.group.add(this.feedback)
     this.feedbackT = 2.5
+  }
+
+  /** KAYIP YAZISI (Faz 1): kaçan müşterinin götürdüğü parayı aracın üstünde yükselterek
+   *  gösterir. Kayıp eskiden tek bir toast'tı; rakam görünmeyince acısı da yoktu. */
+  showLoss(text: string) {
+    if (this.feedback) this.group.remove(this.feedback)
+    const c = document.createElement('canvas')
+    c.width = 384; c.height = 128
+    const ctx = c.getContext('2d')!
+    ctx.font = '800 78px -apple-system, sans-serif'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.lineWidth = 10
+    ctx.strokeStyle = 'rgba(255,255,255,.92)'
+    ctx.strokeText(text, 192, 68)
+    ctx.fillStyle = '#d64545'
+    ctx.fillText(text, 192, 68)
+    const tex = new THREE.CanvasTexture(c)
+    tex.colorSpace = THREE.SRGBColorSpace
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }))
+    sp.scale.set(2.1, 0.7, 1)
+    sp.position.z = 2.6
+    sp.renderOrder = 13
+    this.feedback = sp
+    this.group.add(sp)
+    this.feedbackT = 2.2
+    // ÖNBELLEKSİZ tek kullanımlık doku: tutar her müşteride farklı, paylaşılamaz.
+    // feedback düşerken temizlensin diye dokuyu sprite'a iliştiriyoruz.
+    this.feedbackTex = tex
   }
 
   /** ön cam temizleme görsel efekti — yalnızca aracın ön camına (local +x) parlama/silme */
@@ -659,11 +737,51 @@ export class Car {
     }
 
     if ((this.phase === 'waiting' || this.phase === 'atPump') && !this.beingServed) {
-      this.patience -= dt
+      this.patience -= dt * this.sabirHizi
     }
-    // sabır mekaniği görünmez işler: araç üstünde bar gösterilmez
-    this.patienceBg.visible = false
-    this.patienceFill.visible = false
+
+    // ── SABIR GÖSTERGESİ (Faz 1) ──
+    // Eskiden çubuk her karede gizleniyordu ("sabır mekaniği görünmez işler"): geri sayım
+    // dönüyor ama oyuncu ancak müşteri KAÇINCA haberdar oluyordu. Artık huzursuzluk
+    // eşiğinden itibaren çubuk + yüz görünüyor; oyuncunun müdahale penceresi oluşuyor.
+    const frac = this.patienceFrac
+    const bekliyor = (this.phase === 'waiting' || this.phase === 'atPump') && !this.beingServed
+    const goster = this.barsOn && bekliyor && frac < SABIR_GOSTER
+    this.patienceBg.visible = goster
+    this.patienceFill.visible = goster
+    if (goster) {
+      // Dolgu ORTADAN daralır (sola hizalı değil): sprite'ın local x'i 0 kaldığı için
+      // araç dönerken çubuk kaymaz — yan park eden araçlarda bar aracın yanına kayıyordu.
+      this.patienceFill.scale.x = 1.5 * Math.max(0.02, frac)
+      const renk = frac >= SABIR_AMBER ? 0x4dc36b : frac >= SABIR_KIRMIZI ? 0xe0a02b : 0xd64545
+      this.patienceFill.material.color.setHex(renk)
+      // son dilimde nabız: göz çevresel görüşle bile yakalasın
+      if (frac < SABIR_KIRMIZI) {
+        this.nabizT += dt
+        const n = 0.82 + 0.18 * Math.sin(this.nabizT * 9)
+        this.patienceBg.material.opacity = n
+        this.patienceFill.material.opacity = n
+        this.patienceBg.material.transparent = true
+        this.patienceFill.material.transparent = true
+      } else if (this.patienceBg.material.opacity !== 1) {
+        this.patienceBg.material.opacity = 1
+        this.patienceFill.material.opacity = 1
+      }
+    }
+
+    // ── DUYGU YÜZÜ: çubukla aynı eşiklerde, 😐 → 😠 → 😡 ──
+    const istenenMood = goster ? moodEmoji(frac) : null
+    if (istenenMood !== this.moodKey) {
+      if (this.mood) { this.group.remove(this.mood); this.mood = null }
+      this.moodKey = istenenMood
+      if (istenenMood) {
+        this.mood = emojiSprite(istenenMood)
+        this.mood.scale.set(0.95, 0.95, 1)
+        this.mood.position.z = 2.35
+        this.mood.renderOrder = 12   // sabır çubuğunun (10/11) ÜSTÜNDE kalsın
+        this.group.add(this.mood)
+      }
+    }
 
     if (this.feedback) {
       this.feedbackT -= dt
@@ -671,6 +789,7 @@ export class Car {
       if (this.feedbackT <= 0) {
         this.group.remove(this.feedback)
         this.feedback = null
+        if (this.feedbackTex) { this.feedbackTex.dispose(); this.feedbackTex = null }
       }
     }
 
@@ -919,6 +1038,10 @@ export interface CarManagerOpts {
   onTruckParked?: (car: Car) => void
   onCarReady: (car: Car) => void
   onCarLost: (car: Car) => void
+  /** SABIR ÇARPANI (Faz 2): yeni oyuncuya daha uzun sabır. Verilmezse 1 (nötr). */
+  patienceMult?: () => number
+  /** kuyruk dolu olduğu için içeri hiç giremeyen müşteri (kaçandan AYRI sayılır) */
+  onTurnedAway?: () => void
 }
 
 /** Rezervasyon grafiği açık mı — ?nograph=1 veya NOGRAPH env ile kapatılabilir (A/B ölçümü
@@ -1057,6 +1180,20 @@ export class CarManager {
   update(dt: number) {
     // SU ŞUBESİ: tüm waypoint'ler suda kalsın (iskele doğu kenarı 5.3 + pay)
     Car.waterMinX = this.opts.isWater?.() ? 6.5 : null
+
+    // ── SABIR HIZI (Faz 2): baskı artık duruma göre tırmanıyor ──
+    // 1) Kuyruk kalabalıksa herkes daha çabuk sinirlenir (sosyal baskı): oyuncu yığılmayı
+    //    dağıtmazsa kayıp zinciri başlar — "zamana karşı yarış" hissini bu üretiyor.
+    // 2) Son dilimde tüketim hızlanır: çubuk kızardıktan sonra süre GERÇEKTEN daralır,
+    //    yani kırmızı bir tehdit, dekoratif bir renk değil.
+    {
+      const bekleyen = this.cars.reduce((n, c) =>
+        n + ((c.phase === 'waiting' || c.phase === 'atPump') && !c.beingServed ? 1 : 0), 0)
+      const kuyrukCarpani = bekleyen >= 6 ? 1.35 : bekleyen >= 4 ? 1.2 : 1
+      for (const c of this.cars) {
+        c.sabirHizi = kuyrukCarpani * (c.patienceFrac < SABIR_KIRMIZI ? 1.4 : 1)
+      }
+    }
     // ---- Rezervasyon grafiği: geometri değişince (kapı taşındı / karşı istasyon açıldı)
     // bölgeler geom()'dan YENİDEN TÜRETİLİR. Aynalama elle yazılmadığı için B1-B6 sınıfı
     // "near'da doğru, far'da bozuk" hatası imkânsız.
@@ -1507,7 +1644,7 @@ export class CarManager {
     const L = Math.max(40, Math.ceil(ct.dailyLiters / 7)) // 8 araç × 1/7 ≈ %114 — yuvarlama asla eksik bırakmaz
     const seg: CarSegment[] = [{ id: 'filo', share: 1, min: L * price * 0.9, max: L * price * 1.1,
       marginMult: 1, fuel: ct.fuel, label: 'Filo' }]
-    const car = new Car(this.scene, this.lib, 'fuel', this.opts.prices(), seg, null)
+    const car = new Car(this.scene, this.lib, 'fuel', this.opts.prices(), seg, null, this.opts.patienceMult?.() ?? 1)
     car.lane = 'near'; car.station = 'near'; car.phase = 'transit'
     car.wantsEnter = true
     const svc = this.opts.serviceLane?.()
@@ -1529,7 +1666,7 @@ export class CarManager {
     // Tekne varsa TUTAR da o segmentten gelir: tek elemanlı liste veriyoruz ki Car'ın
     // kendi zarı model ile parayı AYRIŞTIRMASIN (jet ski süperyat parası ödemesin).
     const segs = boatSeg ? [{ ...boatSeg, share: 1 }] : (this.opts.segments?.() ?? null)
-    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), segs, boat)
+    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), segs, boat, this.opts.patienceMult?.() ?? 1)
     car.lane = lane
     car.phase = 'transit'
     // 4 ŞERİTLİ YOL (çevre yolu): giriş kararı şerit seçiminden ÖNCE verilir, çünkü
@@ -1542,7 +1679,13 @@ export class CarManager {
       // Bu yüzden kalabalık frenini yumuşat; asıl kısıt YAVAŞLAMA ŞERİDİ kapasitesidir
       // (dolu ise araç karar noktasında otobana döner = kaçan müşteri, rapor §6.4 kural 2).
       const crowd = this.stationCrowdFactor(isEv, 'near')
-      car.wantsEnter = Math.random() < this.opts.entryChance() * (this.opts.highway?.() ? Math.max(0.75, crowd) : crowd)
+      // GİREMEYEN MÜŞTERİ (Faz 2.3): kapasite dolu olduğu için içeri hiç giremeyen sürücü,
+      // "bekleyip sıkılan"dan AYRI bir sorundur — biri hız, diğeri kapasite sorunudur.
+      // Tek zar atışı kullanılıyor: aynı sürücü, kapasite boş olsaydı girecek miydi?
+      const temelSans = this.opts.entryChance()
+      const zar = Math.random()
+      car.wantsEnter = zar < temelSans * (this.opts.highway?.() ? Math.max(0.75, crowd) : crowd)
+      if (!car.wantsEnter && crowd <= 0.05 && zar < temelSans) this.opts.onTurnedAway?.()
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
       // SU ŞUBESİ: transit de SERVİS şeridini kullanır (Oğuz: "yanaşma yerinden
       // tekneler dümdüz geçmesin") — LANE_NEAR (6.95) iskelenin dibinden geçiyordu.
@@ -1557,7 +1700,11 @@ export class CarManager {
       // (Eski hali tipe bakmıyordu: yalnız şarj olan karşı istasyona benzinli araçlar girip
       //  bekleme noktasında sonsuza dek kalıyor, sabır bitince itibar yakıyordu.)
       if (this.opts.farActive?.() && this.stationHasEquipmentFor(isEv ? 'ev' : 'fuel', 'far')) {
-        car.wantsEnter = Math.random() < this.opts.entryChance() * this.stationCrowdFactor(isEv, 'far')
+        const crowdFar = this.stationCrowdFactor(isEv, 'far')
+        const temelSansFar = this.opts.entryChance()
+        const zarFar = Math.random()
+        car.wantsEnter = zarFar < temelSansFar * crowdFar
+        if (!car.wantsEnter && crowdFar <= 0.05 && zarFar < temelSansFar) this.opts.onTurnedAway?.()
         car.wantsTruckPark = car.isTruck && Math.random() < 0.4 // B6: karşı yakada da tır parkı
       }
       const lx = this.opts.waterOnly?.() && svc ? svc.far

@@ -1742,7 +1742,10 @@ const cars = new CarManager(world.scene, modelLib, {
   pumpCount: () => Math.min(state.pumps, world.pumpSlots.length),
   evCount: () => Math.min(state.evChargers, world.evSlots.length),
   // misafir gate'i açıkken kimse İSTASYONA girmez (ilerleme donuk) ama yol trafiği akar
-  entryChance: () => (guestPaused ? 0 : state.entryChance() * (isPromoMode ? 2.5 : 1)),
+  // YOĞUN SAAT (Faz 2.2): sabah 07-09 ve akşam 17-19 doğal yığılma. Reklamla açılan
+  // "müşteri patlaması"ndan AYRI ve her gün AYNI saatte tekrar eder — oyuncu güne
+  // hazırlanmayı (depo doldur, pompacı tut) öğrensin diye öngörülebilir olması şart.
+  entryChance: () => (guestPaused ? 0 : state.entryChance() * (isPromoMode ? 2.5 : 1) * (state.rushHour ? 1.8 : 1)),
   // EV PAYI (#1023 "elektrikli araba sayısı çok az gibi"): taban %15'ti ve tek şarj
   // ünitesiyle akışın ancak %16'sı EV oluyordu — oyuncu ₺'lik yatırımın karşılığını
   // sahnede göremiyordu. Taban %20, ünite başı katkı %11, tavan %60.
@@ -1769,7 +1772,10 @@ const cars = new CarManager(world.scene, modelLib, {
   serviceLane: () => state.theme().lane.service,
   // Araçlar birbirinin içinden geçer (ölçüm: servis 267→363, tıkanma 41→0).
   // ?collide=1 ile eski davranış açılır.
-  carsPassThrough: () => !new URLSearchParams(location.search).has('collide'),
+  // ÇARPIŞMA ARTIK VARSAYILAN (Faz 4.1): eskiden varsayılan "içinden geç" idi ve
+  // çarpışma yalnız ?collide ile açılıyordu — oyuncular "araçlar iç içe geçiyor"
+  // diye bildiriyordu. Mantık ters çevrildi; ?nocollide acil valf olarak duruyor.
+  carsPassThrough: () => new URLSearchParams(location.search).has('nocollide'),
   trafficLight: () => {
     const tl = state.theme().features?.trafficLight
     return tl ? { red: state.lightRed(), y: tl.y } : null
@@ -1817,10 +1823,28 @@ const cars = new CarManager(world.scene, modelLib, {
   },
   onCarLost: car => {
     state.stats.lost++
+    // KAYBIN BEDELİ GÖRÜNÜR (Faz 1.4): eskiden tek bir toast vardı, rakam yoktu.
+    // Müşterinin bırakacağı gerçek para aracın üstünde yükselerek gösteriliyor.
+    const bedel = car.kind === 'ev' ? car.demandKwh * state.elecPrice : car.demandAmount
+    state.stats.lostMoney += bedel
+    state.dayLostCount++
+    state.dayLostMoney += bedel
+    car.showLoss(`−₺${Math.round(bedel).toLocaleString('tr-TR')}`)
+    ekranFlasi()
+    // SERİ KIRILIR (Faz 3.1): kaçan müşterinin bedeli artık soyut değil — biriktirdiğin
+    // çarpanı da götürüyor. Kayıp acısının asıl kaynağı bu.
+    if (state.combo >= 3) ui.toast(t('Seri koptu! ×{0} çarpanı gitti.', state.comboMult().toFixed(2)), 'bad')
+    state.combo = 0
     ui.toast(t('Müşteri beklemekten sıkıldı ve gitti!'), 'bad', true)
     audio.miss()
     state.addRep(-0.2)
     if (ui.activeCar === car) autoSelect(nextServableCar())
+  },
+  patienceMult: () => state.patienceMult(),
+  onTurnedAway: () => {
+    // KUYRUK DOLU (Faz 2.3): içeri hiç giremeyen müşteri KAÇANDAN AYRI sayılır —
+    // ikisi farklı sorunlar: biri "yavaşsın", diğeri "kapasiten yetmiyor".
+    state.stats.turnedAway++
   },
   // MARİNA: kapı noktası SUDA (iskele x 3.1..5.3'ün doğusu) — tekne giriş/çıkış
   // path'i tahtaların üstünden geçmez. Kara şubelerinde eski kapı (4.2) aynen.
@@ -2238,8 +2262,11 @@ function updateWalkers(dt: number) {
   }
 }
 
+// SERVİS SONU TEPKİSİ (Faz 1): bu fonksiyon ilk POC commit'inden beri dört dalın
+// DÖRDÜNDE de boş string döndürüyordu — yani müşteri memnuniyeti hiç görünmedi.
+// Oyuncu iyi servisin karşılığını görmediği için hızlı olmanın anlamı da yoktu.
 function emojiFor(score: number): string {
-  return score >= 4.5 ? '' : score >= 3.5 ? '' : score >= 2.5 ? '' : ''
+  return score >= 4.5 ? '🤩' : score >= 3.5 ? '😄' : score >= 2.5 ? '🙂' : '😒'
 }
 
 // ---- Servis akışı (yakıt) ----
@@ -2296,7 +2323,51 @@ function gorevOdulle() {
   }
 }
 
-function concludeService(car: Car, score: number) {
+// EKRAN FLAŞI (Faz 1.4): müşteri kaçınca ekranın kenarı bir anlığına kızarır.
+// Toast'ı kaçıran oyuncu bile çevresel görüşle kaybı fark eder. Tek bir DOM düğümü
+// yeniden kullanılır (her kayıpta yeni eleman yaratıp çöp bırakmaz) ve
+// prefers-reduced-motion açıksa hiç oynatılmaz.
+let flasEl: HTMLDivElement | null = null
+function ekranFlasi() {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+  if (!flasEl) {
+    flasEl = document.createElement('div')
+    flasEl.style.cssText = 'position:fixed; inset:0; pointer-events:none; z-index:60; opacity:0;'
+      + 'box-shadow: inset 0 0 90px 18px rgba(214,69,69,.62); transition: opacity .45s ease;'
+    document.body.appendChild(flasEl)
+  }
+  const el = flasEl
+  el.style.transition = 'none'
+  el.style.opacity = '1'
+  requestAnimationFrame(() => {
+    el.style.transition = 'opacity .45s ease'
+    el.style.opacity = '0'
+  })
+}
+
+/** SERİ İLERLEMESİ (Faz 3.1): sabrı bol müşteriyi hızlı uğurlamak seriyi büyütür.
+ *  Yavaş servis seriyi KIRMAZ (yalnız kaçan müşteri kırar) — ceza değil, ödül aracı. */
+function comboIlerlet(car: Car, revenue: number) {
+  if (car.patienceFrac < 0.6) return
+  const oncekiMult = state.comboMult()
+  state.combo++
+  const yeniMult = state.comboMult()
+  // PRİM ÜSTÜNE EKLENİR, geliri ÇARPMAZ: temel gelir çağıran yerde zaten kasaya yazıldı.
+  // Böylece ekonomi dengesi tek noktadan (prim oranı) ayarlanabilir kalıyor.
+  const prim = Math.round(revenue * (yeniMult - 1))
+  if (prim > 0) {
+    state.money += prim
+    state.stats.revenue += prim
+    state.dailyRevenue += prim
+  }
+  if (yeniMult > oncekiMult) {
+    ui.toast(t('SERİ ×{0} — hızlı servis primi!', yeniMult.toFixed(2)), 'good')
+    audio.combo(state.combo)
+  }
+}
+
+function concludeService(car: Car, score: number, revenue = 0) {
+  comboIlerlet(car, revenue)
   if (car.isTruck && state.hasTruckPark && car.phase === 'atPump' && Math.random() < 0.45) {
     trackDaily(score)
     state.addRep((score - 3.3) * 0.1)
@@ -2446,7 +2517,7 @@ function finishSale(car: Car) {
       if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
       if (car.nozzle) { state.stats.liters[car.nozzle] += car.filled; state.dailyLiters += car.filled }
       car.filling = false
-      concludeService(car, score)
+      concludeService(car, score, revenue)
       return
     }
     openLogbook(lb, t('Balıkçı Teknesi'), state.buyPrice('dizel') * 1.08, full, (choice, inspected) => {
@@ -2472,7 +2543,7 @@ function finishSale(car: Car) {
   if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
   if (car.nozzle) { state.stats.liters[car.nozzle] += car.filled; state.dailyLiters += car.filled }
   car.filling = false
-  concludeService(car, score)
+  concludeService(car, score, revenue)
 }
 
 function wrongFuel(car: Car) {
@@ -2587,7 +2658,7 @@ function tickEvCharging(dt: number) {
         spawnWalkerFor(c, { visits, score, squat: true })
         ui.toast(t('Molacı üniteyi tutuyor — göndermek için araca dokun'), 'bad')
       } else {
-        concludeService(c, score)
+        concludeService(c, score, revenue)
       }
     }
   }
@@ -5268,6 +5339,7 @@ function frame() {
   {
     const frac = (dayTime % DAY_CYCLE) / DAY_CYCLE
     const hTot = (6 + frac * 24) % 24
+    state.hourOfDay = hTot   // YOĞUN SAAT (Faz 2.2) bu değeri okuyor
     const str = `${String(Math.floor(hTot)).padStart(2, '0')}:${String(Math.floor((hTot % 1) * 60)).padStart(2, '0')}`
     if (str !== lastClockStr) { lastClockStr = str; const el = document.getElementById('hud-clock'); if (el) el.textContent = str }
   }
@@ -5285,6 +5357,25 @@ function frame() {
         const sec = document.getElementById('rushsec')
         if (sec && sec.textContent !== String(left)) sec.textContent = String(left)
       } else if (rt.style.display !== 'none') rt.style.display = 'none'
+    }
+    // YOĞUN SAAT rozeti (Faz 2.2) — promo rozeti açıkken gizlenir, aynı köşeyi paylaşırlar
+    const rh = document.getElementById('rushhour') as HTMLDivElement | null
+    if (rh) {
+      const goster = state.rushHour && (!rt || rt.style.display === 'none')
+      const want = goster ? 'flex' : 'none'
+      if (rh.style.display !== want) rh.style.display = want
+    }
+    // SERİ rozeti (Faz 3.2) — çarpan 1'in üstündeyken görünür
+    const cb = document.getElementById('combobadge') as HTMLDivElement | null
+    if (cb) {
+      const mult = state.comboMult()
+      const want = mult > 1 ? 'flex' : 'none'
+      if (cb.style.display !== want) cb.style.display = want
+      if (mult > 1) {
+        const el = document.getElementById('combomult')
+        const txt = `×${mult.toFixed(2)}`
+        if (el && el.textContent !== txt) el.textContent = txt
+      }
     }
   }
 
@@ -5348,6 +5439,14 @@ function frame() {
     }
     const profit = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
+    // KAÇIRDIKLARIN (Faz 3.3): kaybı gün sonunda TEK acı sayıya topla — kâr raporunun
+    // hemen ardından gelir, ertesi güne motivasyon üretir. Kayıp yoksa hiç gösterilmez
+    // (mükemmel günü cezalandırmaz, tersine sessizliğiyle ödüllendirir).
+    if (state.dayLostCount > 0) {
+      ui.toast(t('Kaçırdığın müşteri: {0} → ₺{1}', state.dayLostCount, Math.round(state.dayLostMoney).toLocaleString('tr-TR')), 'bad')
+    }
+    state.dayLostCount = 0
+    state.dayLostMoney = 0
     // B6 (analiz): İLK GÜN raporu = duygusal kontrol noktası — misafire kayıp-anı
     // hatırlatması (oturumda tek gate: 10k gate'i zaten çıktıysa tekrarlama)
     if (!auth.loggedIn() && state.day === 2 && profit > 0 && !firstTenGateShown && !guestGateShown) {

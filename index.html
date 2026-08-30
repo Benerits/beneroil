@@ -1150,6 +1150,21 @@ Sorun / Öneri Bildir
     border-radius:var(--r-md); box-shadow:var(--shadow); animation:rushpulse 1s ease-in-out infinite">
     <svg class="ic" style="vertical-align:-3px"><use href="#i-bolt"/></svg> <span id="rushlabel">MÜŞTERİ PATLAMASI</span> · <span id="rushsec">90</span>s
   </div>
+  <!-- YOĞUN SAAT (Faz 2.2): her gün 07-09 ve 17-19 doğal yığılma. Promo rozetiyle AYNI
+       köşede ama promo varken gizlenir (iki rozet üst üste binmesin). -->
+  <div id="rushhour" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(136px + env(safe-area-inset-top)); z-index:33;
+    align-items:center; gap:7px; padding:7px 13px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13.5px;
+    color:#fff; background:linear-gradient(135deg,#3f6ea8,#2f5488); border:0; border-bottom:3px solid #24405f;
+    border-radius:var(--r-md); box-shadow:var(--shadow)">
+    <svg class="ic" style="vertical-align:-3px"><use href="#i-clock"/></svg> <span data-i18n="YOĞUN SAAT">YOĞUN SAAT</span>
+  </div>
+  <!-- SERİ (Faz 3.2): hızlı servis çarpanı. Yalnız çarpan 1'in üstündeyken görünür. -->
+  <div id="combobadge" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:calc(136px + env(safe-area-inset-top)); z-index:33;
+    align-items:center; gap:6px; padding:6px 15px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px;
+    color:#fff; background:linear-gradient(135deg,#3f9c5c,#2e7746); border:0; border-bottom:3px solid #24603a;
+    border-radius:99px; box-shadow:var(--shadow)">
+    <span data-i18n="SERİ">SERİ</span> <span id="combomult">×1.10</span>
+  </div>
   <style>@keyframes rushpulse { 0%,100% { transform:scale(1) } 50% { transform:scale(1.045) } }</style>
 
   <div id="tankerpanel" style="display:none"></div>

@@ -197,10 +197,24 @@ class AudioMan {
   }
 
   /** kaçan müşteri: sinir bozmayan, kısık "of ya" iniltisi */
+  // KAÇAN MÜŞTERİ (Faz 1.4): eskiden iki yumuşak sinüs, ses düzeyi 0.05 — oyun
+  // gürültüsünün altında kalıyor, kayıp duyulmuyordu. Artık aşağı düşen "kaybettin"
+  // motifi: sert testere atağı + inen ikinci ton. Diğer efektlerden AYRIŞIR.
   miss() {
     if (!this.canSfx()) return
-    this.tone(330, 0.12, 'sine', 0.05)
-    this.tone(262, 0.18, 'sine', 0.045, 0.1)
+    this.tone(392, 0.14, 'sawtooth', 0.13)
+    this.tone(294, 0.20, 'sawtooth', 0.11, 0.10)
+    this.tone(196, 0.32, 'triangle', 0.10, 0.20)
+  }
+
+  /** SERİ KADEMESİ (Faz 3.2): her kademede yarım ton yukarı — ödül ritmi kulakla da
+   *  takip edilsin. Seri uzadıkça ses tizleşir, oyuncu ilerlediğini duyar. */
+  combo(seri: number) {
+    if (!this.canSfx()) return
+    const kademe = seri >= 10 ? 2 : seri >= 6 ? 1 : 0
+    const kok = 587.3 * Math.pow(2, kademe / 12)
+    this.tone(kok, 0.12, 'triangle', 0.10)
+    this.tone(kok * 1.5, 0.16, 'triangle', 0.085, 0.07)
   }
 
   /** başarım fanfarı */
