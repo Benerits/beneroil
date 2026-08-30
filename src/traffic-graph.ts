@@ -80,6 +80,16 @@ export class TrafficGraph {
         cx: g.gateX + g.sideSign * 0.6, cy: g.gateOutY,
         w: 3.6, d: 4.6, capacity: 2,
       })
+      // 3) APRON KORİDORU — DENENDİ VE GERİ ALINDI (ölçümle).
+      // SimCity klonundaki node-occupancy fikrini apron'a uyarlamayı denedim: kapı ile
+      // pompa hattı arasına kapasite-2'lik tek bir rezervasyon bölgesi. ÖLÇÜM (aynı
+      // tohum, çarpışma AÇIK): T1 servis 268 → 154, T2 384 → 238, T3'te kalıcı sıkışan 1.
+      // NEDEN OLMADI: SimCity'de her node KÜÇÜK ve ÇOK (karo başına 4-12), araç yalnız
+      // bir sonraki adımı rezerve eder. Apron'u TEK büyük bölge yapınca tüm istasyon içi
+      // trafik 2 araca sınırlanıyor — rezervasyon akışı düzenlemek yerine boğuyor.
+      // DOĞRU UYARLAMA (yapılacak): apron'u tek bölge değil, POMPA BAŞINA küçük yaklaşma
+      // bölgelerine bölmek. O zaman araç yalnız gideceği pompanın önünü rezerve eder,
+      // diğer şeritler serbest kalır. Bu ciddi bir refactor; ölçüm altyapısı hazır.
     }
     // artık var olmayan bölgelerin defterini temizle (istasyon kapandı/kapı taşındı)
     const live = new Set(this.zones.map(z => z.id))

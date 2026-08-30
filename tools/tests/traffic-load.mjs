@@ -21,7 +21,7 @@ const ROAD_X = 7.9
 const __main = readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')
 const __m = __main.match(/carsPassThrough: \(\) => (!?)new URLSearchParams/)
 if (!__m) throw new Error('carsPassThrough üretim varsayılanı okunamadı — test/üretim hizası kırıldı')
-const PROD_PASS_THROUGH = __m[1] === '!'
+const PROD_PASS_THROUGH = process.env.FORCE_COLLIDE ? false : __m[1] === '!'
 console.log(`üretim ayarı: çarpışma ${PROD_PASS_THROUGH ? 'KAPALI' : 'AÇIK'} (main.ts'ten okundu)`)
 function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet = false, highway = null, service = null, passThrough = PROD_PASS_THROUGH }) {
   __seed = 20260726 // her senaryo AYNI tohumla başlar → A/B birebir karşılaştırılabilir
