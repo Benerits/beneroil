@@ -444,6 +444,20 @@ function auditCheat(email, kind, info) {
     [String(email || '').slice(0, 200), String(kind).slice(0, 40), amount, rate]).catch(() => {})
 }
 
+/** PRESTİJ ÇARPANI — src/state.ts GameState.prestigeStarMult() ile BİREBİR AYNI OLMALI.
+ *  İki eksen de geliri çarpar, o yüzden çarpımları alınır:
+ *   · GELİR çarpanı (prestigeMultFor): ilk 10★ +%25, 11-20★ +%10, 21★+ +%5
+ *   · AKIŞ çarpanı (prestigeFlowFor): ilk 5★ +%5, 6-10★ +%2.5, sonrası +%1, tavan ×1.50
+ *  İstemciyle ayrışırsa devretmiş oyuncunun MEŞRU geliri "imkânsız artış" sanılıp
+ *  kırpılır. tools/tests/devir-check.mjs bu fonksiyonu söküp 0-40★ için karşılaştırır.
+ *  Eskiden aynı ifade İKİ YERE kopyalanmıştı — tek kaynağa indirildi. */
+function prestigeStarMult(stars) {
+  const s = Math.max(0, stars)
+  const gelir = 1 + 0.25 * Math.min(s, 10) + 0.10 * Math.min(Math.max(s - 10, 0), 10) + 0.05 * Math.max(s - 20, 0)
+  const akis = Math.min(1.50, 1 + 0.05 * Math.min(s, 5) + 0.025 * Math.min(Math.max(s - 5, 0), 5) + 0.01 * Math.max(s - 10, 0))
+  return gelir * akis
+}
+
 function maxIncomeRate(s) {
   if (!s) return 20
   const n = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
@@ -474,9 +488,8 @@ function maxIncomeRate(s) {
       if (lvl > 0) branch += 6 + lvl * 4
     }
   }
-  // AZALAN VERİM (30 Tem, istemci prestigeMult ile AYNI): 10★ sonrası +%10, 20★ sonrası +%5
-  const starMult = 1 + 0.25 * Math.min(stars, 10) + 0.10 * Math.min(Math.max(stars - 10, 0), 10) + 0.05 * Math.max(stars - 20, 0)
-  return Math.max(20, (base + branch) * 8 * SAFETY * starMult)
+  // AZALAN VERİM + MARKA AKIŞI (istemci prestigeStarMult ile AYNI) — tek kaynak fonksiyon
+  return Math.max(20, (base + branch) * 8 * SAFETY * prestigeStarMult(stars))
 }
 
 /** ŞUBE KASASI CLAMP'İ: istemci tavanıyla BİREBİR (state.ts BRANCH_VAULT_HARD).
@@ -1254,7 +1267,7 @@ async function handleApi(req, res, url) {
         }
         // handoverCount de yıldızla tutarlı olmalı (kurcalanmış save ile eşik atlanmasın)
         if (typeof clean.s.handoverCount === 'number') clean.s.handoverCount = Math.min(clean.s.handoverCount, clean.s.brandStars)
-        const starMult = 1 + 0.25 * Math.min(stars, 10) + 0.10 * Math.min(Math.max(stars - 10, 0), 10) + 0.05 * Math.max(stars - 20, 0) // istemci prestigeMult ile aynı (azalan verim)
+        const starMult = prestigeStarMult(stars) // istemci prestigeStarMult ile BİREBİR (gelir × akış)
         // JETON KOVASI: allowance artık push BAŞINA değil ZAMAN başına birikiyor.
         // Kova save içinde taşınır (_ab, sunucu-sahipli alan); istemci kurcalarsa
         // aşağıda clamp'lenir. Böylece hızlı push spam'i bedava para getirmez —

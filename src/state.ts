@@ -879,7 +879,12 @@ export class GameState {
     // Rakip yokken çarpan 1 → kasabada ve tek şubeli oyuncuda hiçbir şey değişmez.
     // Rampa: rakibin etkisi 10 günde kademeli devreye girer (açılış şoku yok).
     const share = this.rival ? effectiveShare(this.marketShare(), this.rival, this.day) : 1
-    return Math.max(0.05, withReg * share)
+
+    // MARKA TANINIRLIĞI (devir ekseni 2): devrettikçe akış kalıcı artar. brandStars=0'da
+    // çarpan 1.0 → yıldızsız oyuncunun dengesi BİREBİR korunur. 0.98 tavanı olasılığı
+    // 1.0'ın üstüne taşırmaz (yıldızsızda yumuşak tavan zaten 0.95'te → etkisiz).
+    const brand = GameState.prestigeFlowFor(this.brandStars)
+    return Math.max(0.05, Math.min(0.98, withReg * share * brand))
   }
 
   /** Müşterilerin ne kadarı müdavim (0..share). Yalnız teması izin veren şubede (kasaba). */
@@ -1185,6 +1190,48 @@ export class GameState {
     return 1 + 0.25 * Math.min(s, 10) + 0.10 * Math.min(Math.max(s - 10, 0), 10) + 0.05 * Math.max(s - 20, 0)
   }
   prestigeMult(): number { return GameState.prestigeMultFor(this.brandStars) }
+
+  // ---- SONSUZ DEVİR DÖNGÜSÜ: gelir çarpanının YANINDA 2 eksen daha ----
+  // NEDEN: devir tek eksen (gelir ×) verirken oyuncu her turda AYNI grind'i baştan
+  // yaşıyordu — "bir tur daha" hissi doğmuyordu. Tycoon'da doğru cevap daha çok
+  // BEKLEME değil daha hızlı KURULUM: devirden sonra istasyon daha hızlı ayağa
+  // kalkmalı. Üç eksenin hepsi brandStars'tan TÜRETİLİR → save'e YENİ ALAN GİRMEZ,
+  // eski kayıtlar (brandStars=0) birebir eski davranışı sürdürür.
+
+  /** EKSEN 2 — MARKA TANINIRLIĞI: devrettikçe müşteri AKIŞI (entryChance) kalıcı artar.
+   *  Azalan verim: ilk 5★ +%5, 6-10★ +%2.5, sonrası +%1; TAVAN ×1.50.
+   *  Neden tavan: entryChance bir olasılık; sınırsız çarpan trafiği doyurup hem dengeyi
+   *  hem sunucu anti-cheat tavanını anlamsızlaştırırdı. Asıl etkisi ERKEN oyunda
+   *  görülür (istasyon küçükken akış düşüktür) — yani tam da devir sonrasında. */
+  static prestigeFlowFor(s: number): number {
+    s = Math.max(0, s)
+    return Math.min(1.50, 1 + 0.05 * Math.min(s, 5) + 0.025 * Math.min(Math.max(s - 5, 0), 5) + 0.01 * Math.max(s - 10, 0))
+  }
+  prestigeFlow(): number { return GameState.prestigeFlowFor(this.brandStars) }
+
+  /** SUNUCU İLE ORTAK ÇARPAN — server/index.js prestigeStarMult() ile BİREBİR AYNI.
+   *  Sunucu anti-cheat allowance'ı bu değerle genişler; ayrışırsa devretmiş oyuncunun
+   *  MEŞRU geliri "imkânsız artış" sanılıp kırpılır. İki eksen de geliri çarptığı için
+   *  çarpım alınır (gelir × akış). tools/tests/devir-check.mjs bunu 0-40★ için kilitler. */
+  static prestigeStarMult(s: number): number {
+    return GameState.prestigeMultFor(s) * GameState.prestigeFlowFor(s)
+  }
+
+  /** EKSEN 3a — KURULUŞ SERMAYESİ: devirde satış bedelinin ÜSTÜNE yazılan kalıcı destek.
+   *  Azalan verim: ilk 5★ ₺60k, 6-10★ ₺30k, sonrası ₺15k; TAVAN ₺750k.
+   *  Bu bir "hediye" değil hız kaynağıdır: yeniden kurulumun ilk hamlesini finanse eder. */
+  static prestigeSeedFor(s: number): number {
+    s = Math.max(0, s)
+    return Math.min(750_000, 60_000 * Math.min(s, 5) + 30_000 * Math.min(Math.max(s - 5, 0), 5) + 15_000 * Math.max(s - 10, 0))
+  }
+
+  /** EKSEN 3b — KADRO MİRASI: devirden sonra istasyon EĞİTİMLİ ekiple açılır.
+   *  Azalan verim seviye TAVANIYLA gelir (müdür Sv.3, personel Sv.4) — sonsuz büyüme yok.
+   *  Somut değeri: müdür ₺112k + personel ₺86k kurulum bedeli. */
+  static prestigeCrewFor(s: number): { manager: number; staff: number } {
+    s = Math.max(0, s)
+    return { manager: Math.min(3, Math.floor((s + 1) / 2)), staff: Math.min(4, 1 + Math.floor(s / 2)) }
+  }
   /** Bir sonraki devir için gereken kurulu ekipman değeri — her yıldızda İKİYE KATLANIR
    *  (Idle Miner kalıbı: her kademe daha pahalı). Farm döngüsünü matematiksel olarak kapatır.
    *  TAVAN 8M (oyuncu raporu: tek şubenin sınırlı kalemleri ~₺1.63M — ×2 katlama bir yerde
@@ -1242,17 +1289,51 @@ export class GameState {
   canHandover(): boolean {
     return this.companyEquipmentValue() >= this.handoverThreshold() && !this.loan.active && !this.partner.active
   }
-  /** Devirden sonraki büyüme önizlemesi (rapor: ZORUNLU gösterilmeli) */
-  handoverPreview(): { cash: number; starsAfter: number; multAfter: number; multNow: number } {
+  /** Kadro mirasının SERVETE eklediği bedel (₺). Sunucu buildingValue() müdür kurulumunu
+   *  ve personel eğitimini servete SAYIYOR; bedava seviye atlatmak serveti şişirir.
+   *  Bu tutarı kuruluş sermayesinden düşüyoruz ki devir her koşulda NET MALİYETLİ kalsın. */
+  private crewGiftValue(starsAfter: number): number {
+    const crew = GameState.prestigeCrewFor(starsAfter)
+    const dilim = (arr: number[], a: number, b: number) =>
+      arr.slice(Math.max(0, a), Math.max(0, b)).reduce((x, y) => x + y, 0)
+    return dilim(MANAGER_COSTS, this.managerLevel, Math.max(this.managerLevel, crew.manager))
+      + dilim(STAFF_TRAIN_COSTS, this.staffLevel - 1, Math.max(this.staffLevel, crew.staff) - 1)
+  }
+  /** KURULUŞ SERMAYESİ (eksen 3a): devirde satış bedelinin ÜSTÜNE kasaya yazılır.
+   *  TAVAN = teslim edilen ekipmanın %35'i − kadro mirasının servet değeri.
+   *  Böylece satış (%60 / tavanda %30) + sermaye (≤%35) TOPLAMI %100'ün ALTINDA kalır:
+   *  devir hâlâ gerçek bir maliyet taşır, sunucunun servet tavanı yanlış alarm vermez. */
+  handoverSeed(): number {
+    const starsAfter = this.brandStars + 1
+    const butce = Math.round(this.equipmentValue() * 0.35) - this.crewGiftValue(starsAfter)
+    return Math.max(0, Math.min(GameState.prestigeSeedFor(starsAfter), butce))
+  }
+  /** Devirden sonraki büyüme önizlemesi (rapor: ZORUNLU gösterilmeli).
+   *  BELİRSİZLİK PRESTİJİ ÖLDÜRÜR: üç eksenin de ÖNCE/SONRA değeri döner. */
+  handoverPreview(): {
+    cash: number; seed: number; total: number; starsAfter: number
+    multAfter: number; multNow: number; flowNow: number; flowAfter: number
+    crewNow: { manager: number; staff: number }; crewAfter: { manager: number; staff: number }
+  } {
+    const starsAfter = this.brandStars + 1
+    const cash = this.handoverValue(), seed = this.handoverSeed()
+    const crew = GameState.prestigeCrewFor(starsAfter)
     return {
-      cash: this.handoverValue(), starsAfter: this.brandStars + 1,
-      multAfter: GameState.prestigeMultFor(this.brandStars + 1), multNow: this.prestigeMult(),
+      cash, seed, total: cash + seed, starsAfter,
+      multAfter: GameState.prestigeMultFor(starsAfter), multNow: this.prestigeMult(),
+      flowNow: this.prestigeFlow(), flowAfter: GameState.prestigeFlowFor(starsAfter),
+      crewNow: { manager: this.managerLevel, staff: this.staffLevel },
+      crewAfter: { manager: Math.max(this.managerLevel, crew.manager), staff: Math.max(this.staffLevel, crew.staff) },
     }
   }
   /** DEVRET: ekipman gider, ARSA/BETON ve marka yıldızları KALIR, kasaya devir bedeli girer. */
-  handover(): { cash: number; stars: number } | null {
+  /** Dönüş: cash = KASAYA GİREN TOPLAM (satış bedeli + kuruluş sermayesi),
+   *  seed = bunun prestijden gelen payı (arayüzde ayrı gösterilir). */
+  handover(): { cash: number; seed: number; stars: number } | null {
     if (!this.canHandover()) return null
     const cash = this.handoverValue()
+    // SERMAYE ve KADRO ekipman SIFIRLANMADAN hesaplanır (tavanları ekipman değerine bağlı)
+    const seed = this.handoverSeed()
     // ekipman sıfırlanır (arsa/beton, isim, başarımlar, sözleşme sayaçları korunur)
     this.pumps = 1; this.evChargers = 0; this.signLevel = 0; this.tankLevel = 0
     this.marketLevel = 0; this.market2Level = 0; this.toiletLevel = 0
@@ -1275,7 +1356,7 @@ export class GameState {
     this.brokenPumps.clear(); this.brokenChargers.clear()
     for (const f of FUELS) this.orders[f] = { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
     this.uraniumPending = false; this.uraniumEta = 0
-    this.dayStartMoney = this.money + cash // gün sonu raporu uydurma sayı göstermesin
+    this.dayStartMoney = this.money + cash + seed // gün sonu raporu uydurma sayı göstermesin
     this.autoPumps.clear(); this.autoChargers.clear()
     this.pendingCash = {}
     this.contract = null
@@ -1288,10 +1369,18 @@ export class GameState {
     this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }
     this.brandStars++
     this.handoverCount++
-    this.money += cash // KASA KORUNUR (oyuncunun parası kendi); bina değeri düştüğü için servet zaten azalır
+    // KADRO MİRASI (eksen 3b): yeni istasyon eğitimli ekiple açılır — devir sonrası ilk
+    // dakikalar boş geçmesin, aynı grind sıfırdan tekrarlanmasın.
+    // YALNIZ AKTİF ŞUBEYE uygulanır: sunucu buildingValue() müdür/personel bedelini
+    // servete sayıyor; tüm şubelere birden vermek serveti sıçratıp anti-cheat'i
+    // tetiklerdi. Tek şubenin tavanı ₺198k < ALLOW_BURST ₺260k → güvenli.
+    const crew = GameState.prestigeCrewFor(this.brandStars)
+    this.managerLevel = Math.max(this.managerLevel, crew.manager)
+    this.staffLevel = Math.max(this.staffLevel, crew.staff)
+    this.money += cash + seed // KASA KORUNUR (oyuncunun parası kendi); bina değeri düştüğü için servet zaten azalır
     // (6) itibar cezası gerçek olmalı: eski Math.max(3, …) düşük itibarı YÜKSELTİYORDU (aklama)
     this.reputation = Math.max(0, this.reputation - 0.5)
-    return { cash, stars: this.brandStars }
+    return { cash: cash + seed, seed, stars: this.brandStars }
   }
 
   // ---- B2B SÖZLEŞMELERİ (lategame raporu Katman 4a) ----

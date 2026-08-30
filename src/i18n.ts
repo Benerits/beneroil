@@ -1186,6 +1186,24 @@ const EN: Record<string, string> = {
     'A brand star is a PERMANENT income multiplier. You earn one every time you hand over a station; stars are never lost and apply to every station that follows.',
   'Şu anki kazancın': 'Your bonus right now',
   '(+%{0} her satıştan)': '(+{0}% on every sale)',
+  // --- SONSUZ DEVİR DÖNGÜSÜ: üç eksenli kazanç önizlemesi + devir sonrası rapor ---
+  'Marka yıldızı KALICI güçtür. Her devirde gelir çarpanın, müşteri akışın ve kuruluş sermayen büyür — sıfırdan başlarsın ama her turda daha hızlı. Yıldızlar hiç kaybolmaz.':
+    'Brand stars are PERMANENT power. Every hand-over grows your income multiplier, your customer flow and your founding capital — you start over, but faster every run. Stars are never lost.',
+  'Müşteri akışın': 'Your customer flow',
+  'Devretmeye HAZIRSIN — {0}. marka yıldızı': 'READY to hand over — brand star #{0}',
+  'Kasana geçecek': 'Lands in your cash',
+  '· kuruluş sermayesi': '· founding capital',
+  'Müşteri akışı': 'Customer flow',
+  'Devralacağın kadro': 'Crew you will inherit',
+  'Personel Sv.{0}': 'Staff Lv.{0}',
+  'Ekipman gider ama ARSALARIN VE BETONUN SENDE KALIR. Yeni istasyon kuruluş sermayesi ve eğitimli kadroyla açılır — aynı yolu baştan yürümezsin.':
+    'The equipment goes, but YOUR LAND AND PAVING STAY YOURS. The new station opens with founding capital and a trained crew — you never walk the same road again.',
+  '{0}. marka yıldızı senin!': 'Brand star #{0} is yours!',
+  'Bunlar KALICI — yeni istasyonun sıfırdan değil, buradan başlıyor.':
+    'These are PERMANENT — your new station starts from here, not from zero.',
+  'Kasana geçti': 'Credited to your cash',
+  'Devraldığın kadro': 'Crew you inherited',
+  'Yeni turu başlat': 'Start the new run',
   'Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.':
     'You are READY to hand over. <b>+₺{0}</b> lands in your cash and you earn <b>star #{1}</b>: income multiplier ×{2} → <b>×{3}</b>.',
   "Ekipman bedelinin %60'ı kasana yazılır. ARSALARIN VE BETONUN SENDE KALIR — sıfırdan başlamazsın.":
@@ -2643,6 +2661,24 @@ const FR: Record<string, string> = {
     'Une étoile de marque est un multiplicateur de revenus PERMANENT. Tu en gagnes une à chaque station cédée ; les étoiles ne se perdent jamais et s’appliquent à toutes tes stations suivantes.',
   'Şu anki kazancın': 'Ton bonus actuel',
   '(+%{0} her satıştan)': '(+{0} % sur chaque vente)',
+  // --- BOUCLE DE CESSION INFINIE : aperçu des trois axes + rapport après cession ---
+  'Marka yıldızı KALICI güçtür. Her devirde gelir çarpanın, müşteri akışın ve kuruluş sermayen büyür — sıfırdan başlarsın ama her turda daha hızlı. Yıldızlar hiç kaybolmaz.':
+    'Les étoiles de marque sont une puissance PERMANENTE. Chaque cession augmente ton multiplicateur de revenus, ton flux de clients et ton capital de départ — tu recommences, mais plus vite à chaque tour. Les étoiles ne se perdent jamais.',
+  'Müşteri akışın': 'Ton flux de clients',
+  'Devretmeye HAZIRSIN — {0}. marka yıldızı': 'PRÊT à céder — étoile de marque n°{0}',
+  'Kasana geçecek': 'Arrivera dans ta caisse',
+  '· kuruluş sermayesi': '· capital de départ',
+  'Müşteri akışı': 'Flux de clients',
+  'Devralacağın kadro': 'Équipe que tu hériteras',
+  'Personel Sv.{0}': 'Personnel Niv.{0}',
+  'Ekipman gider ama ARSALARIN VE BETONUN SENDE KALIR. Yeni istasyon kuruluş sermayesi ve eğitimli kadroyla açılır — aynı yolu baştan yürümezsin.':
+    'Le matériel part, mais TES TERRAINS ET TON BÉTON TE RESTENT. La nouvelle station ouvre avec un capital de départ et une équipe formée — tu ne refais jamais le même chemin.',
+  '{0}. marka yıldızı senin!': 'L’étoile de marque n°{0} est à toi !',
+  'Bunlar KALICI — yeni istasyonun sıfırdan değil, buradan başlıyor.':
+    'Tout cela est PERMANENT — ta nouvelle station part d’ici, pas de zéro.',
+  'Kasana geçti': 'Versé dans ta caisse',
+  'Devraldığın kadro': 'Équipe héritée',
+  'Yeni turu başlat': 'Lancer le nouveau tour',
   'Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.':
     'Tu es PRÊT à céder. <b>+₺{0}</b> arrivent dans ta caisse et tu gagnes <b>l’étoile n°{1}</b> : ton multiplicateur de revenus ×{2} → <b>×{3}</b>.',
   "Ekipman bedelinin %60'ı kasana yazılır. ARSALARIN VE BETONUN SENDE KALIR — sıfırdan başlamazsın.":
