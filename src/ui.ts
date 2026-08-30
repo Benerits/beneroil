@@ -178,6 +178,11 @@ export class UI {
   private shopCat = 'istasyon'
 
   constructor() {
+    // TEST KANCASI: tools/tests/toast-check.mjs bildirim davranışını (yığılma tavanı,
+    // "×N" birleştirme, tıklayınca kapanma) GERÇEK sayfada doğrulayabilsin diye tek bir
+    // fonksiyon açıyoruz. Oyun durumuna erişimi yok → anti-cheat açısından nötr.
+    ;(window as unknown as { __toast?: unknown }).__toast =
+      (m: string, k: 'good' | 'bad' | '' = '', s = true, o = false) => this.toast(m, k, s, o)
     const fuelWrap = el<HTMLDivElement>('fuelwrap')
     this.orderBtn.addEventListener('click', () => { fuelWrap.classList.add('show'); this.defterT = 0 })
     fuelWrap.addEventListener('pointerdown', e => { if (e.target === fuelWrap) fuelWrap.classList.remove('show') })
@@ -853,7 +858,51 @@ export class UI {
     }
   }
 
-  toast(msg: string, kind: 'good' | 'bad' | '' = '', silent = false) {
+  /** EKRANDA DURAN toast'lar. Eskiden sadece DOM vardı; zamanlayıcılar node'a bağlı
+   *  değildi, bu yüzden ne süre tazeleme ne de tıklayınca temiz kapatma yapılabiliyordu.
+   *  (~20 açık geri bildirim: "çok hızlı kayboluyor", "üst üste yığılıyor", "tıklanamıyor") */
+  private toastLive: {
+    node: HTMLDivElement; base: string; n: number; onemli: boolean
+    solma: number; silme: number
+  }[] = []
+  /** Aynı anda ekranda duracak EN FAZLA toast — fazlası "ekranı kaplıyor" şikayeti.
+   *  3 satır, mobil dar kolonda bile ekranın küçük bir kısmını tutar. */
+  private readonly toastMax = 3
+
+  /** GÖRÜNME SÜRESİ okuma hızına göre: "okumaya vakit kalmıyor" şikayeti sabit 3.5 sn'den
+   *  geliyordu — uzun cümle de kısa cümle de aynı sürede kayboluyordu. Artık taban süre +
+   *  karakter başına ~55 ms; ayrıca önem derecesi tabanı yükseltir ('bad'/önemli en uzun,
+   *  sıradan bilgi en kısa kalsın ki önemli olan spam içinde boğulmasın). */
+  private toastSure(text: string, kind: string, onemli: boolean) {
+    const taban = onemli ? 5200 : kind === 'good' ? 4200 : 3600
+    const tavan = onemli ? 11000 : 8000
+    return Math.min(tavan, taban + text.length * 55)
+  }
+
+  private toastKapat(rec: { node: HTMLDivElement; solma: number; silme: number }) {
+    clearTimeout(rec.solma); clearTimeout(rec.silme)
+    rec.node.remove()
+    const i = this.toastLive.findIndex(x => x.node === rec.node)
+    if (i >= 0) this.toastLive.splice(i, 1)
+  }
+
+  /** Sayacı artan toast'ın süresini SIFIRDAN başlat — birleştirme yapıp süreyi
+   *  tazelemezsek "×3" yazısı görünür görünmez kaybolurdu. */
+  private toastZamanla(rec: { node: HTMLDivElement; base: string; onemli: boolean; solma: number; silme: number }, kind: string) {
+    clearTimeout(rec.solma); clearTimeout(rec.silme)
+    rec.node.style.transition = ''
+    rec.node.style.opacity = ''
+    const ms = this.toastSure(rec.node.textContent ?? rec.base, kind, rec.onemli)
+    rec.solma = window.setTimeout(() => { rec.node.style.transition = 'opacity .4s'; rec.node.style.opacity = '0' }, ms)
+    rec.silme = window.setTimeout(() => this.toastKapat(rec), ms + 400)
+  }
+
+  /**
+   * @param silent  ses ÇALMASIN (mevcut çağrıların 3. parametresi — "kalıcı" DEĞİL)
+   * @param onemli  görsel olarak öne çıksın + daha uzun dursun + eleme sırasında en son düşsün
+   *                (yeni ve opsiyonel; mevcut yüzlerce çağrı etkilenmez)
+   */
+  toast(msg: string, kind: 'good' | 'bad' | '' = '', silent = false, onemli = false) {
     {
       const kayit = stripEmoji(t(msg))
       const son = this.inbox[this.inbox.length - 1]
@@ -864,30 +913,57 @@ export class UI {
         this.syncInboxBadge()
       }
     }
-    if (!silent) {
-      if (kind === 'good') audio.cash()
-      else if (kind === 'bad') audio.bad()
-    }
     const box = el<HTMLDivElement>('toasts')
+    // DOM'dan bizim dışımızda silinmiş kayıtları at (dil değişimi, sahne yeniden kurulumu,
+    // test): kalırsa hem tavanı boş yere doldururlar hem de "×N" görünmeyen bir node'a yazılır.
+    for (let i = this.toastLive.length - 1; i >= 0; i--) {
+      const r = this.toastLive[i]
+      if (!r.node.isConnected) { clearTimeout(r.solma); clearTimeout(r.silme); this.toastLive.splice(i, 1) }
+    }
+    // sarılmamış Türkçe toast'lar da İngilizce moda çevrilsin (t() bilinen key'i çevirir, değilse aynen bırakır)
     const text = stripEmoji(t(msg))
-    // SPAM KIRICI (18 feedback): aynı mesaj arka arkaya gelirse yenisini dizmek yerine
-    // sondakini '×N' ile güncelle — 'alt alta 3-5 bildirim ekranı kaplıyor' şikayeti biter.
-    const last = box.lastElementChild as HTMLDivElement | null
-    if (last && (last.dataset.base === text)) {
-      const n = (Number(last.dataset.n) || 1) + 1
-      last.dataset.n = String(n)
-      last.textContent = `${text} ×${n}`
+    // 'bad' her zaman önemlidir: hata/uyarı gözden kaçmamalı
+    const vurgulu = onemli || kind === 'bad'
+
+    // SPAM KIRICI: aynı mesaj tekrar gelirse YENİ toast dizmek yerine mevcudun üstüne
+    // "×N" koy ve süresini tazele. Eskiden yalnızca EN SON toast'a bakılıyordu; araya
+    // başka bir mesaj girince aynı metin tekrar tekrar diziliyordu (yığılmanın asıl kaynağı).
+    // Ayrıca birleştirmede SES ÇALMIYORUZ → "arka arkaya bildirim sesi" şikayeti biter.
+    const ayni = this.toastLive.find(x => x.base === text)
+    if (ayni) {
+      ayni.n++
+      ayni.node.textContent = `${text} ×${ayni.n}`
+      ayni.node.dataset.n = String(ayni.n)
+      // sayaç arttı: kısa bir vurgu (reduced-motion'da CSS animasyonu devre dışı)
+      ayni.node.classList.remove('bump')
+      void ayni.node.offsetWidth
+      ayni.node.classList.add('bump')
+      this.toastZamanla(ayni, kind)
       return
     }
-    while (box.children.length >= 3) box.firstElementChild?.remove()
+
+    if (!silent) audio.toastSfx(kind)   // ses kapısı audio.ts'te: kısa aralıkta tekrar çalmaz
+
+    // TAVAN: fazlası varsa önce SIRADAN olanı düşür, önemliler (bad/onemli) ekranda kalsın —
+    // "önemli olan spam içinde gözden kaçıyor" şikayetinin çözümü.
+    while (this.toastLive.length >= this.toastMax) {
+      const kurban = this.toastLive.find(x => !x.onemli) ?? this.toastLive[0]
+      this.toastKapat(kurban)
+    }
+
     const node = document.createElement('div')
-    node.className = `toast ${kind}`
-    // sarılmamış Türkçe toast'lar da İngilizce moda çevrilsin (t() bilinen key'i çevirir, değilse aynen bırakır)
+    node.className = `toast ${kind}${vurgulu ? ' imp' : ''}`
     node.textContent = text
     node.dataset.base = text
+    node.dataset.n = '1'
+    const rec = { node, base: text, n: 1, onemli: vurgulu, solma: 0, silme: 0 }
+    // TIKLAYINCA KAPANSIN ("kapatmak mümkün değil"). stopPropagation: tıklama altındaki
+    // sahneye/butona geçip yanlışlıkla bina koymasın/kamerayı oynatmasın.
+    node.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault() })
+    node.addEventListener('click', e => { e.stopPropagation(); this.toastKapat(rec) })
     box.appendChild(node)
-    setTimeout(() => { node.style.opacity = '0'; node.style.transition = 'opacity .4s' }, 3000)
-    setTimeout(() => node.remove(), 3500)
+    this.toastLive.push(rec)
+    this.toastZamanla(rec, kind)
   }
 
   showBoom() {

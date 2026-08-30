@@ -196,6 +196,26 @@ class AudioMan {
     this.tone(140, 0.2, 'sawtooth', 0.05, 0.07)
   }
 
+  /** son bildirim sesinin çalındığı an (ms) — toast ses kapısı için */
+  private sonToastSes = 0
+  /**
+   * BİLDİRİM SESİ KAPISI ("arka arkaya çok fazla bildirim sesi" şikayeti).
+   * Oyunda tek karede birkaç toast birden düşebiliyor (müşteri kaçtı + tank azaldı +
+   * görev bitti) ve her biri cash()/bad() çalıyordu → makineli tüfek gibi ses.
+   * Artık son çalmadan bu yana yeterli süre geçmediyse ses ATLANIR; toast yine görünür.
+   * 'bad' daha kısa kapıya tabidir çünkü uyarının duyulması gerekir.
+   */
+  toastSfx(kind: 'good' | 'bad' | '' = '') {
+    if (kind !== 'good' && kind !== 'bad') return
+    if (!this.canSfx()) return
+    const simdi = performance.now()
+    const kapi = kind === 'bad' ? 900 : 1500
+    if (simdi - this.sonToastSes < kapi) return
+    this.sonToastSes = simdi
+    if (kind === 'bad') this.bad()
+    else this.cash()
+  }
+
   /** kaçan müşteri: sinir bozmayan, kısık "of ya" iniltisi */
   // KAÇAN MÜŞTERİ (Faz 1.4): eskiden iki yumuşak sinüs, ses düzeyi 0.05 — oyun
   // gürültüsünün altında kalıyor, kayıp duyulmuyordu. Artık aşağı düşen "kaybettin"

@@ -227,6 +227,11 @@
         text-align: left !important; white-space: normal; word-break: break-word;
         border-bottom-width: 2px !important;
         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      /* mobilde en fazla 3 toast × 3 satır ≈ ekranın 1/5'i — "ekranı kaplıyor" biter.
+         Önemli olan 3 satıra kadar açılır (2 satırda kırpılan uyarı okunamıyordu),
+         sıradan bilgi 2 satırda kalır. */
+      #toasts { max-height: 34vh; overflow: hidden; }
+      #toasts > .toast.imp { -webkit-line-clamp: 3; border-bottom-width: 3px !important; }
       /* alt-sekmeler (Profil/Ayarlar) yalnızca mobilde görünür (global display:none'ı ez) */
       .subtabs { display: flex !important; }
       /* Sorun Bildir mobilde ayarların içine taşındı — yüzen buton gizli */
@@ -558,7 +563,11 @@
     /* ---------- Toast ---------- */
     /* MASAÜSTÜ: SOL ALT köşe (2 oyuncu raporu: "ortada birikiyor, yazının üstüne geliyor").
        Alt kenara sabit; yeni toast altta, eskiler yukarı iter. Mobil kuralı (aşağıda) sağ kolonu korur. */
-    #toasts { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); left: calc(14px + env(safe-area-inset-left)); z-index: 40;
+    /* Bottom 66px: toast'lar artık TIKLANABİLİR (pointer-events:auto) — eskiden tıklama
+       geçirgen olduğu için sol-alttaki '#guestcta' (Şimdi Kayıt Ol) butonunun üstünde
+       durabiliyorlardı. Artık üstüne binerse tıklamayı yerlerdi; kolonu butonun üstüne
+       kaldırdık (kayıt hunisi korunur). */
+    #toasts { position: fixed; bottom: calc(66px + env(safe-area-inset-bottom)); left: calc(14px + env(safe-area-inset-left)); z-index: 40;
               display: flex; flex-direction: column; justify-content: flex-end; gap: 7px; align-items: flex-start; pointer-events: none;
               max-width: min(420px, 40vw); }
     /* toast = oyunun kart dili: krem + border-bottom "basılı kart" derinliği (jenerik değil) */
@@ -566,10 +575,26 @@
              border: 1.5px solid var(--edge); border-bottom: 3px solid var(--edge);
              padding: 8px 15px; border-radius: var(--r-md); font-size: 13px; font-weight: 800;
              box-shadow: var(--shadow); animation: toastin .22s cubic-bezier(.34, 1.56, .64, 1);
-             max-width: min(420px, 86vw); text-align: center; }
+             max-width: min(420px, 86vw); text-align: center;
+             /* TIKLANABİLİR ("kapatmak mümkün değil" şikayeti): kapsayıcı pointer-events:none,
+                sadece toast'ın kendisi tıklamayı yakalar → altındaki sahne engellenmez. */
+             pointer-events: auto; cursor: pointer; }
     .toast.good { background: #eef7f1; border-color: var(--green); border-bottom-color: var(--green-dark); color: var(--green-dark); }
     .toast.bad { background: #fbeeee; border-color: var(--red); border-bottom-color: var(--red-dark); color: var(--red-dark); }
+    /* ÖNEM AYRIMI ("önemli olan spam içinde gözden kaçıyor"): uyarı/önemli toast kalın
+       çerçeve + belirgin gölge ile öne çıkar, sıradan bilgi geride kalır (hafif soluk,
+       daha ince yazı) — göz önce önemliyi görsün. */
+    .toast.imp { border-width: 2px; border-bottom-width: 4px; box-shadow: 0 8px 22px rgba(15, 22, 30, .30); }
+    .toast:not(.good):not(.bad):not(.imp) { opacity: .9; font-weight: 700; }
+    /* aynı mesaj tekrarlayıp "×N" sayacı arttığında kısa vurgu — yeni satır dizmeden
+       "yine oldu" bilgisini verir */
+    .toast.bump { animation: toastbump .28s ease-out; }
     @keyframes toastin { from { opacity: 0; transform: translateY(-10px) scale(.94); } to { opacity: 1; } }
+    @keyframes toastbump { 0% { transform: scale(1); } 45% { transform: scale(1.06); } 100% { transform: scale(1); } }
+    /* hareket hassasiyeti olan oyuncular: giriş/vurgu animasyonu yok, işlev aynı */
+    @media (prefers-reduced-motion: reduce) {
+      .toast, .toast.bump { animation: none !important; }
+    }
 
     /* ---------- Patlama ---------- */
     #boom { position: fixed; inset: 0; background: #fff; z-index: 100; display: none;
