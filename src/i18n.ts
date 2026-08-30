@@ -17,6 +17,15 @@ function detect(): Lang {
 
 export let lang: Lang = detect()
 
+// <html lang> HER ZAMAN 'tr' kalıyordu; CSS `text-transform: uppercase` de dilin
+// döküm kurallarını kullanır. Sonuç: EN/FR modda başlıklarda TÜRKÇE büyütme —
+// 'Marque & Cession' başlığı 'MARQUE & CESSİON' diye çıkıyordu (noktalı İ).
+// Doğru `lang` ayrıca ekran okuyucu ve tarayıcı çeviri teklifi için de gerekli.
+// DOM guard: bu modül NODE testlerinden de import ediliyor (state.ts → i18n.ts).
+// Guard'sız hâli tüm node testlerini "document is not defined" ile düşürüyordu.
+if (typeof document !== 'undefined') // (headless birim testleri i18n'i Node'da import ediyor — orada `document` yok)
+if (typeof document !== 'undefined') document.documentElement.lang = lang
+
 export function setLang(l: Lang) {
   localStorage.setItem(LANG_KEY, l)
   location.reload()
@@ -1303,6 +1312,24 @@ const EN: Record<string, string> = {
     'The city’s busiest flow, but rent is heavy and land is both pricey and scarce.',
   '{0} zaten bu çıkışta ve GÜÇLÜ — payını sıfırdan kazanman gerekecek.':
     '{0} already holds this exit and is STRONG — you will have to win your share from zero.',
+
+  // --- Kredi: haciz / banka ortaklığı uyarıları ---
+  'Taksit ÜST ÜSTE 2 GÜN ödenmezse banka istasyona ORTAK olur — borç bitene dek günlük kârının bir kısmı bankaya gider.':
+    'Miss the installment 2 DAYS IN A ROW and the bank becomes a PARTNER — a share of your daily profit goes to the bank until the debt clears.',
+  'Taksit ÜST ÜSTE 2 GÜN ödenmezse teminatların HACZEDİLİR ve geri alınamaz. Şu an risk altındaki değer: ₺{0}':
+    'Miss the installment 2 DAYS IN A ROW and your collateral is SEIZED for good. Value at risk right now: ₺{0}',
+  '⚠ {0} gün geciktin — {1} gün daha gecikirsen haciz gelir. Kasanda ₺{2} olmalı.':
+    '⚠ {0} days overdue — {1} more and the seizure lands. You need ₺{2} in your cash.',
+  'SON UYARI: yarın da ödeyemezsen {0} HACZEDİLİR (₺{1}). Kasanda ₺{2} olmalı.':
+    'LAST WARNING: miss tomorrow too and {0} is SEIZED (₺{1}). You need ₺{2} in your cash.',
+  'SON UYARI: yarın da ödeyemezsen banka istasyona ORTAK olur — kârının bir kısmını alır. Kasanda ₺{0} olmalı.':
+    'LAST WARNING: miss tomorrow too and the bank becomes a PARTNER — it takes a share of your profit. You need ₺{0} in your cash.',
+
+  // --- Kredi: teminat seçimi ---
+  'RİSK: taksiti üst üste 2 gün ödeyemezsen seçtiğin {0} bankaya geçer ve GERİ ALINAMAZ.':
+    'RISK: miss the installment 2 days in a row and {0} go to the bank — GONE FOR GOOD.',
+  'Teminat seç — ödeyemezsen seçtiğin binalar bankaya geçer.':
+    'Pick collateral — if you can’t pay, the buildings you pick go to the bank.',
 }
 
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
@@ -2855,6 +2882,24 @@ const FR: Record<string, string> = {
     'Le flux le plus dense de la ville, mais loyer lourd et terrains chers et rares.',
   '{0} zaten bu çıkışta ve GÜÇLÜ — payını sıfırdan kazanman gerekecek.':
     '{0} tient déjà cette sortie et il est FORT — il faudra gagner ta part depuis zéro.',
+
+  // --- Kredi: haciz / banka ortaklığı uyarıları ---
+  'Taksit ÜST ÜSTE 2 GÜN ödenmezse banka istasyona ORTAK olur — borç bitene dek günlük kârının bir kısmı bankaya gider.':
+    'Si la mensualité n’est pas payée 2 JOURS D’AFFILÉE, la banque devient PARTENAIRE — une part de ton bénéfice quotidien lui revient jusqu’au remboursement.',
+  'Taksit ÜST ÜSTE 2 GÜN ödenmezse teminatların HACZEDİLİR ve geri alınamaz. Şu an risk altındaki değer: ₺{0}':
+    'Si la mensualité n’est pas payée 2 JOURS D’AFFILÉE, tes garanties sont SAISIES et perdues. Valeur en jeu actuellement : ₺{0}',
+  '⚠ {0} gün geciktin — {1} gün daha gecikirsen haciz gelir. Kasanda ₺{2} olmalı.':
+    '⚠ {0} jours de retard — encore {1} et la saisie tombe. Il te faut ₺{2} en caisse.',
+  'SON UYARI: yarın da ödeyemezsen {0} HACZEDİLİR (₺{1}). Kasanda ₺{2} olmalı.':
+    'DERNIER AVERTISSEMENT : si tu ne paies pas demain non plus, {0} sera SAISI (₺{1}). Il te faut ₺{2} en caisse.',
+  'SON UYARI: yarın da ödeyemezsen banka istasyona ORTAK olur — kârının bir kısmını alır. Kasanda ₺{0} olmalı.':
+    'DERNIER AVERTISSEMENT : si tu ne paies pas demain non plus, la banque devient PARTENAIRE — elle prend une part de ton bénéfice. Il te faut ₺{0} en caisse.',
+
+  // --- Kredi: teminat seçimi ---
+  'RİSK: taksiti üst üste 2 gün ödeyemezsen seçtiğin {0} bankaya geçer ve GERİ ALINAMAZ.':
+    'RISQUE : deux mensualités manquées d’affilée et {0} passent à la banque — SANS RETOUR.',
+  'Teminat seç — ödeyemezsen seçtiğin binalar bankaya geçer.':
+    'Choisis des garanties — si tu ne peux pas payer, les bâtiments choisis passent à la banque.',
 }
 
 /** Aktif dilin sözlüğü. TR kaynak dil olduğu için sözlüğü yoktur (anahtarın kendisi metindir). */

@@ -1683,7 +1683,18 @@ function renderBank() {
       + `<div class="stat"><span class="k">${t('Kalan taksit')}</span><span class="v">${l.remaining} / 12</span></div>`
       + `<div class="stat"><span class="k">${t('Gecikme')}</span><span class="v ${l.overdue ? 'bad' : 'good'}">${l.overdue}</span></div>`
       + `<div class="sd" style="margin:9px 0 4px">${unsec ? t('Teminatsız avans') : t('Teminatların') + ': ' + l.collateral.map(collateralLabel).join(', ')}</div>`
-      + `<div class="sd" style="margin:4px 0 12px; color:var(--red)">${unsec ? t('Ödenmezse banka istasyona ORTAK olur (kâr payından tahsil).') : t('Ödenmezse teminatların haczedilir.')}</div>`
+      + `<div class="sd" style="margin:4px 0 12px; color:var(--red)">${
+          unsec
+            ? t('Taksit ÜST ÜSTE 2 GÜN ödenmezse banka istasyona ORTAK olur — borç bitene dek günlük kârının bir kısmı bankaya gider.')
+            : t('Taksit ÜST ÜSTE 2 GÜN ödenmezse teminatların HACZEDİLİR ve geri alınamaz. Şu an risk altındaki değer: ₺{0}',
+                l.collateral.reduce((a, id) => a + state.collateralValue(id), 0).toLocaleString('tr-TR'))
+        }</div>`
+      + (l.overdue > 0
+          ? `<div class="sd" style="margin:-6px 0 12px; color:var(--red); font-weight:800">${
+              t('⚠ {0} gün geciktin — {1} gün daha gecikirsen haciz gelir. Kasanda ₺{2} olmalı.',
+                l.overdue, Math.max(1, 2 - l.overdue), l.monthly.toLocaleString('tr-TR'))
+            }</div>`
+          : '')
       + `<button class="btn good" id="bank-payoff" style="width:100%; justify-content:center">${t('Erken Kapat — ₺{0}', state.loanPayoff().toLocaleString('tr-TR'))}</button>`
     return
   }
@@ -1708,6 +1719,15 @@ function renderBank() {
     html += `<div class="ofsec" style="margin-top:16px">${t('Teminatlı Kredi — değerin %50si')}</div>${rows}`
       + `<div class="stat" style="margin-top:8px"><span class="k">${t('Kredi tutarı')}</span><span class="v">₺${total.toLocaleString('tr-TR')}</span></div>`
       + `<div class="stat"><span class="k">${t('Aylık taksit')}</span><span class="v">₺${monthly.toLocaleString('tr-TR')}</span></div>`
+      // #445 (churn): oyuncu neyi riske attığını KREDİYİ ALIRKEN görmüyordu; sonra
+      // binalarını kaybedip oyunu bırakıyordu. Riski işlemden ÖNCE, seçtiği binaların
+      // adıyla söylüyoruz — sürpriz kayıp, oyuncunun bilerek aldığı riskten çok daha kötü.
+      + `<div class="sd" style="margin:8px 0 4px; color:var(--red)">${
+          total > 0
+            ? t('RİSK: taksiti üst üste 2 gün ödeyemezsen seçtiğin {0} bankaya geçer ve GERİ ALINAMAZ.',
+                elig.filter(e => bankSelected.has(e.id)).map(e => e.label).join(', '))
+            : t('Teminat seç — ödeyemezsen seçtiğin binalar bankaya geçer.')
+        }</div>`
       + `<button class="btn primary" id="bank-take" style="width:100%; justify-content:center; margin-top:6px" ${total <= 0 ? 'disabled' : ''}>${t('Krediyi Al — +₺{0}', total.toLocaleString('tr-TR'))}</button>`
   }
   body.innerHTML = html
@@ -6017,7 +6037,19 @@ function frame() {
     // kredi taksiti (aylık = 1 oyun günü)
     const loanRes = state.processLoanDay()
     if (loanRes === 'done') ui.toast(t('Kredi tamamen ödendi — teminatların serbest!'), 'good')
-    else if (loanRes === 'warn') ui.toast(t('Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.'), 'bad')
+    else if (loanRes === 'warn') {
+      // #445: uyarı SOYUTTU ("tahsilat/haciz gelir"). Oyuncu neyi kaybedeceğini bilmeden
+      // krediyi umursamıyor, sonra her şeyi kaybedince oyunu bırakıyordu. Artık uyarı
+      // tam olarak NEYİN gideceğini ve YARIN olacağını söylüyor.
+      const rehin = state.loan.collateral
+      const deger = rehin.reduce((a, id) => a + state.collateralValue(id), 0)
+      ui.toast(rehin.length
+        ? t('SON UYARI: yarın da ödeyemezsen {0} HACZEDİLİR (₺{1}). Kasanda ₺{2} olmalı.',
+            rehin.map(collateralLabel).join(', '), deger.toLocaleString('tr-TR'),
+            state.loan.monthly.toLocaleString('tr-TR'))
+        : t('SON UYARI: yarın da ödeyemezsen banka istasyona ORTAK olur — kârının bir kısmını alır. Kasanda ₺{0} olmalı.',
+            state.loan.monthly.toLocaleString('tr-TR')), 'bad', true)
+    }
     else if (loanRes === 'seize') {
       // HACİZ YALNIZ KREDİNİN ALINDIĞI ŞUBEDE (canlı kayıt kanıtı: cevreyolu'nda oynayan
       // hesaplarda pompalar/ofis dışında HER ŞEY silinmişti). Teminat id'leri şube bazlı
