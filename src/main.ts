@@ -167,7 +167,10 @@ setInterval(() => {
         if (socialInited || !P.SocialLogin?.initialize) return
         await P.SocialLogin.initialize({
           google: { iOSClientId: '80997572914-8ihbi46csk9ngog7ec1oe2ssb3c08t5e.apps.googleusercontent.com' },
-          apple: { clientId: 'com.benerits.beneloil' },
+          // Apple girişinde native aud = BUNDLE ID. Yeni Apple hesabına taşınırken
+          // bundle com.benerits.beneloil → com.beneloil oldu; sunucudaki
+          // APPLE_CLIENT_IDS de bu değeri içermeli (geçiş boyunca ikisi birden).
+          apple: { clientId: 'com.beneloil' },
         })
         socialInited = true
       }
