@@ -19,7 +19,15 @@ bekle(/move && mevcut/.test(src), 'yeni yerleştirme etkilenmiyor (yalnız move 
 // R kısayolu ve döndürme
 bekle(/\(e\.key === 'r' \|\| e\.key === 'R'\) && placing/.test(src), 'R tuşu döndürüyor')
 bekle(/placing\.rot = \(placing\.rot \+ 1\) % 4/.test(src), 'dönüş 90° adımlarla')
-bekle(/R veya ⟳ döndür/.test(src), 'ipucu metni klavye kısayolunu duyuruyor')
+// İpucu metni sonradan yeniden yazıldı ("R veya ⟳ döndür" → "R tuşu ya da ⟳ DÖNDÜRÜR")
+// ama test eski cümleyi arıyordu; kontrol sabit cümleye değil ANLAMA bakmalı: hem taşıma
+// hem yerleştirme ipucu R kısayolunu ve ⟳ butonunu duyurmalı. (i18n anahtarları bu birebir
+// metinler olduğu için cümleyi DEĞİŞTİRMEK yerine testi gerçeğe hizaladık.)
+for (const mod of ['Taşıma modu', 'Yerleştirme modu']) {
+  const satir = src.split('\n').find(l => l.includes(`${mod}: oklar`)) // yorum satırlarını değil, ipucu metnini bul
+  bekle(!!satir && /\bR\b/.test(satir) && satir.includes('⟳'),
+    `ipucu metni klavye kısayolunu duyuruyor (${mod})`)
+}
 
 console.log(hata ? `\n${hata} kontrol başarısız` : '\ntaşıma: tüm kontroller geçti')
 process.exit(hata ? 1 : 0)

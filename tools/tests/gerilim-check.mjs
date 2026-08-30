@@ -71,9 +71,14 @@ bekle(/combo\(seri: number\)/.test(audio), 'seri kademesinde ses var')
 bekle(/Kaçırdığın müşteri/.test(main), 'gün sonu raporunda kayıp satırı var')
 bekle(/state\.dayLostCount = 0/.test(main), 'günlük kayıp sayacı gün dönüşünde sıfırlanıyor')
 
-// ── Faz 4: fizik ──
-bekle(/carsPassThrough: \(\) => new URLSearchParams\(location\.search\)\.has\('nocollide'\)/.test(main),
-  'çarpışma VARSAYILAN açık (eskiden yalnız ?collide ile açılıyordu)')
+// ── Faz 4: fizik — ÇARPIŞMA VARSAYILANI ÖLÇÜMLE GERİ ALINDI ──
+// Faz 4.1'de çarpışmayı varsayılan açmıştım; üretim konfigüyle koşulan yük testi
+// bedelini gösterdi (aynı tohum, 10 dk): servis 384→268, 11 araç buharlaştı, 2'si
+// kalıcı sıkıştı, rezervasyon reddi 367→58.663. Müşteri SESSİZCE siliniyordu
+// (evaporate onCarLost çağırmaz) — görünmez gelir kaybı, görünen iç içe geçmeden kötü.
+bekle(/carsPassThrough: \(\) => !new URLSearchParams\(location\.search\)\.has\('collide'\)/.test(main),
+  'çarpışma varsayılanı KAPALI (ölçülmüş ürün kararı — ?collide ile açılır)')
+bekle(/ÖLÇÜLMÜŞ ÜRÜN KARARI/.test(main), 'geri alma gerekçesi kodda yazılı (ölçüm sayılarıyla)')
 
 // ── SAVE UYUMLULUĞU: eski kayıtlar bozulmamalı ──
 console.log('\n── SAVE UYUMLULUĞU ──')

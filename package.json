@@ -44,6 +44,7 @@
     "test:kasa": "tsx tools/tests/kasa-check.mjs",
     "test:konum": "tsx tools/tests/konum-check.mjs",
     "test:tasima": "tsx tools/tests/tasima-check.mjs",
+    "test:yerlesim": "node tools/tests/yerlesim-check.mjs",
     "test:branch": "tsx tools/tests/branch-check.mjs",
     "test:karsiyaka": "tsx tools/tests/karsi-yaka-check.mjs",
     "ses:export": "node tools/ses-export.mjs",
