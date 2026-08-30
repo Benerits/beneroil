@@ -92,7 +92,7 @@ const saydamKese = new Map<number, THREE.MeshLambertMaterial>()
 const saydam = (color: number) => {
   let m = saydamKese.get(color)
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.4, depthWrite: false })
+    m = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.26, depthWrite: false })
     saydamKese.set(color, m)
   }
   return m
@@ -1226,19 +1226,23 @@ export class World {
     }
     // 1) kaide: silo yere basıyor görünsün (eski küre tankın 4 ayağı yerine)
     sil(R * 1.16, TABAN_Z, TABAN_Z / 2, lam(KOYU), 12)
-    // 2) saydam gövde: içerideki yakıt seviyesi dışarıdan okunsun
-    sil(R, H, TABAN_Z + H / 2, saydam(color))
+    // 2) saydam gövde NÖTR CAM RENGİ: yakıt rengini kabuğa vermek dolu/boş farkını
+    //    yutuyordu (her silo baştan aşağı renkli görünüyordu). Kabuk cam, içindeki sıvı
+    //    renkli → seviye tek bakışta okunuyor. Hangi yakıt olduğunu çatı+kuşak rengi söyler.
+    sil(R, H, TABAN_Z + H / 2, saydam(0xdde3e8))
     // 3) yakıt: opak iç silindir, updateTankFill ile alttan yukarı ölçeklenir
-    const fillR = R * 0.86
+    const fillR = R * 0.88
     const fill = sil(fillR, 0.001, TABAN_Z, lam(color))
     fill.userData = { fillR, baseZ: TABAN_Z + 0.02, bodyH: H - 0.04 }
     // 4) KUŞAKLAR: her segment ekinde ince bir ring — "kaç seviye" gözle sayılabilir olsun
     for (let i = 0; i <= seg; i++) {
       const kalin = i === 0 || i === seg      // alt/üst kuşak biraz daha belirgin
-      sil(R * (kalin ? 1.1 : 1.07), kalin ? 0.1 : 0.07, TABAN_Z + i * SEG_H, lam(kalin ? KOYU : METAL), 12)
+      sil(R * (kalin ? 1.1 : 1.07), kalin ? 0.1 : 0.07, TABAN_Z + i * SEG_H,
+        lam(i === seg ? color : kalin ? KOYU : METAL), 12)
     }
-    // 5) konik çatı + havalandırma borusu — silo siluetini tamamlar
-    const cati = new THREE.Mesh(birimKoni(RAD), lam(METAL))
+    // 5) konik çatı + havalandırma borusu — silo siluetini tamamlar; çatı yakıt renginde
+    //    (cam gövde nötr olduğu için yakıt kimliğini buradan okuyoruz)
+    const cati = new THREE.Mesh(birimKoni(RAD), lam(color))
     cati.scale.set(R * 1.1, 0.34, R * 1.1)
     cati.rotation.x = Math.PI / 2
     cati.position.z = TABAN_Z + H + 0.17
