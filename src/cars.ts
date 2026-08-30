@@ -992,6 +992,64 @@ const WAIT_OFFSETS = [3.2, 6.0, 8.8, 12.6, 15.4, 18.2, 21.0, 23.8]
 // Su şubesinde 4 geniş yuva korunuyor ("tekneler iç içe giriyor" fixi, 9612597).
 const WAIT_OFFSETS_WATER = [4, 13, 22, 31] // tekne kuyruğu: boy ortalaması + pay
 
+/** Eksen hizalı dikdörtgen ile doğru parçası kesişiyor mu (slab yöntemi).
+ *  pad: aracın yarı genişliği kadar şişirme — teğet geçişler de engel sayılır. */
+function segmentDikdortgeniKesiyor(
+  ax: number, ay: number, bx: number, by: number,
+  r: { cx: number; cy: number; w: number; d: number }, pad: number,
+): boolean {
+  const minX = r.cx - r.w / 2 - pad, maxX = r.cx + r.w / 2 + pad
+  const minY = r.cy - r.d / 2 - pad, maxY = r.cy + r.d / 2 + pad
+  // her iki uç da aynı tarafta kalıyorsa kesişim yok (ucuz eleme)
+  if ((ax < minX && bx < minX) || (ax > maxX && bx > maxX)) return false
+  if ((ay < minY && by < minY) || (ay > maxY && by > maxY)) return false
+  const dx = bx - ax, dy = by - ay
+  let t0 = 0, t1 = 1
+  for (const [p, q] of [[-dx, ax - minX], [dx, maxX - ax], [-dy, ay - minY], [dy, maxY - ay]]) {
+    if (p === 0) { if (q < 0) return false; continue }
+    const t = q / p
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t }
+    else { if (t < t0) return false; if (t < t1) t1 = t }
+  }
+  return true
+}
+
+/** Rotayı engellerden ARINDIR: kesişen her segmentin etrafına yanal ara nokta koyar.
+ *  Sınırlı yineleme (2 tur) — çözemezse mevcut reaktif kaçış zaten devrede kalır. */
+function rotayiTemizle(yol: THREE.Vector3[], pad = 1.0): THREE.Vector3[] {
+  if (!Car.solids.length || yol.length < 2) return yol
+  let cikti = yol
+  for (let tur = 0; tur < 2; tur++) {
+    const yeni: THREE.Vector3[] = [cikti[0]]
+    let degisti = false
+    for (let i = 1; i < cikti.length; i++) {
+      const a = cikti[i - 1], b = cikti[i]
+      const engel = Car.solids.find(r => segmentDikdortgeniKesiyor(a.x, a.y, b.x, b.y, r, pad))
+      if (engel) {
+        // engelin İKİ yanından geçen aday ara noktalar; hedefe yakın olanı seçilir
+        const yatay = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
+        const adaylar = yatay
+          ? [engel.cy + engel.d / 2 + pad + 0.4, engel.cy - engel.d / 2 - pad - 0.4]
+              .map(y => new THREE.Vector3((a.x + b.x) / 2, y, 0))
+          : [engel.cx + engel.w / 2 + pad + 0.4, engel.cx - engel.w / 2 - pad - 0.4]
+              .map(x => new THREE.Vector3(x, (a.y + b.y) / 2, 0))
+        // her iki bacağı da temiz olan ilk adayı al
+        const iyi = adaylar
+          .sort((m, n) => m.distanceTo(b) - n.distanceTo(b))
+          .find(c => !Car.solids.some(r =>
+            segmentDikdortgeniKesiyor(a.x, a.y, c.x, c.y, r, pad)
+            || segmentDikdortgeniKesiyor(c.x, c.y, b.x, b.y, r, pad)))
+        if (iyi) { yeni.push(iyi); degisti = true }
+      }
+      yeni.push(b)
+    }
+    cikti = yeni
+    if (!degisti) break
+  }
+  return cikti
+}
+
+
 export interface CarManagerOpts {
   pumpCount: () => number
   evCount: () => number
@@ -1767,11 +1825,12 @@ export class CarManager {
   }
 
   /** rampadan girip hedef noktaya giden yol */
+
   private entryPath(p: THREE.Vector3, st: 'near' | 'far' = 'near'): THREE.Vector3[] {
     const G = this.geom(st)
     const apronY = G.gateInY
     const off = this.gateInOff()
-    return [
+    const ham = [
       // kapı kuyruğu BANKETTE bekler (şerit ile kapı arası) — şerit ortasında duran
       // giriş adayı arkasındaki tüm transit trafiği kilitliyordu ("yolda araçlar
       // sıkışıyor, istasyon boş görünüyor" şikâyeti). Şerit trafiği yanından akar.
@@ -1780,6 +1839,10 @@ export class CarManager {
       new THREE.Vector3(G.gateX + G.sideSign * 1.75, p.y - G.dirY * 2.5, 0),
       p.clone(),
     ]
+    // ENGELLERİ BAŞTAN HESABA KAT (oyuncu gözlemi: "önce pompaya gidiyor, sonra rotasını
+    // güncelliyor"). Eskiden araç bina üstünden geçen rotayla yola çıkıp 1.6 sn takıldıktan
+    // SONRA dolanıyordu — görünen şey "fikir değiştirme"ydi. Artık rota kurulurken temizlenir.
+    return rotayiTemizle(ham)
   }
 
   /** tıra boş tır parkı yeri bul ve gönder; başarılıysa true */

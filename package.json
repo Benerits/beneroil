@@ -49,7 +49,8 @@
     "shots": "node tools/shot/shoot.mjs",
     "test:gerilim": "tsx tools/tests/gerilim-check.mjs",
     "test:mobil": "node tools/tests/mobil-check.mjs",
-    "test:rakip": "tsx tools/tests/rakip-check.mjs"
+    "test:rakip": "tsx tools/tests/rakip-check.mjs",
+    "test:rota": "tsx tools/tests/rota-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

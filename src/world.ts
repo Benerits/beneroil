@@ -4,7 +4,7 @@ import { StaticLib, fitModel } from './models'
 import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 import { LocationTheme, activeTheme } from './themes'
 import type { Kit } from './kits'
-import { asset, texture } from './platform'
+import { asset, texture, isLightMode } from './platform'
 import { SCENE_PLANS, type Placement } from './scenery'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
@@ -75,6 +75,27 @@ const birimSilindir = (segment: number) => {
   let g = silindirKese.get(k)
   if (!g) { g = new THREE.CylinderGeometry(1, 1, 1, segment); silindirKese.set(k, g) }
   return g
+}
+// Silo çatısı: birim koni de aynı mantıkla paylaşılır (tank her seviye atlayışında yeniden
+// kurulduğu için burada geometri üretmek onlarca çöp BufferGeometry demek olurdu).
+const koniKese = new Map<string, THREE.ConeGeometry>()
+const birimKoni = (segment: number) => {
+  const k = `k${segment}`
+  let g = koniKese.get(k)
+  if (!g) { g = new THREE.ConeGeometry(1, 1, segment); koniKese.set(k, g) }
+  return g
+}
+/** Saydam gövde materyali — lam() gibi RENK BAŞINA TEK nesne.
+ *  Tank her yükseltmede/taşımada yeniden kurulduğu için inline materyal üretmek
+ *  her seferinde 3 yeni shader bağlaması (ve eski materyalde sızıntı) demekti. */
+const saydamKese = new Map<number, THREE.MeshLambertMaterial>()
+const saydam = (color: number) => {
+  let m = saydamKese.get(color)
+  if (!m) {
+    m = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.4, depthWrite: false })
+    saydamKese.set(color, m)
+  }
+  return m
 }
 
 function glow(color: number, intensity: number) {
@@ -1173,44 +1194,69 @@ export class World {
     }
   }
 
-  /** Saydam küre tank + içeride yakıt seviyesi (kırpma düzlemiyle alttan dolar). Dönen mesh = iç sıvı.
-   *  KONUM/BOYUT (x,y yarıçap R) CANLI/main ile BİREBİR → footprint aynı, komşu binalarla çakışmaz. */
-  private addSphereTank(x: number, y: number, R: number, color: number): THREE.Mesh {
+  /** SİLO TANK — seviye arttıkça YUKARI büyür, TABAN ALANI SABİT KALIR.
+   *
+   *  NEDEN böyle: yükseltmede tankın çapını büyütmek footprint'i (2.0×2.0, main'deki
+   *  footprintOf/hardRects tablosu) taşırdı; komşu binalarla çakışma ve eski save'lerde
+   *  "yerleştirilemedi" hatası çıkardı. Bu yüzden yarıçap SABİT, her seviye gövdeye bir
+   *  segment ekler: gerçek bir yakıt silosu gibi kuşaklarla üst üste yükselir.
+   *
+   *  Yakıt gövdenin TOPLAM yüksekliğine göre alttan yukarı dolar; ölçekleme ile yapılır
+   *  (kırpma düzlemi DEĞİL) — eski kırpma yöntemi lam() önbelleğindeki PAYLAŞILAN materyale
+   *  clippingPlanes yazıyordu, yani aynı renkteki başka nesneler de kırpılma riski taşıyordu.
+   *
+   *  @param seg gövde segment sayısı (tank seviyesi + 1) */
+  private addSiloTank(x: number, y: number, R: number, seg: number, color: number): THREE.Mesh {
     const g = new THREE.Group()
-    const centerZ = R + 0.55           // küre merkezi main ile aynı yükseklikte
-    const fillR = R * 0.9
-    const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 18),
-      new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.42, depthWrite: false }))
-    shell.position.z = centerZ
-    shell.castShadow = true
-    g.add(shell)
-    // iç sıvı: yatay düzlemle kırpılır → alttan yukarı dolar (%50 = yarım küre)
-    const plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), centerZ - fillR)
-    const fillMat = lam(color)
-    fillMat.clippingPlanes = [plane]
-    fillMat.clipShadows = true
-    const fill = new THREE.Mesh(new THREE.SphereGeometry(fillR, 24, 18), fillMat)
-    fill.position.z = centerZ
-    fill.castShadow = true
-    g.add(fill)
-    const cap = new THREE.Mesh(new THREE.CircleGeometry(1, 28),
-      new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }))
-    cap.position.z = centerZ - fillR
-    cap.visible = false
-    g.add(cap)
-    fill.userData = { plane, cap, fillR, centerZ }
-    // ayaklar/valf — main ile aynı yerleşim (footprint korunur)
-    for (const [lx, ly] of [[0.6, 0.6], [0.6, -0.6], [-0.6, 0.6], [-0.6, -0.6]] as const) {
-      cyl(0.09, R + 0.35, 0x8f979e, lx * (R / 1.15), ly * (R / 1.15), (R + 0.35) / 2, 'z', g)
+    const hafif = isLightMode()
+    const RAD = hafif ? 10 : 20        // mobilde radyal segment yarıya iner (fill+kabuk+çatı×3 tank)
+    const SEG_H = 0.58                 // bir stack'in yüksekliği
+    const TABAN_Z = 0.16               // beton kaide
+    const H = SEG_H * seg              // gövdenin toplam yüksekliği
+    const METAL = 0x9aa3ab, KOYU = 0x6d757c
+    // paylaşılan birim silindir + scale (ayrı BufferGeometry üretilmez)
+    const sil = (r: number, h: number, z: number, mat: THREE.Material, rad = RAD) => {
+      const m = new THREE.Mesh(birimSilindir(rad), mat)
+      m.scale.set(r, h, r)
+      m.rotation.x = Math.PI / 2
+      m.position.z = z
+      m.castShadow = true
+      g.add(m)
+      return m
     }
-    cyl(0.05, 0.45, 0x8f979e, 0, 0, R * 2 + 0.6, 'z', g)
+    // 1) kaide: silo yere basıyor görünsün (eski küre tankın 4 ayağı yerine)
+    sil(R * 1.16, TABAN_Z, TABAN_Z / 2, lam(KOYU), 12)
+    // 2) saydam gövde: içerideki yakıt seviyesi dışarıdan okunsun
+    sil(R, H, TABAN_Z + H / 2, saydam(color))
+    // 3) yakıt: opak iç silindir, updateTankFill ile alttan yukarı ölçeklenir
+    const fillR = R * 0.86
+    const fill = sil(fillR, 0.001, TABAN_Z, lam(color))
+    fill.userData = { fillR, baseZ: TABAN_Z + 0.02, bodyH: H - 0.04 }
+    // 4) KUŞAKLAR: her segment ekinde ince bir ring — "kaç seviye" gözle sayılabilir olsun
+    for (let i = 0; i <= seg; i++) {
+      const kalin = i === 0 || i === seg      // alt/üst kuşak biraz daha belirgin
+      sil(R * (kalin ? 1.1 : 1.07), kalin ? 0.1 : 0.07, TABAN_Z + i * SEG_H, lam(kalin ? KOYU : METAL), 12)
+    }
+    // 5) konik çatı + havalandırma borusu — silo siluetini tamamlar
+    const cati = new THREE.Mesh(birimKoni(RAD), lam(METAL))
+    cati.scale.set(R * 1.1, 0.34, R * 1.1)
+    cati.rotation.x = Math.PI / 2
+    cati.position.z = TABAN_Z + H + 0.17
+    cati.castShadow = true
+    g.add(cati)
+    cyl(0.05, 0.3, METAL, 0, 0, TABAN_Z + H + 0.48, 'z', g)
+    // 6) yan merdiven: ölçek hissi verir (mobilde atlanır — 3 tank × ~10 mesh eder)
+    if (!hafif) {
+      for (const sy of [-0.1, 0.1]) cyl(0.022, H, KOYU, -R * 1.02, sy, TABAN_Z + H / 2, 'z', g)
+      for (let z = TABAN_Z + 0.25; z < TABAN_Z + H; z += 0.3) cyl(0.016, 0.2, KOYU, -R * 1.02, 0, z, 'y', g)
+    }
     g.position.set(x, y, 0)
     this.tankGroup.add(g)
     return fill
   }
 
-  /** KONUMLAR CANLI/main ile BİREBİR (spots, level+1 küre, R) → footprint aynı, eski save'lerle çakışmaz.
-   *  Görsel: saydam + içeride yakıt seviyesi. Küreler yakıtlara eşlenir (benzin/dizel/lpg döngüsel). */
+  /** KONUMLAR CANLI/main ile BİREBİR (üçgen dizilim, sabit R) → footprint 2.0×2.0 aynı kalır,
+   *  eski save'lerle çakışma çıkmaz. Seviye YALNIZCA yüksekliği (segment sayısını) değiştirir. */
   buildTankCluster(level: number) {
     this.tankLevelNow = level
     this.tankFillMeshes = { benzin: [], dizel: [], lpg: [] }
@@ -1218,7 +1264,10 @@ export class World {
       if (!(ch as THREE.Sprite).isSprite) this.tankGroup.remove(ch)
     }
     this.tankGroup.position.set(this.tankAnchor.x, this.tankAnchor.y, 0)
-    const R = 0.4 + level * 0.04
+    // R SABİT: en geniş parça (kaide, R*1.16) ile en uzak konum toplandığında bile
+    // 2.0 birimlik footprint aşılmaz → yerleşim/çakışma sistemi hiç etkilenmez.
+    const R = 0.42
+    const seg = Math.max(1, Math.min(4, level + 1))   // Sv.0 → 1 stack, her seviye +1 (state'te yeni alan YOK)
     const colors: Record<FuelType, number> = { benzin: 0x27a05a, dizel: 0xe8862e, lpg: 0x2f6fed }
     // 3 yakıt HER ZAMAN görünür (benzin/dizel/lpg) — üçgen dizilim, her biri kendi doluluk seviyesini gösterir.
     // Konumlar [0..0.9] aralığında kaldığı için footprint (4 hücre) + taşıma çapası (moveTank) BİREBİR korunur.
@@ -1228,25 +1277,23 @@ export class World {
       ['benzin', 0.45, 0],   // ön-orta
     ]
     for (const [f, x, y] of layout) {
-      const fill = this.addSphereTank(x, y, R, colors[f])
+      const fill = this.addSiloTank(x, y, R, seg, colors[f])
       this.tankFillMeshes[f].push(fill)
     }
   }
 
-  /** Her yakıtın doluluk oranıyla (0..1) sıvı seviyesini alttan yukarı ayarlar. */
+  /** Her yakıtın doluluk oranıyla (0..1) sıvı seviyesini alttan yukarı ayarlar.
+   *  ARAYÜZ DEĞİŞMEDİ; seviye artık silonun TOPLAM yüksekliğine oranlanır. */
   updateTankFill(ratios: Record<FuelType, number>) {
     for (const f of ['benzin', 'dizel', 'lpg'] as FuelType[]) {
       const r = Math.max(0, Math.min(1, ratios[f] || 0))
       for (const m of this.tankFillMeshes[f]) {
-        const ud = m.userData as { plane: THREE.Plane; cap: THREE.Mesh; fillR: number; centerZ: number }
-        if (!ud?.plane) continue
-        const surfaceZ = ud.centerZ + ud.fillR * (2 * r - 1)
-        ud.plane.constant = surfaceZ
-        m.visible = r > 0.001
-        const crossR = ud.fillR * Math.sqrt(Math.max(0, 1 - (2 * r - 1) ** 2))
-        ud.cap.visible = r > 0.02 && r < 0.99
-        ud.cap.position.z = surfaceZ
-        ud.cap.scale.setScalar(Math.max(0.0001, crossR))
+        const ud = m.userData as { fillR: number; baseZ: number; bodyH: number }
+        if (!ud?.bodyH) continue
+        const h = Math.max(0.001, ud.bodyH * r)
+        m.scale.set(ud.fillR, h, ud.fillR)   // silindir ekseni Y; rotation.x ile dünya Z'sine bakar
+        m.position.z = ud.baseZ + h / 2
+        m.visible = r > 0.004
       }
     }
   }
