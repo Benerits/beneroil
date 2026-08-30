@@ -110,6 +110,21 @@ export const TANK_CAPACITY = [800, 1500, 3000, 5000]
 export const ORDER_STEP = 200
 export const MAX_PUMPS = 14
 export const MAX_EV = 12
+/** ŞUBE BAŞINA KURULABİLİR EKİPMAN TAVANI — devir eşiği bunun üstüne ÇIKAMAZ.
+ *  Ölçüm (30 Tem, canlı save'ler): full kurulu şube kasaba ₺1.761.500 · çevreyolu
+ *  ₺1.689.100 · otoyol ₺1.721.300. Tavanı ölçülen maksimumun ALTINA (₺1.5M) sabitliyoruz
+ *  ki eşik her zaman payla ulaşılabilir kalsın — "eşiğe erişilemiyor" kilidi bir daha
+ *  oluşamasın. Yıldız farmının freni burada değil, artan şube açma bedelinde. */
+export const BRANCH_EQUIP_CAP = 1_500_000
+/** Her yeni şubenin bedel çarpanı: açık şube başına ×1.25 (bileşik).
+ *  Devir eşiği tavanı şube sayısıyla büyüdüğü için tavanı yükseltmenin TEK yolu şube
+ *  açmak — bedeli artan yapmak devir-çiftliğini parayla frenler.
+ *  KALİBRASYON (30 Tem, canlı veri): 3 şubeli 15 oyuncunun medyan nakdi ₺2,87M. 1.4'te
+ *  marina ₺9,8M (medyanın 3,4 katı) normal ilerleyen oyuncuyu da cezalandırıyordu →
+ *  1.25 ile ₺7,81M. Farmın asıl freni zaten eşik tavanı + tavan devrinde %60→%30 kırpma;
+ *  şube bedeli üçüncü katman, tek başına duvar olmamalı.
+ *  Bedeller: çevreyolu ₺500k · otoyol ₺2,5M · marina ₺7,81M · metropol ₺23,44M */
+export const BRANCH_COST_STEP = 1.25
 // Batarya deposu kademeleri. Sv.3 (600 kWh) geç oyunda yetmiyordu: 12 şarj ünitesi
 // dolu kapasiteyi dakikalar içinde boşaltıyor, güneş/reaktör üretimi biriktiremiyordu.
 // Üç kademe eklendi; artış hızlanıyor ama fiyat daha hızlı artıyor (kWh başına maliyet
@@ -853,14 +868,25 @@ export class GameState {
   firstBranchGift = false
   /** main gösterip sıfırlar */
   giftToast: string | null = null
-  /** Şube açma bedeli/şartı temadan gelir (nakit + marka yıldızı) */
+  /** ŞUBE AÇMA BEDELİ: temanın taban bedeli × ARTAN çarpan (açık şube başına ×1.4).
+   *  Devir eşiği tavanı = şube × ₺1.5M olduğu için tavanı yükseltmenin tek yolu yeni
+   *  şube açmak; bedeli bileşik artan yapmak yıldız farmını parayla frenler.
+   *  Taban bedeller temada, çarpan tek yerde — yeni tema eklenince otomatik uygulanır. */
+  branchUnlockCost(id: LocId): number {
+    const base = THEMES[id]?.unlock.cash ?? 0
+    if (base <= 0) return 0
+    const owned = Math.max(1, this.unlockedLocs.length)
+    return Math.round(base * Math.pow(BRANCH_COST_STEP, owned - 1) / 10_000) * 10_000
+  }
+  /** Şube açma bedeli/şartı temadan gelir (artan nakit + marka yıldızı) */
   canUnlockLoc(id: LocId): { ok: boolean; cash: number; stars: number; reason: string } {
     const th = THEMES[id]
     if (!th) return { ok: false, cash: 0, stars: 0, reason: 'yok' }
-    if (this.unlockedLocs.includes(id)) return { ok: false, cash: th.unlock.cash, stars: th.unlock.stars, reason: 'acik' }
-    if (this.brandStars < th.unlock.stars) return { ok: false, cash: th.unlock.cash, stars: th.unlock.stars, reason: 'yildiz' }
-    if (this.money < th.unlock.cash) return { ok: false, cash: th.unlock.cash, stars: th.unlock.stars, reason: 'para' }
-    return { ok: true, cash: th.unlock.cash, stars: th.unlock.stars, reason: '' }
+    const cash = this.branchUnlockCost(id)
+    if (this.unlockedLocs.includes(id)) return { ok: false, cash, stars: th.unlock.stars, reason: 'acik' }
+    if (this.brandStars < th.unlock.stars) return { ok: false, cash, stars: th.unlock.stars, reason: 'yildiz' }
+    if (this.money < cash) return { ok: false, cash, stars: th.unlock.stars, reason: 'para' }
+    return { ok: true, cash, stars: th.unlock.stars, reason: '' }
   }
   /** Şubeyi aç (bedeli kasadan düşer — büyük bir SINK) */
   unlockLoc(id: LocId): boolean {
@@ -1058,32 +1084,33 @@ export class GameState {
    *  TAVAN 8M (oyuncu raporu: tek şubenin sınırlı kalemleri ~₺1.63M — ×2 katlama bir yerde
    *  fiziksel imkânsıza dönüyordu). Eşik artık ŞİRKET GENELİ ekipmana bakar (aşağıda). */
   handoverThreshold(): number {
-    // İKİ AŞAMALI EŞİK + ULAŞILABİLİRLİK TAVANI (v4).
+    // İKİ AŞAMALI EŞİK + SERT ULAŞILABİLİRLİK TAVANI (v5).
     // v3'ün ×1.35 yumuşak artışı bile fiziği aşıyordu: tek şubenin KURULABİLİR maksimum
     // ekipmanı ~₺1.4M (tüm kalemler full) — 2 şubeyle 6. yıldız ₺3.65M istiyordu, yani
     // İMKÂNSIZDI. Üstelik kilit: Otoyol 6★ ister, 6. yıldız da otoyolsuz alınamıyordu.
-    // Yeni kural: eşik hiçbir zaman "şube sayısı × ulaşılabilir maksimumun %85'i"ni
-    // AŞAMAZ — tavana dayanınca yeni şube açılana dek orada bekler (her yıldız yine
-    // devirle sıfırdan kurulum ister; grind sürer, duvar sürmez).
-    const soft = 1_200_000 * Math.max(1, this.unlockedLocs.length)
-    // Oğuz kalibrasyonu (29 Tem): şube başına ~₺1.5M kurulabiliyor → tavan 1.5M × şube
-    // (2 şubeyle 6. yıldız = ₺3M; sıkı ama ulaşılabilir)
-    const reachable = 1_500_000 * Math.max(1, this.unlockedLocs.length)
-    // TAVAN-SONRASI TIRMANIŞ (devir-çiftliği freni, 30 Tem): sabit tavan sonsuz farm
-    // kapısı açtı (bir gecede 6★→40★, 143M vakası). Tavana dayandıktan sonraki her
-    // devir tavanı kalıcı +%15 büyütür — farm her turda yavaşlar ama duvar geri gelmez.
+    // Kural: eşik hiçbir zaman "şube sayısı × ₺1.5M"i AŞAMAZ — tavana dayanınca yeni
+    // şube açılana dek orada bekler (her yıldız yine devirle sıfırdan kurulum ister;
+    // grind sürer, duvar sürmez).
+    //
+    // 30 TEM REGRESYONU GERİ ALINDI: devir-çiftliği freni olarak eklenen
+    // "tavan × 1.15^overCap" tırmanışı eşiği FİZİKSEL MAKSİMUMUN ÜSTÜNE çıkarıyordu
+    // (6 devir + 3 şube → ₺5,95M isterken 3 şubeye en fazla ~₺5,17M kurulabiliyor).
+    // Sonuç kalıcı kilitti: 4. şube 9★ ister, 7★ alınamadığı için şube de açılamıyordu.
+    // Fren artık eşikte değil ŞUBE AÇMA BEDELİNDE (bkz. branchUnlockCost) — tavanı
+    // yükseltmenin tek yolu şube açmak ve o bedel her şubede artıyor.
+    const locs = Math.max(1, this.unlockedLocs.length)
+    const soft = 1_200_000 * locs
+    // Oğuz kalibrasyonu: şube başına ₺1.5M kesin kurulabiliyor (ölçülen gerçek tavan
+    // ~₺1.72M olduğu için her zaman pay kalır → eşik ulaşılamaz hale GELEMEZ).
+    const reachable = BRANCH_EQUIP_CAP * locs
     let t = 250_000
-    let overCap = 0
-    for (let i = 0; i < this.handoverCount; i++) {
-      t = t < soft ? Math.min(t * 2, Math.max(soft, t * 1.35)) : t * 1.35
-      if (t >= reachable) overCap++
-    }
-    t = Math.min(t, reachable * Math.pow(1.15, overCap))
-    return Math.min(8_000_000, Math.round(t / 10_000) * 10_000)
+    for (let i = 0; i < this.handoverCount; i++) t = t < soft ? Math.min(t * 2, Math.max(soft, t * 1.35)) : t * 1.35
+    // aşağı yuvarla: yuvarlama eşiği tavanın ÜSTÜNE taşımasın
+    return Math.min(reachable, 8_000_000, Math.floor(t / 10_000) * 10_000)
   }
-  /** eşik ULAŞILABİLİR tavanda/üstünde mi — tavan devri satış bedelini kırpar (farm freni) */
+  /** eşik ULAŞILABİLİR tavanda mı — tavan devri satış bedelini kırpar (farm freni) */
   handoverAtCap(): boolean {
-    return this.handoverThreshold() >= 1_500_000 * Math.max(1, this.unlockedLocs.length)
+    return this.handoverThreshold() >= BRANCH_EQUIP_CAP * Math.max(1, this.unlockedLocs.length)
   }
   /** ŞİRKET GENELİ kurulu ekipman: aktif şube + pasif şubelerin snapshot'taki değeri.
    *  MANTIK HATASI FİXİ: eşik tek şubeden karşılanamıyordu (maks ~1.6M sınırlı kalem);

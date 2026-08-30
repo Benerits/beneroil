@@ -19,6 +19,14 @@ export interface NewsEntry { v: string; date: string; items: string[] }
 /** En yeni en üstte. Yeni sürüm eklerken listenin BAŞINA ekle ve `NEWS_VERSION`'ı güncelle. */
 export const NEWS: NewsEntry[] = [
   {
+    v: '1.5', date: '2026-07-30',
+    items: [
+      'DEVİR KİLİDİ ÇÖZÜLDÜ: bir sonraki yıldızın ekipman eşiği, şubelerine sığandan fazlasını isteyebiliyordu — 3 şubeyle ₺5.950.000 istenip en fazla ~₺5.170.000 kurulabildiği için ilerlemek imkânsız hale geliyordu. Eşik artık şube başına ₺1.500.000 ile SINIRLI ve bu sınırı hiçbir koşulda aşamaz.',
+      'Devir eşiğine takılan oyuncular kaydına dokunulmadan açıldı — oyuna girdiğinde devir düğmen çalışır durumda olacak.',
+      'Yeni şube açmak artık kademeli olarak pahalı: her açık şube bir sonrakinin bedelini artırıyor. Şube açmak yıldız yolunu genişlettiği için bedeli de büyüyor.',
+    ],
+  },
+  {
     v: '1.4', date: '2026-07-26',
     items: [
       'Tesis kumbarası dolduğunda ciro artık kaybolmuyor — dolu kumbara üstüne gelen kazanç kısılarak da olsa birikiyor ve ne kadarının eridiği rapor ediliyor.',
