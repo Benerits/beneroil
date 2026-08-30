@@ -1072,6 +1072,13 @@
         <div class="row">
           <button id="notifbtn" class="btn" style="flex:1; justify-content:center">Bildirimlere İzin Ver</button>
         </div>
+        <!-- ÖĞRETİCİ: atlayan ya da tekrar görmek isteyen oyuncu buradan geri açar
+             (durum localStorage'da tutulur, oyun kaydına yazılmaz) -->
+        <label style="margin-top:12px" data-i18n="Öğretici">Öğretici</label>
+        <div class="sd" style="margin-bottom:6px" data-i18n="İlk dakikaların ipuçlarını yeniden gösterir.">İlk dakikaların ipuçlarını yeniden gösterir.</div>
+        <div class="row">
+          <button id="set-tutorial" class="btn" style="flex:1; justify-content:center" data-i18n="Öğreticiyi Yeniden Başlat">Öğreticiyi Yeniden Başlat</button>
+        </div>
         <label style="margin-top:12px" data-i18n="Geri bildirim">Geri bildirim</label>
         <div class="row">
           <button id="set-feedback" class="btn warn" style="flex:1; justify-content:center" data-i18n="Sorun / Öneri Bildir">Sorun / Öneri Bildir</button>
@@ -1240,11 +1247,18 @@ Sorun / Öneri Bildir
     <div class="sub" data-i18n="Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...">Bakımsız nükleer reaktör istasyonu yok etti. Her şey sıfırlanıyor...</div>
   </div>
 
-  <!-- Onboarding: ilk oturum adım rehberi -->
+  <!-- ÖĞRETİCİ: ilk 3-5 dakikanın bağlamsal ipucu kutusu. Tek satır metin + ATLA (✕).
+       Oyunu DURDURMAZ (pointer-events yalnız ✕'te), modal değil — arkadaki sahne oynanır. -->
   <div id="tuthint" style="display:none; position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:42;
-       max-width:min(92vw,440px); background:#12233d; color:#eaf1fb; padding:12px 16px; border-radius:14px;
+       width:min(92vw,440px); background:#12233d; color:#eaf1fb; padding:12px 16px; border-radius:14px;
        box-shadow:0 6px 24px rgba(9,9,11,.28); font:600 14px/1.45 system-ui,sans-serif; text-align:center;
-       border:1px solid #2f6fed;"></div>
+       border:1px solid #2f6fed; align-items:center; gap:10px; pointer-events:none;">
+    <span id="tut-text" style="flex:1"></span>
+    <button id="tut-skip" title="Öğreticiyi atla" aria-label="Öğreticiyi atla"
+            style="pointer-events:auto; flex:0 0 auto; cursor:pointer; background:rgba(255,255,255,.12); color:#eaf1fb;
+                   border:0; border-radius:9px; padding:5px 10px; font:800 12px/1 system-ui,sans-serif;"
+            data-i18n="ATLA">ATLA</button>
+  </div>
 
   <!-- Mobil taşıma: yön butonlarıyla ince ayar (sürükleme zor) -->
   <!-- pointer-events:auto — içindeki İPTAL butonu mobilde tek çıkış yolu (ESC/sağ-tık yok) -->
@@ -1285,6 +1299,12 @@ Sorun / Öneri Bildir
     #chipinfo.show { display:block }
     #chipinfo b { display:block; font-size:13px; margin-bottom:3px; color:var(--red) }
     .chip[data-bilgi] { cursor:pointer }
+
+    /* ÖĞRETİCİ İPUCU KONUMU: masaüstünde HUD iki sıra yüksekliğinde (göstergeler + eylem
+       butonları). Kutu top:12px'te dururken KASA/BENZİN göstergelerini örtüyordu — oysa
+       ipucu tam da "panele bak" diyor. Geniş ekranda HUD'ın altına iner; dar ekranda HUD
+       tek sıraya toplandığından üstte kalması daha okunaklı. */
+    @media (min-width: 900px) { #tuthint { top: 128px !important } }
 
     /* HIZLI ŞUBE GEÇİŞİ (#1038) */
     #locmenu { position:fixed; z-index:31; display:none; background:var(--paper);
