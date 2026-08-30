@@ -14,7 +14,7 @@
  * Bu dosya sahne/three.js bilmez: saf geometri + rezervasyon defteri (test edilebilir).
  */
 
-/** Bölge = istasyonun darboğazı (kapı ağzı, iç koridor). Dikdörtgen + kapasite. */
+/** Bölge = istasyonun darboğazı (kapı ağzı, ünite yaklaşma koridoru). Dikdörtgen + kapasite. */
 export interface Zone {
   id: string
   cx: number
@@ -22,7 +22,24 @@ export interface Zone {
   w: number
   d: number
   capacity: number
+  /** 'gate' = kapı ağzı: oradan GEÇEN herkes rezerve eder.
+   *  'unit' = pompa/şarj yaklaşma koridoru: YALNIZ o üniteye giden (veya oradan ayrılan)
+   *  araç rezerve eder. Koridordan sadece geçen aracı da bağlasaydık koridorlar zincir
+   *  oluşturur, ters yönde ilerleyen iki araç karşılıklı kilitlenirdi. */
+  kind: 'gate' | 'unit'
 }
+
+/** Ünitenin servis noktası (aracın durduğu yer) — bölge bundan türetilir. */
+export interface UnitPoint {
+  /** 'pump-3' / 'ev-1' — bölge kimliği bundan kurulur, cars.ts aynı kalıbı üretir */
+  id: string
+  x: number
+  y: number
+}
+
+/** Apron seyir şeridinin kapıdan uzaklığı. entryPath (cars.ts) ile yaklaşma bölgesinin
+ *  geometrisi AYNI sabiti kullanmalı — ayrışırsa bölge aracın geçmediği yere düşer. */
+export const APRON_LANE_OFF = 1.75
 
 export interface StationGeom {
   station: string
@@ -33,6 +50,8 @@ export interface StationGeom {
   sideSign: number // istasyonun yönü (near -1, far +1)
   dirY: number     // seyir yönü (near +1, far -1)
   wide: boolean    // geniş kapı alındı mı (kapasite 2)
+  /** bu istasyonun pompa/şarj servis noktaları (yaklaşma bölgeleri bunlardan türer) */
+  units?: UnitPoint[]
 }
 
 /** Bölge sınırına bu mesafede rezervasyon denenir (araç bölgeye girmeden önce durur). */
@@ -68,7 +87,7 @@ export class TrafficGraph {
       const cap = 1
       // 1) Kapı GİRİŞ ağzı: şerit ↔ kapı arası + kapı derinliği (üç akımın kesiştiği nokta)
       this.zones.push({
-        id: `gate-in-${g.station}`,
+        id: `gate-in-${g.station}`, kind: 'gate',
         cx: g.gateX + g.sideSign * 0.6, cy: g.gateInY,
         w: 3.6, d: 4.6, capacity: cap,
       })
@@ -76,20 +95,45 @@ export class TrafficGraph {
       // derin (bir araç şeride katılırken arkadaki kapıda hazır bekleyebilir); 1 verilince
       // çıkış kuyruğu apron'a taşıyordu.
       this.zones.push({
-        id: `gate-out-${g.station}`,
+        id: `gate-out-${g.station}`, kind: 'gate',
         cx: g.gateX + g.sideSign * 0.6, cy: g.gateOutY,
         w: 3.6, d: 4.6, capacity: 2,
       })
-      // 3) APRON KORİDORU — DENENDİ VE GERİ ALINDI (ölçümle).
-      // SimCity klonundaki node-occupancy fikrini apron'a uyarlamayı denedim: kapı ile
-      // pompa hattı arasına kapasite-2'lik tek bir rezervasyon bölgesi. ÖLÇÜM (aynı
-      // tohum, çarpışma AÇIK): T1 servis 268 → 154, T2 384 → 238, T3'te kalıcı sıkışan 1.
-      // NEDEN OLMADI: SimCity'de her node KÜÇÜK ve ÇOK (karo başına 4-12), araç yalnız
-      // bir sonraki adımı rezerve eder. Apron'u TEK büyük bölge yapınca tüm istasyon içi
-      // trafik 2 araca sınırlanıyor — rezervasyon akışı düzenlemek yerine boğuyor.
-      // DOĞRU UYARLAMA (yapılacak): apron'u tek bölge değil, POMPA BAŞINA küçük yaklaşma
-      // bölgelerine bölmek. O zaman araç yalnız gideceği pompanın önünü rezerve eder,
-      // diğer şeritler serbest kalır. Bu ciddi bir refactor; ölçüm altyapısı hazır.
+    }
+    // 3) POMPA/ŞARJ YAKLAŞMA BÖLGELERİ.
+    // ÖNCE DENENEN VE GERİ ALINAN: apron'un tamamı için TEK kapasite-2 bölge. Ölçüm
+    // (aynı tohum, çarpışma AÇIK): T1 servis 268 → 154, T2 384 → 238. Neden olmadı:
+    // SimCity klonunda node'lar KÜÇÜK ve ÇOK; apron'u tek bölge yapmak tüm istasyon içi
+    // trafiği 2 araca sınırlar — akışı düzenlemek yerine boğar.
+    // DOĞRU UYARLAMA (bu blok): her ünitenin ÖNÜNDEKİ dar koridor ayrı bölge, kapasite 1.
+    // Araç yalnız GİDECEĞİ ünitenin koridorunu rezerve eder (kind='unit' filtresi), diğer
+    // şeritler serbest kalır. Kazanımı: bir üniteden AYRILAN araçla oraya GÖNDERİLEN araç
+    // (sendToSlot pompa boşalır boşalmaz tetikleniyor) aynı dar koridora birlikte girmez.
+    // Kapı bölgeleri ÖNCE eklenir: zoneAt ilk eşleşeni döndürür, çakışmada kapı kazanır.
+    for (const g of geoms) {
+      const units = [...(g.units ?? [])].sort((a, b) => a.y - b.y)
+      const laneX = g.gateX + g.sideSign * APRON_LANE_OFF
+      for (let i = 0; i < units.length; i++) {
+        const u = units[i]
+        // DERİNLİK komşu üniteye taşmasın: oyuncu üniteleri sık dizebiliyor (yük testinde
+        // 1.5 birim aralık). Üst üste binen bölgeler zoneAt'te birbirini gölgeler ve
+        // doluluk defterini tutarsızlaştırır.
+        const gapPrev = i > 0 ? u.y - units[i - 1].y : 99
+        const gapNext = i < units.length - 1 ? units[i + 1].y - u.y : 99
+        const d = Math.max(1.1, Math.min(2.4, Math.min(gapPrev, gapNext) - 0.15))
+        // kapı ağzına denk gelen üniteyi ATLA — o alanı zaten kapı bölgesi yönetiyor
+        // (kapı bölgesi derinliği 4.6 → yarısı 2.3).
+        if (Math.abs(u.y - g.gateInY) < 2.3 + d / 2) continue
+        if (Math.abs(u.y - g.gateOutY) < 2.3 + d / 2) continue
+        // Koridor: seyir şeridinden ünitenin servis noktasına. Pay 1.6 → araç gövdesini
+        // kapsar ama bekleme kuyruğu (kapı+0.8) ve çıkış koridoru (kapı+0.45) DIŞARIDA
+        // kalır; onları kapsasaydı bekleyen araç ünite koridorunu ömür boyu tutardı.
+        this.zones.push({
+          id: `unit-${g.station}-${u.id}`, kind: 'unit',
+          cx: (laneX + u.x) / 2, cy: u.y,
+          w: Math.abs(laneX - u.x) + 1.6, d, capacity: 1,
+        })
+      }
     }
     // artık var olmayan bölgelerin defterini temizle (istasyon kapandı/kapı taşındı)
     const live = new Set(this.zones.map(z => z.id))
@@ -102,9 +146,18 @@ export class TrafficGraph {
     return Math.abs(x - z.cx) <= z.w / 2 + pad && Math.abs(y - z.cy) <= z.d / 2 + pad
   }
 
-  /** Verilen noktadaki bölge (varsa). pad ile "yaklaşma" alanı genişletilebilir. */
-  zoneAt(x: number, y: number, pad = 0): Zone | null {
-    for (const z of this.zones) if (this.inside(z, x, y, pad)) return z
+  /**
+   * Verilen noktadaki bölge (varsa). pad ile "yaklaşma" alanı genişletilebilir.
+   * `mineUnit`: ünite bölgeleri için filtre — null ise hiçbir ünite bölgesi görünmez
+   * (araç oradan yalnızca GEÇİYOR), '*' ise hepsi görünür (araç o koridorda duruyor),
+   * bir kimlik verilirse yalnız o ünite görünür. Bu filtre olmasaydı koridorlar zincir
+   * kurar, ters yönde ilerleyen iki araç karşılıklı kilitlenirdi.
+   */
+  zoneAt(x: number, y: number, pad = 0, mineUnit: string | null = null): Zone | null {
+    for (const z of this.zones) {
+      if (z.kind === 'unit' && mineUnit !== '*' && z.id !== mineUnit) continue
+      if (this.inside(z, x, y, pad)) return z
+    }
     return null
   }
 

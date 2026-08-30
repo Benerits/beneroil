@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
-import { TrafficGraph, StationGeom, RESERVE_LOOKAHEAD } from './traffic-graph'
+import { TrafficGraph, StationGeom, UnitPoint, RESERVE_LOOKAHEAD, APRON_LANE_OFF } from './traffic-graph'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
@@ -1197,6 +1197,26 @@ export class CarManager {
     for (let k = 0; k < 6 && Car.isSolidAt(x, y); k++) y += G.dirY * 1.4
     return new THREE.Vector3(x, y, 0)
   }
+  /** Bu istasyonun pompa/şarj servis noktaları — yaklaşma bölgeleri bunlardan TÜRETİLİR
+   *  (elle aynalama yok: ünite taşınınca bölge de taşınır). */
+  private unitPoints(st: 'near' | 'far'): UnitPoint[] {
+    const out: UnitPoint[] = []
+    for (let i = 0; i < this.opts.pumpCount(); i++) {
+      const s = this.opts.pumpSlot(i)
+      if (s && this.pumpStation(i) === st) out.push({ id: `pump-${i}`, x: s.x, y: s.y })
+    }
+    for (let i = 0; i < this.opts.evCount(); i++) {
+      const s = this.opts.evSlot(i)
+      if (s && this.evStation(i) === st) out.push({ id: `ev-${i}`, x: s.x, y: s.y })
+    }
+    return out
+  }
+  /** Aracın KENDİ ünite koridorunun bölge kimliği (yoksa null). Araç yalnız bunu rezerve
+   *  eder; başka ünitelerin koridorundan serbestçe geçer. */
+  private myUnitZone(car: Car): string | null {
+    if (car.slotIndex < 0) return null
+    return `unit-${car.station}-${car.kind === 'ev' ? 'ev' : 'pump'}-${car.slotIndex}`
+  }
   private waitOccFor(st: 'near' | 'far') { return st === 'far' ? this.waitOccFar : this.waitOcc }
   /** o şubede kaç bekleme yuvası var — su şubesinde tekne boyu yüzünden daha az */
   private waitSlotCount(st: 'near' | 'far') {
@@ -1286,9 +1306,11 @@ export class CarManager {
       .map(st => {
         const G = this.geom(st as 'near' | 'far')
         return { station: st, gateX: G.gateX, lane: G.lane, gateInY: G.gateInY, gateOutY: G.gateOutY,
-          sideSign: G.sideSign, dirY: G.dirY, wide: this.opts.wideGates() }
+          sideSign: G.sideSign, dirY: G.dirY, wide: this.opts.wideGates(),
+          units: this.unitPoints(st as 'near' | 'far') }
       })
-    const key = stationsNow.map(g => `${g.station}:${g.gateX}:${g.gateInY}:${g.gateOutY}:${g.wide}`).join('|')
+    const key = stationsNow.map(g => `${g.station}:${g.gateX}:${g.gateInY}:${g.gateOutY}:${g.wide}`
+      + `:${(g.units ?? []).map(u => `${u.id}@${u.x.toFixed(1)},${u.y.toFixed(1)}`).join(',')}`).join('|')
     const useGraph = this.opts.graphEnabled?.() ?? graphOn
     if (key !== this.graphKey || this.graphOnLast !== useGraph) {
       this.graphKey = key; this.graphOnLast = useGraph
@@ -1364,7 +1386,22 @@ export class CarManager {
       const lenC = c.boat ? BOAT_LEN[c.boat] : 0
       for (const o of this.neighbors(cp.x, cp.y, c.boat ? 3 : 1)) {
         if (o === c || o.phase === 'gone') continue
-        if (o.phase === 'parked' && (c.phase === 'toPark' || c.phase === 'leaving')) continue
+        // DURAN ARAÇ TRAFİĞİN PARÇASI DEĞİL (ölçümle bulunan asıl kilit — aşağıda).
+        // Bu döngü zaten pompadaki/kuyruktaki/parktaki aracı ÖZNE olarak atlıyordu
+        // (üstteki `continue`), ama NESNE olarak saymaya devam ediyordu: yani duran araç
+        // kimseye yol vermiyor, herkesin yolunu kesiyordu. Asimetri, apron geometrisiyle
+        // birleşince istasyonu kilitliyor: seyir şeridi (kapı ∓1.75) ünite hattının
+        // (kapı ∓2.4) 0.65 birim yanından geçer, bekleme kuyruğu da (kapı ∓0.8) aynı
+        // 2.4 birimlik apron'a sığar — üç "şerit" bir araç genişliğine biniyor. Sonuç:
+        // servis alan HER araç apron'un tek geçiş yolunu tıkıyor, kuyruk kapıdan taşıp
+        // çıkış birleşmesini öldürüyordu. ÖLÇÜM (T2, çarpışma AÇIK): bu satır olmadan
+        // servis 326 · buharlaşma 25 · gate-out reddi 36.785; bu satırla servis 388 ·
+        // buharlaşma 0 · red 260.
+        // Kural: HAREKET EDEN araçlar arasında çarpışma TAM AÇIK. Duran araç yol kenarı
+        // engelidir; yanından sıyrılınır. Oyuncunun şikâyet ettiği "araçlar birbirinin
+        // içinden geçiyor" görüntüsü akan trafikte olan şeydi, o artık yok.
+        if (o.phase === 'atPump' || o.phase === 'parked' || o.phase === 'waiting') continue
+        // (eski `parked && (toPark|leaving)` istisnası artık bu kuralın içinde eridi)
         const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
         const forward = dx * dir.x + dy * dir.y
         const lenO = o.boat ? BOAT_LEN[o.boat] : 0
@@ -1502,7 +1539,13 @@ export class CarManager {
       //  testinde T1'de 95 buharlaşma. Fiziksel engel zaten Car.solids ile ayrı yönetiliyor.)
       if (c.phase === 'gone' || c.phase === 'parked' || c.phase === 'atPump') { this.graph.release(c); continue }
       const p = c.group.position
-      const here = this.graph.zoneAt(p.x, p.y)
+      // ÜNİTE KORİDORU FİLTRESİ: araç yalnız KENDİ ünitesinin koridorunu rezerve eder.
+      // Ayrılan araç (`leaving`) slotIndex'ini bıraktığı için '*' ile içinde DURDUĞU
+      // koridoru tutar — böylece pompa boşalır boşalmaz gönderilen sıradaki araç, hâlâ
+      // manevra yapan aracın üstüne sürmez. İleriye bakarken '*' KULLANILMAZ: geçilen
+      // koridorlar zincirlenir ve ters yönlü iki araç karşılıklı kilitlenirdi.
+      const mine = c.phase === 'leaving' ? '*' : this.myUnitZone(c)
+      const here = this.graph.zoneAt(p.x, p.y, 0, mine)
       if (here) {
         // bölge İÇİNDEYSE token şart (girmişse zaten var; kurtarma/ışınma ile içeri düşmüşse alır)
         // bölge İÇİNDE: token'ı koşulsuz al, BEKLETME. Tahkim girişte yapıldı; içeride
@@ -1514,8 +1557,9 @@ export class CarManager {
       // ilerideki bölgeye yaklaşıyor muyuz? (hareket yönünde RESERVE_LOOKAHEAD kadar bak)
       const dir = c.headingDir()
       if (!dir) continue
-      const ahead = this.graph.zoneAt(p.x + dir.x * 1.2, p.y + dir.y * 1.2)
-        ?? this.graph.zoneAt(p.x + dir.x * RESERVE_LOOKAHEAD, p.y + dir.y * RESERVE_LOOKAHEAD)
+      const aheadMine = c.phase === 'leaving' ? null : mine
+      const ahead = this.graph.zoneAt(p.x + dir.x * 1.2, p.y + dir.y * 1.2, 0, aheadMine)
+        ?? this.graph.zoneAt(p.x + dir.x * RESERVE_LOOKAHEAD, p.y + dir.y * RESERVE_LOOKAHEAD, 0, aheadMine)
       if (!ahead) continue
       // hold olsa da sırayı koru: token alamayan araç KURALLI BEKLEME olarak işaretlenir
       if (!this.graph.tryAcquire(ahead.id, c)) { c.hold = true; c.waitingForToken = true }
@@ -1836,7 +1880,7 @@ export class CarManager {
       // sıkışıyor, istasyon boş görünüyor" şikâyeti). Şerit trafiği yanından akar.
       new THREE.Vector3((G.lane + G.gateX) / 2, apronY - G.dirY * 3.5 + off, 0),
       new THREE.Vector3(G.gateX, apronY + off, 0),
-      new THREE.Vector3(G.gateX + G.sideSign * 1.75, p.y - G.dirY * 2.5, 0),
+      new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, p.y - G.dirY * 2.5, 0),
       p.clone(),
     ]
     // ENGELLERİ BAŞTAN HESABA KAT (oyuncu gözlemi: "önce pompaya gidiyor, sonra rotasını
@@ -1944,7 +1988,7 @@ export class CarManager {
         if (c.slotIndex >= 0) {
           const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
           c.setPath([
-            new THREE.Vector3(G.gateX + G.sideSign * 1.75, slot.y - G.dirY * 2.5, 0),
+            new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0),
             slot.clone(),
           ], () => this.arriveAtSlot(c))
         } else if (c.waitIndex >= 0) {
@@ -2059,7 +2103,7 @@ export class CarManager {
     const p = this.opts.pumpSlot(slot)
     const G = this.geom(car.station)
     car.setPath([
-      new THREE.Vector3(G.gateX + G.sideSign * 1.75, p.y - G.dirY * 2.5, 0),
+      new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, p.y - G.dirY * 2.5, 0),
       p,
     ], () => this.arriveAtSlot(car))
   }
@@ -2212,11 +2256,11 @@ export class CarManager {
     if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind !== 'ev') {
       const slot = this.opts.pumpSlot(car.slotIndex)
       const G = this.geom(car.station)
-      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * 1.75, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
+      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
     } else if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind === 'ev') {
       const slot = this.opts.evSlot(car.slotIndex)
       const G = this.geom(car.station)
-      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * 1.75, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
+      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
     } else if (car.phase === 'toPark' && car.truckSlot >= 0) {
       this.leaveTruckPark(car)
     } else if (car.phase !== 'atPump' && car.phase !== 'parked' && car.phase !== 'waiting') {
