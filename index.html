@@ -1282,7 +1282,11 @@ Sorun / Öneri Bildir
     /* HIZLI ŞUBE GEÇİŞİ (#1038) */
     #locmenu { position:fixed; z-index:31; display:none; background:var(--paper);
       border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:var(--r-lg);
-      box-shadow:var(--shadow); padding:6px; min-width:210px; max-width:min(280px, 92vw) }
+      box-shadow:var(--shadow); padding:6px; min-width:210px; max-width:min(280px, 92vw);
+      /* ŞUBE ÇİFTLEME: liste 5'ten 9 şubeye çıktı (+ "yeni şube aç" satırı). Sabit
+         yükseklikte menü küçük telefonda ekranı taşırıp alttaki şubeleri TIKLANAMAZ
+         yapıyordu — menü artık kendi içinde kayar. */
+      max-height:min(62vh, 520px); overflow-y:auto; -webkit-overflow-scrolling:touch }
     #locmenu.show { display:block }
     #locmenu button { display:flex; align-items:center; gap:9px; width:100%; text-align:left;
       background:none; border:0; border-radius:10px; padding:9px 10px; cursor:pointer;

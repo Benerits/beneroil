@@ -46,6 +46,7 @@
     "test:tasima": "tsx tools/tests/tasima-check.mjs",
     "test:yerlesim": "node tools/tests/yerlesim-check.mjs",
     "test:branch": "tsx tools/tests/branch-check.mjs",
+    "test:subeciftleme": "tsx tools/tests/sube-ciftleme-check.mjs",
     "test:karsiyaka": "tsx tools/tests/karsi-yaka-check.mjs",
     "ses:export": "node tools/ses-export.mjs",
     "shots": "node tools/shot/shoot.mjs",

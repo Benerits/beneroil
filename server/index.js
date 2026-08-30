@@ -471,7 +471,22 @@ function maxIncomeRate(s) {
 /** ŞUBE KASASI CLAMP'İ: istemci tavanıyla BİREBİR (state.ts BRANCH_VAULT_HARD).
  *  Kurcalanmış save'de branchVault sonsuz para kapısı olmasın. */
 const BRANCH_VAULT_HARD = 240_000
-const VALID_LOCS = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+/**
+ * GEÇERLİ ŞUBE ID'LERİ — istemci state.ts ALL_LOCS ile BİREBİR olmak ZORUNDA.
+ *
+ * ŞUBE ÇİFTLEME (aynı türden ikinci şube): '-2' sonekli 4 kopya eklendi. Bu liste
+ * eksik kalırsa sanitizeSave kopya şubeyi kayıttan siler → snapshotsValue o şubenin
+ * ekipmanını saymaz → meşru oyuncunun serveti sunucuda ÇÖKER ve anti-cheat onu kırpar
+ * ("param gitti" sınıfı hata). Yeni şube eklenince İLK güncellenecek yer burasıdır.
+ */
+const BASE_LOCS_SRV = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+const COPY_LOCS_SRV = ['cevreyolu-2', 'otoyol-2', 'marina-2', 'metropol-2']
+const VALID_LOCS = [...BASE_LOCS_SRV, ...COPY_LOCS_SRV]
+/** kopya id'sini tabanına indirir ('marina-2' → 'marina'); tema limitleri tabandan gelir */
+const baseLocSrv = id => {
+  const b = String(id ?? '').replace(/-\d+$/, '')
+  return BASE_LOCS_SRV.includes(b) ? b : 'kasaba'
+}
 function clampBranchVault(s) {
   if (!s) return
   if (typeof s.branchVault !== 'object' || !s.branchVault || Array.isArray(s.branchVault)) {
@@ -486,6 +501,27 @@ function clampBranchVault(s) {
     out[k] = Math.min(BRANCH_VAULT_HARD, Math.round(v))
   }
   s.branchVault = out
+}
+
+/** PAYLAŞILAN TEDARİK HATTI (istemci state.ts SUPPLY_LINE_QUOTA ile BİREBİR).
+ *  Kopya şube ile tabanı aynı günlük kotadan çeker. Kurcalanmış negatif/NaN değer
+ *  kotayı sonsuz yakıta çevirmesin diye 0..kota aralığına kırpılır; anahtarlar yalnız
+ *  TABAN şube id'leri olabilir. Servet hesabına GİRMEZ (para değil, gün içi sayaç). */
+const SUPPLY_LINE_QUOTA = 9_000
+function clampSupplyUsed(s) {
+  if (!s || !('supplyUsed' in s)) return
+  if (typeof s.supplyUsed !== 'object' || !s.supplyUsed || Array.isArray(s.supplyUsed)) {
+    delete s.supplyUsed
+    return
+  }
+  const out = {}
+  for (const k of Object.keys(s.supplyUsed)) {
+    if (!BASE_LOCS_SRV.includes(k)) continue
+    const v = Number(s.supplyUsed[k])
+    if (!isFinite(v) || v <= 0) continue
+    out[k] = Math.min(SUPPLY_LINE_QUOTA, Math.round(v))
+  }
+  s.supplyUsed = out
 }
 
 /** Jeton kovası tavanı: tek seferlik meşru sıçramayı (gün dönüşü + sözleşme ödemesi) karşılar */
@@ -507,7 +543,9 @@ const ALLOW_BURST = 260_000
  */
 function burstCap(s) {
   const locs = Array.isArray(s?.unlockedLocs) ? s.unlockedLocs.length : 1
-  const pasif = Math.max(0, Math.min(5, locs) - 1)
+  // ŞUBE ÇİFTLEME: tavan 5 şubede sabitlenirse 9 şubeli oyuncu HAKSIZ kırpılır
+  // (kopya şubelerin kasası da tek dokunuşta toplanıyor). Sınır VALID_LOCS'a bağlandı.
+  const pasif = Math.max(0, Math.min(VALID_LOCS.length, locs) - 1)
   return ALLOW_BURST + pasif * BRANCH_VAULT_HARD
 }
 
@@ -598,6 +636,7 @@ function sanitizeSave(save) {
   if ('wear' in s) s.wear = clamp(s.wear, 0, 1, 0)                           // ekipman yaşlanması
   clampMarina(s)                                                            // marina alanları (additive)
   clampBranchVault(s)                                                       // şube müdürü kasaları (additive)
+  clampSupplyUsed(s)                                                        // paylaşılan tedarik hattı (additive)
   clampRival(s)                                                             // AI rakip durumu
   // _ab (jeton kovası) SUNUCU-SAHİPLİ: istemci ne yazarsa yazsın sınırlanır.
   if ('_ab' in s) {
@@ -687,11 +726,13 @@ function sanitizeSave(save) {
   if (Array.isArray(s.ownedParcels) && s.ownedParcels.length > 18) s.ownedParcels = s.ownedParcels.slice(0, 18)
   if (Array.isArray(s.achievements) && s.achievements.length > 32) s.achievements = s.achievements.slice(0, 32)
   // ---- ÇOKLU ŞUBE (additive) ----
-  const VALID_LOC = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+  // ŞUBE ÇİFTLEME: tek geçerli-id kaynağı VALID_LOCS (yukarıda) — iki ayrı liste tutmak
+  // birinin unutulmasına ve meşru şubenin silinmesine yol açıyordu.
+  const VALID_LOC = VALID_LOCS
   if ('activeLoc' in s && !VALID_LOC.includes(s.activeLoc)) s.activeLoc = 'kasaba'
   if ('unlockedLocs' in s) {
     s.unlockedLocs = Array.isArray(s.unlockedLocs)
-      ? [...new Set(s.unlockedLocs.filter(x => VALID_LOC.includes(x)))].slice(0, 5)
+      ? [...new Set(s.unlockedLocs.filter(x => VALID_LOC.includes(x)))].slice(0, VALID_LOC.length)
       : ['kasaba']
     if (!s.unlockedLocs.includes('kasaba')) s.unlockedLocs.unshift('kasaba')
     if (s.activeLoc && !s.unlockedLocs.includes(s.activeLoc)) s.activeLoc = 'kasaba'
@@ -723,9 +764,14 @@ function sanitizeSave(save) {
       }
       clampMarina(f) // marina şubesi anlık görüntüsü de temizlenir
       clampRival(f)
-      // marina snapshot'ı da tema limitleriyle (8 tank, ×3 kapasite) — kayıt kaybı fixi
-      const snMax = k === 'marina' ? 8 : 4
-      const snMult = k === 'marina' ? 3 : 1
+      // marina snapshot'ı da tema limitleriyle (8 tank, ×3 kapasite) — kayıt kaybı fixi.
+      // ŞUBE ÇİFTLEME: limit TABAN şubeden okunur ('marina-2' de bir marinadır). Aksi
+      // hâlde ikinci marinanın tankları her kayıtta 4'e kırpılıp oyuncu para kaybederdi.
+      // (İstemci Marina II'de 6 tank/×2 kapasiteye izin verir; sunucu tavanı tabanın
+      //  ÜSTÜ olduğu için meşru oyuncu asla kırpılmaz, hilekâr yine tavana takılır.)
+      const isMarinaLoc = baseLocSrv(k) === 'marina'
+      const snMax = isMarinaLoc ? 8 : 4
+      const snMult = isMarinaLoc ? 3 : 1
       if (sn.tankCounts && typeof sn.tankCounts === 'object') {
         for (const fu of ['benzin', 'dizel', 'lpg']) sn.tankCounts[fu] = clamp(sn.tankCounts[fu], 1, snMax, 1)
       }
