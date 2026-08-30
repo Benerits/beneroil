@@ -24,6 +24,8 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Move mode: arrows/tap to move · R key or ⟳ to ROTATE · ✓ to place",
+  "Yerleştirme modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Placement mode: arrows/tap to move · R key or ⟳ to ROTATE · ✓ to place",
   "Oyun Günü": "Game Day",
   "Bir oyun günü 160 saniye sürer. Gün dönümünde kira/yovmiye kesilir, ihale teslimatı kapanır, şube müdürlerinin geliri kasana yazılır ve itibarın günün hizmet kalitesine göre güncellenir.": "One game day lasts 160 seconds. At the turn of the day rent and wages are deducted, contract deliveries close, branch managers' income lands in your cash, and your reputation is updated from that day's service quality.",
   "Saat": "Clock",
@@ -1197,6 +1199,8 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Mode déplacement : flèches/toucher pour bouger · touche R ou ⟳ pour PIVOTER · ✓ pour placer",
+  "Yerleştirme modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Mode placement : flèches/toucher pour bouger · touche R ou ⟳ pour PIVOTER · ✓ pour placer",
   "Oyun Günü": "Jour de jeu",
   "Bir oyun günü 160 saniye sürer. Gün dönümünde kira/yovmiye kesilir, ihale teslimatı kapanır, şube müdürlerinin geliri kasana yazılır ve itibarın günün hizmet kalitesine göre güncellenir.": "Une journée de jeu dure 160 secondes. Au changement de jour, loyer et salaires sont prélevés, les livraisons de contrat se clôturent, les revenus des gérants arrivent en caisse et ta réputation est mise à jour selon la qualité du service.",
   "Saat": "Heure",

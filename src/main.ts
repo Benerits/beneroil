@@ -2668,7 +2668,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   airwater: () => ({ w: 1.6, d: 2 }),
   lamp: () => ({ w: 1.2, d: 1.2, grass: true }), // dekoratif: çimen üstüne de konabilir
   selfwash: () => ({ w: 5.5, d: 7 }),
-  parking: () => ({ w: 4.6, d: 3.2 }),
+  parking: () => ({ w: 5.2, d: 3.2 }), // park aralığı genişledi (araçlar sığmıyordu)
   office: () => ({ w: 5, d: 5.5 }),
   sign: () => ({ w: 1.8, d: 1.8, grass: true }), // tabela taşınabilir (çimen üstüne de konabilir)
 }
@@ -3529,8 +3529,8 @@ function startPlacement(id: string, move = false) {
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'block'
   repositionPlacing(placing.cx, placing.cy) // mevcut konumda başlar: geçerlilik/renk hesaplanır
   ui.toast(move
-    ? t('Taşıma modu: yön butonları ya da dokun · R veya ⟳ döndür · ✓ yerleştir')
-    : t('Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir'), '')
+    ? t('Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir')
+    : t('Yerleştirme modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir'), '')
   if (!reserveHintShown) {
     reserveHintShown = true
     ui.toast(t('Turuncu alanlar araç yolu/rezerv — oraya yapı kurulamaz.'), '', true)

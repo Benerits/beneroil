@@ -12,6 +12,18 @@ import { SCENE_PLANS, type Placement } from './scenery'
 // Yol arsadan ayrı: arada yeşil bant (x 5..5.9) ve giriş/çıkış rampaları var.
 
 export const ROAD_X = 7.9
+
+/**
+ * OTOPARK ÖLÇÜLERİ — "araçlar üst üste biniyor" (#107 #139 #198 #252 #320).
+ * Park aralığı 1.02 birimdi; araç genişlikleri 1.05 / 1.10 / 1.20 olduğu için araçlar
+ * fiziksel olarak yan yana sığmıyordu. En geniş araç 1.20 → aralık 1.25 (pay dahil).
+ * Park noktaları hem çizim hem de trafik tarafından parkYerX() ile TEK KAYNAKTAN
+ * okunur; ikisi ayrı hesaplanırsa araç çizginin üstüne park eder.
+ */
+export const PARK_YER = 4
+export const PARK_ARALIK = 1.25
+export const PARK_PAD_W = PARK_YER * PARK_ARALIK        // 5.0
+export const parkYerX = (i: number) => -PARK_PAD_W / 2 + PARK_ARALIK * (i + 0.5)
 export const LANE_NEAR = 6.95
 export const LANE_FAR = 8.85
 /** Karşı (yol karşısı) istasyonun kapı x'i — near kapı 4.2'nin ROAD_X etrafında aynası (15.8-4.2). */
@@ -2981,18 +2993,18 @@ export class World {
   buildParking(pos?: THREE.Vector2, regId = 'parking') {
     const at = pos ?? new THREE.Vector2(0.4, -0.2)
     const g = new THREE.Group()
-    const pad = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 3.1), lam(0x6b7480))
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(PARK_PAD_W, 3.1), lam(0x6b7480))
     pad.position.z = 0.02
     pad.receiveShadow = true
     g.add(pad)
-    // çizgili park yerleri (4 kapasite, kompakt)
-    for (let i = 0; i <= 4; i++) {
+    // çizgili park yerleri — aralık PARK_ARALIK, araç genişliğinden geniş (bkz. sabit)
+    for (let i = 0; i <= PARK_YER; i++) {
       const line = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 2.8), lam(0xe8e4d8))
-      line.position.set(-2.04 + i * 1.02, 0, 0.03)
+      line.position.set(-PARK_PAD_W / 2 + i * PARK_ARALIK, 0, 0.03)
       g.add(line)
     }
-    for (let i = 0; i < 4; i++) {
-      box(0.62, 0.13, 0.1, 0xd8dbde, -1.53 + i * 1.02, -1.2, 0.05, g) // teker stoperi
+    for (let i = 0; i < PARK_YER; i++) {
+      box(0.72, 0.13, 0.1, 0xd8dbde, parkYerX(i), -1.2, 0.05, g) // teker stoperi
     }
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
@@ -3008,8 +3020,8 @@ export class World {
       if (!(b.id === 'parking' || b.id.startsWith('parking#'))) continue
       const g = b.group as THREE.Group
       g.updateMatrixWorld(true)
-      for (let i = 0; i < 4; i++) {
-        const lx = -1.53 + i * 1.02
+      for (let i = 0; i < PARK_YER; i++) {
+        const lx = parkYerX(i)          // çizimle AYNI kaynak (bkz. PARK_ARALIK)
         spots.push({
           id: `${b.id}:${i}`, // KARARLI KİMLİK (B4) — bina taşınsa da yer kimliği değişmez
           pos: new THREE.Vector3(lx, -0.1, 0).applyMatrix4(g.matrixWorld),
