@@ -6,9 +6,12 @@ class AudioMan {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private musicGain: GainNode | null = null
+  private sfxGain: GainNode | null = null
   private musicTimer: number | null = null
   private bar = 0
   sfxOn = localStorage.getItem('benzinlik-sfx') !== '0'
+  /** efekt ses seviyesi 0..1 — müzikteki gibi seviyeli (Twitter isteği, 29 Ağu) */
+  sfxVolume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('benzinlik-sfx-vol') ?? '1')))
   private dieselNodes: { gain: GainNode; stop: () => void } | null = null
   private pumpNodes: { gain: GainNode; stop: () => void } | null = null
   private resumeHooked = false
@@ -29,7 +32,7 @@ class AudioMan {
       const gain = ctx.createGain()
       gain.gain.value = 0
       gain.gain.linearRampToValueAtTime(0.035, ctx.currentTime + 0.4)
-      gain.connect(this.master)
+      gain.connect(this.sfxGain ?? this.master)
       const nbuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
       const nd = nbuf.getChannelData(0)
       for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * 0.5
@@ -66,7 +69,7 @@ class AudioMan {
       // sabit duyuluyordu. Üçte birine indi — jeneratör hâlâ duyuluyor (EV müşterisini
       // kaçırması mekaniğin parçası) ama artık ortamı ezmiyor.
       gain.gain.linearRampToValueAtTime(0.018, ctx.currentTime + 0.8)
-      gain.connect(this.master)
+      gain.connect(this.sfxGain ?? this.master)
       // alçak devirli motor: testere dişi + hafif detune ikinci osilatör
       const osc1 = ctx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = 52
       const osc2 = ctx.createOscillator(); osc2.type = 'square'; osc2.frequency.value = 104.7
@@ -116,6 +119,10 @@ class AudioMan {
     this.musicGain = this.ctx.createGain()
     this.musicGain.gain.value = this.musicOn ? this.musicVolume : 0
     this.musicGain.connect(this.master)
+    // EFEKT BUSU: tüm efektler buradan geçer, tek yerden kısılır
+    this.sfxGain = this.ctx.createGain()
+    this.sfxGain.gain.value = this.sfxOn ? this.sfxVolume : 0
+    this.sfxGain.connect(this.master)
     this.installResumeHooks()
     this.startMusic()
   }
@@ -157,6 +164,7 @@ class AudioMan {
 
   private tone(freq: number, dur: number, type: OscillatorType, vol: number, when = 0, dest?: AudioNode) {
     if (!this.ctx || !this.master) return
+    dest = dest ?? this.sfxGain ?? this.master   // efekt varsayılanı: sfx busu
     const t0 = this.ctx.currentTime + when
     const osc = this.ctx.createOscillator()
     const g = this.ctx.createGain()
@@ -166,7 +174,7 @@ class AudioMan {
     g.gain.linearRampToValueAtTime(vol, t0 + 0.015)
     g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur)
     osc.connect(g)
-    g.connect(dest ?? this.master)
+    g.connect(dest)
     osc.start(t0)
     osc.stop(t0 + dur + 0.05)
   }
@@ -232,7 +240,7 @@ class AudioMan {
     lp.type = 'lowpass'
     lp.frequency.setValueAtTime(900, t0)
     lp.frequency.exponentialRampToValueAtTime(90, t0 + 1.2)
-    src.connect(lp); lp.connect(g); g.connect(this.master)
+    src.connect(lp); lp.connect(g); g.connect(this.sfxGain ?? this.master)
     src.start(t0)
   }
 
@@ -328,8 +336,20 @@ class AudioMan {
     this.sfxOn = !this.sfxOn
     localStorage.setItem('benzinlik-sfx', this.sfxOn ? '1' : '0')
     this.ensure()
+    if (this.sfxGain) this.sfxGain.gain.value = this.sfxOn ? this.sfxVolume : 0
     if (this.sfxOn) this.click()
     return this.sfxOn
+  }
+
+  /** seviyeli efekt sesi (0..1). 0 = kapalı — müzikteki davranışın aynısı. */
+  setSfxVolume(v: number): void {
+    this.sfxVolume = Math.min(1, Math.max(0, v))
+    this.sfxOn = this.sfxVolume > 0.001
+    localStorage.setItem('benzinlik-sfx-vol', String(this.sfxVolume))
+    localStorage.setItem('benzinlik-sfx', this.sfxOn ? '1' : '0')
+    this.ensure()
+    if (this.sfxGain) this.sfxGain.gain.value = this.sfxOn ? this.sfxVolume : 0
+    if (this.sfxOn) this.click()          // seviyeyi duyarak ayarla
   }
 }
 

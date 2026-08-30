@@ -961,12 +961,15 @@ export class GameState {
    * (trafik, kuyruk, fiyat) hem pahalı hem de sunucu tarafında doğrulanamaz. Ekipman
    * tablosu ise save'de duruyor ve sunucu aynı tabloyla üst sınırı hesaplayabiliyor.
    */
-  branchNetPerDay(loc: LocId): { gross: number; wage: number; net: number; level: number } {
+  /** @param varsayLevel müdür YOKKEN "tutarsan ne kazanırsın" tahmini için seviye dayat.
+   *  Oyuncular "2. şubeden para gelmiyor" diyordu (Twitter, 29 Ağu); sebebi müdür
+   *  tutmamış olmaları ama panel bunun BEDELİNİ göstermiyordu. */
+  branchNetPerDay(loc: LocId, varsayLevel?: number): { gross: number; wage: number; net: number; level: number } {
     const sn = this.locSnapshots[loc]
     const f = (sn?.f ?? {}) as Record<string, unknown>
     const num = (k: string) => { const v = f[k]; return typeof v === 'number' && isFinite(v) ? v : 0 }
     const yes = (k: string) => f[k] === true
-    const level = Math.max(0, Math.min(3, Math.round(num('managerLevel'))))
+    const level = varsayLevel ?? Math.max(0, Math.min(3, Math.round(num('managerLevel'))))
     if (level <= 0) return { gross: 0, wage: 0, net: 0, level: 0 }
 
     // Birim başı günlük brüt (kara şubesi ölçümlerinden: pompa ~₺1.400/gün aktif oyunda)

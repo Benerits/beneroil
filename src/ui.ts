@@ -274,11 +274,27 @@ export class UI {
       musicVol.style.background = `linear-gradient(90deg, var(--red) 0 ${pct}%, var(--paper-2) ${pct}% 100%)`
       musicVolVal.textContent = `%${pct}`
     }
-    const syncAudioLabels = () => { sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı') }
+    // EFEKT SEVİYESİ (Twitter isteği, 29 Ağu: "ses efektleri ses düzeyi kontrolü —
+    // şu an yalnızca müzikte var"). Müzikle aynı davranış: 0 = kapalı.
+    const sfxVol = el<HTMLInputElement>('sfxvol')
+    const sfxVolVal = el<HTMLSpanElement>('sfxvolval')
+    const paintSfx = (pct: number) => {
+      sfxVol.style.background = `linear-gradient(90deg, var(--red) 0 ${pct}%, var(--paper-2) ${pct}% 100%)`
+      sfxVolVal.textContent = `%${pct}`
+    }
+    const syncAudioLabels = () => {
+      sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı')
+      const p = Math.round((audio.sfxOn ? audio.sfxVolume : 0) * 100)
+      sfxVol.value = String(p); paintSfx(p)
+    }
     syncAudioLabels()
     const initPct = Math.round(audio.musicVolume * 100)
     musicVol.value = String(initPct); paintSlider(initPct)
     musicVol.addEventListener('input', () => { const p = Number(musicVol.value); audio.setMusicVolume(p / 100); paintSlider(p) })
+    sfxVol.addEventListener('input', () => {
+      const p = Number(sfxVol.value); audio.setSfxVolume(p / 100); paintSfx(p)
+      sfxBtn.textContent = audio.sfxOn ? t('Efektler: Açık') : t('Efektler: Kapalı')
+    })
     sfxBtn.addEventListener('click', () => { audio.toggleSfx(); syncAudioLabels() })
     const notifBtn = el<HTMLButtonElement>('notifbtn')
     const capLN = () => (window as unknown as { Capacitor?: { Plugins?: { LocalNotifications?: any } } }).Capacitor?.Plugins?.LocalNotifications

@@ -24,6 +24,8 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Müdür YOK — bu şube HİÇ kazanmıyor. Sv.1 müdür tutsan günlük ~₺{0} gelirdi (yovmiye düşülmüş). Şubeye git → Ofis › Şubeler.": "NO MANAGER — this branch earns nothing. With a Lv.1 manager it would bring in about ₺{0} a day (wages deducted). Go to the branch → Office › Branches.",
+  "Efektler": "Effects",
   "Tedarikçi: {0}": "Supplier: {0}",
   "Tedarikçi": "Supplier",
   "Toptancı Depo": "Wholesale Depot",
@@ -1181,6 +1183,8 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Müdür YOK — bu şube HİÇ kazanmıyor. Sv.1 müdür tutsan günlük ~₺{0} gelirdi (yovmiye düşülmüş). Şubeye git → Ofis › Şubeler.": "AUCUN GÉRANT — cette station ne rapporte rien. Avec un gérant niv.1 elle rapporterait environ ₺{0} par jour (salaires déduits). Va à la station → Bureau › Stations.",
+  "Efektler": "Effets",
   "Tedarikçi: {0}": "Fournisseur : {0}",
   "Tedarikçi": "Fournisseur",
   "Toptancı Depo": "Dépôt de gros",

@@ -1015,7 +1015,14 @@ function openOfficePanel() {
         const note = d.level > 0
           ? t('Müdür Sv.{0} · günlük net ₺{1} — her gün dönüşünde kasana OTOMATİK eklenir',
               String(d.level), tl(d.net))
-          : t('Müdür YOK — şube kapalı duruyor. Şubeye git, Ofis içindeki Şubeler sekmesinden müdür tut.')
+          // MÜDÜRSÜZ ŞUBE: kaybın SAYIYLA gösterilir. "2. şubemden para gelmiyor" diyen
+          // oyuncuların çoğu müdür tutmamıştı; panel sebebi yazıyordu ama bedelini değil.
+          : (() => {
+              const tahmin = state.branchNetPerDay(id, 1)   // Sv.1 müdürle ne kazanırdı
+              return tahmin.net > 0
+                ? t('Müdür YOK — bu şube HİÇ kazanmıyor. Sv.1 müdür tutsan günlük ~₺{0} gelirdi (yovmiye düşülmüş). Şubeye git → Ofis › Şubeler.', tl(tahmin.net))
+                : t('Müdür YOK — şube kapalı duruyor. Şubeye git, Ofis içindeki Şubeler sekmesinden müdür tut.')
+            })()
         return `<div class="prow" style="flex-wrap:wrap"><span class="pl">${th.name}</span>`
           + (vault > 0 ? `<button class="btn sbuy good" data-collectloc="${id}">${t('Topla ₺{0}', tl(vault))}</button>` : '')
           + `<button class="btn sbuy" data-goloc="${id}">${t('Şubeye Git')}</button>`
