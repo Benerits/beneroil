@@ -1,0 +1,17 @@
+# Godot 4 import/derleme önbelleği — asla commit edilmez
+.godot/
+
+# Export çıktıları
+build/
+*.pck
+*.exe
+*.dmg
+*.zip
+
+# Steam yerel geliştirme dosyası (release paketine de girmez)
+steam_appid.txt
+
+.DS_Store
+
+# NOT: *.uid dosyaları COMMIT EDİLİR — script/asset kimliği, silinmesi
+# sahne referanslarını kırar.

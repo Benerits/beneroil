@@ -1,6 +1,6 @@
 import { Car } from './cars'
 import { t } from './i18n'
-import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems } from './state'
+import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems, dailyQuests, SUPPLIERS } from './state'
 import { audio } from './audio'
 import * as auth from './auth'
 import { isNativePlatform } from './platform'
@@ -525,6 +525,36 @@ export class UI {
       this.currentSell = null
     }
     this.infoCard.classList.add('show')
+    this.anchorInfoCard()
+  }
+
+  /** BİNANIN ÜSTÜNDE POPUP (#1020 "bir şeye tıkladığımızda sol altta çıkıyor, onu direkt
+   *  onun üstünde popup olarak çıkarsak daha güzel olur"): kart artık seçilen yapının
+   *  ekran konumuna tutunur. Mobilde CSS alt-sheet kuralları geçerli kalır (dar ekranda
+   *  yüzen kart parmağın altında kalıyordu) — orada konumlandırma uygulanmaz. */
+  private cardAnchor: { x: number; y: number } | null = null
+  setCardAnchor(p: { x: number; y: number } | null) {
+    this.cardAnchor = p
+    if (this.buildingCardVisible) this.anchorInfoCard()
+  }
+  anchorInfoCard() {
+    const c = this.infoCard
+    const dar = window.matchMedia('(max-width: 820px)').matches
+    if (dar || !this.cardAnchor) {                 // mobil: CSS'e bırak
+      c.style.left = ''; c.style.top = ''; c.style.bottom = ''; c.style.transform = ''
+      return
+    }
+    const k = c.getBoundingClientRect()
+    const g = 14
+    let x = this.cardAnchor.x - k.width / 2
+    let y = this.cardAnchor.y - k.height - 18     // yapının ÜSTÜNDE
+    if (y < g) y = Math.min(this.cardAnchor.y + 24, window.innerHeight - k.height - g)  // yer yoksa altına
+    x = Math.max(g, Math.min(x, window.innerWidth - k.width - g))
+    y = Math.max(g, Math.min(y, window.innerHeight - k.height - g))
+    c.style.left = `${Math.round(x)}px`
+    c.style.top = `${Math.round(y)}px`
+    c.style.bottom = 'auto'
+    c.style.transform = 'none'
   }
 
   private accountEmail: string | null = null
@@ -544,6 +574,7 @@ export class UI {
 
   hideBuildingCard() {
     this.infoCard.classList.remove('show')
+    this.cardAnchor = null
     this.currentAction = null
     this.currentMove = null
     this.currentSell = null
@@ -656,7 +687,12 @@ export class UI {
       if (state.loginStreak >= 2) this.setText(el<HTMLSpanElement>('streak-n'), `${state.loginStreak}`)
     }
     this.setText(this.rep, state.reputation.toFixed(1))
-    this.setText(el<HTMLSpanElement>('quest'), state.dailyDone ? t('TAMAM') : `${state.dailyServed}/15`)
+    // rozet artık ÜÇ görevin kaçının bittiğini gösterir (eski hâli tek sabit 15-müşteri
+    // sayacıydı ve mobilde hiç görünmüyordu — #1004)
+    {
+      const bitti = dailyQuests(state).filter(q => q.done).length
+      this.setText(el<HTMLSpanElement>('quest'), bitti >= 3 ? t('TAMAM') : `${bitti}/3`)
+    }
     if (this.activeCar) this.refreshPanel()
     const ts = this.tankerStatus()
     const tpanel = el<HTMLDivElement>('tankerpanel')
@@ -697,7 +733,8 @@ export class UI {
         btn.disabled = true
       } else {
         // oyuncu isteği: sipariş ekranında ALIŞ fiyatı görünsün
-        this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap, need, state.buyPrice(f).toFixed(1)))
+        this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap,
+          need, (state.buyPrice(f) * state.supplierMult()).toFixed(1)))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }
@@ -705,6 +742,25 @@ export class UI {
         const inp = el<HTMLInputElement>(`fqty-${f}`)
         if (document.activeElement !== inp) inp.value = String(need)
       }
+    }
+    // TEDARİKÇİ SATIRI (#1067): hız/fiyat takası; teslimat bekleyen sipariş varken
+    // değiştirmek yolda olan tankerin süresini değiştirmez (eta zaten yazılmış).
+    {
+      const row = document.getElementById('supplierrow')
+      if (row) {
+        const html = (Object.keys(SUPPLIERS) as (keyof typeof SUPPLIERS)[]).map(id => {
+          const sp = SUPPLIERS[id]
+          const fark = Math.round((sp.priceMult - 1) * 100)
+          return `<button class="btn${id === state.supplier ? ' primary' : ''}" data-sup="${id}"`
+            + ` style="flex:1; justify-content:center; flex-direction:column; gap:2px; height:auto; padding:7px 4px">`
+            + `<span style="font-size:12px">${t(sp.label)}</span>`
+            + `<span style="font-size:11px; opacity:.75">${fark === 0 ? t('piyasa') : `${fark > 0 ? '+' : ''}%${fark}`}`
+            + ` · ${sp.etaMult < 1 ? t('hızlı') : sp.etaMult > 1 ? t('yavaş') : t('normal')}</span></button>`
+        }).join('')
+        if (row.dataset.sup !== state.supplier) { row.innerHTML = html; row.dataset.sup = state.supplier }
+      }
+      const d = document.getElementById('supplierdesc')
+      if (d) this.setText(d as HTMLDivElement, t(SUPPLIERS[state.supplier].desc))
     }
 
     this.setText(this.closeLabel, state.closed ? t('KAPALI') : t('Açık'))
@@ -752,7 +808,32 @@ export class UI {
     }
   }
 
+  /** MESAJ KUTUSU (#1018 "uyarıyı gözden kaçırdım, tekrar bakmam için bir mesaj kutusu
+   *  olsun"): toast 3.5 sn sonra siliniyordu ve geri dönüşü yoktu. Her toast artık burada
+   *  da birikiyor; son 60 kayıt saklanır. */
+  readonly inbox: { text: string; kind: string; t: number }[] = []
+  private inboxUnread = 0
+  get unreadCount() { return this.inboxUnread }
+  markInboxRead() { this.inboxUnread = 0; this.syncInboxBadge() }
+  private syncInboxBadge() {
+    const b = document.getElementById('inboxdot')
+    if (b) {
+      b.textContent = this.inboxUnread > 9 ? '9+' : String(this.inboxUnread)
+      b.style.display = this.inboxUnread > 0 ? 'flex' : 'none'
+    }
+  }
+
   toast(msg: string, kind: 'good' | 'bad' | '' = '', silent = false) {
+    {
+      const kayit = stripEmoji(t(msg))
+      const son = this.inbox[this.inbox.length - 1]
+      if (!son || son.text !== kayit) {
+        this.inbox.push({ text: kayit, kind, t: Date.now() })
+        if (this.inbox.length > 60) this.inbox.shift()
+        this.inboxUnread++
+        this.syncInboxBadge()
+      }
+    }
     if (!silent) {
       if (kind === 'good') audio.cash()
       else if (kind === 'bad') audio.bad()

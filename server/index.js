@@ -70,6 +70,24 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open'`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_note text`)
   await pool.query(`ALTER TABLE benzinlik_feedback ADD COLUMN IF NOT EXISTS resolved_at timestamptz`)
+  // GODOT SÜRÜMÜNÜN GERİ BİLDİRİMİ: benzinlik_feedback'in klonu, artı ekran
+  // görüntüsü (JPEG, satırın içinde) ve sürüm/platform. Godot oyununun hesabı
+  // yok, o yüzden e-posta yerine serbest bir "iletişim" alanı ve IP.
+  await pool.query(`CREATE TABLE IF NOT EXISTS beneloil_godot_feedback (
+    id serial PRIMARY KEY,
+    message text NOT NULL,
+    contact text,
+    version text,
+    platform text,
+    locale text,
+    game jsonb,
+    screenshot bytea,
+    ip text,
+    status text NOT NULL DEFAULT 'open',
+    resolved_note text,
+    resolved_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`)
   await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_stat_hourly (
     hour timestamptz PRIMARY KEY, visits int NOT NULL DEFAULT 0,
     signups int NOT NULL DEFAULT 0, logins int NOT NULL DEFAULT 0
@@ -452,7 +470,7 @@ function maxIncomeRate(s) {
 
 /** ŞUBE KASASI CLAMP'İ: istemci tavanıyla BİREBİR (state.ts BRANCH_VAULT_HARD).
  *  Kurcalanmış save'de branchVault sonsuz para kapısı olmasın. */
-const BRANCH_VAULT_HARD = 220_000
+const BRANCH_VAULT_HARD = 240_000
 const VALID_LOCS = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
 function clampBranchVault(s) {
   if (!s) return
@@ -1671,6 +1689,36 @@ async function handleVs(req, res, url) {
         createdAt: r.created_at,
       })), nextCursor: null })
     }
+    // Godot sürümünün geri bildirimleri: aynı üç eylem, artı tek kayıt (detay
+    // sayfası) ve ekran görüntüsü bağlantısı.
+    if (url === '/vs/v1/godot-feedback' && req.method === 'GET') {
+      const limit = Math.min(5000, Math.max(10, Number(u.searchParams.get('limit')) || 1000))
+      const durum = u.searchParams.get('durum')
+      const where = durum === 'open' || durum === 'resolved' || durum === 'wontfix' ? `WHERE status='${durum}'` : ''
+      const rows = await pool.query(`SELECT ${GODOT_FB_COLS} FROM beneloil_godot_feedback ${where} ORDER BY (status='open') DESC, id DESC LIMIT $1`, [limit])
+      const base = publicBase(req)
+      return json(res, 200, { data: rows.rows.map(r => godotFeedbackRow(r, base)), nextCursor: null })
+    }
+    const gfOne = url.match(/^\/vs\/v1\/godot-feedback\/(\d+)$/)
+    if (gfOne && req.method === 'GET') {
+      const r = await pool.query(`SELECT ${GODOT_FB_COLS} FROM beneloil_godot_feedback WHERE id=$1`, [Number(gfOne[1])])
+      if (!r.rowCount) return json(res, 404, { error: { code: 'not_found', message: 'Kayıt yok.' } })
+      return json(res, 200, { data: godotFeedbackRow(r.rows[0], publicBase(req)) })
+    }
+    const gfM = url.match(/^\/vs\/v1\/godot-feedback\/(\d+)\/(resolve|reopen|wontfix)$/)
+    if (gfM && req.method === 'POST') {
+      const id = Number(gfM[1]); const act = gfM[2]
+      const body = await readBody(req).catch(() => ({}))
+      if (act === 'resolve') {
+        await pool.query('UPDATE beneloil_godot_feedback SET status=\'resolved\', resolved_note=$2, resolved_at=now() WHERE id=$1', [id, String(body.note || 'Çözüldü').slice(0, 300)])
+      } else if (act === 'wontfix') {
+        await pool.query('UPDATE beneloil_godot_feedback SET status=\'wontfix\', resolved_note=$2, resolved_at=now() WHERE id=$1', [id, String(body.note || '').slice(0, 300)])
+      } else {
+        await pool.query('UPDATE beneloil_godot_feedback SET status=\'open\', resolved_note=NULL, resolved_at=NULL WHERE id=$1', [id])
+      }
+      const r = await pool.query(`SELECT ${GODOT_FB_COLS} FROM beneloil_godot_feedback WHERE id=$1`, [id])
+      return json(res, 200, { data: godotFeedbackRow(r.rows[0], publicBase(req)) })
+    }
     const fbM = url.match(/^\/vs\/v1\/feedback\/(\d+)\/(resolve|reopen|wontfix)$/)
     if (fbM && req.method === 'POST') {
       const id = Number(fbM[1]); const act = fbM[2]
@@ -1866,8 +1914,90 @@ async function pushSignupNotif(kind = 'registered', guestTotal = 0) {
   } catch {}
 }
 
+// ---- Godot (masaüstü + web) sürümünün geri bildirim kanalı ----
+// Oyunun hesabı yok: uç herkese açık, IP başına saatte 10 bildirim. Ekran
+// görüntüsü JPEG olarak satırın içinde durur ve /shot.jpg ile HERKESE açık
+// servis edilir (panel <img> olarak gösterir; içinde oyun karesinden başka bir
+// şey yok). Web sürümü benerits.github.io'dan geldiği için CORS açık.
+const GODOT_FB_MAX_SHOT = 700_000
+function corsGodot(res) {
+  res.setHeader('access-control-allow-origin', '*')
+  res.setHeader('access-control-allow-methods', 'POST, OPTIONS')
+  res.setHeader('access-control-allow-headers', 'content-type')
+  res.setHeader('access-control-max-age', '86400')
+}
+function godotFeedbackRow(r, base) {
+  return {
+    id: String(r.id),
+    durum: r.status === 'resolved' ? 'Çözüldü' : r.status === 'wontfix' ? 'Kapatıldı' : 'Açık',
+    createdAt: r.created_at,
+    screenshot: r.has_shot ? `${base}/api/godot-feedback/${r.id}/shot.jpg` : null,
+    message: r.message,
+    contact: r.contact || '',
+    cozumNotu: r.resolved_note || '',
+    surum: r.version || '',
+    platform: r.platform || '',
+    dil: r.locale || '',
+    gun: r.game?.day ?? null,
+    kasa: r.game?.cash ?? null,
+    seviye: r.game?.level ?? null,
+    mod: r.game?.kind ?? '',
+    sure: r.game?.playtime_min ?? null,
+  }
+}
+function publicBase(req) {
+  return String(process.env.PUBLIC_URL || ('https://' + (req.headers.host || ''))).replace(/\/$/, '')
+}
+const GODOT_FB_COLS = 'id, message, contact, version, platform, locale, game, created_at, status, resolved_note, (screenshot IS NOT NULL) AS has_shot'
+async function handleGodotFeedback(req, res, url) {
+  try {
+    const shot = url.match(/^\/api\/godot-feedback\/(\d+)\/shot\.jpg$/)
+    if (shot && req.method === 'GET') {
+      if (!pool) return json(res, 503, { error: 'db' })
+      const r = await pool.query('SELECT screenshot FROM beneloil_godot_feedback WHERE id=$1', [Number(shot[1])])
+      const buf = r.rows[0]?.screenshot
+      if (!buf) { res.writeHead(404); return res.end() }
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': buf.length, 'cache-control': 'public, max-age=31536000, immutable' })
+      return res.end(buf)
+    }
+    if (url !== '/api/godot-feedback') { res.writeHead(404); return res.end() }
+    corsGodot(res)
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST bekleniyor.' })
+    if (!pool) return json(res, 503, { error: 'Sunucuda veritabanı yapılandırılmamış.' })
+    const ip = clientIp(req)
+    if (!rateLimit('gfb:' + ip, 10, 3600_000)) return json(res, 429, { error: 'Çok sık bildirim — biraz sonra tekrar dene.' })
+    let body
+    try { body = await readBody(req) } catch { return json(res, 400, { error: 'Gövde okunamadı.' }) }
+    // SINIRSIZ DEĞİL AMA GENİŞ: ilk beta raporu (3-4 saatlik oyun) 2000
+    // karakterde kesildi ve devamı kayboldu. Gövde tavanı zaten 1 MB.
+    const message = String(body.message || '').trim().slice(0, 50_000)
+    if (message.length < 3) return json(res, 400, { error: 'Mesaj çok kısa.' })
+    const contact = String(body.contact || '').trim().slice(0, 120)
+    const version = String(body.version || '').slice(0, 32)
+    const platform = String(body.platform || '').slice(0, 32)
+    const locale = String(body.locale || '').slice(0, 16)
+    const game = body.game && typeof body.game === 'object' && !Array.isArray(body.game) ? body.game : null
+    let screenshot = null
+    if (typeof body.screenshot === 'string' && body.screenshot) {
+      const buf = Buffer.from(body.screenshot, 'base64')
+      // Yalnız gerçek bir JPEG (SOI işareti) ve tavanın altında olan tutulur;
+      // gerisi mesajı düşürmeden sessizce atılır.
+      if (buf.length >= 4 && buf[0] === 0xff && buf[1] === 0xd8 && buf.length <= GODOT_FB_MAX_SHOT) screenshot = buf
+    }
+    const r = await pool.query(
+      'INSERT INTO beneloil_godot_feedback(message, contact, version, platform, locale, game, screenshot, ip) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+      [message, contact || null, version || null, platform || null, locale || null, game, screenshot, ip])
+    return json(res, 200, { ok: true, id: r.rows[0].id })
+  } catch (e) {
+    console.error('godot-feedback:', e.message)
+    return json(res, 500, { error: 'Sunucu hatası.' })
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   let url = (req.url || '/').split('?')[0]
+  if (url.startsWith('/api/godot-feedback')) return handleGodotFeedback(req, res, url)
   if (url.startsWith('/api/')) return handleApi(req, res, url)
   if (url.startsWith('/vs/v1/')) return handleVs(req, res, url)
   if (url === '/ads.txt' && process.env.ADSENSE_PUB) {
@@ -1890,6 +2020,7 @@ const server = http.createServer(async (req, res) => {
   if (url === '/terms') url = '/terms.html'
   if (url === '/privacy') url = '/privacy.html'
   if (url === '/support') url = '/support.html' // ASC Support URL (App Store şartı)
+  if (url === '/data-deletion') url = '/data-deletion.html' // Meta Data Deletion Instructions URL
   // statik dosyalar + SPA fallback
   let file = path.join(DIST, path.normalize(url).replace(/^([.][.][/\\])+/, ''))
   if (!file.startsWith(DIST)) file = path.join(DIST, 'index.html')

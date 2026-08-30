@@ -577,6 +577,10 @@ export class Car {
   static solids: { cx: number; cy: number; w: number; d: number }[] = []
   /** yağ değişimi körüğü gibi BİNA İÇİNE sürüşlerde duvar çarpışmasını kapatır */
   ghostSolid = false
+  /** üst üste sıkışma sayacı — ikinciden sonra kısa süreli araç-araç geçişi açılır */
+  stuckHits = 0
+  /** >0 iken bu araç DİĞER ARAÇLARDAN geçebilir (binalar hariç): kilidi kırma penceresi */
+  softPassT = 0
 
   /** public sarmalayıcı — bekleme noktası üretimi katı cisimden kaçmak için kullanır (B5) */
   static isSolidAt(x: number, y: number): boolean { return Car.insideSolid(x, y) }
@@ -836,12 +840,15 @@ export class Tanker {
 // B5: bekleme noktaları artık SABİT DÜNYA KOORDİNATI değil — kapıya göreli üretilir ve
 // katı cisme denk gelirse koridor boyunca kayar (oyuncu oraya bina koyunca araç binanın
 // içinde bekliyordu). Ofsetler kapıdan istasyon içine doğru mesafedir.
-const WAIT_OFFSETS = [3.2, 6.0, 12.6, 15.4]
-const WAIT_OFFSETS_WATER = [4, 13, 22, 31] // tekne kuyruğu: boy ortalaması + pay (süperyat 8.5)
-const WAIT_SPOTS = [
-  new THREE.Vector3(3.4, -4.6, 0), new THREE.Vector3(3.4, -7.4, 0),
-  new THREE.Vector3(3.4, -16.8, 0), new THREE.Vector3(3.4, -19.6, 0),
-]
+// İÇ BEKLEME KORİDORU — #1028 ("istasyonda alan olmasına rağmen pompa doluysa sıradaki
+// araç istasyonun GİRİŞ ALANINDA bekliyor, içeri gelmiyor"): iç koridorda yalnız 4 yuva
+// vardı. 5. araçtan itibaren tryEnter yer bulamıyor, araç ya kapıda bekliyor ya yoluna
+// gidiyordu — 10 pompalı istasyonda bile kuyruk dışarıda kalıyordu. Yuva sayısı 8'e çıktı;
+// offsetler pompa hattıyla çakışırsa waitSpotAt zaten katı cisimden kaçırıyor.
+const WAIT_OFFSETS = [3.2, 6.0, 8.8, 12.6, 15.4, 18.2, 21.0, 23.8]
+// MARİNA AYRI KALIR: tekne boyu araçtan çok büyük (süperyat 8.5), 8 yuva iç içe girerdi.
+// Su şubesinde 4 geniş yuva korunuyor ("tekneler iç içe giriyor" fixi, 9612597).
+const WAIT_OFFSETS_WATER = [4, 13, 22, 31] // tekne kuyruğu: boy ortalaması + pay
 
 export interface CarManagerOpts {
   pumpCount: () => number
@@ -983,6 +990,10 @@ export class CarManager {
     return new THREE.Vector3(x, y, 0)
   }
   private waitOccFor(st: 'near' | 'far') { return st === 'far' ? this.waitOccFar : this.waitOcc }
+  /** o şubede kaç bekleme yuvası var — su şubesinde tekne boyu yüzünden daha az */
+  private waitSlotCount(st: 'near' | 'far') {
+    return (this.opts.isWater?.() && st === 'near') ? WAIT_OFFSETS_WATER.length : WAIT_OFFSETS.length
+  }
   /** pompa/şarj bu istasyona mı ait — konuma göre (yol karşısı = far) */
   private pumpStation(i: number): 'near' | 'far' { return this.opts.pumpSlot(i).x > ROAD_X ? 'far' : 'near' }
   private evStation(i: number): 'near' | 'far' { return this.opts.evSlot(i).x > ROAD_X ? 'far' : 'near' }
@@ -1116,6 +1127,9 @@ export class CarManager {
     this.rebuildCarGrid()
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked' || c.phase === 'waiting') continue
+      // KİLİT KIRMA PENCERESİ: iki kez üst üste aynı yerde takılan araç kısa süre diğer
+      // araçlardan geçer. Binalar (Car.solids) hâlâ katı — yalnız araç-araç kilidi açılır.
+      if (c.softPassT > 0) continue
       const dir = c.headingDir()
       if (!dir) continue
       const cp = c.group.position
@@ -1369,18 +1383,31 @@ export class CarManager {
         car.stayT -= dt
         if (car.stayT <= 0) this.leaveTruckPark(car)
       }
-      // sıkışma bekçisi: hareket etmesi gereken araç 6 sn'dir yerindeyse kurtar
-      if (car.phase === 'driving' || car.phase === 'toPark' || car.phase === 'leaving') {
+      // SIKIŞMA BEKÇİSİ. Oyuncu raporu (12 şikayet): "araçlar pompaya takılıp kalıyor",
+      // "her yerde sıkışıyor". Eşik 6 sn'ydi — oyuncu çoktan görüp şikâyet ediyordu; ayrıca
+      // 'transit' fazı hiç kapsanmıyordu, yolda tıkanan araç ancak buharlaşarak temizleniyordu.
+      // Artık 2.2 sn'de müdahale var ve transit dahil; tekrarlayan sıkışmada araç kısa süre
+      // hayalet olup (yalnız araç-araç) kilidi kırıyor — kimse 6 saniye çakılı kalmıyor.
+      if (car.phase === 'driving' || car.phase === 'toPark' || car.phase === 'leaving'
+          || car.phase === 'transit') {
         car.watchT += dt
-        if (car.watchT >= 6) {
-          if (car.group.position.distanceTo(car.watchPos) < 0.35) this.recoverStuck(car)
+        if (car.watchT >= 2.2) {
+          if (car.group.position.distanceTo(car.watchPos) < 0.3) {
+            car.stuckHits++
+            this.recoverStuck(car)
+            // ikinci kez aynı yerde takıldıysa: 1.2 sn araç-araç geçişine izin ver.
+            // Bina/pompa çarpışması (Car.solids) AÇIK kalır — yapıların içinden geçilmez.
+            if (car.stuckHits >= 2) car.softPassT = Math.max(car.softPassT, 1.2)
+          } else { car.stuckHits = 0 }
           car.watchPos.copy(car.group.position)
           car.watchT = 0
         }
       } else {
         car.watchT = 0
+        car.stuckHits = 0
         car.watchPos.copy(car.group.position)
       }
+      if (car.softPassT > 0) car.softPassT = Math.max(0, car.softPassT - dt)
       car.update(dt)
       // NİHAİ SİGORTA: hareket etmesi gereken araç 18 sn boyunca yerinden oynayamadıysa
       // sessizce sahneden çekilir — trafik ne olursa olsun kalıcı kilitlenemez.
@@ -1446,7 +1473,7 @@ export class CarManager {
       used = idx.filter(i => this.evOcc[i]).length
     } else {
       const idx = Array.from({ length: this.opts.pumpCount() }, (_, i) => i).filter(i => this.pumpStation(i) === st)
-      cap = Math.max(1, idx.length + WAIT_SPOTS.length)
+      cap = Math.max(1, idx.length + this.waitSlotCount(st))
       used = idx.filter(i => this.pumpOcc[i]).length + this.waitOccFor(st).filter(Boolean).length
     }
     const kind = isEv ? 'ev' : 'fuel'
@@ -1738,7 +1765,7 @@ export class CarManager {
     // boş bekleme noktası REZERVE edilir; hiç yer yoksa araç girmez, yoluna gider
     const waitOcc = this.waitOccFor(car.station)
     let wi = -1
-    for (let i = 0; i < WAIT_SPOTS.length; i++) if (!waitOcc[i]) { wi = i; break }
+    for (let i = 0; i < this.waitSlotCount(car.station); i++) if (!waitOcc[i]) { wi = i; break }
     if (wi >= 0) {
       waitOcc[wi] = car
       car.waitIndex = wi

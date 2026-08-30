@@ -62,7 +62,10 @@ class AudioMan {
       const ctx = this.ctx
       const gain = ctx.createGain()
       gain.gain.value = 0
-      gain.gain.linearRampToValueAtTime(0.055, ctx.currentTime + 0.8)
+      // #1057 "dizel jeneratörünün sesi çok yüksek ve rahatsız edici": 0.055 tüm sahnede
+      // sabit duyuluyordu. Üçte birine indi — jeneratör hâlâ duyuluyor (EV müşterisini
+      // kaçırması mekaniğin parçası) ama artık ortamı ezmiyor.
+      gain.gain.linearRampToValueAtTime(0.018, ctx.currentTime + 0.8)
       gain.connect(this.master)
       // alçak devirli motor: testere dişi + hafif detune ikinci osilatör
       const osc1 = ctx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = 52
@@ -259,7 +262,17 @@ class AudioMan {
     const stepDur = 60 / 100 / 2 // 100 BPM, 8'lik grid — sakin ama yürüyen
     const ROOTS = [130.8, 98.0, 110.0, 87.3] // C3 G2 A2 F2
     const st = (root: number, semi: number) => root * Math.pow(2, semi / 12)
-    const PENTA = [0, 3, 5, 7, 10, 12]
+    // MAKAM DİZİLERİ (#1035 "arkada çalması için Türkçe şarkı"): lisanslı şarkı
+    // paketleyemiyoruz, ama melodi artık tek pentatonikte dönmüyor — dört dizi sırayla
+    // geliyor ve ikisi Türk müziğinin tanıdık renkleri (hicaz, nihavend).
+    const DIZILER: number[][] = [
+      [0, 3, 5, 7, 10, 12],        // pentatonik (eski dizi — mevcut his korunur)
+      [0, 1, 4, 5, 7, 8, 11],      // hicaz
+      [0, 2, 3, 5, 7, 8, 10],      // nihavend
+      [0, 2, 4, 5, 7, 9, 11],      // majör — aydınlık bölüm
+    ]
+    // 8 barda bir dizi değişir: aynı ezgi sonsuza dek tekrarlanmıyor
+    const dizi = (bar: number) => DIZILER[Math.floor(bar / 8) % DIZILER.length]
     this.nextTime = this.ctx.currentTime + 0.1
     this.nextStep = 0
     const tick = () => {
@@ -279,7 +292,8 @@ class AudioMan {
         }
         // seyrek pentatonik melodi: sadece çift barlarda, yumuşak sine
         if (bar % 2 === 0 && (step === 1 || step === 5 || (step === 7 && bar % 4 === 0))) {
-          const n = PENTA[(bar * 3 + step * 5) % PENTA.length]
+          const d = dizi(bar)
+          const n = d[(bar * 3 + step * 5) % d.length]
           this.tone(st(root, 12 + n) * 2, 0.55, 'sine', 0.026, when, this.musicGain)
         }
         // çok kısık hi-hat: yalnızca 3. ve 7. adım

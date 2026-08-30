@@ -1,0 +1,62 @@
+{
+  "_source": "../src/state.ts (web sürümü) — BİREBİR kopya. Buradaki hiçbir sayı web'den bağımsız değiştirilmez; denge işi için tycoon-economy skill'ine bak.",
+  "_synced_at": "2026-07-30",
+
+  "start_money": 5000,
+  "day_cycle_sec": 160,
+
+  "fuels": {
+    "benzin": { "price": 10, "cost": 6.5 },
+    "dizel":  { "price": 9,  "cost": 6 },
+    "lpg":    { "price": 6,  "cost": 4 }
+  },
+  "fill_rate_l_per_s": 7,
+
+  "pump_costs": [0, 5000, 8000, 12000, 16000, 21000, 26000, 32000, 40000, 50000, 62000, 76000, 92000, 110000],
+  "max_pumps": 14,
+  "pumpspeed_costs": [16000, 38000, 75000],
+  "pumpspeed_mult": [1, 1.25, 1.5, 1.8],
+
+  "ev_costs": [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000],
+  "max_ev": 12,
+  "battery_caps": [0, 100, 250, 600, 1200, 2400, 4500],
+  "battery_costs": [5000, 9000, 16000, 34000, 72000, 155000],
+  "ev_price_per_kwh": 8,
+  "grid_cost_per_kwh": 3.5,
+
+  "tank_capacity": [800, 1500, 3000, 5000],
+  "tank_costs": [3000, 7000, 15000],
+  "tank_add_costs": [0, 6000, 12000, 20000],
+  "max_tanks_per_fuel": 4,
+  "order_eta_sec": 25,
+  "order_step": 200,
+
+  "wages": {
+    "pompaci": 120,
+    "ev_attendant": 150,
+    "manager": [0, 400, 750, 1200]
+  },
+  "hire": {
+    "pompaci": 800,
+    "ev_attendant": 1000
+  },
+  "manager_costs": [18000, 34000, 60000],
+  "staff_train_costs": [12000, 26000, 48000],
+
+  "penalties": {
+    "spill_per_l": 3,
+    "wrong_fuel": 300
+  },
+
+  "loan": {
+    "rate": 0.03,
+    "advance_rate": 0.05,
+    "terms": 12,
+    "partner_share": 0.25
+  },
+
+  "sell_refund": 0.5,
+  "renew_ratio": 0.6,
+  "insurance_daily": 0.0004,
+  "license_period_days": 30
+}

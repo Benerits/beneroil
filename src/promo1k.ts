@@ -1,4 +1,5 @@
 import { t } from './i18n'
+import { asset } from './platform'
 /**
  * BenelOil — "1000 istasyon" tanıtım sahnesi (video çekimi için).
  * Gerçek oyuncu save'lerinden (public/promo-stations.json) her istasyon kendi
@@ -71,7 +72,7 @@ const lam = (c: number) => new THREE.MeshLambertMaterial({ color: c })
 let started = false
 async function boot() {
   let stations: St[] = []
-  try { stations = await (await fetch('/promo-stations.json')).json() } catch { /* boşsa demo */ }
+  try { stations = await (await fetch(asset('/promo-stations.json'))).json() } catch { /* boşsa demo */ }
   if (!stations.length) { for (let i = 0; i < 700; i++) stations.push({ name: '', pumps: 1 + (i % 6), ev: i % 4, market: i % 3, toilet: i % 2, wash: !!(i % 2), oil: !!(i % 3), coffee: !!(i % 2), restaurant: !!(i % 4), truckpark: !!(i % 3), solar: i % 3, smr: i % 50 === 0, battery: i % 3, tank: i % 4, sign: i % 4, day: 300 - (i % 300), money: 100000 - i * 100 }) }
 
   // gelişmişlik skoru → en gelişmiş MERKEZDE

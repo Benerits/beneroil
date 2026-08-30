@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three'
 import { initStation, buildStation, StCfg } from './promostation'
+import { asset } from './platform'
 
 interface St extends StCfg { name?: string; day: number; money: number }
 
@@ -52,7 +53,7 @@ function showDetail(s: St) {
 async function boot() {
   await initStation()
   let stations: St[] = []
-  try { stations = await (await fetch('/promo-stations.json')).json() } catch { /* boş */ }
+  try { stations = await (await fetch(asset('/promo-stations.json'))).json() } catch { /* boş */ }
   if (!stations.length) return
   stations.sort((a, b) => (b.day + b.money / 5000) - (a.day + a.money / 5000))
   const N = stations.length

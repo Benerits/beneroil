@@ -6,17 +6,19 @@ import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './new
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
 import { shareLabel } from './rival'
 import { openLogbook } from './logbook-ui'
-import { makeLogbook, resolveLogbook, logbookFlags } from './marina'
+import { makeLogbook, resolveLogbook, logbookFlags, type MarinaFacId } from './marina'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
-  parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements,
+  parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements, SUPPLIERS,
+  dailyQuests, claimDailyQuests, careerGoals,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
 } from './state'
 import { loadModels, loadStatics, loadCharacters, fitCharacter } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
-import { isNativePlatform } from './platform'
+import { isNativePlatform, isInstantGames, isLightMode, asset } from './platform'
+import { guardContextLoss } from './fbinstant'
 import { THEMES } from './themes'
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
@@ -313,6 +315,10 @@ setInterval(() => {
 }
 
 const app = document.getElementById('app')!
+// LIGHT MOD (Meta/Instant Games): antialias + gölge + post-processing kapalı, pixelRatio 1.
+// Instant Games düşük seviye Android'de iframe içinde çalışıyor; bloom ve PCFSoft gölge
+// oradaki en pahalı iki iş. Web/iOS'ta hiçbir şey değişmez.
+const LIGHT = isLightMode()
 
 /**
  * WEBGL GUARD — 12 Ağu: "WebGL oluşturma hatası, oyun açılmıyor" şikâyetlerinin kökü.
@@ -365,20 +371,24 @@ function showWebGLFailure(err: unknown): void {
   console.error('[webgl] renderer oluşturulamadı:', err)
 }
 
+// MERGE (30 Ağu): WebGL guard ile LIGHT mod BİRLİKTE. Guard, context alınamazsa boş ekran
+// yerine sebebi gösteriyor; LIGHT mod ise Instant Games'te antialias/gölgeyi kapatıyor.
+// İkisi farklı sorunları çözüyor, ayarlar guard'ın içine taşındı.
 let renderer: THREE.WebGLRenderer
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: true })
+  renderer = new THREE.WebGLRenderer({ antialias: !LIGHT, powerPreference: LIGHT ? 'low-power' : 'default' })
 } catch (err) {
   showWebGLFailure(err)
   throw err // modül burada durur; ekran artık boş değil, sebebi yazıyor
 }
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)) // performans: 2x retina yerine 1.5x yeterli
-renderer.shadowMap.enabled = true
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LIGHT ? 1 : 1.5)) // performans: 2x retina yerine 1.5x yeterli
+renderer.shadowMap.enabled = !LIGHT
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 renderer.localClippingEnabled = true // küre tank sıvısı: yatay düzlemle alttan-yukarı dolum kırpması
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 1.1
 app.appendChild(renderer.domElement)
+if (isInstantGames()) guardContextLoss(renderer.domElement) // iframe'de bağlam kaybı sık
 
 // Kamera: (1x, 2y, 1z) yönünden ortografik; tekerlek = zoom, sürükle = kaydır
 const VIEW = 26
@@ -514,8 +524,25 @@ function scheduleBackgroundReminders() {
   }
   if (notifs.length) { try { P.LocalNotifications.schedule({ notifications: notifs }) } catch { /* yok say */ } }
 }
+let gizlendiT = 0
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { scheduleBackgroundReminders(); return } // arka plana geçerken yaklaşan olayları planla
+  if (document.hidden) {
+    gizlendiT = Date.now()
+    scheduleBackgroundReminders() // arka plana geçerken yaklaşan olayları planla
+    return
+  }
+  // ARKA PLAN TELAFİSİ (#1014/#1016): sekme kapalıyken oyun duruyor; dönüşte o süre
+  // offline verimle ödenir. Reload gerekmiyor.
+  if (gizlendiT) {
+    const gecen = (Date.now() - gizlendiT) / 1000
+    gizlendiT = 0
+    if (gecen >= 120) {
+      applyOfflineEarnings(gecen)
+      // aynı süre bir de reload'da ödenmesin: kaydın zaman damgası ŞİMDİ sayılır
+      loadedSaveAt = Date.now()
+      persist()
+    }
+  }
   document.title = `${world?.stationName ?? 'Benzinlik'} — Benzinlik`
   // odağa dönünce: başka cihaz save'i ilerlettiyse en güncele senkronla (ilerleme karışmasın)
   if (auth.loggedIn() && !syncedConflict) {
@@ -594,6 +621,88 @@ function openSection(sec: string) {
   else if (sec === 'profile') document.getElementById('accbtn')?.click()
   else if (sec === 'roadmap') ui.toast(t('Yol haritası yakında!'), '')
 }
+// MASAÜSTÜ OFİS BUTONU (#1076 "mobilde görünen ofis grubu neden web pc'de görünmüyor,
+// şubeleri görmek istiyorum"): PC'de ofise yalnız 3B ofis binasına tıklayarak girilebiliyordu.
+document.getElementById('officebtn')?.addEventListener('click', () => openSection('office'))
+// MESAJ KUTUSU (#1018 "uyarıyı gözden kaçırdım, tekrar bakmam için bir mesaj kutusu olsun")
+function mesajKutusuAc() {
+  const liste = document.getElementById('inbox-list')
+  if (liste) {
+    const kayitlar = [...ui.inbox].reverse()
+    liste.innerHTML = kayitlar.length
+      ? kayitlar.map(m => {
+          const dk = Math.floor((Date.now() - m.t) / 60000)
+          const ne = dk < 1 ? t('az önce') : dk < 60 ? t('{0} dk önce', String(dk)) : t('{0} sa önce', String(Math.floor(dk / 60)))
+          return `<div class="ibrow ${m.kind}"><span class="ibdot"></span>`
+            + `<span class="ibtx">${m.text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))}</span>`
+            + `<span class="ibtm">${ne}</span></div>`
+        }).join('')
+      : `<div id="inbox-empty">${t('Henüz mesaj yok.')}</div>`
+  }
+  document.getElementById('inboxwrap')?.classList.add('show')
+  ui.markInboxRead()
+}
+document.getElementById('inboxbtn')?.addEventListener('click', mesajKutusuAc)
+// TEDARİKÇİ SEÇİMİ (#1067 "akaryakıt alımı için birkaç farklı marka satıcı olabilir"):
+// gerçek marka adı kullanılmıyor (ticari marka) — kurgusal üç dağıtımcı, hız/fiyat takası.
+document.getElementById('supplierrow')?.addEventListener('click', e => {
+  const b = (e.target as HTMLElement).closest('button[data-sup]') as HTMLButtonElement | null
+  if (!b) return
+  const id = b.dataset.sup as keyof typeof SUPPLIERS
+  if (!SUPPLIERS[id] || state.supplier === id) return
+  state.supplier = id
+  ui.toast(t('Tedarikçi: {0}', t(SUPPLIERS[id].label)), 'good')
+  persist()
+})
+
+// HIZLI ŞUBE GEÇİŞİ (#1038 "ANASAYFADA MAPLER ARASINDA HIZLI GEÇİŞ OLSA SÜPER OLUR"):
+// şube değiştirmek için Ofis › Şubeler'e girmek gerekiyordu. Artık HUD'dan tek dokunuş.
+function subeMenusunuCiz() {
+  const m = document.getElementById('locmenu')
+  const btn = document.getElementById('locbtn')
+  if (!m || !btn) return
+  const kasa = state.branchVaultTotal()
+  m.innerHTML = state.unlockedLocs.map(id => {
+    const th = THEMES[id as LocId]
+    const aktif = id === state.activeLoc
+    const kasaTutar = aktif ? 0 : Math.round(state.branchVault[id] ?? 0)
+    const alt = aktif ? t('şu an buradasın')
+      : kasaTutar > 0 ? t('kasada ₺{0} birikti', kasaTutar.toLocaleString('tr-TR'))
+      : t('müdür kasası boş')
+    return `<button data-qloc="${id}" class="${aktif ? 'cur' : ''}"${aktif ? ' disabled' : ''}>`
+      + `<svg class="ic"><use href="#i-map"/></svg>`
+      + `<span class="lm-tx">${th?.name ?? id}<span class="lm-sub">${alt}</span></span></button>`
+  }).join('')
+    + (state.unlockedLocs.length < 5
+      ? `<button data-qloc="__ofis"><svg class="ic"><use href="#i-office"/></svg>`
+        + `<span class="lm-tx">${t('Yeni şube aç…')}<span class="lm-sub">${t('Ofis › Şubeler')}</span></span></button>`
+      : '')
+  const r = btn.getBoundingClientRect()
+  m.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 240))}px`
+  m.style.top = `${r.bottom + 8}px`
+  if (kasa > 0) { /* kasa rozeti ayrı gösterilmiyor; alt satırlar zaten yazıyor */ }
+}
+{ // HUD butonundaki şube adı
+  const lbl = document.getElementById('loclabel')
+  if (lbl) lbl.textContent = THEMES[state.activeLoc]?.name ?? state.activeLoc
+}
+document.getElementById('locbtn')?.addEventListener('click', e => {
+  e.stopPropagation()
+  const m = document.getElementById('locmenu')
+  if (!m) return
+  if (m.classList.contains('show')) { m.classList.remove('show'); return }
+  subeMenusunuCiz()
+  m.classList.add('show')
+})
+document.getElementById('locmenu')?.addEventListener('click', e => {
+  const b = (e.target as HTMLElement).closest('button[data-qloc]') as HTMLButtonElement | null
+  if (!b) return
+  const id = b.dataset.qloc!
+  document.getElementById('locmenu')?.classList.remove('show')
+  if (id === '__ofis') { openSection('office'); document.querySelector<HTMLButtonElement>('#oftabs .tab[data-oftab="buyume"]')?.click(); return }
+  subeyeGec(id as LocId)
+})
+document.addEventListener('click', () => document.getElementById('locmenu')?.classList.remove('show'))
 for (const elx of document.querySelectorAll<HTMLElement>('#navbar .navbtn, #sheettabs .stab')) {
   const sec = elx.id ? elx.id.replace('nav-', '') : elx.dataset.sec
   if (sec) elx.addEventListener('click', () => openSection(sec))
@@ -706,6 +815,64 @@ function openOfficePanel() {
     + row(t('Kasa'), `₺${tl(state.money)}`)
     + row(t('Günlük gider (yovmiye+OPEX+reklam)'), `₺${tl(state.dailyWages() + state.dailyOpex() + state.marketingBudget)}`, 'bad')
 
+  // 1a) PERSONEL — TOPLU İŞE ALIM (#1019 "toplu olarak sarjcı ve pompacı tutabilsek")
+  // Tek tek her pompanın kartını açıp tıklamak 10 pompalı istasyonda 10 ayrı işlemdi.
+  const stEl = document.getElementById('of-staff')
+  if (stEl) {
+    const bosPompa: number[] = []
+    for (let i = 0; i < state.pumps; i++) if (!state.autoPumps.has(i)) bosPompa.push(i)
+    const bosSarj: number[] = []
+    for (let i = 0; i < state.evChargers; i++) if (!state.autoChargers.has(i)) bosSarj.push(i)
+    const pMaliyet = bosPompa.length * POMPACI_HIRE
+    const sMaliyet = bosSarj.length * EV_ATTENDANT_HIRE
+    stEl.innerHTML =
+      row(t('Pompacı'), `${state.autoPumps.size} / ${state.pumps}`)
+      + row(t('Şarjcı'), `${state.autoChargers.size} / ${state.evChargers}`)
+      + row(t('Günlük yovmiye'), `₺${tl(state.dailyWages())}`, 'bad')
+      + `<div class="row" style="display:flex; gap:8px; margin-top:10px">`
+      + `<button class="btn" id="of-hire-pumps" style="flex:1; justify-content:center"${bosPompa.length ? '' : ' disabled'}>`
+      + `<svg class="ic"><use href="#i-fuel"/></svg><span>${bosPompa.length
+          ? t('Tüm pompalara pompacı (₺{0})', tl(pMaliyet)) : t('Tüm pompalarda pompacı var')}</span></button>`
+      + `</div>`
+      + `<div class="row" style="display:flex; gap:8px; margin-top:8px">`
+      + `<button class="btn" id="of-hire-chargers" style="flex:1; justify-content:center"${bosSarj.length ? '' : ' disabled'}>`
+      + `<svg class="ic"><use href="#i-charger"/></svg><span>${state.evChargers === 0
+          ? t('Önce DC şarj ünitesi kur') : bosSarj.length
+          ? t('Tüm şarjlara şarjcı (₺{0})', tl(sMaliyet)) : t('Tüm şarjlarda şarjcı var')}</span></button>`
+      + `</div>`
+  }
+
+  // 1b) GÖREVLER (#1004) ve KARİYER HEDEFLERİ (#1063)
+  // Eskiden tek satırlık "15 müşteri" sayacıydı ve mobilde rozeti de gizliydi; oyuncular
+  // "görev var gözüküyor ama yok gibi" diyordu. Artık günün üç görevi ilerleme çubuklu
+  // listelenir, altında da sıradaki büyük hedefler durur ("amacım kalmadı" fixi).
+  const qEl = document.getElementById('of-quests')
+  if (qEl) {
+    const qs = dailyQuests(state)
+    qEl.innerHTML = qs.map(q => {
+      const yuzde = Math.round(100 * q.have / q.need)
+      return `<div class="qrow${q.done ? ' is-done' : ''}">`
+        + `<svg class="ic"><use href="#${q.done ? 'i-check' : 'i-cal'}"/></svg>`
+        + `<span class="qtxt"><span class="qlbl">${q.label}</span>`
+        + `<span class="qbar"><i style="width:${yuzde}%"></i></span>`
+        + `<span class="qnum">${q.have.toLocaleString('tr-TR')} / ${q.need.toLocaleString('tr-TR')}</span></span>`
+        + `<span class="qrew">${q.done ? t('ALINDI') : `+₺${tl(q.reward)}`}</span></div>`
+    }).join('')
+      + `<div class="sd" style="padding:8px 2px 0; color:var(--muted); font-weight:700">`
+      + `${t('Görevler her gün yenilenir. Ödül tamamlandığı anda kasaya geçer.')}</div>`
+  }
+  const gEl = document.getElementById('of-goals')
+  if (gEl) {
+    gEl.innerHTML = careerGoals(state).map(h => {
+      const yuzde = Math.round(100 * h.have / h.need)
+      return `<div class="qrow${h.done ? ' is-done' : ''}">`
+        + `<svg class="ic"><use href="#${h.done ? 'i-check' : 'i-star'}"/></svg>`
+        + `<span class="qtxt"><span class="qlbl">${h.label}</span>`
+        + `<span class="qbar"><i style="width:${yuzde}%"></i></span>`
+        + `<span class="qnum">${h.have.toLocaleString('tr-TR')} / ${h.need.toLocaleString('tr-TR')}</span></span></div>`
+    }).join('')
+  }
+
   // 2) Yakıt satış fiyatları (+/-)
   const pricesEl = document.getElementById('of-prices')
   if (pricesEl && card?.priceRows) {
@@ -731,6 +898,22 @@ function openOfficePanel() {
       + row(t('İtibar'), `${state.reputation.toFixed(1)} / 5`
           + (state.repTrend > 0 ? ' ▲' : state.repTrend < 0 ? ' ▼' : ''),
           state.repTrend > 0 ? 'good' : state.repTrend < 0 ? 'bad' : '')
+      // #1025: itibar gün sonunda BUGÜNÜN kayıp oranına çekilir; kayıpsız oynayanda
+      // hedef zaten 5.0 olduğu için değer kıpırdamıyor ve sebebi hiçbir yerde yazmıyordu
+      + (() => {
+          const r = state.repToday()
+          const toplam = r.served + r.lost
+          const oran = toplam > 0 ? Math.round(100 * r.lost / toplam) : 0
+          return row(t('Bugün servis / kaçan'), `${r.served} / ${r.lost}${toplam >= 3 ? ` (%${oran})` : ''}`,
+              r.lost === 0 ? 'good' : oran > 10 ? 'bad' : '')
+            + row(t('Gün sonu itibar hedefi'), r.target.toFixed(1),
+                r.target > state.reputation + 0.05 ? 'good' : r.target < state.reputation - 0.05 ? 'bad' : '')
+            + (toplam < 3
+                ? `<div class="sd" style="padding:6px 2px; color:var(--muted); font-weight:700">${t('Bugün neredeyse hiç müşteri görmedin — itibar yavaşça 3.0\'a doğru aşınır.')}</div>`
+                : r.lost === 0
+                ? `<div class="sd" style="padding:6px 2px; color:var(--muted); font-weight:700">${t('Kayıpsız gün: itibar 5.0\'a doğru gidiyor. Düşmesi için müşteri kaçırman gerekir.')}</div>`
+                : '')
+        })()
       // §6.2 kasaba imzası: müdavim payı yalnız mekaniğin açık olduğu şubede görünür
       + (state.regularsShare() > 0
           ? row(t('Müdavim müşteri'), `%${Math.round(state.regularsShare() * 100)}`, 'good')
@@ -830,7 +1013,7 @@ function openOfficePanel() {
       // D11 (analiz): "ne kadar kaldı" görünür hedef — kilitli şubede ilerleme çubuğu
       const pct = Math.min(100, Math.round((state.money / Math.max(1, c.cash)) * 100))
       // D13 (analiz): kilitli şubenin CANLI ÖNİZLEMESİ — merak yaratır ("marina vitrini")
-      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="/gen/loc-${id}.jpg?v=2" alt="" loading="lazy"`
+      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="${asset(`/gen/loc-${id}.jpg`)}?v=2" alt="" loading="lazy"`
         + `style="width:100%;max-height:110px;object-fit:cover;border-radius:8px;border:1.5px solid var(--edge);filter:saturate(.9)" `
         + `onerror="this.parentElement.style.display='none'"></div>`
       const prog = c.reason !== 'yildiz' && !c.ok
@@ -977,10 +1160,45 @@ function renderProfile() {
   if (acc) acc.innerHTML =
     row(t('Giriş serisi'), `${state.loginStreak} gün`)
     + row(t('Başarımlar'), `${state.achievements.size} / 9`)
-    + row(t('Günlük görev'), state.dailyDone ? t('tamamlandı ✓') : `${state.dailyServed}/15`)
+    + row(t('Günlük görev'), `${dailyQuests(state).filter(q => q.done).length}/3`)
     + `<div class="pf-synced"><svg class="ic" style="vertical-align:-3px"><use href="#i-cloud"/></svg> ${t('Kaydın buluta senkronlanıyor (10 sn)')}</div>`
 }
+// TOPLU PERSONEL ALIMI (#1019): parası yeten kadar alır, kalanı söyler
+function topluIseAl(tur: 'pump' | 'charger') {
+  const bedel = tur === 'pump' ? POMPACI_HIRE : EV_ATTENDANT_HIRE
+  const kume = tur === 'pump' ? state.autoPumps : state.autoChargers
+  const adet = tur === 'pump' ? state.pumps : state.evChargers
+  let alinan = 0, atlanan = 0
+  for (let i = 0; i < adet; i++) {
+    if (kume.has(i)) continue
+    if (state.money < bedel) { atlanan++; continue }
+    state.money -= bedel
+    kume.add(i)
+    alinan++
+  }
+  if (alinan) {
+    audio.build()
+    ui.toast(tur === 'pump'
+      ? t('{0} pompacı işe alındı (-₺{1})', String(alinan), (alinan * bedel).toLocaleString('tr-TR'))
+      : t('{0} şarjcı işe alındı (-₺{1})', String(alinan), (alinan * bedel).toLocaleString('tr-TR')), 'good', true)
+  }
+  if (atlanan) ui.toast(t('{0} birim için para yetmedi — kasa dolunca tekrar dene.', String(atlanan)), 'bad')
+  if (!alinan && !atlanan) ui.toast(t('Zaten hepsinde personel var.'), '')
+  openOfficePanel()
+  persist()
+}
+// butonlar her render'da yeniden yazılıyor → dinleyici SABİT kapsayıcıda (delegasyon)
+document.getElementById('of-staff')?.addEventListener('click', e => {
+  const el = e.target as HTMLElement
+  if (el.closest('#of-hire-pumps')) topluIseAl('pump')
+  else if (el.closest('#of-hire-chargers')) topluIseAl('charger')
+})
 document.getElementById('accbtn')?.addEventListener('click', renderProfile)
+// GÖREV ROZETİ → Ofis › Görevler (mobilde rozet tek giriş kapısı)
+document.getElementById('questchip')?.addEventListener('click', () => {
+  openSection('office')
+  document.querySelector<HTMLButtonElement>('#oftabs .tab[data-oftab="gorev"]')?.click()
+})
 // Ofis fiyat yönetimi butonları officewrap içinde de çalışsın (bina kartıyla aynı handler)
 document.getElementById('of-prices')?.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest('button[data-pf]') as HTMLButtonElement | null
@@ -1032,18 +1250,23 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
     return
   }
   if (!go) return
+  subeyeGec(go.dataset.goloc as LocId, go)
+})
+
+/** Şube geçişi — hem Ofis › Şubeler butonları hem HUD hızlı geçiş menüsü buradan geçer
+ *  (#1038 "anasayfada mapler arasında hızlı geçiş olsa süper olur"). */
+function subeyeGec(id: LocId, go?: HTMLButtonElement) {
   // ÇİFT TIKLAMA KİLİDİ ("şubeye gidilemedi" raporu): push-confirmed reload 1.6-6 sn
   // (kit inişinde 12 sn) sürebiliyor; bu pencerede ikinci tıklama switchLoc'u
   // "zaten o şubedesin" durumuna düşürüp yanlış hata gösteriyordu.
   if (locSwitching) { ui.toast(t('Sahne yükleniyor — birkaç saniye…'), '', true); return }
-  const id = go.dataset.goloc as LocId
   // Şube değişimi: mevcut şubenin ekipmanı + YERLEŞİMİ saklanır, hedefin yüklenir.
   // Para/gün/itibar/prestij/kredi ŞİRKETTE kalır (tek kasa — rapor §3a kararı).
   const next = state.switchLoc(id, { placedPos, placedRot, placedRects })
   if (!next) { ui.toast(t('Şube değiştirilemedi.'), 'bad'); return }
   locSwitching = true
-  go.disabled = true
-  go.textContent = t('Yükleniyor…')
+  if (go) { go.disabled = true; go.textContent = t('Yükleniyor…') }
+  document.getElementById('locmenu')?.classList.remove('show')
   for (const k of Object.keys(placedPos)) delete placedPos[k]
   for (const k of Object.keys(placedRot)) delete placedRot[k]
   placedRects.length = 0
@@ -1079,7 +1302,7 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
     loadKit(id).catch(() => null).then(goReload)
     setTimeout(goReload, 12000) // ağ takılırsa oyuncuyu bekletme
   } else setTimeout(goReload, 1600) // sahne temadan yeniden kurulsun
-})
+}
 
 // PRESTİJ: İstasyonu Devret — iki aşamalı onay (geri dönüşü yok, gönüllü)
 let handoverArmedAt = 0
@@ -1393,18 +1616,29 @@ let exploding = false
 let selectedBuilding: string | null = null
 let cardRefreshT = 0
 
-composer = new EffectComposer(renderer)
-composer.addPass(new RenderPass(world.scene, camera))
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.24, 0.4, 0.93)) // yarı çözünürlük bloom: gözle fark yok, kat kat hızlı
-composer.addPass(new OutputPass())
-composer.setSize(window.innerWidth, window.innerHeight)
+// LIGHT MOD'da composer HİÇ kurulmaz → bloom pass'i yok, ara render target'ları yok.
+if (!LIGHT) {
+  composer = new EffectComposer(renderer)
+  composer.addPass(new RenderPass(world.scene, camera))
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.24, 0.4, 0.93)) // yarı çözünürlük bloom: gözle fark yok, kat kat hızlı
+  composer.addPass(new OutputPass())
+  composer.setSize(window.innerWidth, window.innerHeight)
+}
+/** Tek kare çiz. Composer varsa post-processing zinciri, yoksa doğrudan render. */
+function renderFrame() {
+  if (composer) composer.render()
+  else renderer.render(world.scene, camera)
+}
 
 const cars = new CarManager(world.scene, modelLib, {
   pumpCount: () => state.pumps,
   evCount: () => state.evChargers,
   // misafir gate'i açıkken kimse İSTASYONA girmez (ilerleme donuk) ama yol trafiği akar
   entryChance: () => (guestPaused ? 0 : state.entryChance() * (isPromoMode ? 2.5 : 1)),
-  evShare: () => (state.evChargers > 0 ? Math.min(0.5, 0.15 + 0.09 * state.evChargers) * state.evPriceFactor() : 0),
+  // EV PAYI (#1023 "elektrikli araba sayısı çok az gibi"): taban %15'ti ve tek şarj
+  // ünitesiyle akışın ancak %16'sı EV oluyordu — oyuncu ₺'lik yatırımın karşılığını
+  // sahnede göremiyordu. Taban %20, ünite başı katkı %11, tavan %60.
+  evShare: () => (state.evChargers > 0 ? Math.min(0.60, 0.20 + 0.11 * state.evChargers) * state.evPriceFactor() : 0),
   isPumpBroken: i => state.brokenPumps.has(i),
   isChargerBroken: i => state.brokenChargers.has(i),
   parkSpots: () => world.getParkingSpots(),
@@ -1925,21 +2159,38 @@ ui.onStartFull = car => {
 }
 
 /** servis bitti: skoru bağla, tesis ziyareti varsa otoparka çek, yoksa uğurla */
-function trackDaily() {
+function gunlukSayaclariSifirla() {
+  state.dailyServed = 0
+  state.dailyDone = false
+  state.dailyRevenue = 0
+  state.dailyLiters = 0
+  state.dailyCollected = 0
+  state.dailyPerfect = 0
+  state.dailyClaimed = []
+}
+
+function trackDaily(score = 0) {
   state.dailyServed++
-  if (!state.dailyDone && state.dailyServed >= 15) {
-    state.dailyDone = true
-    state.money += 1000
-    ui.toast('GÜNLÜK GÖREV TAMAM: 15 müşteri — ödül +₺1.000!', 'good', true)
+  if (score >= 4.8) state.dailyPerfect++
+  gorevOdulle()
+}
+
+/** Tamamlanan günlük görevlerin ödülünü öder ve haber verir (#1004). Görev sayaçlarını
+ *  değiştiren HER yerden çağrılır — ödül gecikmesin, oyuncu "görev yok gibi" demesin. */
+function gorevOdulle() {
+  const yeni = claimDailyQuests(state)
+  for (const q of yeni) {
+    ui.toast(t('GÖREV TAMAM: {0} — ödül +₺{1}', q.label, q.reward.toLocaleString('tr-TR')), 'good', true)
     audio.achieve()
-  } else if (!state.dailyDone && state.dailyServed % 5 === 0) {
-    ui.toast(t('Günlük görev: {0}/15 müşteri', state.dailyServed), '', true)
+  }
+  if (yeni.length && dailyQuests(state).every(q => q.done)) {
+    ui.toast(t('Günün üç görevi de bitti — yarın yenileri gelecek!'), 'good', true)
   }
 }
 
 function concludeService(car: Car, score: number) {
   if (car.isTruck && state.hasTruckPark && car.phase === 'atPump' && Math.random() < 0.45) {
-    trackDaily()
+    trackDaily(score)
     state.addRep((score - 3.3) * 0.1)
     car.showFeedback(emojiFor(score))
     car.hideBubble()
@@ -1950,7 +2201,7 @@ function concludeService(car: Car, score: number) {
     cars.releaseCar(car)
     return
   }
-  trackDaily()
+  trackDaily(score)
   // YAĞ DEĞİŞİMİ DRIVE-IN (Oğuz: "arabalar yağ değişiminin içine girsinler"):
   // körük boşsa araç garaj kapısından içeri sürer, işi bitince kapıdan çıkar gider.
   // Körük dolu/tesis yoksa eski hızlı akış (vehicleServices anında öder) devam eder.
@@ -2082,9 +2333,10 @@ function finishSale(car: Car) {
       state.money += revenue
       state.stats.served++
       state.stats.revenue += revenue
+    state.dailyRevenue += revenue
       state.addSideRevenue(car.station === 'far', revenue)
       if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
-      if (car.nozzle) state.stats.liters[car.nozzle] += car.filled
+      if (car.nozzle) { state.stats.liters[car.nozzle] += car.filled; state.dailyLiters += car.filled }
       car.filling = false
       concludeService(car, score)
       return
@@ -2106,10 +2358,11 @@ function finishSale(car: Car) {
   state.money += revenue
   state.stats.served++
   state.stats.revenue += revenue
+  state.dailyRevenue += revenue
   state.addSideRevenue(car.station === 'far', revenue) // #317: yaka bazlı ciro ayrımı
   // aktif sözleşme: bu satışın litresi taahhüde sayılır (yalnız sözleşmenin yakıtı)
   if (car.nozzle) state.addContractDelivery(car.nozzle, car.filled)
-  if (car.nozzle) state.stats.liters[car.nozzle] += car.filled
+  if (car.nozzle) { state.stats.liters[car.nozzle] += car.filled; state.dailyLiters += car.filled }
   car.filling = false
   concludeService(car, score)
 }
@@ -2208,6 +2461,7 @@ function tickEvCharging(dt: number) {
       state.stats.served++
       state.stats.kwh += c.demandKwh
       state.stats.revenue += revenue
+    state.dailyRevenue += revenue
       // Oyuncu raporu: "muhasebede karşı istasyon 0" — EV geliri yaka sayacına
       // hiç yazılmıyordu; karşı yakada yalnız şarj olan kurulumda pay hep 0 kalıyordu.
       state.addSideRevenue(c.station === 'far', revenue)
@@ -2309,11 +2563,18 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'restaurant': world.buildRestaurant(pos); break
     case 'truckpark': world.buildTruckPark(pos); break
     case 'truckpark2': world.buildTruckPark(pos, 'truckpark2'); break
+    case 'hotel': world.buildHotel(pos); break
     case 'airwater': world.buildAirWater(pos, id); break
     case 'lamp': world.buildStreetLamp(pos, id); break
     case 'selfwash': world.buildSelfWash(pos, id); break
     case 'parking': world.buildParking(pos, id); break
     case 'office': world.buildOffice(pos); break
+    default:
+      // MARİNA: tesis kurulunca ada üzerinde yapısı belirsin (7 rapor: "yat klübü
+      // açtım ama gözükmüyor"). Bağlama yerleri de sahnede uzayan iskele olur.
+      if (state.isMarina && state.hasMarinaFac(base as MarinaFacId)) world.buildMarinaFac(base, pos)
+      else if (base.startsWith('berth_') || base === 'winterslot') world.updateBerthVisual(state.berths)
+      break
   }
 }
 
@@ -2339,6 +2600,7 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   restaurant: () => ({ w: 5.5, d: 6 }),
   truckpark: () => ({ w: 8, d: 6 }),
   truckpark2: () => ({ w: 8, d: 6 }), // karşı yaka tır parkı
+  hotel: () => ({ w: 7, d: 10 }), // iki katlı blok + giriş kanopisi
   airwater: () => ({ w: 1.6, d: 2 }),
   lamp: () => ({ w: 1.2, d: 1.2, grass: true }), // dekoratif: çimen üstüne de konabilir
   selfwash: () => ({ w: 5.5, d: 7 }),
@@ -2656,9 +2918,15 @@ function applySaveData(d: Record<string, unknown>) {
  * En fazla 6 saat + ₺150.000 tavan. İstasyon kapalıysa gelir yok.
  * Anti-cheat uyumlu: income ≤ 150k, sunucu allowance'ı (50k + elapsed×600) hep kapsar.
  */
-function applyOfflineEarnings() {
-  if (state.closed || !loadedSaveAt) return
-  const elapsedSec = (Date.now() - loadedSaveAt) / 1000
+/** Yokken geçen süre kadar pasif gelir. Parametresiz çağrılınca kayıt zamanından, açık
+ *  parametreyle sekme/uygulama arka planda kaldığı süreden hesaplar (#1014/#1016
+ *  "oyun arka planda çalışmıyor, sekme değiştirsek duruyor"): oyun arka planda rAF'ı
+ *  durduruyor (pil/ısınma kararı) ama dönüşte hiçbir telafi YOKTU — yalnız sayfa
+ *  yeniden yüklenirse offline gelir işliyordu. */
+function applyOfflineEarnings(gecenSn?: number) {
+  if (state.closed) return
+  if (gecenSn === undefined && !loadedSaveAt) return
+  const elapsedSec = gecenSn ?? (Date.now() - loadedSaveAt!) / 1000
   if (elapsedSec < 120) return // <2 dk: anlamsız
   const capped = Math.min(elapsedSec, 6 * 3600) // en fazla 6 saat
   const facilities = (state.marketLevel > 0 ? state.marketLevel : 0)
@@ -2786,6 +3054,7 @@ function rebuildFromState() {
   if (state.hasRestaurant) world.buildRestaurant(pv('restaurant'))
   if (state.hasTruckPark) world.buildTruckPark(pv('truckpark'))
   if (state.hasTruckPark2) world.buildTruckPark(pv('truckpark2'), 'truckpark2')
+  if (state.hasHotel) world.buildHotel(pv('hotel'))
   for (let i = 0; i < state.airWaterCount; i++) {
     const iid = i === 0 ? 'airwater' : `airwater#${i}`
     world.buildAirWater(pv(iid), iid)
@@ -2801,6 +3070,10 @@ function rebuildFromState() {
   for (let i = 0; i < state.parkingCount; i++) {
     const iid = i === 0 ? 'parking' : `parking#${i}`
     world.buildParking(pv(iid), iid)
+  }
+  if (state.isMarina) {
+    for (const fid of state.marinaFacs) world.buildMarinaFac(fid, pv('mfac-' + fid))
+    world.updateBerthVisual(state.berths)
   }
   if (placedPos.office) {
     world.removeBuildingGroup('office')
@@ -2818,6 +3091,35 @@ function rebuildFromState() {
   for (const [id, rot] of Object.entries(placedRot))
     if (!id.startsWith('charger-') && !id.startsWith('pump-')) world.rotateBuilding(id, rot)
   world.setClosed(state.closed)
+  konumlariSabitle()
+}
+
+/**
+ * KONUM SABİTLEME (oyuncu raporu: "karşı tuvalet/tır parkı gir-çık yapınca yerine dönüyor").
+ *
+ * Bir yapı satın alınıp yerleştirildiğinde konumu placedPos'a yazılır. Ama yükseltme,
+ * şube dönüşü ya da yarıda kalan yerleştirme gibi yollarda alan yazılmadan kalabiliyordu;
+ * o zaman rebuildFromState yapıyı VARSAYILAN yerine koyuyor ve oyuncunun taşıdığı yer
+ * kayboluyordu. Canlı kayıtlarda karşı yaka tesislerinin ~%14'ünde konum alanı boştu.
+ *
+ * Çözüm: yeniden kurulum bittikten sonra sahnedeki GERÇEK konumu placedPos'a yaz. Böylece
+ * konumu olmayan yapılar bir defa sabitlenir ve bir daha yer değiştirmez; mevcut bozuk
+ * kayıtlar da ilk açılışta kendini onarır.
+ */
+function konumlariSabitle() {
+  let yazildi = 0
+  for (const b of world.buildings) {
+    const id = b.id
+    if (!id || placedPos[id]) continue
+    if (id.startsWith('pump-') || id.startsWith('charger-')) continue   // bunların kendi tabloları var
+    const g = b.group as THREE.Object3D | undefined
+    if (!g) continue
+    const x = Number(g.position.x), y = Number(g.position.y)
+    if (!isFinite(x) || !isFinite(y)) continue
+    placedPos[id] = [x, y]
+    yazildi++
+  }
+  if (yazildi) persist()   // onarım kalıcı olsun, bir dahaki açılışta tekrar gerekmesin
 }
 
 /** araçların ASLA içinden geçemeyeceği katı objeler (fiziksel gövdeler) */
@@ -3146,16 +3448,23 @@ function startPlacement(id: string, move = false) {
     root.add(preview)
   }
   world.scene.add(root)
-  placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, valid: false, cx: 0, cy: 0, rot: placedRot[id] ?? 0 }
+  // TAŞIMA YAPININ BULUNDUĞU YERDEN BAŞLAR. Oyuncu raporu (#1008): "taşı diyince yerinden
+  // kaldırıyor" — hayalet (0,0)'dan başladığı için yapı istasyonun ortasına zıplıyordu ve
+  // sadece döndürmek isteyen oyuncu yerini kaybediyordu. Artık mevcut konum başlangıç noktası;
+  // dokunmadan ⟳ + ✓ yapılırsa yapı yerinde kalır, yalnız yönü değişir.
+  const mevcut = placedPos[id]
+  const bx = move && mevcut ? mevcut[0] : 0
+  const by = move && mevcut ? mevcut[1] : 0
+  placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, valid: false, cx: bx, cy: by, rot: placedRot[id] ?? 0 }
   root.rotation.z = placing.rot * Math.PI / 2
   world.showGrid(true)
   showReserves(id) // görünmez rezervler (araç yolu/yuva) turuncu görünür — "boş ama kırmızı" bitti
   ui.closeShop()
   ui.hideBuildingCard()
   const mc = document.getElementById('movectl'); if (mc) mc.style.display = 'block'
-  repositionPlacing(placing.cx, placing.cy) // ilk geçerlilik/renk
+  repositionPlacing(placing.cx, placing.cy) // mevcut konumda başlar: geçerlilik/renk hesaplanır
   ui.toast(move
-    ? t('Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir')
+    ? t('Taşıma modu: yön butonları ya da dokun · R veya ⟳ döndür · ✓ yerleştir')
     : t('Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir'), '')
   if (!reserveHintShown) {
     reserveHintShown = true
@@ -3239,7 +3548,12 @@ function repositionPlacing(x: number, y: number) {
     const odd = placing.rot % 2 === 1
     const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
     // yalnız BİNA/pompa üstüne binmesin (servis şeridi hariç — tabela şeritte araç engeli değil)
-    placing.valid = !placedRects.some(o => o.id !== 'sign' && overlaps(eff, o))
+    // ANA YOL HARİÇ (#1032 "bug - tabela yola da dikiliyor"): servis şeridi serbest kaldı
+    // ama ASFALTIN ORTASI değil. Yol bandı ROAD_X çevresinde ±2.6 birim; tabela artık
+    // oraya dikilemiyor, kaldırım/refüj payı korunuyor.
+    const yolBandi = Math.abs(eff.cx - ROAD_X) < 2.6 + eff.w / 2
+    placing.valid = !yolBandi
+      && !placedRects.some(o => o.id !== 'sign' && overlaps(eff, o))
       && !fixedObstacles('sign').some(o => !(o.cx === 4.3 && o.d === 48) && !(o.cx === 11.6 && o.d === 48) && overlaps(eff, o))
   } else {
     placing.cx = Math.round(x)
@@ -3338,8 +3652,17 @@ function confirmZone() {
     world.paveParcel(z.c, z.r)
     ui.toast('Zemin betonlandı — artık yapı kurabilirsin!', 'good')
   }
-  cancelPlacement()
   persist()
+  // ZİNCİRLEME ALIM (oyuncu: "her arsa için mağazayı tekrar tekrar açmak işkence"):
+  // alım başarılıysa mod AÇIK kalır, sıradaki parsele dokunup devam edilir. Bir sonraki
+  // adım imkânsızsa (para bitti / sınır doldu / betonsuz arsa kalmadı) kendiliğinden kapanır.
+  const devam = z.kind === 'land'
+    ? !state.parcelLimitReached() && state.ownedParcels.size < 18 && state.money >= parcelCost(0, 0, state)
+    : state.ownedParcels.size > state.pavedParcels.size && state.money >= PAVE_COST
+  if (!devam) { cancelPlacement(); return }
+  zoneMode = { kind: z.kind, ghost: z.ghost, c: -1, r: -1, valid: false }
+  const zc2 = document.getElementById('zonecost')
+  if (zc2) { zc2.style.color = 'var(--ink)'; zc2.textContent = z.kind === 'land' ? t('Parsele dokun…') : t('Arsana dokun…') }
 }
 
 window.addEventListener('keydown', e => {
@@ -3470,6 +3793,8 @@ function buyToast(id: string) {
     case 'restaurant': ui.toast('Restoran açıldı — yolcular yemek molası verecek!', 'good'); break
     case 'truckpark': ui.toast('Tır parkı açıldı — düzenli konaklama geliri!', 'good'); break
     case 'truckpark2': ui.toast(t('Karşı tır parkı açıldı — düzenli konaklama geliri!'), 'good'); break
+    case 'hotel': ui.toast(t('Otel açıldı! Doluluk itibarınla artar — günlük işletme gideri de var.'), 'good', true); break
+    case 'cleaner': ui.toast(t('Temizlikçi işe alındı — bakım özeni düşmeyecek, paneller kendiliğinden silinecek.'), 'good'); break
     case 'airwater': ui.toast('Hava-su ünitesi kuruldu!', 'good'); break
     case 'lamp': ui.toast(t('Sokak lambası kuruldu — gece istasyon aydınlık!'), 'good'); break
     case 'selfwash': ui.toast('Self yıkama açıldı — köpük ve su otomatik satılacak!', 'good'); break
@@ -3633,6 +3958,9 @@ function applyLivePatch(p: Record<string, unknown>) {
 let liveWs: WebSocket | null = null
 let liveRetry = 0
 function connectLive() {
+  // META: canlı kanal kendi backend'imize bağlanır — Instant Games'te böyle bir sunucu yok
+  // (kayıt FBInstant player data'sında, bkz. fbinstant.ts). NEZP altında dış bağlantı istemiyoruz.
+  if (isInstantGames()) return
   if (isFullMode || isPromoMode || cloudBlocked || !auth.loggedIn()) return
   const token = localStorage.getItem('benzinlik-token')
   if (!token) return
@@ -3812,8 +4140,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
         ui.toast(t('Tekrar hoş geldin patron! Dönüş hediyesi: +₺1.000'), 'good', true)
       }
       state.dailyDate = today
-      state.dailyServed = 0
-      state.dailyDone = false
+      gunlukSayaclariSifirla()
       persist()
     } else {
       state.lastLoginDate = today // teaser günde 1 kez görünsün
@@ -3822,8 +4149,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
   }
   if (state.dailyDate !== today) {
     state.dailyDate = today
-    state.dailyServed = 0
-    state.dailyDone = false
+    gunlukSayaclariSifirla()
   }
 
   // ---- Offline kazanç raporu: sen yokken tesisler çalıştı ----
@@ -3868,7 +4194,7 @@ if (isFullMode) {
     'tank', 'tank', 'tank', 'market', 'market', 'toilet', 'toilet', 'grid', 'grid',
     'battery', 'battery', 'battery', 'evcharger', 'evcharger', 'evcharger', 'evcharger',
     'solar', 'dieselgen', 'smr', 'wash', 'oil',
-    'airwater', 'selfwash', 'coffee', 'restaurant', 'truckpark', 'parking',
+    'airwater', 'selfwash', 'coffee', 'restaurant', 'truckpark', 'hotel', 'cleaner', 'parking',
   ]
   state.money = 10_000_000
   for (const id of FULL_ORDER) {
@@ -4307,6 +4633,15 @@ function buildingCard(id: string): BuildingCard | null {
         desc: t('Tırcılar konaklar; sen hiçbir şey yapmadan düzenli gelir akar.'),
         stats: [['Pasif gelir', '₺90-160 / ~45sn'], ['Trafik etkisi', '+%2']],
       }
+    case 'hotel':
+      return {
+        icon: 'i-hotel', name: t('Yol Kenarı Oteli'),
+        desc: t('Yolcular geceler. Doluluk itibarına bağlıdır — ihmal edilen istasyonde oda boş kalır.'),
+        stats: [[t('Pasif gelir'), '₺260-480 / ~58sn'],
+                [t('Doluluk'), `%${Math.round((0.45 + 0.13 * Math.min(4, state.reputation)) * 100)}`],
+                [t('Günlük gider'), '₺900', 'bad'],
+                [t('Trafik etkisi'), '+%5']],
+      }
     case 'lamp':
       // Oyuncu raporu: "can't move street lamp" — kartı yoktu, tıklanınca hiçbir şey
       // açılmıyordu; Taşı/Yık butonları bu karta genel akıştan otomatik eklenir.
@@ -4386,8 +4721,21 @@ function refreshBuildingCard() {
   if (!card) return
   const facId = selectedBuilding.split('#')[0]
   if (['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2', 'coffee', 'coffee2',
-       'restaurant', 'restaurant2', 'truckpark', 'truckpark2', 'selfwash', 'airwater'].includes(facId)) {
+       'restaurant', 'restaurant2', 'truckpark', 'truckpark2', 'hotel', 'selfwash', 'airwater'].includes(facId)) {
     card.stats.push([t('Bugünkü ciro'), `₺${Math.round(state.facDaily[facId] ?? 0).toLocaleString('tr-TR')}`, 'good'])
+    // SESSİZ GELİR SIFIRI (#1065 "Market üretim yapmıyor, yönünü değiştirdim çözüm olmadı"):
+    // müşteri YAYA olarak yol karşısına geçmez. Tesis yolun bir yakasındayken o yakada
+    // hiç pompa/şarj yoksa geliri MATEMATİKSEL OLARAK sıfırdır — ama hiçbir yerde
+    // yazmıyordu, oyuncu binayı döndürüp duruyordu. Artık kart açıkça söylüyor.
+    const b = world.buildings.find(x => x.id === selectedBuilding)
+    if (b) {
+      const karsida = b.group.position.x > ROAD_X
+      const oYakadaUnite = world.pumpSlots.slice(0, state.pumps).some(p => (p.x > ROAD_X) === karsida)
+        || world.evSlots.slice(0, state.evChargers).some(p => (p.x > ROAD_X) === karsida)
+      if (!oYakadaUnite) {
+        card.stats.push([t('UYARI'), t('Bu yakada pompa/şarj yok — müşteri karşıya yürümez, gelir sıfır kalır. Tesisi taşı.'), 'bad'])
+      }
+    }
   }
   // karttan doğrudan yükseltme: ilgili mağaza kalemi alınabilir durumdaysa buton koy
   const shopId = selectedBuilding.startsWith('pump-') ? 'pump'
@@ -4402,7 +4750,23 @@ function refreshBuildingCard() {
   }
   const si = sellInfo(state, selectedBuilding)
   if (si) card.sell = { label: t('Yık — +₺{0}', si.refund.toLocaleString('tr-TR')), id: selectedBuilding }
+  ui.setCardAnchor(binaEkranNoktasi(selectedBuilding))
   ui.showBuildingCard(card)
+}
+
+/** Seçili yapının ekran koordinatı — bilgi kartı onun üstünde açılsın diye (#1020). */
+function binaEkranNoktasi(id: string): { x: number; y: number } | null {
+  const b = world.buildings.find(x => x.id === id)
+  if (!b) return null
+  const g = b.group as THREE.Object3D
+  g.updateMatrixWorld(true)
+  // yapının tepesi: etiket yüksekliğini kullan (her bina kendi labelZ'sini veriyor)
+  const p = new THREE.Vector3(0, 0, b.labelZ ?? 2.5).applyMatrix4(g.matrixWorld).project(camera)
+  if (p.z > 1) return null                        // kamera arkasında
+  return {
+    x: (p.x * 0.5 + 0.5) * renderer.domElement.clientWidth,
+    y: (-p.y * 0.5 + 0.5) * renderer.domElement.clientHeight,
+  }
 }
 
 // ---- Ödüllü reklam: izle → müşteri patlaması ----
@@ -4639,6 +5003,8 @@ function handleClick(e: PointerEvent) {
       const amt = state.collectPending(cashFor)
       state.addSideRevenue(/2$/.test(cashFor.split('#')[0]), amt) // #317
       if (amt > 0) {
+        state.dailyCollected++
+        gorevOdulle()
         audio.cash()
         // çok üniteli tesiste kumbara ORTAKTIR (gelir zaten adetle çarpılır) — bunu söyle,
         // yoksa oyuncu "3 üniteden sadece 1'i kazanıyor" sanıyor (13 feedback)
@@ -4712,6 +5078,10 @@ function frame() {
   // ~250 ms'de bir çağırıp simülasyonu GERÇEK ZAMANDA sürdürür. Görsel render arka planda
   // atlanır (GPU boşa çalışmasın); dt tavanı arka planda 0.34 ki 4 fps worker temposu
   // gerçek zamanı yakalasın. Ön planda 0.05 tavan aynen korunur (görsel stabilite).
+  // Bilgi kartı seçili yapıya TUTUNUR (#1020) — yalnız görünürken, arka planda anlamsız.
+  if (!document.hidden && selectedBuilding && ui.buildingCardVisible) {
+    ui.setCardAnchor(binaEkranNoktasi(selectedBuilding))
+  }
   const dt = Math.min(clock.getDelta(), document.hidden ? 0.34 : 0.05)
   promoTick?.(dt)
   if (exploding) { if (!document.hidden) composer!.render(); return }

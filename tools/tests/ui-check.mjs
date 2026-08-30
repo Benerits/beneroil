@@ -13,8 +13,11 @@ const all = (re, s = html) => [...s.matchAll(re)].map(m => m[1])
 console.log('== 1) Ofis sekmeleri oyunun ORTAK bileşenini kullanıyor ==')
 const ofBlock = html.slice(html.indexOf('id="officewrap"'), html.indexOf('<!-- Mağaza (IAP) -->'))
 check('sekme şeridi .tabs sınıfını kullanıyor', /<div class="tabs" id="oftabs">/.test(ofBlock))
+// sekme sayısı sabit DEĞİL (Görevler sekmesi eklendi) — ölçüt: her sekme ortak .tab
+// bileşenini kullanıyor mu, yani data-oftab taşıyan buton sayısı .tab'lı sayıya eşit mi
 check('her sekme .tab sınıfını kullanıyor',
-  all(/<button class="tab[^"]*" data-oftab="([^"]+)"/g, ofBlock).length === 5)
+  all(/<button class="tab[^"]*" data-oftab="([^"]+)"/g, ofBlock).length
+    === all(/data-oftab="([^"]+)"/g, ofBlock).length)
 check('uydurma .oftab stili KALMADI', !/\.oftabs?\s*\{/.test(html) && !/class="oftab/.test(html))
 check('mağazayla aynı bileşen (tek kaynak)',
   /<div class="tabs" id="shoptabs">/.test(html) && /<div class="tabs" id="oftabs">/.test(html))
@@ -22,7 +25,8 @@ check('mağazayla aynı bileşen (tek kaynak)',
 console.log('\n== 2) Sekme ↔ panel bütünlüğü ==')
 const tabs = all(/data-oftab="([^"]+)"/g, ofBlock)
 const panes = all(/data-ofpane="([^"]+)"/g, ofBlock)
-check(`5 sekme / 5 panel (${tabs.length}/${panes.length})`, tabs.length === 5 && panes.length === 5)
+check(`sekme ve panel sayısı eşit (${tabs.length}/${panes.length})`,
+  tabs.length === panes.length && tabs.length >= 5)
 check('kimlikler birebir eşleşiyor', JSON.stringify(tabs) === JSON.stringify(panes),
   `sekme=${tabs} panel=${panes}`)
 check('tam BİR sekme varsayılan aktif', (ofBlock.match(/class="tab active"/g) || []).length === 1)

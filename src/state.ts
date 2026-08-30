@@ -23,6 +23,7 @@ export const LOC_FIELDS = [
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'rival',
   'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount',
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasTruckPark2',
+  'hasHotel', 'hasCleaner', 'supplier',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
   'uraniumPending', 'uraniumEta', 'closed', 'wideGates', 'smrWreck',
 ] as const
@@ -204,13 +205,38 @@ const WASH_COST = 8000
 const OIL_COST = 12000
 const COFFEE_COST = 7000
 const RESTAURANT_COST = 15000
+// TEDARİKÇİLER (#1067 "akaryakıt alımı için birkaç farklı marka satıcı olabilir"):
+// gerçek marka adları kullanılmıyor (ticari marka) — üç kurgusal dağıtımcı, klasik
+// hız/fiyat takası. Seçim kalıcıdır ve tüm yakıtlara uygulanır.
+export const SUPPLIERS = {
+  ekonomi:  { label: t('Toptancı Depo'), priceMult: 0.92, etaMult: 1.7,
+              desc: t('En ucuz litre fiyatı ama tanker geç gelir — stoğunu erken planla.') },
+  standart: { label: t('Standart Dağıtım'), priceMult: 1.00, etaMult: 1.0,
+              desc: t('Piyasa fiyatı, normal teslimat süresi.') },
+  hizli:    { label: t('Hızlı Lojistik'), priceMult: 1.07, etaMult: 0.55,
+              desc: t('Pahalı ama tanker yarı sürede kapıda — tank kurutmadan doldurur.') },
+} as const
+export type SupplierId = keyof typeof SUPPLIERS
+
 const TRUCKPARK_COST = 12000
+// OTEL (#1011 "otel ekleyebilirsin"): tır parkının bir üst ligi — yolcuyu geceletir.
+// Pasif omurga ama BEDAVA değil: her gün oda bakımı/personeli OPEX'e yazılır.
+const HOTEL_COST = 260_000
+const HOTEL_OPEX = 900          // günlük işletme gideri
+// TEMİZLİKÇİ (#1010 "temizlikçi ekleyebilirsin"): bakım özenini sürekli yüksek tutar,
+// güneş panelini siler. Yovmiyesi vardır — otomasyonun bedeli var.
+const CLEANER_HIRE = 9_000
+const CLEANER_WAGE = 320        // günlük yovmiye
 const AIRWATER_COST = 1500
 const SELFWASH_COST = 6000
 const PARKING_COST = 1200
 export const URANIUM_COST = 2500
 export const URANIUM_ETA = 20 // saniye
-const URANIUM_DRAIN_PER_S = 100 / 300 // tam yük ~5 dakika sürer
+// #1043/#1044 "uranyum çok hızlı tükeniyor · 15-20 saniyede %1 azalıyor": tam çubuk
+// 300 sn = 5 dakika sürüyordu, yani 2 oyun gününden az. ₺2.500'lük çubuk için sipariş
+// döngüsü bunaltıcıydı. Yeni ömür 720 sn ≈ 4.5 oyun günü; Sv.3 müdür de artık kendi
+// sipariş ediyor (managerTick), yani reaktör "sürekli yakıt bekleyen" tesis olmaktan çıktı.
+const URANIUM_DRAIN_PER_S = 100 / 720
 
 export class GameState {
   money = START_MONEY
@@ -393,6 +419,10 @@ export class GameState {
   hasCoffee = false
   hasRestaurant = false
   hasTruckPark = false
+  supplier: SupplierId = 'standart'
+  hasHotel = false
+  hotelTimer = 40
+  hasCleaner = false
   airWaterCount = 0
   selfWashCount = 0
   get hasAirWater() { return this.airWaterCount > 0 }
@@ -420,6 +450,14 @@ export class GameState {
   dailyDate = ''
   dailyServed = 0
   dailyDone = false
+  /** GÜNLÜK GÖREVLER (#1004 "günlük görev var gözüküyor ama yok gibi bi şey"):
+   *  tek bir 15-müşteri sayacı vardı, mobilde rozet de gizliydi — oyuncu görevi hiç
+   *  göremiyordu. Artık her gün 3 görev seçiliyor, ilerlemeleri bu sayaçlardan okunuyor. */
+  dailyRevenue = 0      // bugün kazanılan ciro
+  dailyLiters = 0       // bugün satılan litre
+  dailyCollected = 0    // bugün toplanan kumbara sayısı
+  dailyPerfect = 0      // bugün 5 yıldızlı servis
+  dailyClaimed: string[] = []   // ödülü alınmış görev id'leri (çift ödül olmaz)
   /** süreli fırsat: cheapFuel = yakıt maliyeti %50, rush = müşteri patlaması */
   promo: { type: 'cheapFuel' | 'rush'; until: number } | null = null
   private promoTimer = 150
@@ -630,12 +668,33 @@ export class GameState {
         this.addPending('truckpark2', m, t('Karşı tır parkı'))
       }
     }
+    // OTEL: tır parkından daha seyrek ama çok daha yüklü (oda geliri)
+    if (this.hasHotel) {
+      this.hotelTimer -= dt
+      if (this.hotelTimer <= 0) {
+        this.hotelTimer = 45 + Math.random() * 25
+        // itibar doluluk oranını belirler: kötü otel boş kalır (pasif gelir "bedava" olmasın)
+        const doluluk = 0.45 + 0.13 * Math.min(4, this.reputation)
+        const m = Math.round((260 + Math.random() * 220) * doluluk)
+        this.addPending('hotel', m, t('Otel'))
+      }
+    }
+    // TEMİZLİKÇİ: bakım özenini yüksek tutar, paneli siler — arıza olasılığını düşürür
+    if (this.hasCleaner) {
+      this.maintCare = Math.min(1, this.maintCare + 0.0012 * dt)
+      if (this.hasSolar) this.solarDirt = Math.max(0, this.solarDirt - 0.0011 * dt)
+    }
     if (this.hasSelfWash) {
       this.selfWashTimer -= dt
       if (this.selfWashTimer <= 0) {
         this.selfWashTimer = 25 + Math.random() * 20
         const m = (30 + Math.floor(Math.random() * 30)) * this.selfWashCount
-        this.addPending('selfwash', m, t('Self yıkama'))
+        // Etikette ünite sayısı GÖRÜNÜR: gelir zaten ünite başına çarpılıyor (ölçüldü:
+        // ×1 ₺1.200, ×2 ₺2.400, ×4 ₺4.800) ama tek bildirim geldiği için oyuncular
+        // "ne kadar eklesek de tek birinin parasını ödüyor" sanıyordu.
+        this.addPending('selfwash', m, this.selfWashCount > 1
+          ? t('Self yıkama ×{0}', String(this.selfWashCount))
+          : t('Self yıkama'))
       }
     }
 
@@ -704,7 +763,7 @@ export class GameState {
       + 0.04 * this.marketLevel + 0.02 * this.toiletLevel + 0.02 * this.evChargers
       + (this.hasWash ? 0.03 : 0) + (this.hasOil ? 0.03 : 0)
       + (this.hasCoffee ? 0.02 : 0) + (this.hasRestaurant ? 0.03 : 0)
-      + (this.hasTruckPark ? 0.02 : 0) + 0.02 * Math.min(this.airWaterCount, 3)
+      + (this.hasTruckPark ? 0.02 : 0) + (this.hasHotel ? 0.05 : 0) + 0.02 * Math.min(this.airWaterCount, 3)
       + 0.02 * Math.min(this.selfWashCount, 3)
     // Fiyat esnekliği TÜM akışı çarpar. Eskiden yalnız taban terimi çarpıyordu —
     // gelişmiş istasyonda tesis terimleri fiyattan bağımsız kalınca tavan fiyat
@@ -875,9 +934,22 @@ export class GameState {
   /** seviye → verim (0 = müdür yok). Aktif oynamanın hep üstünde kalması BİLİNÇLİ. */
   static readonly BRANCH_MANAGER_EFF = [0, 0.45, 0.65, 0.85]
   /** seviye → şube kasası tavanı. Yüksek seviye daha uzun süre uzak kalmayı satar. */
-  static readonly BRANCH_VAULT_DAYS = [0, 2, 3, 5]
+  /**
+   * Kasa kaç GÜNLÜK net geliri biriktirir (müdür seviyesine göre).
+   * Oyuncu raporu (21 şikayet, 3 gün): "başka şubeye gidince öncekisi çalışmıyor".
+   * Sebep tavanın erken dolmasıydı — 1. seviye müdür yalnız 2 gün biriktirip duruyordu,
+   * oyuncu ertesi gün döndüğünde şube gerçekten durmuş oluyordu. Süreler iki katına
+   * çıkarıldı; müdüre yatırım yapmak hâlâ anlamlı ama şube bir hafta sonra da yaşıyor.
+   */
+  static readonly BRANCH_VAULT_DAYS = [0, 5, 8, 12]
   /** mutlak tavan: tek toplamada sunucunun izin verdiği sıçramanın (₺260.000) altında */
-  static readonly BRANCH_VAULT_HARD = 220_000
+  /**
+   * Mutlak tavan: tek toplamada sunucunun izin verdiği sıçramanın (ALLOW_BURST ₺260.000)
+   * GÜVENLİ ALTINDA kalmalı — üstüne çıkarsa toplama anında anti-cheat kaydı reddeder ve
+   * oyuncu parayı da ilerlemeyi de kaybeder. Gün sayısını artırmak asıl çözüm; bu tavan
+   * yalnız çok büyük şubelerde devreye girer ve orada oyuncu kasa dolunca uyarılır.
+   */
+  static readonly BRANCH_VAULT_HARD = 240_000
 
   /** Şube kasaları: pasif şubelerin biriken net geliri (ADDITIVE save alanı). */
   branchVault: Partial<Record<LocId, number>> = {}
@@ -971,6 +1043,17 @@ export class GameState {
       this.stats.revenue += total
     }
     return total
+  }
+
+  /** Bir şubenin kasa doluluğu (0..1) — dolmak üzereyken oyuncuyu uyarmak için */
+  branchVaultFill(loc: LocId): number {
+    const cap = this.branchVaultCap(loc)
+    if (cap <= 0) return 0
+    return Math.max(0, Math.min(1, (this.branchVault[loc] ?? 0) / cap))
+  }
+  /** Kasası dolmuş (gelir akışı durmuş) şubeler */
+  fullBranchVaults(): LocId[] {
+    return this.unlockedLocs.filter(l => l !== this.activeLoc && this.branchVaultFill(l) >= 0.999)
   }
 
   /** Toplanmayı bekleyen toplam (HUD/ofis göstergesi) */
@@ -1087,6 +1170,7 @@ export class GameState {
     this.marinaFacs = []; this.berths = {}; this.winterSlots = 0; this.marinaViolations = 0
     this.hasDiesel = false; this.hasSMR = false; this.smrWreck = false; this.hasWash = false; this.hasOil = false
     this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
+    this.hasHotel = false; this.hasCleaner = false
     this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
     for (const f of FUELS) { this.tankCounts[f] = 1; this.tanks[f] = 0 }
     this.brokenPumps.clear(); this.brokenChargers.clear()
@@ -1268,15 +1352,18 @@ export class GameState {
    *  Yovmiye AYRI kalemde kalır (çifte sayım yok); şebeke faturası canlı kesiliyor.
    *  opexStart'tan itibaren 10 günde %0→%100 rampalanır (enflasyon şoku yok). */
   dailyOpex(): number {
+    // otel odaları her gün toplanıyor/temizleniyor: pasif gelirin sabit karşı gideri
     const ramp = Math.min(1, Math.max(0, (this.day - this.opexStart) / 10))
-    if (ramp <= 0) return 0
-    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp) + this.insuranceDaily()
+    const otel = this.hasHotel ? HOTEL_OPEX : 0
+    if (ramp <= 0) return otel
+    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp) + this.insuranceDaily() + otel
   }
   /** kurulu ekipman+tesis alış değeri (sunucu buildingValue ile aynı felsefe, istemce tablolarından) */
   equipmentValue(): number {
     const sum = (arr: number[], k: number) => arr.slice(0, Math.max(0, Math.min(arr.length, Math.floor(k) || 0))).reduce((a, b) => a + b, 0)
     let v = 0
     v += sum(PUMP_COSTS, this.pumps)
+    if (this.hasCleaner) v += CLEANER_HIRE
     v += sum(SIGN_COSTS, this.signLevel) + sum(TANK_COSTS, this.tankLevel)
     v += sum(MARKET_COSTS, this.marketLevel) + sum(MARKET_COSTS, this.market2Level)
     v += sum(TOILET_COSTS, this.toiletLevel) + sum(GRID_COSTS, this.gridLevel)
@@ -1293,6 +1380,7 @@ export class GameState {
     if (this.hasCoffee) v += COFFEE_COST
     if (this.hasRestaurant) v += RESTAURANT_COST
     if (this.hasTruckPark) v += TRUCKPARK_COST
+    if (this.hasHotel) v += HOTEL_COST
     if (this.wideGates) v += WIDEGATE_COST
     return v
   }
@@ -1322,12 +1410,14 @@ export class GameState {
    *  büyük tanklı oyuncu 'tanker çağıramıyor' kalmaz (buton asla salt fiyat yüzünden kilitlenmez). */
   orderNeed(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
-    const affordable = Math.max(0, Math.floor(this.money / (this.buyPrice(f) * disc)) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
+    const affordable = Math.max(0, Math.floor(this.money / (this.buyPrice(f) * disc * this.supplierMult())) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
     return Math.floor(Math.max(0, Math.min(this.orderQty[f] * ORDER_STEP, this.fuelCapacity(f) - this.tanks[f], affordable)))
   }
+  /** seçili tedarikçinin litre çarpanı (#1067) */
+  supplierMult() { return SUPPLIERS[this.supplier]?.priceMult ?? 1 }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
-    return Math.ceil(this.orderNeed(f) * this.buyPrice(f) * disc) // piyasa fiyatı (Katman 4b)
+    return Math.ceil(this.orderNeed(f) * this.buyPrice(f) * disc * this.supplierMult()) // piyasa fiyatı (Katman 4b)
   }
 
   canOrder(f: FuelType) {
@@ -1347,7 +1437,7 @@ export class GameState {
     this.fuelLog.push({ day: this.day, f, liters: need, cost })
     if (this.fuelLog.length > 40) this.fuelLog.shift()
     this.orders[f].pending = true
-    this.orders[f].eta = ORDER_ETA
+    this.orders[f].eta = Math.round(ORDER_ETA * (SUPPLIERS[this.supplier]?.etaMult ?? 1))
     this.orders[f].amount = need // teslimatta bu kadar eklenecek (parti miktarı)
     return true
   }
@@ -1371,7 +1461,7 @@ export class GameState {
     const c: [string, string][] = [
       ['market', t('Market')], ['toilet', t('Tuvalet')], ['battery', t('Batarya Deposu')],
       ['wash', t('Oto Yıkama')], ['oil', t('Yağ Değişimi')], ['coffee', t('Kahveci')],
-      ['restaurant', t('Restoran')], ['truckpark', t('Tır Parkı')], ['dieselgen', t('Jeneratör')], ['smr', t('Reaktör')],
+      ['restaurant', t('Restoran')], ['truckpark', t('Tır Parkı')], ['hotel', t('Otel')], ['dieselgen', t('Jeneratör')], ['smr', t('Reaktör')],
     ]
     if (this.evChargers > 0) c.push([`charger#${this.evChargers - 1}`, t('DC Şarj')])
     if (this.solarCount > 0) c.push([`solar#${this.solarCount - 1}`, t('Güneş Santrali')])
@@ -1390,7 +1480,7 @@ export class GameState {
     const staffMul = 1 + 0.35 * (this.staffLevel - 1)
     const wm = this.theme().econ.wageMult ?? 1
     return Math.round((Math.round((this.autoPumps.size * POMPACI_WAGE + this.autoChargers.size * EV_ATTENDANT_WAGE) * staffMul)
-      + MANAGER_WAGES[Math.min(3, this.managerLevel)]) * wm)
+      + MANAGER_WAGES[Math.min(3, this.managerLevel)] + (this.hasCleaner ? CLEANER_WAGE : 0)) * wm)
   }
   /** EKİPMAN YAŞLANMASI: yıpranma arttıkça verim düşer (%100'de -%40) */
   wearEfficiency(): number { return 1 - 0.4 * Math.min(1, Math.max(0, this.wear)) }
@@ -1567,7 +1657,11 @@ export class GameState {
   managerTick(dt: number): { collected: number; cleaned: boolean; fixed: number; ordered: number } | null {
     if (this.managerLevel <= 0) return null
     this.managerT += dt
-    if (this.managerT < 45) return null // 45 sn'de bir tur (gün ≈ 160 sn)
+    // TUR SIKLIĞI SEVİYEYLE ARTAR (#988 "otomatik toplayacak bir şey ekleyelim, sürekli
+    // kumbaralar doluyor"): tek sabit 45 sn'lik tur, 10 tesisli istasyonda kumbaraların
+    // dolmasına yetişemiyordu. Sv.1 45 sn · Sv.2 32 sn · Sv.3 22 sn.
+    const turSuresi = [45, 45, 32, 22][Math.min(3, this.managerLevel)]
+    if (this.managerT < turSuresi) return null // gün ≈ 160 sn
     this.managerT = 0
     let collected = 0
     for (const id of Object.keys(this.pendingCash)) collected += this.collectPending(id)
@@ -1606,6 +1700,15 @@ export class GameState {
       // tamir edip reaktöre bakmıyordu. %50 yıpranmada bakımı öder, patlama yaşanmaz.
       if (this.hasSMR && this.smrWear >= 0.5 && this.money >= 1500) {
         this.money -= 1500; this.smrWear = 0; fixed++
+      }
+      // URANYUM SİPARİŞİ (iki ayrı oyuncu raporu: "müdür uranyum sipariş etmiyor").
+      // Reaktör yakıtsız kalınca üretim duruyordu; müdür pompayı tamir edip reaktörü
+      // yakıtsız bırakmak tutarsızdı. Kritik seviyede kendisi sipariş verir.
+      if (this.hasSMR && this.uranium <= 20 && !this.uraniumPending && this.money >= URANIUM_COST) {
+        this.money -= URANIUM_COST
+        this.uraniumPending = true
+        this.uraniumEta = URANIUM_ETA
+        ordered++
       }
     }
     return (collected > 0 || cleaned || fixed > 0 || ordered > 0) ? { collected, cleaned, fixed, ordered } : null
@@ -1708,6 +1811,7 @@ export class GameState {
       case 'parking': return 300 * Math.min(6, Math.max(1, this.parkingCount))
       case 'truckpark': return 1200   // pasif yüksek kazanan
       case 'truckpark2': return 1200
+      case 'hotel': return 3000       // en yüklü pasif kalem — tavanı da yüksek
       case 'restaurant': return 1200  // ₺80-160/ziyaret
       case 'oil': return 1000         // ₺150-250/servis
       case 'wash': return 700         // ₺60-120/yıkama
@@ -1769,14 +1873,16 @@ export class GameState {
   pendingCapTotal(): number {
     let v = 0
     for (const id of ['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2',
-      'coffee', 'coffee2', 'restaurant', 'restaurant2', 'truckpark', 'truckpark2', 'selfwash', 'airwater', 'parking']) {
+      'coffee', 'coffee2', 'restaurant', 'restaurant2', 'truckpark', 'truckpark2', 'hotel', 'selfwash', 'airwater', 'parking']) {
       const has = (id === 'market' && this.marketLevel > 0) || (id === 'market2' && this.market2Level > 0)
         || (id === 'toilet' && this.toiletLevel > 0) || (id === 'toilet2' && this.toilet2Level > 0)
         || (id === 'wash' && this.hasWash) || (id === 'wash2' && this.hasWash2)
         || (id === 'oil' && this.hasOil) || (id === 'oil2' && this.hasOil2)
         || (id === 'coffee' && this.hasCoffee) || (id === 'coffee2' && this.hasCoffee2)
         || (id === 'restaurant' && this.hasRestaurant) || (id === 'restaurant2' && this.hasRestaurant2)
-        || (id === 'truckpark' && this.hasTruckPark) || (id === 'truckpark2' && this.hasTruckPark2) || (id === 'selfwash' && this.selfWashCount > 0)
+        || (id === 'truckpark' && this.hasTruckPark) || (id === 'truckpark2' && this.hasTruckPark2)
+        || (id === 'hotel' && this.hasHotel)
+        || (id === 'selfwash' && this.selfWashCount > 0)
         || (id === 'airwater' && this.airWaterCount > 0) || (id === 'parking' && this.parkingCount > 0)
       if (has) v += this.pendingCap(id)
     }
@@ -1813,6 +1919,17 @@ export class GameState {
   // ÇÖZÜM: her gün sonunda itibar, O GÜNÜN hizmet kalitesine doğru çekilir. Artık 5.0'da
   // kalmak için kayıpsız gün gerekir; istasyonu ihmal etmek itibarı gerçekten düşürür.
   private repMark = { served: 0, lost: 0 }
+  /** İTİBAR ŞEFFAFLIĞI (#1025 "ne yaptıysam ne düşürebildim ne de arttırabildim"):
+   *  itibar gün sonunda O GÜNÜN kayıp oranına doğru çekiliyor. Kayıpsız oynayan oyuncuda
+   *  hedef zaten 5.0 olduğu için değer kıpırdamıyordu ve bu hiçbir yerde yazmıyordu.
+   *  Panel artık bugünkü kayıp oranını ve gün sonu hedefini gösteriyor. */
+  repToday(): { served: number; lost: number; target: number } {
+    const served = this.stats.served - this.repMark.served
+    const lost = this.stats.lost - this.repMark.lost
+    const total = served + lost
+    const target = total < 3 ? 3.0 : Math.max(1, 5 - (lost / total) * 7)
+    return { served, lost, target }
+  }
   /** son mutabakatın yönü — arayüzde ok göstermek için (+1 arttı, -1 düştü, 0 sabit) */
   repTrend = 0
 
@@ -1895,11 +2012,19 @@ export function getShopItems(s: GameState): ShopRow[] {
     row('winterslot', 'i-parking', s.winterSlots ? t('Karada Kışlama ({0})', String(s.winterSlots)) : t('Karada Kışlama'),
       t('+₺900/gün (kışın)'), t('Tekneyi karaya çek, kışı geçirsin — kışın en büyük gelir kalemi.'),
       8_000, s.hasMarinaFac('travelift') ? null : t('Önce Travel Lift kur'))
-    // 2. POMPA (Oğuz: "2 tane pompaya izin verelim marinada") — iskele boyu sınırlı: maks 2
-    row('pump', 'i-fuel', t('İskele Pompası #{0}', Math.min(s.pumps + 1, 2)), t('+1 pompa'),
-      t('İskeleye ikinci dolum noktası — aynı anda iki tekne alırsın.'),
-      s.pumps >= 2 ? null : PUMP_COSTS[s.pumps],
-      s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    // İSKELE POMPASI — sınır 2'ydi, iki ayrı rapor ("marinaya pompa koyabilelim artık,
+    // 100k ciroyla dönmüyor" / "pompa artırılmıyor") tavanın erken geldiğini gösterdi.
+    // Yeni tavan 4; 3. ve 4. pompa için iskelenin BÜYÜMÜŞ olması şart (bağlama yeri),
+    // yani sınır kalkmadı — genişleyen marinaya bağlandı.
+    const MARINA_MAX_PUMP = 4
+    const iskeleBoyu = Object.values(s.berths).reduce((a, v) => a + (v || 0), 0)
+    const pompaKilit = !s.hasMarinaFac('fueldock') ? t('Önce Yakıt İskelesi kur')
+      : (s.pumps >= 2 && iskeleBoyu < 4) ? t('Önce iskeleyi büyüt (4 bağlama yeri)')
+      : null
+    row('pump', 'i-fuel', t('İskele Pompası #{0}', Math.min(s.pumps + 1, MARINA_MAX_PUMP)), t('+1 pompa'),
+      t('İskeleye bir dolum noktası daha — aynı anda bir tekne fazla alırsın. 3. pompadan itibaren iskelenin büyümüş olması gerekir.'),
+      s.pumps >= MARINA_MAX_PUMP ? null : PUMP_COSTS[Math.min(s.pumps, PUMP_COSTS.length - 1)],
+      pompaKilit)
     // DEPO (Oğuz: "marinada tanka tıklayıp seviye artırılabilmeli") — kara ile aynı
     row('tank', 'i-tank', t('Yakıt Tankı'), s.tankLevel >= 3 ? `${TANK_CAPACITY[3]}L` : `${TANK_CAPACITY[s.tankLevel + 1]}L`,
       t('Depo büyür (tüm yakıtlar), daha seyrek sipariş verirsin'),
@@ -1924,6 +2049,16 @@ export function getShopItems(s: GameState): ShopRow[] {
       t('Yüksek debili pompa donanımı: dolum hızlanır, aynı sürede daha çok müşteri bitirirsin. Tüm pompalara uygulanır.'),
       s.pumpSpeedLevel >= 3 ? null : PUMPSPEED_COSTS[s.pumpSpeedLevel],
       s.hasMarinaFac('fueldock') ? null : t('Önce Yakıt İskelesi kur'))
+    // TUVALET (#1033: "Marinada wc yok müşteri şikayet ediyo") — kara ile aynı mekanik.
+    // Denizciler tesise çıkıyor; WC yokluğu memnuniyeti düşürüyordu ama satın alınamıyordu.
+    row('toilet', 'i-toilet', s.toiletLevel === 0 ? t('Tuvalet') : t('Tuvalet Sv.2'), t('+moral'),
+      t('Denizciler karaya çıkınca ilk aradıkları yer — memnuniyeti ve itibarı artırır.'),
+      s.toiletLevel >= 2 ? null : TOILET_COSTS[s.toiletLevel], null)
+    // TABELA (#1034: "marinanın tabela geliştirilmiyo") — marina mağazasında satır YOKTU,
+    // oyuncu tabelaya tıklayıp yükseltme arıyordu. Marinada tabela = seyir feneri/pilon.
+    row('sign', 'i-sign', t('Marina Tabelası Sv.{0}', Math.min(s.signLevel + 1, 3)), t('+%10 trafik'),
+      t('Kıyıdan görünen marina tabelası — seyir hâlindeki tekneler uğramaya daha meyilli olur.'),
+      s.signLevel >= 3 ? null : SIGN_COSTS[s.signLevel], null)
     // MARKET (Oğuz: "marinaya market koyabilelim") — kara marketiyle aynı mekanik
     row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1),
       `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,
@@ -2007,6 +2142,16 @@ export function getShopItems(s: GameState): ShopRow[] {
     s.hasRestaurant ? null : RESTAURANT_COST, null)
   row('truckpark', 'i-truck', t('Tır Parkı'), '+₺90-160/dk', t('Tırcılar konaklar — düzenli pasif gelir'),
     s.hasTruckPark ? null : TRUCKPARK_COST, null)
+  // OTEL (#1011): tır parkının üst ligi. Doluluk İTİBARA bağlı, günlük OPEX'i var —
+  // pasif gelir "bedava" olmasın, ihmal edilen istasyonda otel zarar eder.
+  row('hotel', 'i-hotel', t('Yol Kenarı Oteli'), '+₺260-480/dk',
+    t('Yolcular geceler. Doluluk itibarınla artar; günlük ₺{0} işletme gideri vardır. Tır parkı şart.', String(HOTEL_OPEX)),
+    s.hasHotel ? null : HOTEL_COST,
+    s.hasTruckPark ? null : t('Önce Tır Parkı kur'))
+  // TEMİZLİKÇİ (#1010): otomasyon kalemi — bakım özeni düşmez, panel kendi kendine silinir
+  row('cleaner', 'i-clean', t('Temizlikçi Tut'), t('bakım + panel'),
+    t('Sürekli bakım özeni: arıza olasılığı düşer, güneş panelleri kendiliğinden silinir. Günlük ₺{0} yovmiye.', String(CLEANER_WAGE)),
+    s.hasCleaner ? null : CLEANER_HIRE, null)
 
   // elektrik zinciri (teknoloji sırası korunur, arsa şartı yok)
   // ---- B8: karşı yaka nüshaları (yalnız karşıda betonlu arsa varken görünür) ----
@@ -2152,6 +2297,103 @@ const ACHIEVEMENTS: [string, string, (s: GameState) => boolean][] = [
   ['chain', t('Zincir başladı — İkinci şuben açık!'), s => s.unlockedLocs.length >= 2],
 ]
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GÜNLÜK GÖREVLER (#1004) ve KARİYER HEDEFLERİ (#1063)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Görev şablonu: hedef sayı oyuncunun ölçeğine göre büyür (yeni oyuncuya 15 müşteri
+ *  hedefi anlamlıydı, 10 pompalı oyuncuya değil — "görev yok gibi" hissinin bir sebebi
+ *  de buydu: tek sabit hedef günün ilk dakikasında bitiyordu). */
+export interface DailyQuest {
+  id: string; label: string; have: number; need: number; reward: number; done: boolean
+}
+type QuestTpl = {
+  id: string
+  /** ölçek = pompalar + tesisler; hedef buna göre büyür */
+  need: (s: GameState) => number
+  have: (s: GameState) => number
+  label: (need: number) => string
+  reward: (need: number) => number
+}
+const QUEST_TPLS: QuestTpl[] = [
+  { id: 'serve', need: s => 10 + 4 * s.pumps, have: s => s.dailyServed,
+    label: n => t('{0} müşteriye servis yap', String(n)), reward: n => n * 90 },
+  { id: 'revenue', need: s => 4_000 + 1_800 * s.pumps, have: s => Math.floor(s.dailyRevenue),
+    label: n => t('Bugün ₺{0} ciro yap', n.toLocaleString('tr-TR')), reward: n => Math.round(n * 0.12) },
+  { id: 'liters', need: s => 400 + 150 * s.pumps, have: s => Math.floor(s.dailyLiters),
+    label: n => t('{0} litre yakıt sat', n.toLocaleString('tr-TR')), reward: n => n * 3 },
+  { id: 'collect', need: () => 6, have: s => s.dailyCollected,
+    label: n => t('{0} kumbara topla', String(n)), reward: () => 1_200 },
+  { id: 'perfect', need: s => 3 + Math.floor(s.pumps / 2), have: s => s.dailyPerfect,
+    label: n => t('{0} kez 5 yıldızlı servis ver', String(n)), reward: n => n * 400 },
+  { id: 'rep', need: () => 1, have: s => (s.reputation >= 4.5 ? 1 : 0),
+    label: () => t('Günü 4.5+ itibarla kapat'), reward: () => 2_000 },
+]
+
+/** Günün 3 görevi — TARİHE bağlı deterministik seçim: aynı gün her açılışta aynı görevler
+ *  gelir (rastgele olsaydı sayfa yenilendikçe görev değişir, ilerleme kaybolmuş görünürdü). */
+export function dailyQuests(s: GameState): DailyQuest[] {
+  let tohum = 0
+  for (const ch of (s.dailyDate || 'gun')) tohum = (tohum * 31 + ch.charCodeAt(0)) >>> 0
+  const havuz = [...QUEST_TPLS]
+  const secili: QuestTpl[] = []
+  for (let i = 0; i < 3 && havuz.length; i++) {
+    tohum = (tohum * 1103515245 + 12345) >>> 0
+    secili.push(...havuz.splice(tohum % havuz.length, 1))
+  }
+  return secili.map(q => {
+    const need = Math.max(1, Math.round(q.need(s)))
+    const have = Math.max(0, q.have(s))
+    return { id: q.id, label: q.label(need), have: Math.min(have, need), need,
+             reward: q.reward(need), done: have >= need }
+  })
+}
+
+/** Tamamlanan görevlerin ödülünü bir kez öder; yeni tamamlananları döner (toast için). */
+export function claimDailyQuests(s: GameState): DailyQuest[] {
+  const yeni: DailyQuest[] = []
+  for (const q of dailyQuests(s)) {
+    if (!q.done || s.dailyClaimed.includes(q.id)) continue
+    s.dailyClaimed.push(q.id)
+    s.money += q.reward
+    yeni.push(q)
+  }
+  // üçünü de bitiren gün rozetini kazanır (eski dailyDone alanı korunur)
+  if (!s.dailyDone && dailyQuests(s).every(q => q.done)) s.dailyDone = true
+  return yeni
+}
+
+/** KARİYER HEDEFLERİ (#1063 "oyunda devam edecek bi amacım kalmadı"): sıradaki üç
+ *  büyük kilometre taşı her zaman görünür olsun. Başarımlardan farkı: ilerleme ÇUBUĞU
+ *  var ve sırayla gelirler — oyuncu "şimdi ne yapmalıyım"ı bir bakışta görür. */
+export interface CareerGoal { label: string; have: number; need: number; done: boolean }
+export function careerGoals(s: GameState, adet = 3): CareerGoal[] {
+  const g = (label: string, have: number, need: number): CareerGoal =>
+    ({ label, have: Math.min(have, need), need, done: have >= need })
+  const hepsi: CareerGoal[] = [
+    g(t('₺100.000 kasa'), Math.floor(s.money), 100_000),
+    g(t('4 pompaya çık'), s.pumps, 4),
+    g(t('İlk şarj ünitesini kur'), s.evChargers, 1),
+    g(t('Market Sv.3'), s.marketLevel, 3),
+    g(t('İkinci şubeni aç'), s.unlockedLocs.length, 2),
+    g(t('Müdür Sv.3 yetiştir'), s.managerLevel, 3),
+    g(t('9 arsanın tamamını al'), s.ownedParcels.size, 9),
+    g(t('₺1.000.000 kasa'), Math.floor(s.money), 1_000_000),
+    g(t('Güneş + batarya ile kendi elektriğini üret'), s.solarCount > 0 && s.batteryLevel > 0 ? 1 : 0, 1),
+    g(t('Reaktör kur (SMR)'), s.hasSMR ? 1 : 0, 1),
+    g(t('5 ihale tamamla'), s.contractsDone, 5),
+    g(t('Dört şubeye ulaş'), s.unlockedLocs.length, 4),
+    g(t('Marina şubesi aç'), s.unlockedLocs.includes('marina') ? 1 : 0, 1),
+    g(t('10 marka yıldızı topla'), s.brandStars, 10),
+    g(t('Beş şubenin hepsini aç'), s.unlockedLocs.length, 5),
+    g(t('25 marka yıldızı topla'), s.brandStars, 25),
+    g(t('₺25.000.000 servet'), Math.floor(s.money + s.equipmentValue()), 25_000_000),
+  ]
+  const kalan = hepsi.filter(x => !x.done)
+  // hepsi bittiyse son üçü "tamam" olarak göster (boş liste umutsuzluk hissi verir)
+  return kalan.length ? kalan.slice(0, adet) : hepsi.slice(-adet)
+}
+
 export function checkAchievements(s: GameState) {
   for (const [id, title, cond] of ACHIEVEMENTS) {
     if (!s.achievements.has(id) && cond(s)) {
@@ -2167,9 +2409,10 @@ const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'pumpSpeedLevel', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
   'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
-  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'airWaterCount', 'selfWashCount', 'parkingCount',
+  'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'supplier', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
-  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone', 'maintCare', 'wideGates', 'loan', 'partner',
+  'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
+  'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'steamPoll', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
 ] as const
@@ -2324,6 +2567,8 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])
   if (Array.isArray(data.brokenPumps)) s.brokenPumps = new Set((data.brokenPumps as number[]).filter(n => Number.isInteger(n)))
   if (Array.isArray(data.brokenChargers)) s.brokenChargers = new Set((data.brokenChargers as number[]).filter(n => Number.isInteger(n)))
+  // kurcalanmış/eski kayıt: bilinmeyen tedarikçi standarda düşer (fiyat çarpanı NaN olmasın)
+  if (!(s.supplier in SUPPLIERS)) s.supplier = 'standart'
 }
 
 export function doMaintenance(s: GameState, id: string): boolean {
@@ -2382,6 +2627,8 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'restaurant': s.hasRestaurant = true; break
     case 'truckpark': s.hasTruckPark = true; break
     case 'truckpark2': s.hasTruckPark2 = true; break
+    case 'hotel': s.hasHotel = true; break
+    case 'cleaner': s.hasCleaner = true; break
     case 'airwater': s.airWaterCount++; break
     case 'lamp': s.lampCount++; break
     case 'winterslot': s.winterSlots++; break
@@ -2427,6 +2674,7 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
     case 'restaurant': return s.hasRestaurant ? { refund: half(RESTAURANT_COST) } : null
     case 'truckpark': return s.hasTruckPark ? { refund: half(TRUCKPARK_COST) } : null
     case 'truckpark2': return s.hasTruckPark2 ? { refund: half(TRUCKPARK_COST) } : null
+    case 'hotel': return s.hasHotel ? { refund: half(HOTEL_COST) } : null
     case 'dieselgen': return s.hasDiesel ? { refund: half(DIESELGEN_COST) } : null
     case 'smr': return s.hasSMR ? { refund: half(SMR_COST) } : null
     case 'solar': return s.solarCount > 0 ? { refund: half(SOLAR_COST) } : null // 2c: herhangi bir örnek satılabilir
@@ -2470,6 +2718,7 @@ export function applySell(s: GameState, id: string): number | null {
     case 'restaurant': s.hasRestaurant = false; break
     case 'truckpark': s.hasTruckPark = false; break
     case 'truckpark2': s.hasTruckPark2 = false; break
+    case 'hotel': s.hasHotel = false; break
     case 'dieselgen': s.hasDiesel = false; break
     case 'smr': s.hasSMR = false; s.uranium = 0; s.smrWear = 0; break
     case 'solar': s.solarCount--; break

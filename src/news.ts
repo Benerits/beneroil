@@ -60,6 +60,10 @@ export function newsUnseen(): boolean {
 function markSeen() {
   try { localStorage.setItem(SEEN_KEY, NEWS_VERSION) } catch { /* özel sekme: sessizce geç */ }
 }
+/** Sürüm notlarını "görülmüş" say — YENİ oyuncuda açılışta göstermemek için.
+ *  Değişiklik günlüğü, oyunu ilk kez açan birine hiçbir şey ifade etmiyor ve
+ *  onboarding balonunun üstünü kapatıyor. (Meta'da her oyuncu yeni oyuncu.) */
+export function markNewsSeen() { markSeen() }
 
 // ---- 2) Bildirim geçmişi ----
 export interface LogItem { day: number; msg: string; kind: 'good' | 'bad' | '' }

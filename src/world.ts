@@ -4,6 +4,7 @@ import { StaticLib, fitModel } from './models'
 import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
 import { LocationTheme, activeTheme } from './themes'
 import type { Kit } from './kits'
+import { asset, texture } from './platform'
 import { SCENE_PLANS, type Placement } from './scenery'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
@@ -371,7 +372,7 @@ export class World {
     // dokulu zeminler: nano banana PNG'leri; yüklenemezse prosedürel benek
     const aiGround = (url: string, rx: number, ry: number, fallback: THREE.Texture) => {
       const mat = new THREE.MeshLambertMaterial({ map: fallback })
-      new THREE.TextureLoader().load(url, t => {
+      new THREE.TextureLoader().load(texture(url), t => {
         t.wrapS = t.wrapT = THREE.RepeatWrapping
         t.repeat.set(rx, ry)
         t.colorSpace = THREE.SRGBColorSpace
@@ -533,12 +534,31 @@ export class World {
     // SU ŞUBESİ (marina): asfalt/refüj/şerit HİÇ çizilmez — yolun yerini seyir kanalı alır.
     // Bu blok atlanmazsa denizin üstünde asfalt şerit görünüyordu.
     const isWater = th.lane.kind === 'water'
-    const roadW = th.lane.service ? 6.0 : 4.6
+    // ASFALT GENİŞLİĞİ ŞERİT SAYISINDAN TÜRER (#1075 "Otoyol eklenmiş ama tek şerit,
+    // en az çift şerit olması iyi olur"): eskiden yalnızca 'service' bandı olan temalar
+    // (çevre yolu/metropol) geniş çiziliyordu; otoyol lane.count = 3 olmasına rağmen
+    // kasaba yoluyla AYNI 4.6 birimlik tek şeritli asfaltı alıyordu.
+    const seritSayisi = Math.max(1, th.lane.count ?? 1)
+    // 3+ şeritte 6.8 birimde duruyoruz: karşı yaka kapısı FAR_GATE_X = 11.6'da ve
+    // asfaltın kenarı (ROAD_X + 3.4 = 11.3) onun altında kalmalı — yoksa kapı pedi
+    // asfaltın üstüne biniyor.
+    const roadW = th.lane.service ? 6.0 : seritSayisi >= 3 ? 6.8 : seritSayisi === 2 ? 6.0 : 4.6
     if (!isWater) {
       const road = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 220), roadMat)
       road.position.set(ROAD_X, 0, 0.01)
       road.receiveShadow = true
       s.add(road)
+      // ARSA ↔ ASFALT BOŞLUĞU (#1030 "2. haritada ortada çimler vs kaldı"): arsa x=5.0'da
+      // bitiyor, asfalt tema genişliğine göre başlıyor. Kentsel temalarda arada açıklanamayan
+      // ince bir ÇİM ŞERİDİ kalıyordu. Kasabada bu bant BİLEREK duruyor (kır istasyonu
+      // imzası); diğerlerinde beton payla kapatılır.
+      const asfaltBasi = ROAD_X - roadW / 2
+      if (th.id !== 'kasaba' && asfaltBasi > 5.0) {
+        const pay = new THREE.Mesh(new THREE.PlaneGeometry(asfaltBasi - 5.0 + 0.12, 220), this.concreteMat)
+        pay.position.set((5.0 + asfaltBasi) / 2, 0, 0.014)
+        pay.receiveShadow = true
+        s.add(pay)
+      }
     }
     if (th.lane.median && !isWater) {
       // ---- KENTSEL YOL (çevre yolu/metropol): orta REFÜJ + şerit çizgileri (rapor §6.3) ----
@@ -569,9 +589,20 @@ export class World {
       // ŞERİT AYIRICI KESİKLER: 4 şeritli yolda her yönün İKİ şeridi arasına, tek
       // şeritlide eski konumlarına. Konum temadan türer, elle sabit yok.
       const dashPerLane = 44
-      const dashOff = th.lane.service
+      // Yön başına (count-1) ayırıcı: 3 şeritli otoyolda her yönde iki kesikli çizgi.
+      const yariGen = roadW / 2, medYari = medW / 2
+      const seritGen = (yariGen - medYari) / seritSayisi
+      const dashOff: number[] = th.lane.service
         ? [ROAD_X - 2.32, ROAD_X + 2.32]   // 4 şerit: yön başına iki şeridin arası
-        : [ROAD_X - 1.15, ROAD_X + 1.15]   // tek şerit (mevcut görünüm)
+        : seritSayisi === 1
+        ? [ROAD_X - 1.15, ROAD_X + 1.15]   // tek şerit (kasaba görünümü — değişmedi)
+        : (() => {
+            const o: number[] = []
+            for (let i = 1; i < seritSayisi; i++) {
+              o.push(ROAD_X - medYari - seritGen * i, ROAD_X + medYari + seritGen * i)
+            }
+            return o
+          })()
       mkInst(new THREE.PlaneGeometry(0.08, 2.4), lam(0xe8e4d8), dashPerLane * dashOff.length, (m, i) => {
         const k = i % dashPerLane
         m.makeTranslation(dashOff[Math.floor(i / dashPerLane)], -107 + k * 5, 0.021)
@@ -589,7 +620,7 @@ export class World {
       }
     }
     // kenar çizgileri asfalt kenarına oturur (yol genişleyince onlar da kayar)
-    const edgeOff = (th.lane.service ? 6.0 : 4.6) / 2 - 0.14
+    const edgeOff = roadW / 2 - 0.14
     for (const off of isWater ? [] : [-edgeOff, edgeOff]) {
       const edgeLine = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 220), lam(0xe8e4d8))
       edgeLine.position.set(ROAD_X + off, 0, 0.02)
@@ -932,6 +963,12 @@ export class World {
   // ---- kayıt / etiket / uyarı ----
 
   private register(id: string, name: string, group: THREE.Object3D, labelZ: number) {
+    // karşı yakada kurulan tesis daha ilk karede doğru yöne baksın (pompa/şarj kendi
+    // flip'ini zaten hesaplıyor, onları ellemiyoruz)
+    if (!id.startsWith('pump-') && !id.startsWith('charger-')
+        && (group as THREE.Group).rotation.z === 0 && this.farFlip(group)) {
+      (group as THREE.Group).rotation.z = Math.PI
+    }
     const label = labelSprite(name)
     label.position.z = labelZ
     label.visible = false // isim sadece bina seçilince görünür
@@ -1992,9 +2029,19 @@ export class World {
   }
 
   /** yerleştirmede seçilen yöne döndür (90° adımlar) */
+  /** KARŞI YAKA DÖNÜŞÜ (#1019 "karşı dükkanlar ters duruyor"): tesisler yola göre
+   *  AYNALANIP konumlanıyor ama açıları dönmüyordu — vitrin/tente/kapı karşı istasyonun
+   *  içine değil, dışarı bakıyordu. Pompalarda bu düzeltme vardı (far → +PI), dükkanlarda
+   *  yoktu. Flip'i rotateBuilding'e gömüyoruz: oyuncu binayı döndürse de kaybolmuyor. */
+  private farFlip(g: THREE.Object3D) {
+    // marinada "yol karşısı" diye bir şey yok — ada tek parça; flip yalnız kara şubelerinde
+    if (this.theme.lane.kind === 'water') return 0
+    return g.position.x > ROAD_X ? Math.PI : 0
+  }
+
   rotateBuilding(id: string, rot: number) {
     const b = this.buildings.find(x => x.id === id)
-    if (b) (b.group as THREE.Group).rotation.z = rot * Math.PI / 2
+    if (b) (b.group as THREE.Group).rotation.z = rot * Math.PI / 2 + this.farFlip(b.group)
   }
 
   /** istasyon giriş/çıkış kapısı — oyuncu yerini belirler, trafik buna uyar */
@@ -2631,6 +2678,266 @@ export class World {
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.register(regId, t('SELF YIKAMA'), g, 3.4)
+  }
+
+  /** MARİNA TESİSLERİ — 7 oyuncu raporu: "yat klübü sahil rest açtım ama gözükmüyor",
+   *  "neredeyse bina yok", "marina daha hiç olmamış". Tesisler yalnızca bir listede
+   *  string olarak duruyordu; ₺220.000 ödenen yat kulübünün sahnede hiçbir izi yoktu.
+   *  Artık her tesisin kendi yapısı var: adanın batı bandında sabit yuvalar (parsel
+   *  yemez, mevcut yapı yerleşimiyle çakışmaz), tıklanınca ismi görünür. */
+  private static readonly MARINA_FAC_SLOTS: Record<string, [number, number]> = {
+    clubhouse: [-16.8, 13.5],
+    chandlery: [-17.2, 7.2],
+    shower:    [-17.2, 1.4],
+    icebait:   [-17.2, -4.2],
+    wasteoil:  [-17.2, -10.0],
+    travelift: [1.20, -20.20],
+    fueldock:  [3.40, -12.60],
+    pumpout:   [3.40, -16.60],
+    boom:      [7.40, 2.00],
+  }
+
+  buildMarinaFac(id: string, pos?: THREE.Vector2) {
+    const slot = World.MARINA_FAC_SLOTS[id]
+    if (!slot) return
+    const at = pos ?? new THREE.Vector2(slot[0], slot[1])
+    const g = new THREE.Group()
+    let ad = id, labelZ = 3.0
+
+    const tabela = (metin: string, renk: string, w: number, z: number) => {
+      const sg = canvasPanel(w, w * 0.28, Math.round(w * 150), Math.round(w * 42), (ctx, cw, ch) => {
+        ctx.fillStyle = renk; ctx.beginPath(); ctx.roundRect(0, 0, cw, ch, 16); ctx.fill()
+        ctx.fillStyle = '#fff'; ctx.font = `800 ${Math.round(ch * 0.58)}px -apple-system, sans-serif`
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+        ctx.fillText(metin, cw / 2, ch / 2 + 2)
+      })
+      sg.position.set(0, 0, z)
+      g.add(sg)
+    }
+
+    switch (id) {
+      case 'clubhouse': {                                  // yat kulübü / sahil restoranı
+        ad = t('YAT KULÜBÜ')
+        box(6.2, 5.0, 3.0, 0xf1e6d2, 0, 0, 1.5, g)         // ana kütle
+        box(6.6, 5.4, 0.26, 0x2f6b8f, 0, 0, 3.13, g)       // lacivert saçak
+        box(3.4, 3.0, 1.4, 0xf7f0e2, 0, 0, 3.95, g)        // üst kat / seyir salonu
+        box(3.6, 3.2, 0.2, 0x2f6b8f, 0, 0, 4.75, g)
+        box(0.06, 3.6, 1.3, 0x8ed0e8, 3.14, 0, 1.7, g)     // deniz manzara camı
+        // deniz tarafı teras + korkuluk
+        const teras = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5.0), lam(0xd7c39c))
+        teras.position.set(4.6, 0, 0.03); teras.receiveShadow = true; g.add(teras)
+        for (let i = 0; i < 7; i++) cyl(0.06, 0.75, 0xf5f1e6, 5.85, -2.3 + i * 0.77, 0.38, 'z', g)
+        cyl(0.09, 5.0, 0xf5f1e6, 5.85, 0, 0.74, 'y', g)
+        cyl(0.10, 4.6, 0xe8e2d2, -2.4, 2.0, 2.3, 'z', g)   // gönder
+        box(0.9, 0.04, 0.6, 0xd64545, -1.95, 2.0, 4.2, g)  // flama
+        tabela(t('YAT KULÜBÜ'), '#2f6b8f', 3.4, 5.35)
+        this.facadeLights(g, [[3.16, -1.2, 1.8], [3.16, 1.2, 1.8]], 1.0, 0.7)
+        labelZ = 6.0
+        break
+      }
+      case 'chandlery': {                                  // denizci malzemecisi
+        ad = t('MALZEMECİ')
+        box(4.0, 3.4, 2.4, 0xe3d9c6, 0, 0, 1.2, g)
+        box(4.3, 3.7, 0.22, 0x9c3b3b, 0, 0, 2.51, g)
+        box(0.06, 2.2, 1.1, 0x8ed0e8, 2.04, 0, 1.35, g)
+        for (let i = 0; i < 5; i++) box(0.55, 0.7, 0.06, i % 2 ? 0x9c3b3b : 0xf3efe4, 2.30, -1.4 + i * 0.7, 1.95, g)
+        cyl(0.16, 1.5, 0xb7bfc6, -1.5, -1.4, 0.75, 'z', g) // dışarıda halat makarası
+        cyl(0.42, 0.30, 0xd8b168, -1.5, -1.4, 1.55, 'z', g)
+        tabela(t('MALZEMECİ'), '#9c3b3b', 2.4, 2.95)
+        this.facadeLights(g, [[2.06, 0, 1.35]], 0.9, 0.6)
+        labelZ = 3.5
+        break
+      }
+      case 'shower': {                                     // duş & çamaşırhane
+        ad = t('DUŞ & ÇAMAŞIR')
+        box(3.6, 2.8, 2.3, 0xdfe6e8, 0, 0, 1.15, g)
+        box(3.9, 3.1, 0.2, 0x4f7f92, 0, 0, 2.4, g)
+        box(0.06, 0.8, 1.4, 0x6f7c84, 1.84, -0.8, 0.85, g) // kapı
+        box(0.06, 0.8, 1.4, 0x6f7c84, 1.84, 0.8, 0.85, g)
+        cyl(0.55, 1.1, 0xc9d2d6, -1.0, 0, 3.05, 'z', g)    // çatı su deposu
+        // buhar bacası
+        cyl(0.12, 0.7, 0x9aa4ab, 1.2, 1.0, 2.85, 'z', g)
+        tabela(t('DUŞ'), '#4f7f92', 2.0, 2.85)
+        this.facadeLights(g, [[1.86, -0.8, 1.0], [1.86, 0.8, 1.0]], 0.6, 0.45)
+        labelZ = 3.9
+        break
+      }
+      case 'icebait': {                                    // buz & yem satışı
+        ad = t('BUZ & YEM')
+        box(2.6, 2.2, 1.9, 0xeaf2f5, 0, 0, 0.95, g)
+        box(2.9, 2.5, 0.2, 0x3f8fb0, 0, 0, 2.0, g)
+        box(0.06, 1.3, 0.9, 0x8ed0e8, 1.34, 0, 1.15, g)    // vitrin
+        box(1.0, 0.9, 0.7, 0xcfe6ef, -1.5, 0.5, 0.35, g)   // dışarıdaki buz sandığı
+        tabela(t('BUZ & YEM'), '#3f8fb0', 1.8, 2.45)
+        this.facadeLights(g, [[1.36, 0, 1.15]], 0.7, 0.5)
+        labelZ = 3.0
+        break
+      }
+      case 'wasteoil': {                                   // atık yağ toplama
+        ad = t('ATIK YAĞ')
+        const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.6), lam(0x8b8577))
+        pad.position.z = 0.02; pad.receiveShadow = true; g.add(pad)
+        for (const [dx, dy] of [[-0.8, -0.6], [0.1, -0.6], [-0.8, 0.6], [0.1, 0.6]] as [number, number][])
+          cyl(0.36, 1.1, 0x3c6b3f, dx, dy, 0.55, 'z', g)   // varil dizisi
+        box(0.12, 2.6, 1.0, 0xb9b2a2, 1.5, 0, 0.5, g)      // sızıntı seti
+        tabela(t('ATIK YAĞ'), '#3c6b3f', 1.7, 1.75)
+        labelZ = 2.3
+        break
+      }
+      case 'travelift': {                                  // tekne asansörü (portal vinç)
+        ad = t('TRAVEL LIFT')
+        for (const dy of [-2.4, 2.4]) {
+          cyl(0.20, 4.6, 0xf0a93b, -1.6, dy, 2.3, 'z', g)  // ayaklar
+          cyl(0.20, 4.6, 0xf0a93b, 1.6, dy, 2.3, 'z', g)
+          box(0.30, 0.30, 0.30, 0x3c4046, -1.6, dy, 0.15, g)
+          box(0.30, 0.30, 0.30, 0x3c4046, 1.6, dy, 0.15, g)
+        }
+        cyl(0.22, 3.4, 0xf0a93b, -1.6, 0, 4.6, 'y', g)     // yan kirişler
+        cyl(0.22, 3.4, 0xf0a93b, 1.6, 0, 4.6, 'y', g)
+        cyl(0.22, 3.4, 0xf0a93b, 0, -2.4, 4.6, 'x', g)     // enine kirişler
+        cyl(0.22, 3.4, 0xf0a93b, 0, 2.4, 4.6, 'x', g)
+        for (const dy of [-1.1, 1.1]) {                    // askı kolanları
+          box(0.10, 0.36, 2.2, 0x2f3439, -1.6, dy, 3.4, g)
+          box(0.10, 0.36, 2.2, 0x2f3439, 1.6, dy, 3.4, g)
+          box(3.3, 0.36, 0.14, 0x2f3439, 0, dy, 2.35, g)
+        }
+        labelZ = 5.6
+        break
+      }
+      case 'fueldock': {                                   // yakıt iskelesi kulübesi
+        ad = t('YAKIT İSKELESİ')
+        box(2.4, 2.4, 2.2, 0xf1e6d2, 0, 0, 2.1 / 2 + 0.24, g)  // güverte üstünde
+        const guverte = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 5.2), lam(0xa8875c))
+        guverte.position.z = 0.24; guverte.receiveShadow = true; g.add(guverte)
+        box(2.7, 2.7, 0.2, 0xd64545, 0, 0, 2.44, g)
+        box(0.06, 1.4, 1.0, 0x8ed0e8, 1.24, 0, 1.44, g)
+        cyl(0.22, 1.3, 0xd64545, 0.6, -1.9, 0.89, 'z', g)  // yakıt tabancası standı
+        cyl(0.22, 1.3, 0x3f8fb0, -0.6, -1.9, 0.89, 'z', g)
+        tabela(t('YAKIT'), '#d64545', 1.7, 2.85)
+        this.facadeLights(g, [[1.26, 0, 1.44]], 0.7, 0.5)
+        labelZ = 3.4
+        break
+      }
+      case 'pumpout': {                                    // atık su tahliyesi
+        ad = t('ATIK SU TAHLİYESİ')
+        const guverte = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.0), lam(0xa8875c))
+        guverte.position.z = 0.24; guverte.receiveShadow = true; g.add(guverte)
+        cyl(0.55, 1.7, 0x4f8f6a, 0, 0, 1.10, 'z', g)       // tahliye ünitesi
+        box(1.0, 0.8, 0.5, 0xdfe6e8, 0, -1.0, 0.49, g)     // pompa kutusu
+        cyl(0.07, 1.6, 0x2f3439, 0.55, 0.6, 1.6, 'y', g)   // hortum kolu
+        tabela(t('ATIK SU'), '#4f8f6a', 1.5, 2.30)
+        labelZ = 2.9
+        break
+      }
+      case 'boom': {                                       // yakıt sızıntı bariyeri (suda)
+        ad = t('SIZINTI BARİYERİ')
+        for (let i = 0; i < 14; i++) {
+          const c = cyl(0.22, 1.15, i % 2 ? 0xf0a93b : 0xe8e2d2, 0, -7.5 + i * 1.15, 0.16, 'y', g)
+          c.castShadow = false
+        }
+        box(0.10, 16.2, 0.06, 0x3c4046, 0, 0, 0.30, g)     // üst halat
+        labelZ = 1.4
+        break
+      }
+    }
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register('mfac-' + id, ad, g, labelZ)
+  }
+
+  /** İSKELE BÜYÜMESİ — "iskeleler büyümüyor" (#1074): satın alınan bağlama yerleri
+   *  sahnede görünmüyordu. Her tür kendi görselini alır ve sayı arttıkça uzar. */
+  private berthGroup: THREE.Group | null = null
+  updateBerthVisual(berths: Record<string, number>) {
+    if (this.berthGroup) { this.scene.remove(this.berthGroup); this.berthGroup = null }
+    const g = new THREE.Group()
+    const lam2 = (c: number) => new THREE.MeshLambertMaterial({ color: c })
+    const n = (k: string) => Math.max(0, Math.round(berths[k] ?? 0))
+
+    // parmak iskeleler: ana pontonun (x 23.2) batı yakasına, boya göre üç uzunlukta
+    const parmak = (adet: number, uzunluk: number, y0: number, renk: number) => {
+      for (let i = 0; i < adet; i++) {
+        const y = y0 + i * 2.3
+        if (y > 21 || y < -21) break                       // dalgakıran/fener bandına taşma
+        const m = new THREE.Mesh(new THREE.BoxGeometry(uzunluk, 0.85, 0.24), lam2(renk))
+        m.position.set(22.55 - uzunluk / 2, y, 0.13); m.castShadow = true; g.add(m)
+        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.12, 0.42, 6), lam2(0x3c4046))
+        b.rotation.x = Math.PI / 2
+        b.position.set(22.55 - uzunluk, y, 0.34); g.add(b)
+      }
+    }
+    parmak(n('finger8'), 2.6, -18.0, 0xa8875c)
+    parmak(n('finger12'), 3.8, -6.5, 0x9b7f56)
+    parmak(n('finger18'), 5.2, 6.0, 0x8d6f49)
+
+    // şamandıralar: açık suda dizi
+    for (let i = 0; i < n('buoy'); i++) {
+      const y = -20 + (i % 18) * 2.4, x = 28.5 + Math.floor(i / 18) * 2.2
+      const s2 = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), lam2(0xe8e2d2))
+      s2.position.set(x, y, 0.24); g.add(s2)
+      const t2 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 6), lam2(0xd64545))
+      t2.rotation.x = Math.PI / 2; t2.position.set(x, y, 0.72); g.add(t2)
+    }
+    // karşı kıyı parkı: doğu kıyısında bağlama babaları dizisi
+    for (let i = 0; i < n('karsi'); i++) {
+      const y = -16 + (i % 16) * 2.1
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.7, 0.22), lam2(0xb0a48c))
+      m.position.set(-22.6, y, 0.13); g.add(m)
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.46, 6), lam2(0x3c4046))
+      b.rotation.x = Math.PI / 2; b.position.set(-23.1, y, 0.36); g.add(b)
+    }
+    // süperyat mevkisi: dalgakıranın iç yüzünde uzun, geniş rıhtım
+    for (let i = 0; i < n('mega'); i++) {
+      const y = -14 + (i % 5) * 7.5
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1.5, 6.6, 0.30), lam2(0x8d8577))
+      m.position.set(24.45, y, 0.16); m.castShadow = true; g.add(m)
+      for (let k = 0; k < 3; k++) {
+        const l = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.5, 6), lam2(0xe8e2d2))
+        l.rotation.x = Math.PI / 2; l.position.set(24.45, y - 2.4 + k * 2.4, 0.9); g.add(l)
+      }
+    }
+    if (g.children.length === 0) return
+    this.scene.add(g)
+    this.berthGroup = g
+  }
+
+  /** YOL KENARI OTELİ (#1011 "otel ekleyebilirsin") — tır parkının üst ligi: iki katlı
+   *  konaklama bloğu, giriş saçağı, ışıklı tabela. Gece pencereleri yanar. */
+  buildHotel(pos?: THREE.Vector2, regId = 'hotel') {
+    const at = pos ?? new THREE.Vector2(-14.5, -12.5)
+    const g = new THREE.Group()
+    box(6.4, 9.0, 5.2, 0xeee3cd, 0, 0, 2.6, g)              // ana blok (2 kat)
+    box(6.8, 9.4, 0.28, 0x9c3b3b, 0, 0, 5.34, g)            // saçak
+    box(6.6, 0.16, 0.20, 0xd8cdb4, 0, 0, 2.62, g)           // kat ayrım silmesi
+    // oda pencereleri: iki kat × dört oda, deniz/yol tarafına bakar
+    const isik: [number, number, number][] = []
+    for (let kat = 0; kat < 2; kat++) {
+      for (let i = 0; i < 4; i++) {
+        const py = -3.2 + i * 2.1, pz = 1.5 + kat * 2.5
+        box(0.06, 1.3, 1.0, 0x8ed0e8, 3.24, py, pz, g)
+        isik.push([3.26, py, pz])
+      }
+    }
+    // giriş: kanopi + iki direk + basamak
+    box(2.6, 3.0, 0.22, 0x9c3b3b, 4.5, 0, 3.0, g)
+    cyl(0.12, 3.0, 0xd8cdb4, 5.6, -1.3, 1.5, 'z', g)
+    cyl(0.12, 3.0, 0xd8cdb4, 5.6, 1.3, 1.5, 'z', g)
+    box(1.8, 2.6, 0.14, 0xcfc6b0, 4.6, 0, 0.07, g)
+    box(0.06, 1.8, 2.1, 0x6f5a3f, 3.24, 0, 1.05, g)         // giriş kapısı
+    // çatı üstü ışıklı tabela
+    const tab = canvasPanel(3.6, 0.86, 520, 124, (ctx, cw, ch) => {
+      ctx.fillStyle = '#9c3b3b'; ctx.beginPath(); ctx.roundRect(0, 0, cw, ch, 20); ctx.fill()
+      ctx.fillStyle = '#fff'; ctx.font = '800 62px -apple-system, sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText(t('OTEL'), cw / 2, ch / 2 + 2)
+    })
+    tab.position.set(0, 0, 6.1)
+    g.add(tab)
+    cyl(0.09, 0.9, 0xb7ae99, 0, 0, 5.65, 'z', g)            // tabela direği
+    this.facadeLights(g, isik, 0.9, 0.65)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    this.register(regId, t('OTEL'), g, 7.0)
   }
 
   buildParking(pos?: THREE.Vector2, regId = 'parking') {

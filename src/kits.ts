@@ -16,6 +16,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { LocId } from './state'
+import { asset } from './platform'
 
 /** Kit içeriği: ad → yüklenmiş model (yüklenemeyen null olur, sahne prosedürele düşer) */
 export type Kit = Record<string, THREE.Group | null>
@@ -106,7 +107,7 @@ export async function loadKit(loc: LocId, onProgress?: (done: number, total: num
     const entries = await Promise.all(spec.files.map(async name => {
       let model: THREE.Group | null = null
       try {
-        const g = await loader.loadAsync(`/kenney/${spec.dir}/${name}.glb`)
+        const g = await loader.loadAsync(asset(`/kenney/${spec.dir}/${name}.glb`))
         model = convert(g.scene as unknown as THREE.Group)
       } catch {
         model = null                            // tek model düşerse sahne yine kurulur
