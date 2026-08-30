@@ -14,12 +14,16 @@ import {
   dailyQuests, claimDailyQuests, careerGoals,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
+  // ŞUBE ÇİFTLEME: kopya şubeler (otoyol-2 vb.) — tema/sahne TABAN id'den, ekonomi
+  // türetilmiş temadan gelir (bkz. state.ts themeFor / BRANCH_COPIES).
+  ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor, SUPPLY_LINE_QUOTA,
 } from './state'
 import { loadModels, loadStatics, loadCharacters, fitCharacter } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
 import { isNativePlatform, isInstantGames, isLightMode, asset } from './platform'
 import { guardContextLoss } from './fbinstant'
-import { THEMES } from './themes'
+// NOT: tema artık doğrudan THEMES'ten değil state.themeFor()'dan okunur — kopya şubede
+// (Otoyol II) taban temadan TÜRETİLMİŞ, kısıtları değişmiş nesne dönmeli.
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
 import * as auth from './auth'
@@ -573,7 +577,11 @@ document.addEventListener('visibilitychange', () => {
 // Sahne, save YÜKLENMEDEN kurulduğu için aktif şube ipucu localStorage'dan okunur
 // (save otoriter kalır; uyuşmazlıkta aşağıda bir kez sessiz reload ile düzelir).
 const LOC_HINT_KEY = 'beneloil-loc'
-const locHint = (localStorage.getItem(LOC_HINT_KEY) as LocId | null) ?? 'kasaba'
+/** Kayıttaki gerçek şube id'si — KOPYA olabilir ('otoyol-2'). Save karşılaştırması bunu kullanır. */
+const locHintSave = (localStorage.getItem(LOC_HINT_KEY) as LocId | null) ?? 'kasaba'
+/** SAHNE/KİT id'si: kopya şube tabanıyla AYNI sahneyi kullanır (Otoyol II de bir otoyoldur).
+ *  Kopya id'si sahne katmanına asla sızmaz — world.ts bilinmeyen id'de kasabaya düşerdi. */
+const locHint = baseLoc(locHintSave)
 
 // Kenney modelleri (yüklenemezse prosedürele düşer) + AKTİF ŞUBENİN kiti.
 // Kit tembel: kasaba/çevre yolu oyuncusu tek bayt fazla indirmez (bkz. src/kits.ts).
@@ -585,6 +593,9 @@ const locHint = (localStorage.getItem(LOC_HINT_KEY) as LocId | null) ?? 'kasaba'
 const failSafe = <T,>(p: Promise<T | null>, ms = 20_000): Promise<T | null> =>
   Promise.race([p.catch(() => null), new Promise<null>(res => setTimeout(() => res(null), ms))])
 const [modelLib, staticLib, branchKit] = await Promise.all([
+  // ŞUBE ÇİFTLEME: kopya şube TABANIYLA AYNI sahneyi/kiti kullanır (Otoyol II de bir
+  // otoyoldur). Kit ve tema daima taban id'den okunur; kopya id'si sahne katmanına
+  // hiç sızmaz — yoksa world.ts bilinmeyen id'de kasaba sahnesine düşerdi.
   failSafe(loadModels()), failSafe(loadStatics()), failSafe(loadKit(locHint)),
 ])
 const world = new World(staticLib, locHint, branchKit)
@@ -715,9 +726,10 @@ function subeMenusunuCiz() {
   const m = document.getElementById('locmenu')
   const btn = document.getElementById('locbtn')
   if (!m || !btn) return
+  subeEtiketiniTazele() // kayıt sonrası ilk açılışta doğru şube adını yakalar
   const kasa = state.branchVaultTotal()
   m.innerHTML = state.unlockedLocs.map(id => {
-    const th = THEMES[id as LocId]
+    const th = themeFor(id)
     const aktif = id === state.activeLoc
     const kasaTutar = aktif ? 0 : Math.round(state.branchVault[id] ?? 0)
     const alt = aktif ? t('şu an buradasın')
@@ -727,7 +739,9 @@ function subeMenusunuCiz() {
       + `<svg class="ic"><use href="#i-map"/></svg>`
       + `<span class="lm-tx">${th?.name ?? id}<span class="lm-sub">${alt}</span></span></button>`
   }).join('')
-    + (state.unlockedLocs.length < 5
+    // ŞUBE ÇİFTLEME: tavan 5 değil ALL_LOCS (5 taban + 4 kopya) — "yeni şube aç" bağlantısı
+    // hepsi açılana kadar görünür kalır.
+    + (state.unlockedLocs.length < ALL_LOCS.length
       ? `<button data-qloc="__ofis"><svg class="ic"><use href="#i-office"/></svg>`
         + `<span class="lm-tx">${t('Yeni şube aç…')}<span class="lm-sub">${t('Ofis › Şubeler')}</span></span></button>`
       : '')
@@ -736,10 +750,22 @@ function subeMenusunuCiz() {
   m.style.top = `${r.bottom + 8}px`
   if (kasa > 0) { /* kasa rozeti ayrı gösterilmiyor; alt satırlar zaten yazıyor */ }
 }
-{ // HUD butonundaki şube adı
+/**
+ * HUD butonundaki şube adı.
+ *
+ * BUG (çiftlemeyle ortaya çıktı, aslında eskiden beri var): bu satır MODÜL YÜKLENİRKEN
+ * bir kez çalışıyordu — kayıt ise çok daha sonra uygulanıyor. Yani etiket her zaman
+ * varsayılan şubeyi ("Kasaba") yazıyordu. Tek şubeli oyuncuda göze batmıyordu; artık
+ * "Otoyol" ile "Otoyol II" aynı sahnede aynı görünüyor, oyuncunun HANGİ şubede olduğunu
+ * yalnızca bu etiketten anlaması gerekiyor. Bu yüzden fonksiyona alındı ve kayıt
+ * yüklendikten sonra + her şube menüsü açılışında tazeleniyor.
+ */
+function subeEtiketiniTazele() {
   const lbl = document.getElementById('loclabel')
-  if (lbl) lbl.textContent = THEMES[state.activeLoc]?.name ?? state.activeLoc
+  const ad = themeFor(state.activeLoc).name ?? state.activeLoc
+  if (lbl && lbl.textContent !== ad) lbl.textContent = ad
 }
+subeEtiketiniTazele()
 document.getElementById('locbtn')?.addEventListener('click', e => {
   e.stopPropagation()
   const m = document.getElementById('locmenu')
@@ -1064,7 +1090,15 @@ function openOfficePanel() {
   // 3z) ŞUBELER: aktif şube + açık şubeler arası geçiş + yeni şube açma (büyük SINK)
   const lel = document.getElementById('of-locations')
   if (lel) {
-    const order: LocId[] = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+    // ŞUBE ÇİFTLEME: her taban şubenin hemen ALTINDA kendi kopyası listelenir
+    // (Otoyol → Otoyol II). Kopya satırı YALNIZ tabanı açıkken görünür: kilitli
+    // tabanın altında ikinci bir kilit göstermek paneli gürültüye çevirirdi.
+    const order: LocId[] = ALL_LOCS
+      .filter(id => !isCopyLoc(id) || state.unlockedLocs.includes(baseLoc(id)))
+      .sort((a, b) => {
+        const ai = ALL_LOCS.indexOf(baseLoc(a)), bi = ALL_LOCS.indexOf(baseLoc(b))
+        return ai !== bi ? ai - bi : (isCopyLoc(a) ? 1 : 0) - (isCopyLoc(b) ? 1 : 0)
+      })
     const vaultTotal = state.branchVaultTotal()
     let head = ''
     // ---- MÜDÜR (Oğuz: "müdür tutmayı ofise koyalım") — bu şubenin müdürü buradan ----
@@ -1107,13 +1141,33 @@ function openOfficePanel() {
         + `<span class="pc">₺${tl(Math.round(vaultTotal))}</span>`
         + `<button class="btn sbuy good" id="of-collect-vaults">${t('Hepsini Topla')}</button></div>`
     }
+    // PAYLAŞILAN TEDARİK HATTI UYARISI: kopya ile tabanı aynı depodan çekiyor. Oyuncu
+    // kotayı GÖRMEDEN karar veremez — "neden kardeş şubem az kazandı?" sorusunun cevabı
+    // burada, gün içinde, sayıyla duruyor.
+    if (state.supplyLine()) {
+      const kalan = Math.round(state.supplyRemaining())
+      const dolu = Math.round(state.supplyFill() * 100)
+      const kardes = state.unlockedLocs.find(l => l !== state.activeLoc && baseLoc(l) === state.supplyLine())
+      head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><b>${t('Ortak tedarik hattı')}</b></span>`
+        + `<span class="pc${dolu >= 50 ? ' bad' : ''}">${t('{0}L / {1}L kaldı', tl(kalan), tl(SUPPLY_LINE_QUOTA))}</span>`
+        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">`
+        + t('{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}\'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota her gün dönüşünde tazelenir.',
+            themeFor(state.activeLoc).name, kardes ? themeFor(kardes).name : themeFor(state.supplyLine()!).name, String(dolu))
+        + `</div></div>`
+    }
     lel.innerHTML = head + order.map(id => {
-      const th = THEMES[id]
+      const th = themeFor(id)
       const open = state.unlockedLocs.includes(id)
       const active = state.activeLoc === id
+      // KOPYA ŞUBENİN KISIT ROZETİ: "ikinci nüsha aynısı değil" mesajı her satırda görünür
+      const kisit = isCopyLoc(id)
+        ? `<div style="flex:1 0 100%;font-size:11px;font-weight:700;color:var(--accent,#e8862e);margin-top:2px">⚑ ${BRANCH_COPIES[id].note}</div>`
+        : ''
       if (active) {
         // AKTİF ŞUBE: müdür burada zaten anlık çalışıyor, kasa biriktirmez
-        return row(`<svg class="ic" style="vertical-align:-3px"><use href="#i-map"/></svg> ${th.name}`, t('AKTİF'), 'good')
+        return `<div class="prow" style="flex-wrap:wrap"><span class="pl">`
+          + `<svg class="ic" style="vertical-align:-3px"><use href="#i-map"/></svg> ${th.name}</span>`
+          + `<span class="pc good">${t('AKTİF')}</span>${kisit}</div>`
       }
       if (open) {
         // PASİF ŞUBE: müdür var mı, günlük net ne, kasada ne birikti
@@ -1134,14 +1188,18 @@ function openOfficePanel() {
           + (vault > 0 ? `<button class="btn sbuy good" data-collectloc="${id}">${t('Topla ₺{0}', tl(vault))}</button>` : '')
           + `<button class="btn sbuy" data-goloc="${id}">${t('Şubeye Git')}</button>`
           + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${note}</div>`
+          + kisit
           + `</div>`
       }
       const c = state.canUnlockLoc(id)
-      const note = c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', c.stars) : `₺${tl(c.cash)}`
+      const note = c.reason === 'taban' ? t('Önce {0} şubesini aç', themeFor(baseLoc(id)).name)
+        : c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', c.stars)
+        : `₺${tl(c.cash)}`
       // D11 (analiz): "ne kadar kaldı" görünür hedef — kilitli şubede ilerleme çubuğu
       const pct = Math.min(100, Math.round((state.money / Math.max(1, c.cash)) * 100))
       // D13 (analiz): kilitli şubenin CANLI ÖNİZLEMESİ — merak yaratır ("marina vitrini")
-      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="${asset(`/gen/loc-${id}.jpg`)}?v=2" alt="" loading="lazy"`
+      // kopya şubenin ayrı görseli YOK — tabanının vitrinini kullanır (aynı sahne)
+      const thumb = `<div style="flex:1 0 100%;margin-top:6px"><img src="${asset(`/gen/loc-${baseLoc(id)}.jpg`)}?v=2" alt="" loading="lazy"`
         + `style="width:100%;max-height:110px;object-fit:cover;border-radius:8px;border:1.5px solid var(--edge);filter:saturate(.9)" `
         + `onerror="this.parentElement.style.display='none'"></div>`
       const prog = c.reason !== 'yildiz' && !c.ok
@@ -1151,7 +1209,7 @@ function openOfficePanel() {
       return `<div class="prow" style="flex-wrap:wrap"><span class="pl" style="color:var(--muted)">${th.name}</span>`
         + `<span class="pc">${note}</span>`
         + (c.ok ? `<button class="btn sbuy good" data-unlockloc="${id}">${t('Şube Aç')}</button>`
-                : `<button class="btn sbuy" disabled>${t('Kilitli')}</button>`) + prog + `</div>`
+                : `<button class="btn sbuy" disabled>${t('Kilitli')}</button>`) + kisit + prog + `</div>`
     }).join('')
   }
 
@@ -1426,7 +1484,9 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
   if (un) {
     const id = un.dataset.unlockloc as LocId
     if (!state.unlockLoc(id)) { ui.toast(t('Şube açma şartları sağlanmıyor.'), 'bad'); return }
-    ui.toast(t('{0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.', THEMES[id].name), 'good', true)
+    ui.toast(t('{0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.', themeFor(id).name), 'good', true)
+    // KOPYA ŞUBE: oyuncu "aynısını ikinci kez aldım" sanmasın — kısıtı AÇILIŞ ANINDA söyle.
+    if (isCopyLoc(id)) ui.toast(BRANCH_COPIES[id].note, '', true)
     audio.achieve(); openOfficePanel(); persist()
     return
   }
@@ -1455,7 +1515,7 @@ function subeyeGec(id: LocId, go?: HTMLButtonElement) {
   Object.assign(placedRot, next.placedRot)
   placedRects.push(...(next.placedRects as typeof placedRects))
   localStorage.setItem(LOC_HINT_KEY, id) // reload'da sahne doğru temayla kurulsun
-  ui.toast(t('{0} şubesine geçildi — sahne yükleniyor…', THEMES[id].name), 'good', true)
+  ui.toast(t('{0} şubesine geçildi — sahne yükleniyor…', themeFor(id).name), 'good', true)
   if (state.giftToast) { ui.toast(state.giftToast, 'good', true); state.giftToast = null } // D12 hediyesi
   lastRemotePush = 0 // throttle'ı atla: şube değişimi reload'dan ÖNCE buluta yazılmalı
   persist()
@@ -1478,10 +1538,19 @@ function subeyeGec(id: LocId, go?: HTMLButtonElement) {
   // önbellekten okur, oyuncu boş/prosedürel sahne görmez. İndirme başarısız olsa da
   // reload yine yapılır (sahne prosedürele düşer, oyun durmaz).
   const goReload = () => { pushCapped.finally(() => location.reload()) }
+  // ŞUBE ÇİFTLEME: kopya şube TABANININ kitini kullanır (Otoyol II = otoyol modelleri).
+  // Kit önbelleği taban id'de tutulduğu için kopya için İKİNCİ bir indirme YOKTUR;
+  // mobil veri/ısınma maliyeti artmaz. İki dal ayrı duruyor çünkü kitNeeded/kitSize
+  // yalnız taban id'lerini tanır (kits.ts MANIFEST taban anahtarlı).
+  const kitId = baseLoc(id)
   if (kitNeeded(id) && !kitReady(id)) {
-    ui.toast(t('{0} sahnesi indiriliyor ({1} model)…', THEMES[id].name, String(kitSize(id))), '')
+    ui.toast(t('{0} sahnesi indiriliyor ({1} model)…', themeFor(id).name, String(kitSize(id))), '')
     loadKit(id).catch(() => null).then(goReload)
     setTimeout(goReload, 12000) // ağ takılırsa oyuncuyu bekletme
+  } else if (kitNeeded(kitId) && !kitReady(kitId)) {
+    ui.toast(t('{0} sahnesi indiriliyor ({1} model)…', themeFor(id).name, String(kitSize(kitId))), '')
+    loadKit(kitId).catch(() => null).then(goReload)
+    setTimeout(goReload, 12000)
   } else setTimeout(goReload, 1600) // sahne temadan yeniden kurulsun
 }
 
@@ -3385,6 +3454,7 @@ function maybeShowDevirModal() {
 /** kayıttan gelen state'e göre sahneyi yeniden kurar */
 function rebuildFromState() {
   golgeTazele()
+  subeEtiketiniTazele() // kayıt uygulandı → HUD artık GERÇEK şubeyi yazar (bkz. fonksiyon notu)
   const validParcel = (c: number, r: number) => Number.isInteger(c) && Number.isInteger(r) && c >= 0 && c < PARCEL_COLS.length && r >= 0 && r < PARCEL_ROWS.length
   for (const key of state.ownedParcels) {
     const [c, r] = key.split(',').map(Number)
@@ -4409,7 +4479,9 @@ if (!isFullMode && !isPromoMode && auth.needsVerify()) {
   await new Promise(() => {}) // doğrulanana dek motor durur
 }
 // Şube ipucu ile bulut kaydı uyuşmuyorsa (başka cihazda şube değişmiş) bir kez düzelt
-if (saveLoaded && state.activeLoc !== locHint && !sessionStorage.getItem('beneloil-loc-fixed')) {
+// ŞUBE ÇİFTLEME: karşılaştırma HAM ipucuyla yapılır (locHintSave). locHint sahne id'si
+// olduğu için 'otoyol-2' ↔ 'otoyol' her boot'ta "uyuşmazlık" sayılıp gereksiz reload atardı.
+if (saveLoaded && state.activeLoc !== locHintSave && !sessionStorage.getItem('beneloil-loc-fixed')) {
   sessionStorage.setItem('beneloil-loc-fixed', '1') // yalnız BİR kez → sonsuz reload döngüsü yok
   localStorage.setItem(LOC_HINT_KEY, state.activeLoc)
   location.reload()
@@ -4417,7 +4489,7 @@ if (saveLoaded && state.activeLoc !== locHint && !sessionStorage.getItem('benelo
 // Tutarlı boot → tek-seferlik sigorta sıfırlanır. Eski hali sekme ömrü boyunca kilitli
 // kalıyordu: ilk uyuşmazlıktan sonra düzeltici bir daha ASLA çalışmıyordu (şube
 // değiştirme raporlarının ikinci ayağı).
-if (saveLoaded && state.activeLoc === locHint) sessionStorage.removeItem('beneloil-loc-fixed')
+if (saveLoaded && state.activeLoc === locHintSave) sessionStorage.removeItem('beneloil-loc-fixed')
 if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)
 // C9 (analiz): eski şube-kasası bakiyesi varsa haber ver (ilk gün dönüşünde otomatik devredilir)
@@ -5925,6 +5997,13 @@ function frame() {
       const added = vaults.reduce((a, v) => a + v.added, 0)
       if (added > 0) {
         ui.toast(t('Şube müdürlerinden kasaya +₺{0}', added.toLocaleString('tr-TR')), 'good')
+      }
+      // PAYLAŞILAN HAT SONUCU: kardeş şube yakıtsız kaldıysa oyuncu SEBEBİNİ görmeli —
+      // yoksa "şubem neden az kazandı?" sessiz bir hayal kırıklığına dönüşür.
+      const ac = vaults.filter(v => v.starved)
+      if (ac.length) {
+        ui.toast(t('{0}: ortak tedarik hattını dün sen tükettin — şube yakıtsız kaldı, günlük neti düştü.',
+          ac.map(v => themeFor(v.loc).name).join(', ')), 'bad', true)
       }
     }
     // İTİBAR MUTABAKATI (#456): itibar günün hizmet kalitesine çekilir — 5.0'da donmaz

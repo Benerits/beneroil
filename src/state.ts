@@ -13,7 +13,174 @@ export type FuelType = 'benzin' | 'dizel' | 'lpg'
 
 export const FUELS: FuelType[] = ['benzin', 'dizel', 'lpg']
 export const FUEL_PRICE: Record<FuelType, number> = { benzin: 10, dizel: 9, lpg: 6 }
-export type LocId = 'kasaba' | 'cevreyolu' | 'otoyol' | 'marina' | 'metropol'
+/** Taban şubeler — her birinin themes.ts'te KENDİ tema nesnesi var (sahne + ekonomi). */
+export const BASE_LOCS = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol'] as const
+export type BaseLocId = typeof BASE_LOCS[number]
+
+/**
+ * ŞUBE ÇİFTLEME — aynı türden İKİNCİ şube (oyuncu talebi).
+ *
+ * NEDEN "-2" SONEKİ: kayıt uyumu. `unlockedLocs` bir string dizisi, `locSnapshots`
+ * anahtarlı bir nesne. Yeni id'ler yalnızca EKLENİYOR; eski kayıtta bu id'ler hiç
+ * geçmediği için eski save birebir aynı davranır. Eski istemci bilmediği id'yi
+ * kendi VALID süzgecinden düşürür (çökme yok, kasaba/taban listede kalır).
+ *
+ * NEDEN KOPYALA-YAPIŞTIR DEĞİL (oyun sahibinin kuralı): "aynı içeriği ikinci kez
+ * oynatır, 2-3 saat ekler, sonra aynı duvar". Bu yüzden her kopyanın KENDİ KISITI
+ * var (bkz. BRANCH_COPIES) ve grind uzatmak yerine YENİ BİR KARAR getiriyor
+ * (paylaşılan tedarik hattı — bkz. supplyLine).
+ */
+export const COPY_LOCS = ['cevreyolu-2', 'otoyol-2', 'marina-2', 'metropol-2'] as const
+export type CopyLocId = typeof COPY_LOCS[number]
+
+export type LocId = BaseLocId | CopyLocId
+/** Panel/süzgeç sırası: önce tabanlar, sonra kopyaları */
+export const ALL_LOCS: LocId[] = [...BASE_LOCS, ...COPY_LOCS]
+
+/** Kopya id'sini tabanına indirir ('otoyol-2' → 'otoyol'). Bilinmeyen id GÜVENLİ
+ *  varsayılana (kasaba) düşer — kurcalanmış/ileri sürüm kaydı oyunu çökertmesin. */
+export function baseLoc(id: string): BaseLocId {
+  const b = String(id ?? '').replace(/-\d+$/, '')
+  return (BASE_LOCS as readonly string[]).includes(b) ? b as BaseLocId : 'kasaba'
+}
+export function isCopyLoc(id: string): id is CopyLocId {
+  return (COPY_LOCS as readonly string[]).includes(String(id))
+}
+
+/**
+ * KOPYA ŞUBENİN KISIT SETİ.
+ *
+ * themes.ts'e DOKUNULMUYOR (sahne katmanının sözleşmesi orada): kopya teması taban
+ * temadan TÜRETİLİYOR ve `id` alanı TABAN kalıyor, çünkü world.ts `th.id`'ye bakıp
+ * zemin/siluet kuruyor — 'metropol-2' görseydi kasaba sahnesine düşerdi.
+ *
+ * Üç eksende ayrışma zorunlu (yoksa kopya sadece "aynı duvarın tekrarı" olur):
+ *   1) BEDEL   — costMult/starsAdd: kopya tabanından belirgin pahalı
+ *   2) KISIT   — opexMult/trafficMult/econ/features: farklı problem, farklı kaldıraç
+ *   3) KARAR   — tabanla ORTAK tedarik hattı (aşağıda): biri stoklarsa diğeri aç kalır
+ */
+export interface BranchCopySpec {
+  /** arayüzde görünen ad (taban adından FARKLI olmak zorunda) */
+  name: string
+  /** taban açılış bedelinin çarpanı */
+  costMult: number
+  /** taban yıldız şartının üstüne eklenen marka yıldızı */
+  starsAdd: number
+  /** günlük işletme gideri (kira) çarpanı — 1 = tabanla aynı */
+  opexMult: number
+  /** taban çekiciliğin (entryBase) çarpanı — <1 daha az trafik, >1 daha çok */
+  trafficMult: number
+  /** ekonomik kaldıraç farkları (esneklik/bahşiş/yovmiye) */
+  econ?: Partial<LocationTheme['econ']>
+  /** kopyaya özgü tema özellikleri (arsa kıtlığı, tank limiti, rampa kapasitesi) */
+  land?: { maxParcels: number; priceMult: number }
+  tankCapMult?: number
+  maxTanksPerFuel?: number
+  rampCap?: number
+  /** rakip istasyon bu güçle DOĞAR (taban 0.3) — "aynı çıkışı paylaşıyorsun" */
+  rivalStrength?: number
+  /** kısa gerekçe — arayüzde oyuncuya gösterilir ("neyi farklı alıyorum") */
+  note: string
+}
+
+export const BRANCH_COPIES: Record<CopyLocId, BranchCopySpec> = {
+  // ÇEVRE YOLU II — SANAYİ KAVŞAĞI: az araç geçer ama geçen araç fiyat sormaz.
+  // Karar tersine döner: burada müşteri avlamak değil MARJ korumak kazandırır.
+  'cevreyolu-2': {
+    name: t('Çevre Yolu II · Sanayi Kavşağı'),
+    costMult: 3.2, starsAdd: 3, opexMult: 1,
+    trafficMult: 0.70,                                    // 0.33 → 0.231 taban çekicilik
+    econ: { priceElasticity: 0.80, tipRate: 0.17 },       // 1.35 → 0.80: zam müşteri kaçırmıyor
+    note: t('Taban trafiği düşük ama fiyata duyarsız: az müşteri, yüksek marj.'),
+  },
+  // OTOYOL II — RAKİP ÇIKIŞI: aynı otoyol çıkışında zaten bir zincir var.
+  // Rakip ZAYIF doğmaz, GÜÇLÜ doğar; şerit de paylaşıldığı için apron daha kısa.
+  'otoyol-2': {
+    name: t('Otoyol II · Rakip Çıkışı'),
+    costMult: 3.2, starsAdd: 3, opexMult: 1.25,           // çıkış payı/geçiş bedeli
+    trafficMult: 0.85,                                    // çıkışı rakiple bölüşüyorsun
+    rampCap: 2,                                           // taban 3 → 2 araç
+    rivalStrength: 0.62,                                  // taban 0.30 → kavga ilk günden
+    note: t('Rakip zincir AYNI çıkışta ve güçlü başlıyor; yavaşlama şeridi de daha kısa.'),
+  },
+  // MARİNA II — DIŞ LİMAN: daha çok tekne geçer ama liman idaresi kirası ağır,
+  // kadro daha pahalı ve rıhtım DAR (tank kapasitesi tabanın altında).
+  'marina-2': {
+    name: t('Marina II · Dış Liman'),
+    costMult: 3.2, starsAdd: 3, opexMult: 1.8,            // liman idaresi kirası
+    trafficMult: 1.25,                                    // 0.09 → 0.1125
+    econ: { wageMult: 2.2 },                              // taban 1.6 → yetkin kadro pahalı
+    tankCapMult: 2, maxTanksPerFuel: 6,                   // taban 3 / 8 → dar rıhtım
+    note: t('Daha çok tekne ama ağır liman kirası, pahalı kadro ve DAR rıhtım (az tank).'),
+  },
+  // METROPOL II — MERKEZ: en yoğun akış, en ağır kira. Arsa hem daha pahalı hem daha az;
+  // "her şeyi kur" imkânsız, "neyi kurmayacağım" kararı zorunlu.
+  'metropol-2': {
+    name: t('Metropol II · Merkez'),
+    costMult: 3.2, starsAdd: 3, opexMult: 2.4,            // merkez kirası — en sert OPEX
+    trafficMult: 1.10,                                    // 0.37 → 0.407
+    land: { maxParcels: 12, priceMult: 4.6 },             // taban 18 / ×3.2
+    note: t('Şehrin en yoğun akışı ama kira ağır, arsa hem pahalı hem sayılı.'),
+  },
+}
+
+/** Türetilmiş kopya temaları — bir kez üretilip saklanır (her karede nesne kurulmasın). */
+const COPY_THEME_CACHE = new Map<string, LocationTheme>()
+
+/**
+ * Bir şubenin teması. Taban şubede themes.ts'teki nesnenin AYNISI döner (denge birebir).
+ * Kopyada taban temadan türetilmiş, kısıtları değiştirilmiş bir nesne döner —
+ * `id` TABAN kalır (sahne/kit katmanı onu okuyor), `name` ayrışır (arayüz).
+ */
+export function themeFor(id: string): LocationTheme {
+  const base = THEMES[baseLoc(id)] ?? THEMES.kasaba
+  if (!isCopyLoc(id)) return base
+  const hit = COPY_THEME_CACHE.get(id)
+  if (hit) return hit
+  const sp = BRANCH_COPIES[id]
+  const feats: NonNullable<LocationTheme['features']> = { ...(base.features ?? {}) }
+  if (sp.land) feats.land = sp.land
+  if (sp.tankCapMult !== undefined) feats.tankCapMult = sp.tankCapMult
+  if (sp.maxTanksPerFuel !== undefined) feats.maxTanksPerFuel = sp.maxTanksPerFuel
+  if (sp.rampCap !== undefined && base.features?.highway) {
+    feats.highway = { ...base.features.highway, rampCap: sp.rampCap }
+  }
+  const th: LocationTheme = {
+    ...base,
+    name: sp.name,
+    econ: {
+      ...base.econ,
+      ...sp.econ,
+      // yuvarlama: kayan nokta artığı testlerde/panelde çirkin sayı üretmesin
+      entryBase: Math.round(base.econ.entryBase * sp.trafficMult * 10_000) / 10_000,
+    },
+    unlock: {
+      cash: Math.round(base.unlock.cash * sp.costMult / 10_000) * 10_000,
+      stars: base.unlock.stars + sp.starsAdd,
+    },
+    features: feats,
+  }
+  COPY_THEME_CACHE.set(id, th)
+  return th
+}
+
+/**
+ * PAYLAŞILAN TEDARİK HATTI — kopyanın getirdiği YENİ KARAR.
+ *
+ * Oyun sahibi: "grind uzatmak retention değil churn üretir — tycoon'da doğru cevap
+ * her zaman daha fazla bekleme değil, DAHA FAZLA KARAR."
+ *
+ * Kopya şube ile tabanı AYNI dağıtımcının aynı bölge deposundan çeker. Depo günlük
+ * bir kota ayırır: aktif şubede tankları fullersen kardeş şube o gün yakıtsız kalır
+ * ve müdürünün getirdiği net düşer. Yani her sipariş artık "hangi şubeye?" sorusudur.
+ *
+ * KRİTİK: kota YALNIZ hem taban hem kopya AÇIKKEN devreye girer. Tek şubeli ya da
+ * kopyası olmayan oyuncuda supplyLine() null döner ve hiçbir formül değişmez —
+ * eski kayıtlar ve mevcut denge birebir korunur.
+ */
+export const SUPPLY_LINE_QUOTA = 9_000
+/** Hat tamamen tükendiğinde kardeş şubenin gününden silinen pay (kalan %40) */
+export const SUPPLY_STARVE_MAX = 0.6
 
 /** Şubeye AİT (lokasyon-bazlı) alanlar. Bunun dışındaki her şey şirket seviyesidir:
  *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
@@ -979,17 +1146,25 @@ export class GameState {
    *  şube açmak; bedeli bileşik artan yapmak yıldız farmını parayla frenler.
    *  Taban bedeller temada, çarpan tek yerde — yeni tema eklenince otomatik uygulanır. */
   branchUnlockCost(id: LocId): number {
-    const base = THEMES[id]?.unlock.cash ?? 0
+    // ARTAN BEDEL EKSENİ: taban bedel temadan (kopyada ×costMult ile zaten şişirilmiş),
+    // üstüne açık şube başına BRANCH_COST_STEP. Kopya hem tabanından hem de zincirin
+    // büyüklüğünden pahalanır — "ikinciyi ucuza al" kaçamağı yok.
+    const base = (ALL_LOCS.includes(id) ? themeFor(id).unlock.cash : 0)
     if (base <= 0) return 0
     const owned = Math.max(1, this.unlockedLocs.length)
     return Math.round(base * Math.pow(BRANCH_COST_STEP, owned - 1) / 10_000) * 10_000
   }
   /** Şube açma bedeli/şartı temadan gelir (artan nakit + marka yıldızı) */
   canUnlockLoc(id: LocId): { ok: boolean; cash: number; stars: number; reason: string } {
-    const th = THEMES[id]
-    if (!th) return { ok: false, cash: 0, stars: 0, reason: 'yok' }
+    if (!ALL_LOCS.includes(id)) return { ok: false, cash: 0, stars: 0, reason: 'yok' }
+    const th = themeFor(id)
     const cash = this.branchUnlockCost(id)
     if (this.unlockedLocs.includes(id)) return { ok: false, cash, stars: th.unlock.stars, reason: 'acik' }
+    // KOPYA ŞART: önce TABAN şube. Oyuncu marinayı hiç görmeden "Marina II" açamaz —
+    // ikinci nüsha bir GENİŞLEME kararıdır, atlama kısayolu değil.
+    if (isCopyLoc(id) && !this.unlockedLocs.includes(baseLoc(id))) {
+      return { ok: false, cash, stars: th.unlock.stars, reason: 'taban' }
+    }
     if (this.brandStars < th.unlock.stars) return { ok: false, cash, stars: th.unlock.stars, reason: 'yildiz' }
     if (this.money < cash) return { ok: false, cash, stars: th.unlock.stars, reason: 'para' }
     return { ok: true, cash, stars: th.unlock.stars, reason: '' }
@@ -1002,8 +1177,39 @@ export class GameState {
     this.unlockedLocs.push(id)
     return true
   }
-  /** Aktif şubenin teması — ekonomik kısıtlar buradan okunur */
-  theme(): LocationTheme { return THEMES[this.activeLoc] ?? THEMES.kasaba }
+  /** Aktif şubenin teması — ekonomik kısıtlar buradan okunur.
+   *  Kopya şubede taban temadan TÜRETİLMİŞ (kısıtları değişmiş) nesne döner. */
+  theme(): LocationTheme { return themeFor(this.activeLoc) }
+  /** Bu şubenin kira/işletme gideri çarpanı — kopyalarda >1 (ikinci metropol pahalı) */
+  branchOpexMult(loc: LocId = this.activeLoc): number {
+    return isCopyLoc(loc) ? BRANCH_COPIES[loc].opexMult : 1
+  }
+
+  // ---- PAYLAŞILAN TEDARİK HATTI (kopya şubenin getirdiği YENİ KARAR) ----
+  /** Hat bazında BUGÜN çekilen litre (ADDITIVE save alanı; gün dönüşünde sıfırlanır) */
+  supplyUsed: Partial<Record<BaseLocId, number>> = {}
+  /**
+   * Bu şube paylaşılan bir tedarik hattında mı — hattın kimliği (taban şube id'si).
+   * Yalnız hem taban HEM kopya açıkken hat vardır; aksi hâlde null (eski davranış birebir).
+   */
+  supplyLine(loc: LocId = this.activeLoc): BaseLocId | null {
+    const b = baseLoc(loc)
+    const copy = `${b}-2`
+    if (!isCopyLoc(copy)) return null                       // kasabanın kopyası yok
+    return this.unlockedLocs.includes(b) && this.unlockedLocs.includes(copy) ? b : null
+  }
+  /** Hattan bugün kalan litre. Hat yoksa Infinity (sipariş hiç sınırlanmaz). */
+  supplyRemaining(loc: LocId = this.activeLoc): number {
+    const line = this.supplyLine(loc)
+    if (!line) return Infinity
+    return Math.max(0, SUPPLY_LINE_QUOTA - (this.supplyUsed[line] ?? 0))
+  }
+  /** Hattın bugün ne kadarı tüketildi (0..1) — arayüzde uyarı çubuğu */
+  supplyFill(loc: LocId = this.activeLoc): number {
+    const line = this.supplyLine(loc)
+    if (!line) return 0
+    return Math.max(0, Math.min(1, (this.supplyUsed[line] ?? 0) / SUPPLY_LINE_QUOTA))
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // ŞUBE MÜDÜRÜ — PASİF ŞUBE İŞLETMESİ
@@ -1082,8 +1288,10 @@ export class GameState {
     }
     if (Array.isArray(f['marinaFacs'])) gross += (f['marinaFacs'] as string[]).length * 800
 
-    // şubenin kendi teması: otoyol hacimli, kasaba küçük (temanın entryBase'i ölçek verir)
-    const th = THEMES[loc]
+    // şubenin kendi teması: otoyol hacimli, kasaba küçük (temanın entryBase'i ölçek verir).
+    // Kopya şubede türetilmiş tema gelir → trafik farkı pasif gelire de OTOMATİK yansır
+    // (Çevre Yolu II az kazandırır, Metropol II çok — ama kirası da ağır, aşağıda).
+    const th = themeFor(loc)
     const themeMult = th ? th.econ.entryBase / THEMES.kasaba.econ.entryBase : 1
     gross = Math.round(gross * themeMult * GameState.BRANCH_MANAGER_EFF[level] * this.prestigeMult())
     // Yovmiye: müdürün kendi maaşı + o şubede otomatiğe bağlı pompacı/şarjcı kadrosu.
@@ -1092,7 +1300,12 @@ export class GameState {
     const crew = (sn?.autoPumps?.length ?? 0) * POMPACI_WAGE + (sn?.autoChargers?.length ?? 0) * EV_ATTENDANT_WAGE
     // pasif şube yovmiyesi de tema çarpanına tabi (marina kadrosu pahalı)
     const wm = th?.econ.wageMult ?? 1
-    const wage = Math.round((MANAGER_WAGES[level] + Math.round(crew * staffMul)) * wm)
+    // KİRA (kopya şubenin kısıtı): ikinci metropolün merkez kirası, ikinci marinanın
+    // liman idaresi bedeli pasif gelirden de KESİLİR — yoksa kopya "bedava para basan
+    // ikinci nüsha" olurdu. dailyOpex ile AYNI formül (amortisman oranı × kira farkı),
+    // böylece aktif ve pasif işletme arasında tutarsızlık doğmaz.
+    const kira = Math.round(0.002 * Math.max(0, Number(sn?.equipVal) || 0) * (this.branchOpexMult(loc) - 1))
+    const wage = Math.round((MANAGER_WAGES[level] + Math.round(crew * staffMul)) * wm) + kira
     return { gross, wage, net: Math.max(0, gross - wage), level }
   }
 
@@ -1110,17 +1323,28 @@ export class GameState {
    * Aktif şube DAHİL DEĞİL (orada gelir anlık işliyor; iki kez sayılırsa anti-cheat 409).
    * Sunucu uyumu: günlük net, kovanın şube terimi (maxIncomeRate) içinde zaten hesaplı.
    */
-  accrueBranchVaults(): { loc: LocId; added: number; full: boolean }[] {
-    const out: { loc: LocId; added: number; full: boolean }[] = []
+  accrueBranchVaults(): { loc: LocId; added: number; full: boolean; starved: boolean }[] {
+    const out: { loc: LocId; added: number; full: boolean; starved: boolean }[] = []
     for (const loc of this.unlockedLocs) {
       if (loc === this.activeLoc) continue
       const d = this.branchNetPerDay(loc)
       if (d.level <= 0 || d.net <= 0) continue
-      const added = Math.round(d.net)
+      // PAYLAŞILAN TEDARİK HATTI: aktif şubede çekilen her litre kardeşinden düşer.
+      // Hattın tamamını bugün sen kullandıysan kardeş şube AÇ KALIR ve gününün
+      // SUPPLY_STARVE_MAX kadarını kaybeder. Hat yoksa (tek nüsha) çarpan 1 → hiçbir
+      // eski oyuncu bundan etkilenmez.
+      const line = this.supplyLine(loc)
+      const kullanim = line ? Math.min(1, (this.supplyUsed[line] ?? 0) / SUPPLY_LINE_QUOTA) : 0
+      const factor = 1 - SUPPLY_STARVE_MAX * kullanim
+      const added = Math.round(d.net * factor)
+      if (added <= 0) continue
       this.money += added
       this.stats.revenue += added
-      out.push({ loc, added, full: false })
+      out.push({ loc, added, full: false, starved: kullanim >= 0.5 })
     }
+    // Gün bitti: depo kotası tazelenir. Ertesi gün oyuncu kararı YENİDEN verir —
+    // mekanik bir bekleme duvarı değil, tekrar eden bir tercih olsun diye.
+    this.supplyUsed = {}
     return out
   }
 
@@ -1549,8 +1773,12 @@ export class GameState {
     // otel odaları her gün toplanıyor/temizleniyor: pasif gelirin sabit karşı gideri
     const ramp = Math.min(1, Math.max(0, (this.day - this.opexStart) / 10))
     const otel = this.hasHotel ? HOTEL_OPEX : 0
-    if (ramp <= 0) return otel
-    return Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp) + this.insuranceDaily() + otel
+    // KİRA ÇARPANI (kopya şube kısıtı): ikinci metropolde merkez kirası ×2.4, ikinci
+    // marinada liman idaresi ×1.8. Taban şubelerde 1 → mevcut denge BİREBİR korunur.
+    const kira = this.branchOpexMult()
+    if (ramp <= 0) return Math.round(otel * kira)
+    return Math.round((Math.round(0.002 * (this.equipmentValue() + this.landValue()) * ramp)
+      + this.insuranceDaily() + otel) * kira)
   }
   /** kurulu ekipman+tesis alış değeri (sunucu buildingValue ile aynı felsefe, istemce tablolarından) */
   equipmentValue(): number {
@@ -1615,7 +1843,10 @@ export class GameState {
   orderNeed(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     const affordable = Math.max(0, Math.floor(this.money / (this.buyPrice(f) * disc * this.supplierMult())) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
-    return Math.floor(Math.max(0, Math.min(this.orderQty[f] * ORDER_STEP, this.fuelCapacity(f) - this.tanks[f], affordable)))
+    // PAYLAŞILAN HAT: dağıtımcının bu bölgeye ayırdığı günlük kotadan fazlası verilmez.
+    // Hat yoksa Infinity döner → Math.min üzerinde hiçbir etkisi olmaz (eski davranış).
+    return Math.floor(Math.max(0, Math.min(this.orderQty[f] * ORDER_STEP, this.fuelCapacity(f) - this.tanks[f],
+      affordable, this.supplyRemaining())))
   }
   /** seçili tedarikçinin litre çarpanı (#1067) */
   supplierMult() { return SUPPLIERS[this.supplier]?.priceMult ?? 1 }
@@ -1643,6 +1874,11 @@ export class GameState {
     this.orders[f].pending = true
     this.orders[f].eta = Math.round(ORDER_ETA * (SUPPLIERS[this.supplier]?.etaMult ?? 1))
     this.orders[f].amount = need // teslimatta bu kadar eklenecek (parti miktarı)
+    // ORTAK HAT DEFTERİ: çekilen litre hattın günlük kotasından düşer. Gün dönüşünde
+    // (accrueBranchVaults) kardeş şubenin geliri bu kullanıma göre kırpılır — "iki şube
+    // aynı depodan çekiyor" kararı burada gerçek bir bedele dönüşüyor.
+    const line = this.supplyLine()
+    if (line) this.supplyUsed[line] = Math.min(SUPPLY_LINE_QUOTA, (this.supplyUsed[line] ?? 0) + need)
     return true
   }
 
@@ -1712,7 +1948,8 @@ export class GameState {
   rivalAllowed(): boolean {
     return this.activeLoc !== 'kasaba' && this.unlockedLocs.length >= 2
   }
-  rivalKind() { return rivalKindFor(this.activeLoc) }
+  /** Rakibin kişiliği TABAN şubeden gelir: Otoyol II'de de kurumsal zincir karşındadır. */
+  rivalKind() { return rivalKindFor(baseLoc(this.activeLoc)) }
   /** rakibin etkisi ne kadar devrede (0..1) — arayüzde "yerleşiyor" göstergesi */
   rivalRamp() { return this.rival ? rivalRamp(this.rival, this.day) : 0 }
   rivalName() { return RIVAL_NAME[this.rivalKind()] }
@@ -1745,8 +1982,15 @@ export class GameState {
     if (!this.rival) {
       // koşullar oluştuysa rakip SAHNEYE ÇIKAR (bir kez)
       if (this.rivalAllowed()) {
-        this.rival = freshRival(this.avgPrice(), this.day)
-        return t('Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.', this.rivalName())
+        const r = freshRival(this.avgPrice(), this.day)
+        // KOPYA KISITI: ikinci otoyol RAKİP ÇIKIŞINA kuruluyor — orada zaten yerleşik bir
+        // zincir var. Rakip zayıf DOĞMAZ; oyuncu ilk günden pazar payı savaşına girer.
+        const sp = isCopyLoc(this.activeLoc) ? BRANCH_COPIES[this.activeLoc] : null
+        if (sp?.rivalStrength) r.strength = sp.rivalStrength
+        this.rival = r
+        return sp?.rivalStrength
+          ? t('{0} zaten bu çıkışta ve GÜÇLÜ — payını sıfırdan kazanman gerekecek.', this.rivalName())
+          : t('Yol karşısına {0} açıldı — artık fiyat bir MÜZAKERE. Pazar payını ofisten izle.', this.rivalName())
       }
       return ''
     }
@@ -2753,6 +2997,9 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.locSnapshots = JSON.parse(JSON.stringify(s.locSnapshots))
   // ŞUBE MÜDÜRÜ (ADDITIVE): pasif şubelerin biriken kasası. Eski istemci yok sayar.
   out.branchVault = { ...s.branchVault }
+  // PAYLAŞILAN TEDARİK HATTI (ADDITIVE): gün içinde hattan çekilen litre. Kaydedilmezse
+  // F5 atmak kotayı sıfırlayan bir exploit olurdu ("yenile, iki şubeyi de fulle").
+  out.supplyUsed = { ...s.supplyUsed }
   out.partner = { ...s.partner } // banka ortaklığı durumu
   out.pendingCash = { ...s.pendingCash }
   out.ownedParcels = [...s.ownedParcels]
@@ -2844,8 +3091,10 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       missedDays: Math.max(0, Math.round(Number(ct.missedDays) || 0)),
     }
   } else s.contract = null
-  // ÇOKLU ŞUBE: bilinmeyen/bozuk id'ler atılır, aktif şube her zaman AÇIK listede olur
-  const VALID: LocId[] = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'metropol']
+  // ÇOKLU ŞUBE: bilinmeyen/bozuk id'ler atılır, aktif şube her zaman AÇIK listede olur.
+  // ÇİFTLEME: liste artık kopya id'lerini de içeriyor (ALL_LOCS) — eski kayıtta bu id'ler
+  // hiç geçmediği için eski davranış birebir aynıdır, yeni id'ler yalnızca EKLENDİ.
+  const VALID: LocId[] = ALL_LOCS
   if (Array.isArray(data.unlockedLocs)) {
     const list = (data.unlockedLocs as string[]).filter(x => VALID.includes(x as LocId)) as LocId[]
     s.unlockedLocs = list.includes('kasaba') ? list : ['kasaba', ...list]
@@ -2863,6 +3112,18 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       bv[k as LocId] = Math.min(GameState.BRANCH_VAULT_HARD, Math.round(n))
     }
     s.branchVault = bv
+  }
+  // PAYLAŞILAN TEDARİK HATTI (ADDITIVE): hat anahtarları yalnız TABAN şube id'leridir.
+  // Kurcalanmış negatif/NaN değer kotayı sonsuz yakıta çevirmesin diye 0..kota kırpılır.
+  if (data.supplyUsed && typeof data.supplyUsed === 'object' && !Array.isArray(data.supplyUsed)) {
+    const su: Partial<Record<BaseLocId, number>> = {}
+    for (const [k, v] of Object.entries(data.supplyUsed as Record<string, unknown>)) {
+      if (!(BASE_LOCS as readonly string[]).includes(k)) continue
+      const n = Number(v)
+      if (!isFinite(n) || n <= 0) continue
+      su[k as BaseLocId] = Math.min(SUPPLY_LINE_QUOTA, Math.round(n))
+    }
+    s.supplyUsed = su
   }
   if (data.locSnapshots && typeof data.locSnapshots === 'object' && !Array.isArray(data.locSnapshots)) {
     const out: Partial<Record<LocId, LocSnapshot>> = {}
