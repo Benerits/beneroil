@@ -996,8 +996,11 @@ export class CarManager {
     return (this.opts.isWater?.() && st === 'near') ? WAIT_OFFSETS_WATER.length : WAIT_OFFSETS.length
   }
   /** pompa/şarj bu istasyona mı ait — konuma göre (yol karşısı = far) */
-  private pumpStation(i: number): 'near' | 'far' { return this.opts.pumpSlot(i).x > ROAD_X ? 'far' : 'near' }
-  private evStation(i: number): 'near' | 'far' { return this.opts.evSlot(i).x > ROAD_X ? 'far' : 'near' }
+  // İKİNCİ SİGORTA: slot yoksa (sayım/sahne uyuşmazlığı) çökmek yerine 'near' say.
+  // Tek başına main.ts'teki kırpma yeterli; bu, ileride başka bir yol sayımı bozarsa
+  // oyunun tamamen donmasını engelliyor.
+  private pumpStation(i: number): 'near' | 'far' { return (this.opts.pumpSlot(i)?.x ?? 0) > ROAD_X ? 'far' : 'near' }
+  private evStation(i: number): 'near' | 'far' { return (this.opts.evSlot(i)?.x ?? 0) > ROAD_X ? 'far' : 'near' }
   /** istasyonda servis edecek en az bir pompa/şarj var mı — yoksa müşteri girip sonsuza dek beklemesin */
   private stationHasEquipment(st: 'near' | 'far'): boolean {
     for (let i = 0; i < this.opts.pumpCount(); i++) if (this.pumpStation(i) === st) return true

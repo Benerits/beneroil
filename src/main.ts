@@ -1732,8 +1732,12 @@ function renderFrame() {
 }
 
 const cars = new CarManager(world.scene, modelLib, {
-  pumpCount: () => state.pumps,
-  evCount: () => state.evChargers,
+  // SAHNEYLE SINIRLI SAYIM: state.pumps sahnedeki pompa sayısını AŞARSA pumpSlot(i)
+  // undefined dönüyor ve trafik her karede "Cannot read properties of undefined (reading 'x')"
+  // ile patlıyordu — oyun tamamen donuyor. Kayıt/sahne uyuşmazlığında (bulut kaydı world'ün
+  // kurabildiğinden fazla pompa söylerse) çökmek yerine kurulmuş olanla devam et.
+  pumpCount: () => Math.min(state.pumps, world.pumpSlots.length),
+  evCount: () => Math.min(state.evChargers, world.evSlots.length),
   // misafir gate'i açıkken kimse İSTASYONA girmez (ilerleme donuk) ama yol trafiği akar
   entryChance: () => (guestPaused ? 0 : state.entryChance() * (isPromoMode ? 2.5 : 1)),
   // EV PAYI (#1023 "elektrikli araba sayısı çok az gibi"): taban %15'ti ve tek şarj

@@ -1,0 +1,351 @@
+/**
+ * TANITIM VİDEOSU ÇEKİCİ — headless tarayıcıda gerçek oyunu kaydeder.
+ *
+ * Twitter analitiği (30 Ağu): ortalama izleme 12.8 sn, tamamlama %9.7, en iyi gün %21.8.
+ * → Videolar 12-15 saniye. Hook ilk 2 saniyede. Tek net mesaj.
+ *
+ * Her senaryo: sahneyi kurar, kamerayı yerleştirir, overlay yazıyı basar, kaydeder.
+ * Çıktı webm; ses ekleme ve mp4'e çevirme tools/video/tamamla.swift ile yapılır.
+ *
+ * Kullanım: npm run dev -- --port 5311  →  node tools/video/cek.mjs [senaryo]
+ */
+import { chromium } from 'playwright-core'
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const PORT = process.env.PORT ?? '5311'
+const OUT = process.env.OUT ?? '/tmp/beneloil-video'
+mkdirSync(OUT, { recursive: true })
+
+// ── marka: krem zemin, kırmızı vurgu, Baloo 2 (oyunun fontu) ──
+const OVERLAY_CSS = `
+#vo { position:fixed; inset:0; z-index:2147483647; pointer-events:none;
+      font-family:'Baloo 2',system-ui,sans-serif; }
+#vo .band { position:absolute; left:0; right:0; padding:26px 40px; box-sizing:border-box; }
+#vo .top { top:206px; background:linear-gradient(180deg, rgba(34,48,60,.82) 0%, rgba(34,48,60,.55) 62%, rgba(34,48,60,0) 100%); }
+#vo .bot { bottom:44px; background:linear-gradient(0deg, rgba(34,48,60,.9) 0%, rgba(34,48,60,0) 100%);
+           padding-bottom:40px; }
+#vo h1 { margin:0; color:#fff; font-size:48px; font-weight:800; line-height:1.08;
+         letter-spacing:-.5px; text-shadow:0 3px 14px rgba(0,0,0,.5); opacity:0; }
+#vo h2 { margin:10px 0 0; color:#ffd9d9; font-size:27px; font-weight:700; opacity:0;
+         text-shadow:0 2px 10px rgba(0,0,0,.5); }
+#vo .bot h1 { font-size:42px; margin-bottom:4px }
+/* KAYIT DÜZENİ: bina kartı seçilen binaya yapışık konumlanıyor, yani odaktaki binayı
+   kapatıyordu. Kayıt boyunca sol üste sabitliyoruz; kamera binayı sağ yarıya alıyor. */
+#infocard.show { left:34px !important; right:auto !important; top:232px !important;
+                 bottom:auto !important; transform:none !important; margin:0 !important; }
+/* toast'lar sol-altta alt bant yazısının üstüne biniyordu → sağ üste al (kanıt olarak kalsın) */
+#toasts { left:auto !important; right:26px !important; bottom:auto !important; top:232px !important;
+          transform:none !important; align-items:flex-end !important; }
+/* KAYIT DÜZENİ: bina kartı ekranın ortasında; odaktaki binayı ve yazıyı kapatmasın diye
+   sola çekiliyor, kamera da binayı sağ yarıya alıyor. */
+
+#vo .tag { display:inline-block; background:#d64545; color:#fff; font-size:22px; font-weight:800;
+           padding:7px 16px; border-radius:99px; margin-bottom:14px; opacity:0;
+           box-shadow:0 4px 16px rgba(214,69,69,.5); }
+#vo .in { animation:vin .45s cubic-bezier(.2,.9,.3,1) forwards; }
+@keyframes vin { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:none } }
+#vo .out { animation:vout .3s ease forwards }
+@keyframes vout { to { opacity:0; transform:translateY(-10px) } }
+#vo .pulse { position:absolute; border:4px solid #d64545; border-radius:14px; opacity:0;
+             box-shadow:0 0 0 4px rgba(214,69,69,.25); }
+#vo .pulse.on { animation:vp 1.1s ease-out infinite }
+@keyframes vp { 0%{opacity:1;transform:scale(1)} 70%{opacity:.5;transform:scale(1.06)} 100%{opacity:0;transform:scale(1.1)} }
+`
+
+async function kurOverlay(p) {
+  await p.addStyleTag({ content: OVERLAY_CSS })
+  await p.evaluate(() => {
+    const d = document.createElement('div')
+    d.id = 'vo'
+    d.innerHTML = `<div class="band top"><span class="tag" id="vo-tag"></span><h1 id="vo-h1"></h1></div>
+                   <div class="band bot"><h1 id="vo-b1"></h1><h2 id="vo-h2"></h2></div>`
+    document.body.appendChild(d)
+    window.__vo = {
+      yaz(tag, h1, h2) {
+        for (const [id, v] of [['vo-tag', tag], ['vo-h1', h1], ['vo-h2', h2]]) {
+          const e = document.getElementById(id)
+          e.textContent = v || ''
+          e.className = id === 'vo-tag' ? 'tag' : ''
+          if (v) { void e.offsetWidth; e.classList.add('in') }
+        }
+      },
+      // alt bantta büyük yazı — bina kartı açıkken üst bant kartın altında kalıyor
+      yazAlt(h1, h2) {
+        for (const [id, v] of [['vo-b1', h1], ['vo-h2', h2]]) {
+          const e = document.getElementById(id)
+          e.textContent = v || ''
+          e.className = ''
+          if (v) { void e.offsetWidth; e.classList.add('in') }
+        }
+      },
+      sil() { for (const id of ['vo-tag', 'vo-h1', 'vo-b1', 'vo-h2']) document.getElementById(id).classList.add('out') },
+      isaret(sel) {
+        document.querySelectorAll('#vo .pulse').forEach(x => x.remove())
+        const t = document.querySelector(sel); if (!t) return false
+        const r = t.getBoundingClientRect()
+        const k = document.createElement('div')
+        k.className = 'pulse on'
+        Object.assign(k.style, { left: (r.left - 8) + 'px', top: (r.top - 8) + 'px',
+                                 width: (r.width + 16) + 'px', height: (r.height + 16) + 'px' })
+        document.getElementById('vo').appendChild(k)
+        return true
+      },
+      isaretSil() { document.querySelectorAll('#vo .pulse').forEach(x => x.remove()) },
+    }
+  })
+}
+
+/** oyunu misafir olarak açar, kapıları geçer, sahneyi kurar */
+async function oyunuAc(p, save) {
+  await p.addInitScript(s => {
+    localStorage.setItem('benzinlik-guest', JSON.stringify(s))
+    localStorage.setItem('beneloil-loc', s.activeLoc || 'kasaba')
+    localStorage.setItem('benzinlik-guest-joined', '1')
+    localStorage.setItem('benzinlik-music', '0')     // kayıtta oyun sesi olmasın, müziği sonra ekliyoruz
+    localStorage.setItem('benzinlik-sfx', '0')
+  }, save)
+  await p.goto(`http://localhost:${PORT}/?full=1`, { waitUntil: 'domcontentloaded' })
+  await p.waitForTimeout(9500)
+  // KAPIYI DÜZGÜN GEÇ: authgate'i DOM'dan silmek yetmiyordu — donmayı `guestPaused`
+  // bayrağı tutuyor ve yalnız "Misafir olarak oyna" butonu indiriyor. Silince sahne
+  // donuk kalıyor, ui.sync hiç çalışmıyor, HUD "0 ₺ / GÜN 1"de takılıyordu.
+  await p.evaluate(() => {
+    document.getElementById('gguest')?.click()
+    document.querySelectorAll('.backdrop.show').forEach(x => x.classList.remove('show'))
+    document.getElementById('boot')?.remove()
+    document.getElementById('authgate')?.remove()
+    // promo kaydında oyun-içi CTA'lar görünmesin (video temiz kalsın)
+    for (const id of ['guestcta', 'fbbtn', 'farhint']) {
+      const el = document.getElementById(id)
+      if (el) el.style.display = 'none'
+    }
+  })
+  await p.waitForTimeout(700)
+  // ?full=1 vitrin modu kendi state'ini kuruyor ve guest save'i eziyor → değerleri
+  // sahne kurulduktan SONRA dayatıyoruz (kasa/gün/itibar videoda gerçekçi görünsün).
+  // YALNIZ HUD ALANLARI: yapı sayılarını (pumps/parkingCount/solarCount…) state'e dayatmak
+  // sahnedeki gerçek nesnelerle uyuşmuyor ve trafik "undefined.x" ile her karede çöküyordu.
+  // ?full=1 zaten her yapıyı kuruyor; buradan sadece kasa/gün/itibar/depo düzeltiliyor.
+  await p.evaluate(sv => {
+    const st = window.__dbg?.state
+    if (!st) return
+    for (const k of ['money', 'day', 'reputation']) if (sv[k] != null) st[k] = sv[k]
+    if (sv.tanks) for (const [f, v] of Object.entries(sv.tanks)) st.tanks[f] = v
+  }, save)
+  await p.waitForTimeout(1400)
+  await kurOverlay(p)
+}
+
+const bekle = (p, ms) => p.waitForTimeout(ms)
+
+// ─────────────────────────── SENARYOLAR ───────────────────────────
+const SENARYOLAR = {
+  // 1) MÜDÜR TALİMATLARI — ofis binası → modal → talimat düğmeleri
+  mudur: {
+    ad: '01-mudur-talimatlari',
+    save: { money: 4_000_000, day: 92, reputation: 4.8, pumps: 8, evChargers: 4, marketLevel: 3,
+            managerLevel: 3, hasWash: true, hasOil: true, hasCoffee: true, hasRestaurant: true,
+            hasTruckPark: true, solarCount: 3, unlockedLocs: ['kasaba', 'cevreyolu', 'otoyol'],
+            activeLoc: 'kasaba', tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
+    async oyna(p) {
+      // HOOK: ofis binasına yaklaş
+      await p.evaluate(() => {
+        const d = window.__dbg
+        d.cine?.setCam?.(-5, 4.5, 2.4)
+        window.__vo.yaz('YENİ', 'Müdürünüz artık\nsizi dinliyor', '')
+      })
+      await bekle(p, 2600)
+      await p.evaluate(() => {
+        window.__vo.yaz('', '', '"Müdürün ne yapacağına BİZ karar vermeliyiz"')
+      })
+      await bekle(p, 2200)
+      // Ofis › Şubeler → talimat paneli
+      await p.evaluate(() => {
+        window.__vo.sil()
+        document.getElementById('officebtn')?.click()
+        document.querySelector('#oftabs .tab[data-oftab="buyume"]')?.click()
+      })
+      await bekle(p, 1400)
+      await p.evaluate(() => window.__vo.yaz('', 'Artık talimat veriyorsunuz', ''))
+      await bekle(p, 1600)
+      // düğmeleri tek tek işaretle
+      for (const [sel, yazi] of [['[data-mpol="orderFuel"]', 'Yakıt sipariş etsin mi?'],
+                                 ['[data-mpfuel="0.35"]', 'Hangi seviyede sipariş versin?'],
+                                 ['[data-mpol="cleanSolar"]', 'Panelleri temizlesin mi?']]) {
+        await p.evaluate(([s, y]) => { window.__vo.isaret(s); window.__vo.yaz('', '', y) }, [sel, yazi])
+        await bekle(p, 1500)
+      }
+      await p.evaluate(() => { window.__vo.isaretSil(); window.__vo.yaz('BENELOIL', '8 ayrı talimat', 'beneloil.com') })
+      await bekle(p, 2200)
+    },
+  },
+
+  // 2) DÖNDÜR — 40 kayıtlık grup
+  dondur: {
+    ad: '02-dondur',
+    save: { money: 2_000_000, day: 60, pumps: 6, marketLevel: 3, hasCoffee: true, hasRestaurant: true,
+            hasWash: true, parkingCount: 2, activeLoc: 'kasaba', unlockedLocs: ['kasaba'],
+            tanks: { benzin: 4000, dizel: 4000, lpg: 4000 } },
+    async oyna(p) {
+      await p.evaluate(() => {
+        window.__dbg.cine?.setCam?.(-2.6, 15.4, 2.0)
+        window.__vo.yaz('40 KİŞİ İSTEDİ', '"Marketi nasıl\ndöndüreceğim?"', '')
+      })
+      await bekle(p, 3000)
+      await p.evaluate(() => { window.__vo.yaz('', '', 'Özellik vardı — kimse bulamıyordu.') })
+      await bekle(p, 2200)
+      await p.evaluate(() => { window.__vo.sil(); window.__dbg.sec('market') })
+      await bekle(p, 900)
+      await p.evaluate(() => { window.__vo.isaret('#binfo-rot'); window.__vo.yazAlt('Artık tek dokunuş', '') })
+      await bekle(p, 1700)
+      for (let i = 0; i < 3; i++) {
+        await p.evaluate(() => document.getElementById('binfo-rot')?.click())
+        await bekle(p, 950)
+      }
+      await p.evaluate(() => { window.__vo.isaretSil(); window.__vo.yazAlt('Yerinden kalkmadan döner', 'beneloil.com') })
+      await bekle(p, 2200)
+    },
+  },
+
+  // 3) OTOPARK — ölçüyle anlatılan bug
+  otopark: {
+    ad: '03-otopark',
+    isinma: 55_000,          // araçlar gelip park edene dek bekle (kayıt dışı)
+    save: { money: 3_000_000, day: 70, pumps: 6, parkingCount: 3, marketLevel: 2, hasCoffee: true,
+            hasRestaurant: true, activeLoc: 'kasaba', unlockedLocs: ['kasaba'],
+            tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
+    async oyna(p) {
+      await p.evaluate(() => {
+        window.__dbg.cine?.setCam?.(0.4, -0.2, 2.35)   // otoparkın ölçülmüş dünya konumu
+        window.__vo.yaz('BUG AVI', 'Araçlar üst üste\nbiniyordu', '')
+      })
+      await bekle(p, 2800)
+      await p.evaluate(() => window.__vo.yaz('', '', 'Park yeri: 1.02 birim'))
+      await bekle(p, 1900)
+      await p.evaluate(() => window.__vo.yaz('', '', 'Araç genişliği: 1.20 birim'))
+      await bekle(p, 2100)
+      await p.evaluate(() => window.__vo.yaz('', 'Sığmıyorlarmış.', ''))
+      await bekle(p, 2000)
+      await p.evaluate(() => window.__vo.yaz('DÜZELDİ', 'Aralık 1.25', 'beneloil.com'))
+      await bekle(p, 2400)
+    },
+  },
+
+  // 4) PERFORMANS — mobil ısınma
+  performans: {
+    ad: '04-performans',
+    save: { money: 8_000_000, day: 120, reputation: 4.7, activeLoc: 'kasaba',
+            tanks: { benzin: 8000, dizel: 8000, lpg: 8000 } },
+    async oyna(p) {
+      await p.evaluate(() => {
+        window.__dbg.cine?.setCam?.(-2, 2, 1.5)
+        window.__vo.yaz('ŞİKAYET', '"Telefonum\ninanılmaz ısınıyor"', '')
+      })
+      await bekle(p, 2900)
+      await p.evaluate(() => window.__vo.yaz('', '', 'Ölçtük: sahne her karede İKİ KEZ çiziliyordu'))
+      await bekle(p, 2400)
+      await p.evaluate(() => window.__vo.yaz('', 'Gölgeyi dondurduk', '621 materyal → 187'))
+      await bekle(p, 2200)
+      await p.evaluate(() => window.__vo.yaz('MOBİLDE', '9 kat az piksel', '2.9M → 329K'))
+      await bekle(p, 2400)
+      await p.evaluate(() => window.__vo.yaz('BENELOIL', 'Aynı oyun, serin telefon', 'beneloil.com'))
+      await bekle(p, 2000)
+    },
+  },
+
+  // 5) HUD BİLGİ KUTULARI
+  bilgi: {
+    ad: '05-bilgi-kutulari',
+    save: { money: 1_500_000, day: 45, pumps: 5, evChargers: 2, marketLevel: 2, reputation: 4.6,
+            activeLoc: 'kasaba', unlockedLocs: ['kasaba'], tanks: { benzin: 3000, dizel: 2000, lpg: 1500 } },
+    async oyna(p) {
+      await p.evaluate(() => {
+        window.__dbg.cine?.setCam?.(-3, 6, 1.9)
+        window.__vo.yaz('SORU', '"İtibarım neden\ndeğişmiyor?"', '')
+      })
+      await bekle(p, 2900)
+      await p.evaluate(() => { window.__vo.sil(); window.__vo.isaret('.chip[data-bilgi="itibar"]') })
+      await bekle(p, 1200)
+      await p.evaluate(() => {
+        document.querySelector('.chip[data-bilgi="itibar"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        window.__vo.yazAlt('Artık dokunun, anlatsın', '')
+      })
+      await bekle(p, 2600)
+      await p.evaluate(() => {
+        window.__vo.isaret('.chip[data-bilgi="kasa"]')
+        document.querySelector('.chip[data-bilgi="kasa"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        window.__vo.yaz('', '', '9 gösterge · hepsi açıklamalı')
+      })
+      await bekle(p, 2400)
+      await p.evaluate(() => { window.__vo.isaretSil(); window.__vo.yazAlt('Tahmin etmeyin', 'beneloil.com') })
+      await bekle(p, 2200)
+    },
+  },
+}
+
+// ─────────────────────────── ÇEKİM ───────────────────────────
+const istenen = process.argv.slice(2)
+const liste = istenen.length ? istenen : Object.keys(SENARYOLAR)
+const b = await chromium.launch({ channel: 'chrome' })
+for (const ad of liste) {
+  const s = SENARYOLAR[ad]
+  if (!s) { console.log(`  ? bilinmeyen senaryo: ${ad}`); continue }
+  const klasor = join(OUT, ad)
+  mkdirSync(klasor, { recursive: true })
+  const ctx = await b.newContext({
+    viewport: { width: 1080, height: 1350 },       // Twitter dikey-kare: akışta en çok yer kaplar
+    deviceScaleFactor: 1,
+  })
+  const p = await ctx.newPage()
+  // KARE YAKALAYICI — CDP screencast.
+  // p.screenshot() saniyede ancak ~1 kare veriyordu (PNG encode yavaş). Page.startScreencast
+  // tarayıcının kendi kare akışını JPEG olarak veriyor: gerçek zamanlı, ~15-30 fps.
+  // (recordVideo webm üretiyor; AVFoundation webm okuyamıyor, playwright'ın ffmpeg'i de
+  //  mp4 yazamıyor — bu yüzden kareleri toplayıp kareler-mp4.swift ile birleştiriyoruz.)
+  let kareNo = 0
+  const cdp = await ctx.newCDPSession(p)
+  cdp.on('Page.screencastFrame', ev => {
+    writeFileSync(join(klasor, `k${String(kareNo++).padStart(5, '0')}.jpg`), Buffer.from(ev.data, 'base64'))
+    cdp.send('Page.screencastFrameAck', { sessionId: ev.sessionId }).catch(() => {})
+  })
+  p.on('pageerror', e => console.log('   HATA:', String(e.stack || e).slice(0, 700)))
+  await oyunuAc(p, s.save)
+  // ISINMA (kayıt DIŞI): otopark gibi sahneler boş başlıyor — araçlar gelip park edene
+  // kadar beklenmezse video "araçlar sığıyor" derken bomboş beton gösteriyordu.
+  if (s.isinma) {
+    console.log(`   ısınma ${s.isinma / 1000} sn (trafik otursun)`)
+    await p.waitForTimeout(s.isinma)
+  }
+  // ikinci dayatma: vitrin kurulumu gecikmeli bittiği için ilk override eziliyordu
+  await p.evaluate(sv => {
+    const st = window.__dbg?.state
+    if (!st) return
+    for (const k of ['money', 'day', 'reputation']) if (sv[k] != null) st[k] = sv[k]
+    if (sv.tanks) for (const [f, v] of Object.entries(sv.tanks)) st.tanks[f] = v
+  }, s.save)
+  await p.waitForTimeout(600)
+  // KAYIT BOYUNCA SABİT TUT: vitrin modu FULL_ORDER ile alışveriş yapıp kasayı sıfırlıyor,
+  // HUD'da "0 ₺" görünüyordu. Videoda gerçekçi rakam dursun diye periyodik dayatma.
+  const sabitle = setInterval(() => {
+    p.evaluate(sv => {
+      const st = window.__dbg?.state
+      if (!st) return
+      st.money = sv.money ?? st.money
+      if (sv.day) st.day = sv.day
+      if (sv.reputation) st.reputation = sv.reputation
+      if (sv.tanks) for (const [f, v] of Object.entries(sv.tanks)) st.tanks[f] = v
+    }, s.save).catch(() => {})
+  }, 500)
+  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 90, everyNthFrame: 1 })
+  await s.oyna(p)
+  clearInterval(sabitle)
+  await cdp.send('Page.stopScreencast').catch(() => {})
+  await p.waitForTimeout(300)
+  await p.close()
+  await ctx.close()
+  const n = readdirSync(klasor).filter(f => f.endsWith('.jpg')).length
+  console.log(`  ✓ ${s.ad}: ${n} kare (${(n / 15).toFixed(1)} sn) → ${klasor}`)
+}
+await b.close()
+console.log(`\nçıktı: ${OUT}`)
