@@ -1226,6 +1226,83 @@ const EN: Record<string, string> = {
   'Muhasebe': 'Accounting',
   'İhaleler': 'Contracts',
   'Büyüme': 'Growth',
+
+  // --- Tersane (marina): kızak kapasitesi, gelen/kızaktaki işler, iş türleri ---
+  'Tersane': 'Boatyard',
+  'Kızak Durumu': 'Cradle Status',
+  'Kızak kapasitesi': 'Cradle capacity',
+  'Teslim edilen iş': 'Jobs delivered',
+  'Tersane kazancı': 'Boatyard earnings',
+  'kışın iş zirve yapar': 'jobs peak in winter',
+  'Gelen İşler': 'Incoming Jobs',
+  'gün': 'd',
+  'Kabul': 'Accept',
+  'Kızak dolu': 'Cradles full',
+  'Şu an bekleyen iş yok — yeni işler gün başında gelir.':
+    'No jobs waiting — new ones come in at the start of the day.',
+  'Kızaktaki İşler': 'Jobs on the Cradle',
+  'gün kaldı': 'days left',
+  'Kızaklar boş.': 'Cradles are empty.',
+  'Kızak dolu — önce bir iş teslim edilmeli.': 'Cradles are full — deliver a job first.',
+  'Bu iş artık yok.': 'That job is gone.',
+  'İş kızağa alındı.': 'Job is up on the cradle.',
+  'Tersane: {0} iş teslim edildi → +₺{1}': 'Boatyard: {0} jobs delivered → +₺{1}',
+  "Tersaneye {0} bakım işi geldi — Ofis › Marina'dan kabul et ({1} kızak boş)":
+    '{0} refit jobs came into the boatyard — accept them in Office › Boatyard ({1} cradles free)',
+  'Karina temizliği': 'Hull cleaning',
+  'Tekne boyası': 'Boat paintwork',
+  'Motor bakımı': 'Engine service',
+  'Direk & armada bakımı': 'Mast & rigging service',
+  'Osmoz onarımı': 'Osmosis repair',
+
+  // --- Şube çiftleme: ortak tedarik hattı kotası ---
+  'Ortak tedarik hattı': 'Shared supply line',
+  '{0}L / {1}L kaldı': '{0}L / {1}L left',
+  "{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota her gün dönüşünde tazelenir.":
+    '{0} and {1} draw from the SAME distributor depot. You have used {2}% of today’s quota — burn it all here and the sister branch runs dry tomorrow, and its daily net drops. The quota refills at every day change.',
+  '{0}: ortak tedarik hattını dün sen tükettin — şube yakıtsız kaldı, günlük neti düştü.':
+    '{0}: you drained the shared supply line yesterday — the branch ran dry and its daily net fell.',
+  'Önce {0} şubesini aç': 'Open the {0} branch first',
+
+  // --- Gerilim: sabır, seri (combo), VIP müşteri, yoğun saat, ödüllü reklam ---
+  'YOĞUN SAAT': 'RUSH HOUR',
+  'Seri koptu! ×{0} çarpanı gitti.': 'Streak broken! The ×{0} multiplier is gone.',
+  'VIP MÜŞTERİ geldi — büyük sipariş, KISA sabır!': 'VIP CUSTOMER pulled in — big order, SHORT patience!',
+  'SERİ ×{0} — hızlı servis primi!': 'STREAK ×{0} — fast-service bonus!',
+  'VIP müşteri elde tutuldu — sırayı ona verdik!': 'VIP customer stayed — we bumped them to the front!',
+  'Seri kurtarıldı — ×{0} devam ediyor!': 'Streak saved — ×{0} is still running!',
+  "Reklam İzle: VIP'yi Elde Tut (₺{0})": 'Watch Ad: Keep the VIP (₺{0})',
+  'Reklam İzle: Seriyi Koru (×{0})': 'Watch Ad: Keep the Streak (×{0})',
+  'Kaçırdığın müşteri: {0} → ₺{1}': 'Customers you lost: {0} → ₺{1}',
+
+  // --- Marina: kulüp üyelik aidatı ---
+  'Kulüp aidatı: {0} üye → +₺{1}': 'Club dues: {0} members → +₺{1}',
+
+  // --- Rakip saha hamleleri: tesis yatırımı + personel transferi ---
+  'market': 'market',
+  'oto yıkama': 'car wash',
+  'kafe': 'cafe',
+  'şarj istasyonu': 'charging station',
+  '🏗️ {0} karşına {1} açtı — 14 gün senin {1} gelirin düşecek.':
+    '🏗️ {0} opened a {1} across the road — your {1} income drops for 14 days.',
+  '🚪 {0} pompacını transfer etti — personel seviyen düştü, yeniden eğit.':
+    '🚪 {0} poached your attendant — your staff level dropped, train them again.',
+
+  // --- Şube çiftleme: kopya şube adları ve kısıt notları ---
+  'Çevre Yolu II · Sanayi Kavşağı': 'Çevre Yolu II · Industrial Junction',
+  'Taban trafiği düşük ama fiyata duyarsız: az müşteri, yüksek marj.':
+    'Low base traffic but price-blind: few customers, fat margins.',
+  'Otoyol II · Rakip Çıkışı': 'Otoyol II · Rival Exit',
+  'Rakip zincir AYNI çıkışta ve güçlü başlıyor; yavaşlama şeridi de daha kısa.':
+    'A rival chain is on the SAME exit and starts strong; the slip lane is shorter too.',
+  'Marina II · Dış Liman': 'Marina II · Outer Harbour',
+  'Daha çok tekne ama ağır liman kirası, pahalı kadro ve DAR rıhtım (az tank).':
+    'More boats, but heavy harbour rent, pricey crew and a NARROW quay (fewer tanks).',
+  'Metropol II · Merkez': 'Metropol II · Downtown',
+  'Şehrin en yoğun akışı ama kira ağır, arsa hem pahalı hem sayılı.':
+    'The city’s busiest flow, but rent is heavy and land is both pricey and scarce.',
+  '{0} zaten bu çıkışta ve GÜÇLÜ — payını sıfırdan kazanman gerekecek.':
+    '{0} already holds this exit and is STRONG — you will have to win your share from zero.',
 }
 
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
@@ -2701,6 +2778,83 @@ const FR: Record<string, string> = {
   'Muhasebe': 'Comptabilité',
   'İhaleler': 'Contrats',
   'Büyüme': 'Croissance',
+
+  // --- Tersane (marina): kızak kapasitesi, gelen/kızaktaki işler, iş türleri ---
+  'Tersane': 'Chantier',
+  'Kızak Durumu': 'État des berceaux',
+  'Kızak kapasitesi': 'Capacité en berceaux',
+  'Teslim edilen iş': 'Chantiers livrés',
+  'Tersane kazancı': 'Revenus du chantier',
+  'kışın iş zirve yapar': 'l’activité culmine en hiver',
+  'Gelen İşler': 'Chantiers proposés',
+  'gün': 'j',
+  'Kabul': 'Accepter',
+  'Kızak dolu': 'Berceaux pleins',
+  'Şu an bekleyen iş yok — yeni işler gün başında gelir.':
+    'Aucun chantier en attente — les nouveaux arrivent au début du jour.',
+  'Kızaktaki İşler': 'Chantiers au berceau',
+  'gün kaldı': 'jours restants',
+  'Kızaklar boş.': 'Berceaux vides.',
+  'Kızak dolu — önce bir iş teslim edilmeli.': 'Berceaux pleins — il faut d’abord livrer un chantier.',
+  'Bu iş artık yok.': 'Ce chantier n’est plus disponible.',
+  'İş kızağa alındı.': 'Chantier mis au berceau.',
+  'Tersane: {0} iş teslim edildi → +₺{1}': 'Chantier : {0} chantiers livrés → +₺{1}',
+  "Tersaneye {0} bakım işi geldi — Ofis › Marina'dan kabul et ({1} kızak boş)":
+    '{0} chantiers d’entretien sont arrivés — accepte-les dans Bureau › Chantier ({1} berceaux libres)',
+  'Karina temizliği': 'Nettoyage de carène',
+  'Tekne boyası': 'Peinture de coque',
+  'Motor bakımı': 'Révision moteur',
+  'Direk & armada bakımı': 'Entretien mât & gréement',
+  'Osmoz onarımı': 'Traitement osmose',
+
+  // --- Şube çiftleme: ortak tedarik hattı kotası ---
+  'Ortak tedarik hattı': 'Approvisionnement partagé',
+  '{0}L / {1}L kaldı': '{0} L / {1} L restants',
+  "{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota her gün dönüşünde tazelenir.":
+    '{0} et {1} puisent dans le MÊME dépôt régional du distributeur. Tu as utilisé {2} % du quota du jour — si tu brûles tout ici, la succursale sœur sera à sec demain et son net quotidien chutera. Le quota se recharge à chaque changement de jour.',
+  '{0}: ortak tedarik hattını dün sen tükettin — şube yakıtsız kaldı, günlük neti düştü.':
+    '{0} : tu as vidé l’approvisionnement partagé hier — la succursale est restée à sec et son net quotidien a chuté.',
+  'Önce {0} şubesini aç': 'Ouvre d’abord la succursale {0}',
+
+  // --- Gerilim: sabır, seri (combo), VIP müşteri, yoğun saat, ödüllü reklam ---
+  'YOĞUN SAAT': 'HEURE DE POINTE',
+  'Seri koptu! ×{0} çarpanı gitti.': 'Série brisée ! Le multiplicateur ×{0} est perdu.',
+  'VIP MÜŞTERİ geldi — büyük sipariş, KISA sabır!': 'CLIENT VIP à la pompe — grosse commande, PATIENCE COURTE !',
+  'SERİ ×{0} — hızlı servis primi!': 'SÉRIE ×{0} — prime de service rapide !',
+  'VIP müşteri elde tutuldu — sırayı ona verdik!': 'Client VIP conservé — on lui a donné la priorité !',
+  'Seri kurtarıldı — ×{0} devam ediyor!': 'Série sauvée — ×{0} continue !',
+  "Reklam İzle: VIP'yi Elde Tut (₺{0})": 'Regarder une pub : garder le VIP (₺{0})',
+  'Reklam İzle: Seriyi Koru (×{0})': 'Regarder une pub : garder la série (×{0})',
+  'Kaçırdığın müşteri: {0} → ₺{1}': 'Clients perdus : {0} → ₺{1}',
+
+  // --- Marina: kulüp üyelik aidatı ---
+  'Kulüp aidatı: {0} üye → +₺{1}': 'Cotisations du club : {0} membres → +₺{1}',
+
+  // --- Rakip saha hamleleri: tesis yatırımı + personel transferi ---
+  'market': 'boutique',
+  'oto yıkama': 'lavage auto',
+  'kafe': 'café',
+  'şarj istasyonu': 'borne de recharge',
+  '🏗️ {0} karşına {1} açtı — 14 gün senin {1} gelirin düşecek.':
+    '🏗️ {0} a ouvert : {1} juste en face — tes revenus {1} baissent pendant 14 jours.',
+  '🚪 {0} pompacını transfer etti — personel seviyen düştü, yeniden eğit.':
+    '🚪 {0} a débauché ton pompiste — ton niveau de personnel a baissé, forme-le à nouveau.',
+
+  // --- Şube çiftleme: kopya şube adları ve kısıt notları ---
+  'Çevre Yolu II · Sanayi Kavşağı': 'Çevre Yolu II · Carrefour industriel',
+  'Taban trafiği düşük ama fiyata duyarsız: az müşteri, yüksek marj.':
+    'Trafic de base faible mais insensible au prix : peu de clients, grosse marge.',
+  'Otoyol II · Rakip Çıkışı': 'Otoyol II · Sortie du rival',
+  'Rakip zincir AYNI çıkışta ve güçlü başlıyor; yavaşlama şeridi de daha kısa.':
+    'Une chaîne rivale tient la MÊME sortie et démarre fort ; la voie de décélération est plus courte.',
+  'Marina II · Dış Liman': 'Marina II · Port extérieur',
+  'Daha çok tekne ama ağır liman kirası, pahalı kadro ve DAR rıhtım (az tank).':
+    'Plus de bateaux, mais loyer portuaire lourd, équipage cher et quai ÉTROIT (moins de cuves).',
+  'Metropol II · Merkez': 'Metropol II · Centre-ville',
+  'Şehrin en yoğun akışı ama kira ağır, arsa hem pahalı hem sayılı.':
+    'Le flux le plus dense de la ville, mais loyer lourd et terrains chers et rares.',
+  '{0} zaten bu çıkışta ve GÜÇLÜ — payını sıfırdan kazanman gerekecek.':
+    '{0} tient déjà cette sortie et il est FORT — il faudra gagner ta part depuis zéro.',
 }
 
 /** Aktif dilin sözlüğü. TR kaynak dil olduğu için sözlüğü yoktur (anahtarın kendisi metindir). */
