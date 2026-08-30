@@ -1832,10 +1832,19 @@ const cars = new CarManager(world.scene, modelLib, {
   serviceLane: () => state.theme().lane.service,
   // Araçlar birbirinin içinden geçer (ölçüm: servis 267→363, tıkanma 41→0).
   // ?collide=1 ile eski davranış açılır.
-  // ÇARPIŞMA ARTIK VARSAYILAN (Faz 4.1): eskiden varsayılan "içinden geç" idi ve
-  // çarpışma yalnız ?collide ile açılıyordu — oyuncular "araçlar iç içe geçiyor"
-  // diye bildiriyordu. Mantık ters çevrildi; ?nocollide acil valf olarak duruyor.
-  carsPassThrough: () => new URLSearchParams(location.search).has('nocollide'),
+  // ÇARPIŞMA: KAPALI (ÖLÇÜLMÜŞ ÜRÜN KARARI — Faz 4.1 GERİ ALINDI).
+  // "Araçlar iç içe geçiyor" şikâyeti üzerine çarpışmayı varsayılan AÇIK yapmıştım.
+  // Üretim konfigüyle koşulan yük testi bunun bedelini ölçtü (aynı tohum, 10 dk):
+  //     çarpışma AÇIK : servis 268 · buharlaşan 11 · kalıcı sıkışan 2 · token reddi 58.663
+  //     çarpışma KAPALI: servis 384 · buharlaşan  0 · kalıcı sıkışan 0 · token reddi    367
+  // Yani akış %30 çöküyor ve müşteri SESSİZCE siliniyor (evaporate onCarLost çağırmaz →
+  // oyuncu kaybı görmez, sadece geliri düşer). Görünmez gelir kaybı, görünen iç içe
+  // geçmeden daha kötü. Kurtarma eşiklerini agresifleştirmek 268→365'e çıkardı ama
+  // kalıcı sıkışmayı ve rezervasyon thrash'ini bitirmedi.
+  // DOĞRU ÇÖZÜM (yapılacak): apron/kuyruk koridorlarını da rezervasyon grafiğine almak —
+  // bugün yalnız kapı ağzı rezerve ediliyor, apron içi çakışma tamamen reaktif katmana
+  // (dodge/override/evaporate) bırakılmış durumda.
+  carsPassThrough: () => !new URLSearchParams(location.search).has('collide'),
   trafficLight: () => {
     const tl = state.theme().features?.trafficLight
     return tl ? { red: state.lightRed(), y: tl.y } : null

@@ -93,10 +93,22 @@ export function marketShare(myPrice: number, rival: RivalState, loyalty: number,
  * Agresif rakip pay kaybedince fiyat kırar; kurumsal rakip fiyatını korur, kampanya açar.
  */
 export interface RivalMove {
-  kind: 'kes' | 'zam' | 'kampanya' | 'bekle'
+  // FİYAT DIŞI HAMLELER (yatirim/transfer): rakip yalnız fiyatla oynayınca tek boyutlu
+  // kalıyordu — oyuncu fiyatı ayarlayıp unutuyordu. Artık rakip SAHADA da hamle yapıyor.
+  kind: 'kes' | 'zam' | 'kampanya' | 'bekle' | 'yatirim' | 'transfer'
   price: number
   promoDays: number
   msg: string
+  /** 'yatirim': rakip bu tesisi açtı → oyuncunun aynı tesisinin geliri bir süre düşer */
+  yatirim?: RivalFacility
+  /** kaç gün etkili (yatırım/transfer) */
+  etkiGun?: number
+}
+
+/** Rakibin açabileceği tesisler — oyuncunun aynı tesisini doğrudan vurur. */
+export type RivalFacility = 'market' | 'wash' | 'coffee' | 'ev'
+export const RIVAL_FACILITY_LABEL: Record<RivalFacility, string> = {
+  market: t('market'), wash: t('oto yıkama'), coffee: t('kafe'), ev: t('şarj istasyonu'),
 }
 
 export function rivalDecide(
@@ -110,6 +122,14 @@ export function rivalDecide(
   const winning = myShare < 0.42
 
   if (losing) {
+    // SAHA HAMLESİ: fiyat dibe yakınsa rakip artık kesemez — parasını SAHAYA yatırır.
+    // Böylece "fiyatı ayarladım, rakip nötr" durumu ortadan kalkıyor: baskı sürüyor.
+    if (r.price <= floorPrice + 0.35 && rnd < 0.45) {
+      const tesisler: RivalFacility[] = ['market', 'wash', 'coffee', 'ev']
+      const t2 = tesisler[Math.floor(rnd * 4 * 1000 % 4)]
+      return { kind: 'yatirim', price: r.price, promoDays: r.promoDays, yatirim: t2, etkiGun: 14,
+        msg: t('🏗️ {0} karşına {1} açtı — 14 gün senin {1} gelirin düşecek.', name, RIVAL_FACILITY_LABEL[t2]) }
+    }
     if (kind === 'agresif' && r.price > floorPrice + 0.3) {
       // maliyetin altına İNMEZ: rakip de kâr etmek zorunda (sonsuz dip sarmalı yok)
       const cut = Math.min(0.5, r.price - floorPrice - 0.2)
@@ -120,6 +140,12 @@ export function rivalDecide(
     if (r.promoDays <= 0 && rnd < 0.5) {
       return { kind: 'kampanya', price: r.price, promoDays: 5,
         msg: t('📣 {0} kampanya başlattı — 5 gün boyunca daha çekici olacak.', name) }
+    }
+    // PERSONEL AVLAMA: agresif rakip pompacını transfer eder. Acıtır ama TELAFİ EDİLİR
+    // (eğitim satın alınabilir) — türün "kalıcı silme yok" ilkesine uygun.
+    if (kind === 'agresif' && rnd > 0.82) {
+      return { kind: 'transfer', price: r.price, promoDays: r.promoDays, etkiGun: 0,
+        msg: t('🚪 {0} pompacını transfer etti — personel seviyen düştü, yeniden eğit.', name) }
     }
     return { kind: 'bekle', price: r.price, promoDays: r.promoDays, msg: '' }
   }

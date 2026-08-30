@@ -379,6 +379,9 @@ export class GameState {
   refitEarned = 0
   /** AI RAKİP (Katman 4d) — yalnız ikinci şubeden sonra, kasaba HARİÇ. null = rakip yok */
   rival: RivalState | null = null
+  /** RAKİP YATIRIMI (ADDITIVE): rakip karşına tesis açtıysa hangi tesis, kaç gün.
+   *  Etkisi SÜRELİ ve tek tesise özgü — kalıcı hasar yok (türün telafi ilkesi). */
+  rivalPush: { fac: string; daysLeft: number } | null = null
   /** doğru/yanlış defter kararı sayacı (öğretici geri bildirim için) */
   logbookOk = 0
   logbookBad = 0
@@ -1627,6 +1630,18 @@ export class GameState {
     this.rival.promoDays = mv.promoDays
     this.rival.strength = updateStrength(this.rival, share)
     this.rival.lastDay = this.day
+    // ── FİYAT DIŞI HAMLELERİN SONUCU ──
+    if (mv.kind === 'yatirim' && mv.yatirim) {
+      this.rivalPush = { fac: mv.yatirim, daysLeft: mv.etkiGun ?? 14 }
+    } else if (mv.kind === 'transfer') {
+      // kalıcı değil: eğitimle geri alınır (tür kuralı — kalıcı silme yok)
+      this.staffLevel = Math.max(1, this.staffLevel - 1)
+    }
+    // süreli baskı geri sayar
+    if (this.rivalPush) {
+      this.rivalPush.daysLeft--
+      if (this.rivalPush.daysLeft <= 0) this.rivalPush = null
+    }
     return mv.msg
   }
 
@@ -1963,7 +1978,22 @@ export class GameState {
    *  Yeni davranış: tavana kadar %100, tavanın üstünde %40 verimle DEVAM eder (sert tavan
    *  3× cap). Yani hiçbir şey tamamen buharlaşmaz ama ihmal etmek yine cezalı — müdür
    *  otomasyonu (§7 #5) ve sık toplama değerini korur. Kayıp artık GÖRÜNÜR. */
+  /** RAKİP BASKISI: rakip aynı tesisi karşına açtıysa o tesisin geliri %35 düşer.
+   *  Süreli (14 gün) ve TEK tesise özgü — kalıcı hasar yok, oyuncu ya bekler ya
+   *  karşı yatırım yapar. Rakip böylece fiyat dışında da hissediliyor. */
+  rivalFacMult(facId: string): number {
+    if (!this.rivalPush) return 1
+    const eslesme: Record<string, string[]> = {
+      market: ['market', 'market2'], wash: ['wash', 'wash2', 'selfwash'],
+      coffee: ['coffee', 'coffee2', 'restaurant', 'restaurant2'], ev: ['ev'],
+    }
+    return (eslesme[this.rivalPush.fac] ?? []).includes(facId) ? 0.65 : 1
+  }
+
   addPending(id: string, amt: number, name: string) {
+    // rakip baskısı TEK NOKTADAN uygulanır: her çağrı yerine tek tek eklemek yerine
+    // gelir kapısında kesiliyor, böylece yeni tesis eklenince unutulmuyor.
+    amt = amt * this.rivalFacMult(id)
     this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
     this.facTotal[id] = (this.facTotal[id] ?? 0) + amt
     const cap = this.pendingCap(id)
@@ -2545,7 +2575,7 @@ const SAVE_FIELDS = [
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
   'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'steamPoll', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
-  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
+  'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival', 'rivalPush',
   // tersane (ADDITIVE): kabul edilmiş işler + sayaçlar. Teklifler kayda girmez (gün içi).
   'refitJobs', 'refitDone', 'refitEarned',
   // GERİLİM (ADDITIVE): gün sonu raporundaki "bugün kaçırdıkların" satırı. Eski kayıtta

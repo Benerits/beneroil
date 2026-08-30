@@ -8,12 +8,22 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 let __seed = 0
 const __rnd = () => { __seed = (__seed * 1103515245 + 12345) & 0x7fffffff; return __seed / 0x7fffffff }
 Math.random = __rnd
+const { readFileSync } = await import('node:fs')
 const THREE = await import('three')
 const { CarManager } = await import('../../src/cars.ts')
 const { GameState, FUEL_PRICE } = await import('../../src/state.ts')
 
 const ROAD_X = 7.9
-function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet = false, highway = null, service = null, passThrough = true }) {
+
+// ÜRETİM AYARINI KODDAN OKU — test ile üretim ayrışmasın.
+// main.ts: carsPassThrough: () => !has('collide')  → varsayılan passThrough = TRUE
+//          carsPassThrough: () =>  has('nocollide') → varsayılan passThrough = FALSE
+const __main = readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')
+const __m = __main.match(/carsPassThrough: \(\) => (!?)new URLSearchParams/)
+if (!__m) throw new Error('carsPassThrough üretim varsayılanı okunamadı — test/üretim hizası kırıldı')
+const PROD_PASS_THROUGH = __m[1] === '!'
+console.log(`üretim ayarı: çarpışma ${PROD_PASS_THROUGH ? 'KAPALI' : 'AÇIK'} (main.ts'ten okundu)`)
+function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet = false, highway = null, service = null, passThrough = PROD_PASS_THROUGH }) {
   __seed = 20260726 // her senaryo AYNI tohumla başlar → A/B birebir karşılaştırılabilir
   const scene = new THREE.Scene()
   const state = new GameState()
