@@ -1163,29 +1163,48 @@ function openOfficePanel() {
     // Artık üç soruyu da panel cevaplıyor: ne verir · nasıl kazanılır · ne kadar kaldı.
     const eq = state.companyEquipmentValue(), thr = state.handoverThreshold()
     const pct = Math.max(0, Math.min(100, Math.round(eq / Math.max(1, thr) * 100)))
+    // KAZANÇ SATIRI: her eksen için "şimdi → devirden sonra". Belirsizlik prestiji öldürür;
+    // oyuncu butona basmadan ÖNCE üç eksende ne kazanacağını sayıyla görmeli.
+    const kz = (ad: string, val: string) => `<div class="pz-gline"><span>${ad}</span><b>${val}</b></div>`
     let html = `<div class="pz-card">`
       + `<div class="pz-top"><span class="pz-stars">${state.brandStars > 0 ? '★'.repeat(Math.min(10, state.brandStars)) : '☆'}</span>`
       + `<span class="pz-count">${t('{0} marka yıldızı', String(state.brandStars))}</span></div>`
-      + `<div class="pz-what">${t('Marka yıldızı KALICI gelir çarpanıdır. İstasyonunu devrettiğinde bir yıldız kazanırsın; yıldızlar hiç kaybolmaz ve sonraki bütün istasyonlarında geçerlidir.')}</div>`
+      + `<div class="pz-what">${t('Marka yıldızı KALICI güçtür. Her devirde gelir çarpanın, müşteri akışın ve kuruluş sermayen büyür — sıfırdan başlarsın ama her turda daha hızlı. Yıldızlar hiç kaybolmaz.')}</div>`
       + `<div class="pz-now">${t('Şu anki kazancın')}: <b>×${pv.multNow.toFixed(2)}</b>`
       + (state.brandStars > 0 ? ` <span class="pz-gain">${t('(+%{0} her satıştan)', String(Math.round((pv.multNow - 1) * 100)))}</span>` : '')
+      + (state.brandStars > 0 ? `<br>${t('Müşteri akışın')}: <b>×${pv.flowNow.toFixed(2)}</b>` : '')
       + `</div></div>`
       + (state.handoverCount > 0 ? row(t('Devredilen istasyon'), `${state.handoverCount}`) : '')
 
     if (state.canHandover()) {
+      const kadroArtiyor = pv.crewAfter.manager > pv.crewNow.manager || pv.crewAfter.staff > pv.crewNow.staff
       html += `<div class="pz-ready">`
-        + t('Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.',
-            tl(pv.cash), pv.starsAfter, pv.multNow.toFixed(2), pv.multAfter.toFixed(2))
-        + `<br><span class="pz-fine">${t('Ekipman bedelinin %60\'ı kasana yazılır. ARSALARIN VE BETONUN SENDE KALIR — sıfırdan başlamazsın.')}</span>`
+        + `<div class="pz-rtitle">${t('Devretmeye HAZIRSIN — {0}. marka yıldızı', String(pv.starsAfter))}</div>`
+        + `<div class="pz-gains">`
+        + kz(t('Kasana geçecek'), `+₺${tl(pv.total)}`)
+        + (pv.seed > 0 ? kz(t('· kuruluş sermayesi'), `₺${tl(pv.seed)}`) : '')
+        + kz(t('Gelir çarpanı'), `×${pv.multNow.toFixed(2)} → ×${pv.multAfter.toFixed(2)}`)
+        + kz(t('Müşteri akışı'), `×${pv.flowNow.toFixed(2)} → ×${pv.flowAfter.toFixed(2)}`)
+        + (kadroArtiyor
+            ? kz(t('Devralacağın kadro'), `${t('Müdür Sv.{0}', String(pv.crewAfter.manager))} · ${t('Personel Sv.{0}', String(pv.crewAfter.staff))}`)
+            : '')
+        + `</div>`
+        + `<span class="pz-fine">${t('Ekipman gider ama ARSALARIN VE BETONUN SENDE KALIR. Yeni istasyon kuruluş sermayesi ve eğitimli kadroyla açılır — aynı yolu baştan yürümezsin.')}</span>`
         + `</div><button class="btn warn" id="of-handover" style="width:100%;justify-content:center;margin-top:8px">`
         + (handoverArmed() ? t('EMİN MİSİN? Devretmek için tekrar bas') : t('İstasyonu Devret')) + `</button>`
     } else if (state.loan.active || state.partner.active) {
       html += `<div class="pz-lock">${t('Devir için önce kredi/ortaklık kapatılmalı.')}</div>`
     } else {
       // İLERLEME ÇUBUĞU: "ne kadar kaldı" sorusunun görsel cevabı
+      // + HEDEF: sıradaki yıldızın ne getireceği burada da yazar (motivasyon eşik ÖNCESİNDE lazım).
       html += `<div class="pz-prog-head"><span>${t('Sonraki yıldıza')}</span>`
         + `<span class="pz-prog-num">₺${tl(eq)} / ₺${tl(thr)}</span></div>`
         + `<div class="pz-bar"><div class="pz-fill" style="width:${pct}%"></div></div>`
+        + `<div class="pz-gains">`
+        + kz(t('Gelir çarpanı'), `×${pv.multNow.toFixed(2)} → ×${pv.multAfter.toFixed(2)}`)
+        + kz(t('Müşteri akışı'), `×${pv.flowNow.toFixed(2)} → ×${pv.flowAfter.toFixed(2)}`)
+        + kz(t('· kuruluş sermayesi'), `₺${tl(GameState.prestigeSeedFor(pv.starsAfter))}`)
+        + `</div>`
         + `<div class="pz-fine">${t('TÜM ŞUBELERİN kurulu ekipmanı ₺{0} değerine ulaşınca devir açılır — yeni şube donatmak da sayar. Eşik büyür ama şubelerine KURULABİLECEK toplamı asla aşmaz; tavana dayandıysa büyümesi için yeni şube açman gerekir.', tl(thr))}</div>`
     }
     pel.innerHTML = html
@@ -1467,6 +1486,8 @@ function subeyeGec(id: LocId, go?: HTMLButtonElement) {
 }
 
 // PRESTİJ: İstasyonu Devret — iki aşamalı onay (geri dönüşü yok, gönüllü)
+/** Devir raporu köprüsü: devir sayfayı yeniliyor, kazanç ekranı yenilemeden SONRA açılır. */
+const DEVIR_RAPOR_KEY = 'beneloil-devir-rapor'
 let handoverArmedAt = 0
 const handoverArmed = () => Date.now() - handoverArmedAt < 6000
 document.getElementById('of-prestige')?.addEventListener('click', e => {
@@ -1490,6 +1511,16 @@ document.getElementById('of-prestige')?.addEventListener('click', e => {
     if (id !== 'gatein' && id !== 'gateout' && id !== 'office' && id !== 'tank') placedRects.splice(i, 1)
   }
   Car.solids = hardRects()
+  // DEVİR RAPORU: sayfa hemen yenileniyor, toast kaybolur. Ne kazandığı yenilemeden
+  // SONRA modal olarak gösterilsin ki "devrettim ama elime ne geçti?" boşluğu olmasın.
+  // localStorage kullanılır — save şemasına YENİ ALAN GİRMEZ (sunucu doğrulaması bozulmaz).
+  try {
+    localStorage.setItem(DEVIR_RAPOR_KEY, JSON.stringify({
+      stars: res.stars, cash: res.cash, seed: res.seed,
+      mult: state.prestigeMult(), flow: state.prestigeFlow(),
+      manager: state.managerLevel, staff: state.staffLevel,
+    }))
+  } catch { /* kota dolu olabilir — rapor kritik değil */ }
   ui.toast(t('İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})',
     res.cash.toLocaleString('tr-TR'), res.stars, state.prestigeMult().toFixed(2)), 'good', true)
   audio.achieve()
@@ -3280,6 +3311,46 @@ function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
   o.addEventListener('click', e => { if (e.target === o) close() })
 }
 
+/** DEVİR RAPORU: devirden sonraki ilk açılışta "ne kazandın" ekranı.
+ *  NEDEN: devir sayfayı yeniliyor; oyuncu boş bir arsaya düşüp "ne oldu?" diyordu.
+ *  Kalıcı kazançları (sermaye, çarpan, akış, kadro) SAYIYLA gösterip döngüyü kapatıyoruz. */
+function maybeShowDevirModal() {
+  let r: { stars?: number; cash?: number; seed?: number; mult?: number; flow?: number; manager?: number; staff?: number } | null = null
+  try {
+    const raw = localStorage.getItem(DEVIR_RAPOR_KEY)
+    localStorage.removeItem(DEVIR_RAPOR_KEY) // tek sefer: bozuk veri de olsa bir daha denenmez
+    if (raw) r = JSON.parse(raw)
+  } catch { return }
+  if (!r || typeof r.stars !== 'number') return
+  const num = (v: unknown, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
+  const sat = (ad: string, val: string) =>
+    `<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:750;color:#3d4b58;padding:5px 0;border-top:1px solid #e5dcc8"><span>${ad}</span><b style="color:#2fa05a">${val}</b></div>`
+  const o = document.createElement('div')
+  o.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#0d1420cc;display:flex;align-items:center;justify-content:center;padding:22px;font-family:var(--font,system-ui)'
+  const yildiz = '★'.repeat(Math.min(10, Math.max(1, Math.round(num(r.stars, 1)))))
+  o.innerHTML =
+    `<div style="background:linear-gradient(180deg,#fdfaf2,#f1ebdb);border:2px solid #e0d4bd;border-bottom-width:7px;border-radius:22px;padding:22px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(10,14,20,.5)">`
+    + `<div style="font-size:26px;line-height:1;color:#d9a521;letter-spacing:-.04em">${yildiz}</div>`
+    + `<div style="font-size:21px;font-weight:800;color:#1e2a36;margin:8px 0 2px">${t('{0}. marka yıldızı senin!', String(Math.round(num(r.stars, 1))))}</div>`
+    + `<div style="font-size:12.5px;font-weight:700;color:#7a6152;margin-bottom:12px">${t('Bunlar KALICI — yeni istasyonun sıfırdan değil, buradan başlıyor.')}</div>`
+    + `<div style="text-align:left">`
+    + sat(t('Kasana geçti'), `+₺${Math.round(num(r.cash)).toLocaleString('tr-TR')}`)
+    + (num(r.seed) > 0 ? sat(t('· kuruluş sermayesi'), `₺${Math.round(num(r.seed)).toLocaleString('tr-TR')}`) : '')
+    + sat(t('Gelir çarpanı'), `×${num(r.mult, 1).toFixed(2)}`)
+    + sat(t('Müşteri akışı'), `×${num(r.flow, 1).toFixed(2)}`)
+    + (num(r.manager) > 0 || num(r.staff, 1) > 1
+        ? sat(t('Devraldığın kadro'), `${t('Müdür Sv.{0}', String(Math.round(num(r.manager))))} · ${t('Personel Sv.{0}', String(Math.round(num(r.staff, 1))))}`)
+        : '')
+    + `</div>`
+    + `<button id="devir-ok" style="width:100%;margin-top:16px;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">${t('Yeni turu başlat')}</button>`
+    + `</div>`
+  document.body.appendChild(o)
+  const close = () => o.remove()
+  o.querySelector('#devir-ok')?.addEventListener('click', close)
+  o.addEventListener('click', e => { if (e.target === o) close() })
+  audio.achieve()
+}
+
 /** kayıttan gelen state'e göre sahneyi yeniden kurar */
 function rebuildFromState() {
   golgeTazele()
@@ -4591,6 +4662,12 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
   // bildirimi geldi") — bu blokta closed guard'ı yoktu; kumbara/idle/pompacı satışı
   // kapalıyken de işliyordu. Artık kapalıyken hiçbir offline kazanç işlemez.
   if (loadedSaveAt > 0) applyAwayEarnings((Date.now() - loadedSaveAt) / 1000) // guard'lar fonksiyonun içinde
+
+  // ---- DEVİR RAPORU: yenilemenin diğer ucu ----
+  // Devir sayfayı yeniliyor; oyuncu boş arsaya düşünce "ne kazandım?" boşluğu doğuyordu.
+  // Kalıcı kazançlar burada sayıyla gösterilir. Offline modalından SONRA gelsin ki
+  // en son okunan ekran "yeni tur" olsun.
+  maybeShowDevirModal()
 }
 
 ui.onLogin = async (email, pass) => {

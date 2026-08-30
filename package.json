@@ -54,7 +54,8 @@
     "test:toast": "node tools/tests/toast-check.mjs",
     "test:rakip": "tsx tools/tests/rakip-check.mjs",
     "test:rota": "tsx tools/tests/rota-check.mjs",
-    "test:aci": "tsx tools/tests/aci-check.mjs"
+    "test:aci": "tsx tools/tests/aci-check.mjs",
+    "test:devir": "tsx tools/tests/devir-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",
