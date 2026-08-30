@@ -71,7 +71,9 @@ for (const k of Object.keys(BERTH_KINDS)) {
 const ana = readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')
 bekle(/hasMarinaFac\(base as MarinaFacId\)\) world\.buildMarinaFac/.test(ana),
   'tesis satın alınınca görseli ANINDA kuruluyor')
-bekle(/for \(const fid of state\.marinaFacs\) world\.buildMarinaFac/.test(ana),
+// tekilKur() sarmalayıcısı (kayıt-kaybı fixi: ikiz bina koruması) araya girebilir —
+// aranan şey KURULUMUN VARLIĞI, çağrının birebir şekli değil.
+bekle(/for \(const fid of state\.marinaFacs\)[\s\S]{0,80}world\.buildMarinaFac/.test(ana),
   'kayıt yüklenince tesisler geri geliyor (refreshte kaybolmuyor)')
 bekle(/world\.updateBerthVisual\(state\.berths\)/.test(ana), 'bağlama görselleri kayıttan kuruluyor')
 

@@ -350,7 +350,11 @@ const STAFF_TRAIN_COSTS = [12000, 26000, 48000]
 // MARİNA (src/marina.ts ile SENKRON — orada değişirse burası da değişmeli)
 const MARINA_FAC_COST = { fueldock: 180000, chandlery: 90000, shower: 60000, clubhouse: 220000,
   icebait: 45000, travelift: 900000, pumpout: 120000, wasteoil: 70000, boom: 95000 }
-const BERTH_COST = { buoy: 12000, finger8: 40000, finger12: 75000, finger18: 140000, mega: 600000 }
+// KAYIT KAYBI FİXİ: 'karsi' (Karşı Kıyı Parkı, ₺90.000) bu tabloda YOKTU. clampMarina
+// bilinmeyen anahtarı attığı için oyuncunun aldığı HER karşı kıyı yeri ilk buluta yazımda
+// siliniyordu (para gitmiş, yer yok — iade de yok). Canlıda 102 marina oyuncusunun
+// HİÇBİRİNDE 'karsi' yoktu; kanıt bu. src/marina.ts BERTH_KINDS ile birebir olmalı.
+const BERTH_COST = { buoy: 12000, finger8: 40000, finger12: 75000, finger18: 140000, karsi: 90000, mega: 600000 }
 const WINTER_SLOT_COST = 8000
 /** Marina alanlarını temizle. Bilinmeyen tesis/bağlama anahtarları ATILIR — uydurma
  *  anahtarla servet şişirme yolu kapalı. Sayılar abuse tavanıyla sınırlanır. */
@@ -380,12 +384,19 @@ function clampMarina(s) {
     const out = {}
     if (s.berths && typeof s.berths === 'object' && !Array.isArray(s.berths)) {
       for (const k of Object.keys(s.berths)) {
-        if (k in BERTH_COST) out[k] = clamp(s.berths[k], 0, 60, 0)
+        // 60 ÇOK DARDI: istemcide bağlama sayısında sınır YOK (buyItem 'berth_*' sadece
+        // artırır). Canlıda 33 bağlama kalemi tam 60'ta çakılıydı — oyuncu ödüyor, sunucu
+        // her kayıtta geri kırpıyordu ("marina arsalarımın sayısı düşmüş, iade de olmadı").
+        // 2000 = abuse tavanı; meşru oyuncunun ulaşamayacağı kadar yüksek, servet freni
+        // (money+bval tavanı) enjeksiyonu zaten kapatıyor.
+        if (k in BERTH_COST) out[k] = clamp(s.berths[k], 0, 2000, 0)
       }
     }
     s.berths = out
   }
-  if ('winterSlots' in s) s.winterSlots = clamp(s.winterSlots, 0, 120, 0)
+  // 120 ÇOK DARDI (aynı gerekçe): kışlama kızağında da istemci sınırı yok, canlıda 6 hesap
+  // tam 120'de çakılıydı — bir oyuncu 2.500 kızağını kaybettiğini bildirdi.
+  if ('winterSlots' in s) s.winterSlots = clamp(s.winterSlots, 0, 20_000, 0)
   if ('marinaViolations' in s) s.marinaViolations = clamp(s.marinaViolations, 0, 999, 0)
   if ('logbookOk' in s) s.logbookOk = clamp(s.logbookOk, 0, 1e6, 0)
   if ('logbookBad' in s) s.logbookBad = clamp(s.logbookBad, 0, 1e6, 0)

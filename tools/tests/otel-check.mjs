@@ -96,7 +96,8 @@ bekle(/if \(locSwitching\)/.test(ana), 'çift tıklama kilidi korundu')
 bekle(/i-hotel/.test(html), 'otel ikonu tanımlı (emoji değil)')
 bekle(/buildHotel\(pos\?: THREE\.Vector2/.test(readFileSync(new URL('../../src/world.ts', import.meta.url), 'utf8')),
   'otelin 3B görseli var')
-bekle(/if \(state\.hasHotel\) world\.buildHotel\(pv\('hotel'\)\)/.test(ana), 'otel kayıttan sahneye geri kuruluyor')
+// tekilKur() sarmalayıcısı (kayıt-kaybı fixi: ikiz bina koruması) araya girebilir
+bekle(/if \(state\.hasHotel\)[\s\S]{0,60}world\.buildHotel\(pv\('hotel'\)\)/.test(ana), 'otel kayıttan sahneye geri kuruluyor')
 bekle(/hotel: \(\) => \(\{ w: 7, d: 10 \}\)/.test(ana), 'otel yerleştirilebilir/taşınabilir')
 
 console.log(hata ? `\n${hata} HATA` : '\nOTEL & TEMİZLİKÇİ TEMİZ')

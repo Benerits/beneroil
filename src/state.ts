@@ -98,7 +98,12 @@ export const LOAN_RATE = 0.03
 export const ADVANCE_RATE = 0.05 // teminatsız avans: daha yüksek faiz (risk primi)
 export const LOAN_TERMS = 12
 export const PARTNER_SHARE = 0.25 // teminatsız borç ödenmezse banka günlük kârın %25'ine ortak olur
-export type Loan = { active: boolean; principal: number; monthly: number; remaining: number; overdue: number; collateral: string[]; rate: number }
+/** `loc` ADDITIVE: kredinin ALINDIĞI şube. Teminat id'leri ('market', 'toilet'…) ŞUBE
+ *  BAZLIDIR ama kredi ŞİRKET alanıdır (SAVE_FIELDS, LOC_FIELDS değil). Bu alan olmadan
+ *  kasabada rehin verilen market yüzünden çevre yolundaki market haczediliyordu —
+ *  oyuncunun hiç rehin vermediği şubenin binaları siliniyordu (canlı kayıt kanıtı:
+ *  cevreyolu'nda oynayan hesaplarda pompalar/ofis dışında her şey sıfırlanmıştı). */
+export type Loan = { active: boolean; principal: number; monthly: number; remaining: number; overdue: number; collateral: string[]; rate: number; loc?: LocId }
 export type Partner = { active: boolean; remaining: number; share: number }
 export const FILL_RATE = 7 // L/sn
 /** POMPA HIZI GELİŞTİRMESİ (Oğuz: "dolum hızı parayla artırılabilir olsun") —
@@ -1275,6 +1280,12 @@ export class GameState {
     this.pendingCash = {}
     this.contract = null
     this.marketingBudget = 0
+    // DEVİRDE BANKA KAYDI DA SIFIRLANIR: ekipman gittiği için teminat listesi artık var
+    // olmayan binaları gösteriyor. Eskiden principal/monthly/collateral kayıtta kalıyordu
+    // (canlıda devir yapmış 136 hesapta bayat teminat listesi vardı) ve oyuncu AYNI id'li
+    // binaları yeniden kurunca, hiç rehin vermediği yeni binalar haciz hedefi oluyordu.
+    this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
+    this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }
     this.brandStars++
     this.handoverCount++
     this.money += cash // KASA KORUNUR (oyuncunun parası kendi); bina değeri düştüğü için servet zaten azalır
@@ -1904,7 +1915,9 @@ export class GameState {
   takeLoan(principal: number, collateral: string[], rate = LOAN_RATE): boolean {
     if (this.loan.active || this.partner.active || principal <= 0) return false
     const p = Math.round(principal)
-    this.loan = { active: true, principal: p, monthly: this.loanMonthly(p, rate), remaining: LOAN_TERMS, overdue: 0, collateral: [...collateral], rate }
+    // KREDİ ŞUBEYE MÜHÜRLENİR: teminat id'leri ('market'…) şube bazlı olduğundan haciz
+    // yalnız bu şubede uygulanabilir (bkz. Loan.loc notu).
+    this.loan = { active: true, principal: p, monthly: this.loanMonthly(p, rate), remaining: LOAN_TERMS, overdue: 0, collateral: [...collateral], rate, loc: this.activeLoc }
     this.money += p
     return true
   }
@@ -1932,7 +1945,11 @@ export class GameState {
     while (l.overdue > 0 && l.remaining > 0 && this.money >= l.monthly - 0.5) {
       this.money = Math.max(0, this.money - l.monthly); l.remaining -= 1; l.overdue -= 1
     }
-    if (l.remaining <= 0) { l.active = false; return 'done' }
+    // BİTEN KREDİ TAMAMEN SİLİNİR: eskiden yalnız `active=false` yapılıyordu; principal/
+    // monthly/teminat listesi kayıtta kalıyordu. Canlıda 140 hesapta "kapalı ama teminat
+    // dolu" kredi vardı — bu bayat liste, sonraki haciz/devir yollarında ARTIK VAR OLMAYAN
+    // (ya da yeniden kurulmuş) binaları hedef gösteriyordu.
+    if (l.remaining <= 0) { this.loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }; return 'done' }
     if (l.overdue >= 2) return 'seize'
     if (l.overdue === 1) return 'warn'
     return 'ok'
@@ -2767,6 +2784,9 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   }
   // güvenlik: aktif şube snapshot'ta DURAMAZ (çift sayım → sunucu servet hesabı şişer)
   delete s.locSnapshots[s.activeLoc]
+  // KREDİ ŞUBESİ (ADDITIVE): bozuk/bilinmeyen değer haczi yanlış şubeye yönlendirmesin.
+  // Eski kayıtta alan yok → undefined kalır ve haciz yolu güvenli tarafa (ortaklık) düşer.
+  if (s.loan && !VALID.includes(s.loan.loc as LocId)) delete s.loan.loc
   // prestij alanları: bozuk save NaN/negatif getirirse tüm ekonomi NaN olur, '★'.repeat crash
   s.brandStars = Math.max(0, Math.min(40, Math.round(Number(s.brandStars) || 0)))
   s.handoverCount = Math.max(0, Math.min(40, Math.round(Number(s.handoverCount) || 0)))

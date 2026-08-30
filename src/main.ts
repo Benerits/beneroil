@@ -2824,6 +2824,14 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     world.upgradeTankVisual(state.tankLevel) // yakıta özel yeni tank belirir
     return
   }
+  // YERİNDE YÜKSELTMEDE İKİZ BİNA OLMASIN (bkz. tekilKur notu): world.buildToilet gibi
+  // bazı kurucular ikinci çağrıda eski grubu SAHNEDE bırakıp yalnız kayıttan düşürüyordu
+  // → karşı tuvalet Sv.2'ye çıkınca Sv.1 gövdesi haritada tıklanamaz enkaz olarak kalıyordu
+  // ("tuvalet mapimde buga girdi"). Kayıtta olmayan id için no-op, yeni kurulumu etkilemez.
+  // İSTİSNA (KENDİ GRUBUNU YÖNETENLER): tank tek bir kalıcı gruptur (buildTankCluster
+  // yeniden REGISTER ETMEZ) — sökersek yakıt tankı büsbütün kaybolur. Tabela/geniş kapı/
+  // pompa/şarj de kendi temizliğini yapar, dokunmuyoruz.
+  if (!KENDI_TEMIZLEYEN.has(base)) world.removeBuildingGroup(id)
   switch (base) {
     case 'pump': world.addPump(state.pumps - 1); break
     case 'sign': world.setSign(state.signLevel, pos); break
@@ -3280,6 +3288,28 @@ function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
   o.addEventListener('click', e => { if (e.target === o) close() })
 }
 
+/**
+ * HAYALET BİNA KORUMASI (oyuncu raporu: "tuvalet mapimde buga girdi allah rızası için
+ * silin ya", "tesisteki kahveci yıkamacı vs. kayboldu geri gelmiyor").
+ *
+ * world.buildX() ailesinin çoğu (solar/wash/coffee/parking/tır parkı/karşı tuvalet…) aynı
+ * id ile İKİNCİ kez çağrılınca eski grubu SAHNEDE BIRAKIP kayda ikinci bir satır ekliyor.
+ * Ölçüm: dolu bir istasyonda rebuildFromState iki kez çalıştırıldığında 28 binanın 19'u
+ * ikizleniyor. İkiz, `buildings` listesinde ikinci sırada kaldığı için ne seçilebiliyor
+ * ne satılabiliyor ne taşınabiliyor (find/removeBuildingGroup hep İLKİNİ bulur) —
+ * haritada sonsuza dek duran, tıklanamayan bir enkaz kalıyor.
+ *
+ * Çözüm: yeniden kurulan her id için ÖNCE eski grubu sök. world.ts'e dokunmadan,
+ * kurulumun tek kapısı burası olduğu için tüm yollar (reload + yerinde yükseltme) kapanır.
+ */
+function tekilKur(id: string, kur: () => void) {
+  world.removeBuildingGroup(id)
+  kur()
+}
+/** Grubunu KENDİ yöneten (ya da hiç ayrı grubu olmayan) kurulum id'leri — bunları sökmek
+ *  YARARSIZ ya da YIKICI olur (tank: tek kalıcı grup, buildTankCluster re-register etmez). */
+const KENDI_TEMIZLEYEN = new Set(['tank', 'sign', 'widegate', 'pump', 'evcharger'])
+
 /** kayıttan gelen state'e göre sahneyi yeniden kurar */
 function rebuildFromState() {
   golgeTazele()
@@ -3301,13 +3331,13 @@ function rebuildFromState() {
     // placedPos footprint MERKEZİ; gövde ofseti açıyla döner (unitBodyPos) → reload'da yapı
     // yerleştirildiği yerde kalır, zıplamaz.
     const pr = placedRot[`pump-${i}`] ?? 0
-    world.addPump(i, sp ? unitBodyPos(`pump-${i}`, sp.x, sp.y, pr) : undefined, pr)
+    tekilKur(`pump-${i}`, () => world.addPump(i, sp ? unitBodyPos(`pump-${i}`, sp.x, sp.y, pr) : undefined, pr))
   }
   for (let i = 0; i < state.evChargers; i++) {
     const sp = pvv(`charger-${i}`)
     // Kayıtlı açıyla kur → araç yanaşma slotu da doğru hesaplanır (rotateBuilding slot güncellemez).
     const cr = placedRot[`charger-${i}`] ?? 0
-    world.addEvCharger(i, sp ? unitBodyPos(`charger-${i}`, sp.x, sp.y, cr) : undefined, cr)
+    tekilKur(`charger-${i}`, () => world.addEvCharger(i, sp ? unitBodyPos(`charger-${i}`, sp.x, sp.y, cr) : undefined, cr))
   }
   // GENİŞ KAPI kapılardan ÖNCE uygulanır: buildGate kapı ağzı/rampa/bordür boşluğunu
   // this.wideGates'ten okur. Eskiden karşı kapılar bu satırdan önce kurulduğu için her
@@ -3331,47 +3361,47 @@ function rebuildFromState() {
   world.setSign(state.signLevel, placedPos.sign ? new THREE.Vector2(placedPos.sign[0], placedPos.sign[1]) : undefined)
   world.upgradeTankVisual(state.tankLevel) // seviye + yakıt-başına adet
   const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
-  if (state.marketLevel > 0) world.buildMarket(state.marketLevel, pv('market'))
-  if (state.market2Level > 0) world.buildMarket(state.market2Level, pv('market2'), 'market2')
-  if (state.toilet2Level > 0) world.buildToilet(state.toilet2Level, pv('toilet2'), 'toilet2')
-  if (state.hasWash2) world.buildWash(pv('wash2'), 'wash2')
-  if (state.hasOil2) world.buildOil(pv('oil2'), 'oil2')
-  if (state.hasCoffee2) world.buildCoffee(pv('coffee2'), 'coffee2')
-  if (state.hasRestaurant2) world.buildRestaurant(pv('restaurant2'), 'restaurant2')
-  if (state.toiletLevel > 0) world.buildToilet(state.toiletLevel, pv('toilet'))
-  if (state.batteryLevel > 0) world.buildBattery(state.batteryLevel, pv('battery'))
+  if (state.marketLevel > 0) tekilKur('market', () => world.buildMarket(state.marketLevel, pv('market')))
+  if (state.market2Level > 0) tekilKur('market2', () => world.buildMarket(state.market2Level, pv('market2'), 'market2'))
+  if (state.toilet2Level > 0) tekilKur('toilet2', () => world.buildToilet(state.toilet2Level, pv('toilet2'), 'toilet2'))
+  if (state.hasWash2) tekilKur('wash2', () => world.buildWash(pv('wash2'), 'wash2'))
+  if (state.hasOil2) tekilKur('oil2', () => world.buildOil(pv('oil2'), 'oil2'))
+  if (state.hasCoffee2) tekilKur('coffee2', () => world.buildCoffee(pv('coffee2'), 'coffee2'))
+  if (state.hasRestaurant2) tekilKur('restaurant2', () => world.buildRestaurant(pv('restaurant2'), 'restaurant2'))
+  if (state.toiletLevel > 0) tekilKur('toilet', () => world.buildToilet(state.toiletLevel, pv('toilet')))
+  if (state.batteryLevel > 0) tekilKur('battery', () => world.buildBattery(state.batteryLevel, pv('battery')))
   for (let i = 0; i < state.solarCount; i++) {
     const iid = i === 0 ? 'solar' : `solar#${i}`
-    world.buildSolar(state.landSouth ? 'south' : 'north', pv(iid), iid)
+    tekilKur(iid, () => world.buildSolar(state.landSouth ? 'south' : 'north', pv(iid), iid))
   }
-  if (state.hasDiesel) world.buildDiesel(pv('dieselgen'))
-  if (state.hasSMR) world.buildSMR(state.landNorth ? 'north' : 'south', pv('smr'))
-  else if (state.smrWreck) world.buildSMRWreck(state.landNorth ? 'north' : 'south', pv('smr')) // patlama kalıntısı — aynı temelde
-  if (state.hasWash) world.buildWash(pv('wash'))
-  if (state.hasOil) world.buildOil(pv('oil'))
-  if (state.hasCoffee) world.buildCoffee(pv('coffee'))
-  if (state.hasRestaurant) world.buildRestaurant(pv('restaurant'))
-  if (state.hasTruckPark) world.buildTruckPark(pv('truckpark'))
-  if (state.hasTruckPark2) world.buildTruckPark(pv('truckpark2'), 'truckpark2')
-  if (state.hasHotel) world.buildHotel(pv('hotel'))
+  if (state.hasDiesel) tekilKur('dieselgen', () => world.buildDiesel(pv('dieselgen')))
+  if (state.hasSMR) tekilKur('smr', () => world.buildSMR(state.landNorth ? 'north' : 'south', pv('smr')))
+  else if (state.smrWreck) tekilKur('smrwreck', () => world.buildSMRWreck(state.landNorth ? 'north' : 'south', pv('smr'))) // patlama kalıntısı — aynı temelde
+  if (state.hasWash) tekilKur('wash', () => world.buildWash(pv('wash')))
+  if (state.hasOil) tekilKur('oil', () => world.buildOil(pv('oil')))
+  if (state.hasCoffee) tekilKur('coffee', () => world.buildCoffee(pv('coffee')))
+  if (state.hasRestaurant) tekilKur('restaurant', () => world.buildRestaurant(pv('restaurant')))
+  if (state.hasTruckPark) tekilKur('truckpark', () => world.buildTruckPark(pv('truckpark')))
+  if (state.hasTruckPark2) tekilKur('truckpark2', () => world.buildTruckPark(pv('truckpark2'), 'truckpark2'))
+  if (state.hasHotel) tekilKur('hotel', () => world.buildHotel(pv('hotel')))
   for (let i = 0; i < state.airWaterCount; i++) {
     const iid = i === 0 ? 'airwater' : `airwater#${i}`
-    world.buildAirWater(pv(iid), iid)
+    tekilKur(iid, () => world.buildAirWater(pv(iid), iid))
   }
   for (let i = 0; i < state.lampCount; i++) {
     const iid = i === 0 ? 'lamp' : `lamp#${i}`
-    world.buildStreetLamp(pv(iid), iid)
+    tekilKur(iid, () => world.buildStreetLamp(pv(iid), iid))
   }
   for (let i = 0; i < state.selfWashCount; i++) {
     const iid = i === 0 ? 'selfwash' : `selfwash#${i}`
-    world.buildSelfWash(pv(iid), iid)
+    tekilKur(iid, () => world.buildSelfWash(pv(iid), iid))
   }
   for (let i = 0; i < state.parkingCount; i++) {
     const iid = i === 0 ? 'parking' : `parking#${i}`
-    world.buildParking(pv(iid), iid)
+    tekilKur(iid, () => world.buildParking(pv(iid), iid))
   }
   if (state.isMarina) {
-    for (const fid of state.marinaFacs) world.buildMarinaFac(fid, pv('mfac-' + fid))
+    for (const fid of state.marinaFacs) tekilKur('mfac-' + fid, () => world.buildMarinaFac(fid, pv('mfac-' + fid)))
     world.updateBerthVisual(state.berths)
   }
   if (placedPos.office) {
@@ -4241,6 +4271,20 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
     },
     /** reload simülasyonu: sahneyi kayıtlı state'ten yeniden kur */
     rebuild() { rebuildFromState() },
+  },
+  // KAYIT KAYBI KANCASI (yalnız ?full=1): tools/tests/kayit-kaybi-check.mjs
+  // "arsa al → sahneyi yeniden kur → kaydet → yükle → hiçbir yapı kaybolmadı" turunu
+  // ölçebilsin. Sahnedeki bina listesi + kayda giden yükün aynası; mutasyon yapmaz.
+  kayit: {
+    binalar() { return world.buildings.map(b => b.id) },
+    yuk() { return JSON.parse(JSON.stringify(savePayload())) as Record<string, unknown> },
+    /** kaydı YENİDEN uygula (reload'un applySaveData + rebuildFromState ayağı) */
+    yukle(d: Record<string, unknown>) { applySaveData(d); rebuildFromState() },
+    arsaAl(c: number, r: number, beton = true) {
+      state.ownedParcels.add(parcelKey(c, r)); world.markOwned(c, r)
+      if (beton) { state.pavedParcels.add(parcelKey(c, r)); world.paveParcel(c, r) }
+      persist()
+    },
   },
   // SİNEMATİK KAMERA (video stüdyosu için — yalnız vitrin modunda): pürüzsüz zoom/pan
   cine: {
@@ -5818,8 +5862,19 @@ function frame() {
     if (loanRes === 'done') ui.toast(t('Kredi tamamen ödendi — teminatların serbest!'), 'good')
     else if (loanRes === 'warn') ui.toast(t('Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.'), 'bad')
     else if (loanRes === 'seize') {
-      if (state.loan.collateral.length) seizeCollateral() // teminatlı → haciz
-      else { state.startPartnership(); ui.toast(t('Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!', Math.round(PARTNER_SHARE * 100)), 'bad') }
+      // HACİZ YALNIZ KREDİNİN ALINDIĞI ŞUBEDE (canlı kayıt kanıtı: cevreyolu'nda oynayan
+      // hesaplarda pompalar/ofis dışında HER ŞEY silinmişti). Teminat id'leri şube bazlı
+      // olduğu için başka şubedeyken haciz, oyuncunun hiç rehin vermediği binaları yıkıyordu.
+      // Şube bilinmiyorsa (alan eklenmeden önce alınmış eski kredi) da HACZETME — ortaklığa
+      // düş: banka alacağını kâr payından tahsil eder, hiçbir bina kaybolmaz.
+      const ayniSube = state.loan.loc === state.activeLoc
+      if (state.loan.collateral.length && ayniSube) seizeCollateral() // teminatlı → haciz
+      else {
+        if (state.loan.collateral.length) {
+          ui.toast(t('Borç ödenemedi — teminatların BAŞKA şubede olduğu için haczedilmedi.'), 'bad', true)
+        }
+        state.startPartnership(); ui.toast(t('Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!', Math.round(PARTNER_SHARE * 100)), 'bad')
+      }
     }
     // banka ortaklığı aktifse günlük kârdan payını al
     const pc = state.applyPartnerCut(profit)

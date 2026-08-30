@@ -47,6 +47,7 @@
     "test:yerlesim": "node tools/tests/yerlesim-check.mjs",
     "test:branch": "tsx tools/tests/branch-check.mjs",
     "test:karsiyaka": "tsx tools/tests/karsi-yaka-check.mjs",
+    "test:kayitkaybi": "tsx tools/tests/kayit-kaybi-check.mjs",
     "ses:export": "node tools/ses-export.mjs",
     "shots": "node tools/shot/shoot.mjs",
     "test:gerilim": "tsx tools/tests/gerilim-check.mjs",

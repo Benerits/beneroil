@@ -945,6 +945,7 @@ const EN: Record<string, string> = {
   'Kredi tamamen ödendi — teminatların serbest!': 'Loan fully repaid — your collateral is released!',
   'Kredi taksiti gecikti! Kasanı doldur — üst üste 2 gecikmede tahsilat/haciz gelir.': 'Loan installment overdue! Top up your cash — 2 misses in a row triggers seizure.',
   'Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!': 'Debt unpaid — the bank became a {0}% PARTNER, collected from profit share!',
+  'Borç ödenemedi — teminatların BAŞKA şubede olduğu için haczedilmedi.': 'Debt unpaid — your collateral is at ANOTHER branch, so nothing was seized.',
   'Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin!': 'The bank recovered its share — partnership ended, the station is all yours!',
   'Banka ortağı kâr payı aldı: -₺{0}': 'Bank partner took its profit share: -₺{0}',
   // pompacı / şarjcı / bina
@@ -2341,6 +2342,8 @@ const FR: Record<string, string> = {
     'Mensualité de crédit en retard ! Renfloue ta caisse — 2 retards d’affilée déclenchent la saisie.',
   'Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!':
     'Dette impayée — la banque est devenue ASSOCIÉE à {0} %, prélevée sur les bénéfices !',
+  'Borç ödenemedi — teminatların BAŞKA şubede olduğu için haczedilmedi.':
+    'Dette impayée — tes garanties sont dans une AUTRE succursale, rien n’a été saisi.',
   'Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin!':
     'La banque a récupéré sa part — partenariat terminé, la station est entièrement à toi !',
   'Banka ortağı kâr payı aldı: -₺{0}': 'L’associé bancaire a pris sa part des bénéfices : -₺{0}',
