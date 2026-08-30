@@ -871,8 +871,21 @@
         <button class="tab" data-oftab="ihale" data-i18n="İhaleler">İhaleler</button>
         <button class="tab" data-oftab="gorev" data-i18n="Görevler">Görevler</button>
         <button class="tab" data-oftab="buyume" data-i18n="Şubeler">Şubeler</button>
+        <!-- TERSANE: yalnız marina şubesinde görünür (main.ts sekmeyi gizler/gösterir) -->
+        <button class="tab" data-oftab="tersane" data-i18n="Tersane" style="display:none">Tersane</button>
       </div>
       <div class="mbody">
+
+        <!-- TERSANE PANELİ: gelen bakım işleri + kızaktaki işler.
+             Marina'nın tek AKTİF karar noktası: kapasite sınırlı, iş kaçırmak acıtır. -->
+        <div class="ofpane" data-ofpane="tersane">
+          <div class="ofsec" data-i18n="Kızak Durumu">Kızak Durumu</div>
+          <div id="of-refit-cap"></div>
+          <div class="ofsec" data-i18n="Gelen İşler">Gelen İşler</div>
+          <div id="of-refit-offers"></div>
+          <div class="ofsec" data-i18n="Kızaktaki İşler">Kızaktaki İşler</div>
+          <div id="of-refit-jobs"></div>
+        </div>
 
         <div class="ofpane is-on" data-ofpane="ozet">
           <div class="ofsec" data-i18n="Finansal Durum">Finansal Durum</div>

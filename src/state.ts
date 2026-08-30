@@ -1,7 +1,8 @@
 import { t } from './i18n'
 import {
   BOAT_SEGMENTS, BERTH_KINDS, MARINA_FACILITIES, berthIncome, winterStorageIncome,
-  blueFlagStatus, pickMarinaEvent, type BerthKind, type MarinaFacId, type BoatSegment,
+  blueFlagStatus, pickMarinaEvent, membershipIncome, refitDemand, pickRefitJob,
+  type BerthKind, type MarinaFacId, type BoatSegment,
 } from './marina'
 import {
   freshRival, marketShare, rivalDecide, rivalKindFor, updateStrength, effectiveShare, rivalRamp, RIVAL_NAME,
@@ -368,6 +369,14 @@ export class GameState {
   winterSlots = 0
   /** çevre/uyum sicili — 3 ihlalde Mavi Bayrak askıya alınır (GEÇİCİ, kalıcı silme yok) */
   marinaViolations = 0
+  // ── TERSANE KUYRUĞU (ADDITIVE) ──
+  // Kabul edilmiş bakım işleri. Kapasite = winterSlots (kışlama kızakları) — travel lift
+  // → kışlama → bakım zinciri böyle bağlanıyor. Eski kayıtlarda alan yok → boş dizi.
+  refitJobs: { kind: string; daysLeft: number; fee: number }[] = []
+  /** bugün gelen, henüz kabul/ret edilmemiş teklifler (kayda GİRMEZ — gün içi karar) */
+  refitOffers: { kind: string; gun: number; ucret: number }[] = []
+  refitDone = 0
+  refitEarned = 0
   /** AI RAKİP (Katman 4d) — yalnız ikinci şubeden sonra, kasaba HARİÇ. null = rakip yok */
   rival: RivalState | null = null
   /** doğru/yanlış defter kararı sayacı (öğretici geri bildirim için) */
@@ -1231,6 +1240,7 @@ export class GameState {
     this.gridLevel = 0; this.batteryLevel = 0; this.battery = 0
     this.solarCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0; this.lampCount = 0
     this.marinaFacs = []; this.berths = {}; this.winterSlots = 0; this.marinaViolations = 0
+    this.refitJobs = []; this.refitOffers = []
     this.hasDiesel = false; this.hasSMR = false; this.smrWreck = false; this.hasWash = false; this.hasOil = false
     this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
     this.hasHotel = false; this.hasCleaner = false
@@ -1675,12 +1685,60 @@ export class GameState {
   }
 
   /** Bağlama + kışlama günlük geliri (pasif omurga). Gün dönüşünde kasaya eklenir. */
-  marinaDailyIncome(): { berth: number; winter: number; total: number } {
-    if (!this.isMarina) return { berth: 0, winter: 0, total: 0 }
+  marinaDailyIncome(): { berth: number; winter: number; uyelik: number; uye: number; total: number } {
+    if (!this.isMarina) return { berth: 0, winter: 0, uyelik: 0, uye: 0, total: 0 }
     const sid = this.season().id
     const berth = berthIncome(this.berths, sid, this.blueFlag().ok)
     const winter = winterStorageIncome(this.winterSlots, sid, this.hasMarinaFac('travelift'))
-    return { berth, winter, total: berth + winter }
+    // ÜYELİK: kışın da gelen sabit gelir — sezon çöküşünü yumuşatır (yaz %95 → kış %55
+    // doluluk uçurumu tek başına marinayı "kışın ölü" yapıyordu).
+    const m = membershipIncome(this.berths, this.hasMarinaFac('clubhouse'), this.blueFlag().ok)
+    return { berth, winter, uyelik: m.gelir, uye: m.uye, total: berth + winter + m.gelir }
+  }
+
+  // ── TERSANE ──
+  /** kaç kızak boş: kapasite kışlama kızaklarından gelir, travel lift şart */
+  refitCapacity(): number { return this.hasMarinaFac('travelift') ? this.winterSlots : 0 }
+  refitFree(): number { return Math.max(0, this.refitCapacity() - this.refitJobs.length) }
+
+  /** Gün başında teklifleri üret (determinist: F5 ile iş kumarı oynanamaz). */
+  rollRefitOffers(): void {
+    this.refitOffers = []
+    const kap = this.refitCapacity()
+    if (!this.isMarina || kap <= 0) return
+    let yer = 0
+    for (const n2 of Object.values(this.berths)) yer += n2
+    const n = refitDemand(this.season().id, yer)
+    for (let i = 0; i < n; i++) this.refitOffers.push(pickRefitJob(this.day, i))
+  }
+
+  /** Teklifi kabul et — boş kızak yoksa reddedilir (kapasite kararı burada acıtır). */
+  acceptRefit(i: number): { ok: boolean; reason?: string } {
+    const o = this.refitOffers[i]
+    if (!o) return { ok: false, reason: 'yok' }
+    if (this.refitFree() <= 0) return { ok: false, reason: 'kapasite' }
+    this.refitJobs.push({ kind: o.kind, daysLeft: o.gun, fee: o.ucret })
+    this.refitOffers.splice(i, 1)
+    return { ok: true }
+  }
+
+  /** Gün dönüşü: işler ilerler, bitenler ödenir. */
+  processRefitDay(): { biten: number; kazanc: number } {
+    if (!this.refitJobs.length) return { biten: 0, kazanc: 0 }
+    let biten = 0, kazanc = 0
+    this.refitJobs = this.refitJobs.filter(j => {
+      j.daysLeft -= 1
+      if (j.daysLeft > 0) return true
+      biten++; kazanc += j.fee
+      return false
+    })
+    if (kazanc > 0) {
+      this.money += kazanc
+      this.refitDone += biten
+      this.refitEarned += kazanc
+      this.addRep(0.05 * biten)     // iyi tersane itibar yapar
+    }
+    return { biten, kazanc }
   }
 
   /** Günlük risk olayı (determinist). Kalıcı silme YOK — para/itibar/bayrak, hepsi telafi edilebilir. */
@@ -2488,9 +2546,14 @@ const SAVE_FIELDS = [
   'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
   'wagesPaid', 'fuelSpent', 'noAds', 'steamPoll', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival',
+  // tersane (ADDITIVE): kabul edilmiş işler + sayaçlar. Teklifler kayda girmez (gün içi).
+  'refitJobs', 'refitDone', 'refitEarned',
   // GERİLİM (ADDITIVE): gün sonu raporundaki "bugün kaçırdıkların" satırı. Eski kayıtta
   // alan yok → applySaveData dokunmaz, sınıf varsayılanı (0) kalır.
   'dayLostCount', 'dayLostMoney',
+  // ÖDÜLLÜ REKLAM ÖDÜLÜ KAYDA GİRER: "refresh atınca müşteri patlaması kayboluyor"
+  // şikâyeti — izlenen reklamın karşılığı yenilemede yanmamalı.
+  'promo',
   // ödüllü reklam günlük hakları (ADDITIVE; eski kayıtta yok → 0'dan başlar)
   'adSeriUsed', 'adVipUsed',
 ] as const
@@ -2534,6 +2597,8 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   for (const f of SAVE_FIELDS) {
     if (f in data) (s as any)[f] = data[f]
   }
+  // SÜRESİ DOLMUŞ PROMO TEMİZLENİR: kayıt eskiyse rozet sonsuza dek asılı kalırdı.
+  if (s.promo && (typeof s.promo.until !== 'number' || s.promo.until <= Date.now())) s.promo = null
   // eski boolean kayıtları sayaca çevir
   if (data.hasSolar && !s.solarCount) s.solarCount = 1
   if (data.hasParking && !s.parkingCount) s.parkingCount = 1

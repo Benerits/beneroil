@@ -258,3 +258,60 @@ export function pickMarinaEvent(day: number, seasonId: string, facs: Set<string>
   }
   return pool[pool.length - 1]
 }
+
+// ---- 6) TERSANE: YAT BAKIM KUYRUĞU ----
+// Marina'nın tüm parçaları PASİF gelirdi (bağlama, kışlama, tesis) — oyuncunun verecek
+// kararı yoktu, bu yüzden "sığ" hissediyordu. Bakım kuyruğu marinanın AKTİF mekaniği:
+// iş gelir, kapasite sınırlıdır, kabul edip etmemek karardır.
+//
+// KRİTİK BAĞLANTI: kapasite = kışlama kızakları (winterSlots) ve iş akışı KIŞIN zirve
+// yapar. Böylece travel lift → kışlama → bakım tek bir zincire bağlanır; bunlar bugüne
+// dek birbirinden habersiz üç ayrı sistemdi.
+export const REFIT_KINDS = {
+  karina:  { gun: 1, ucret: 14_000, label: t('Karina temizliği') },
+  boya:    { gun: 3, ucret: 46_000, label: t('Tekne boyası') },
+  motor:   { gun: 2, ucret: 32_000, label: t('Motor bakımı') },
+  yelken:  { gun: 2, ucret: 27_000, label: t('Direk & armada bakımı') },
+  osmoz:   { gun: 4, ucret: 88_000, label: t('Osmoz onarımı') },
+} as const
+export type RefitKind = keyof typeof REFIT_KINDS
+
+/** Günlük gelen bakım işi sayısı — KIŞIN zirve, yazın az (tekneler suda).
+ *  TALEP MARİNANIN BÜYÜKLÜĞÜNDEN gelir (bağlama yeri sayısı), KAPASİTEDEN DEĞİL.
+ *  Kapasiteye bağlamak "yetişemedim" kararını imkânsız kılıyordu: kızak aldıkça talep
+ *  de artıyor, kuyruk hiç taşmıyordu. Artık kızak = ARZ, bağlama = TALEP. */
+export function refitDemand(seasonId: string, berthCount: number): number {
+  if (berthCount <= 0) return 0
+  const rate = seasonId === 'kis' ? 1 : seasonId === 'sonbahar' ? 0.7 : seasonId === 'ilkbahar' ? 0.6 : 0.35
+  return Math.max(0, Math.round(berthCount * rate * 0.4))
+}
+
+/** Determinist iş üretimi (gün tohumlu — F5 ile iş kumarı oynanamaz). */
+export function pickRefitJob(day: number, index: number): { kind: RefitKind; gun: number; ucret: number } {
+  const keys = Object.keys(REFIT_KINDS) as RefitKind[]
+  const x = Math.sin(day * 41.7 + index * 9.13) * 43758.5453
+  const r = x - Math.floor(x)
+  const kind = keys[Math.min(keys.length - 1, Math.floor(r * keys.length))]
+  const k = REFIT_KINDS[kind]
+  // ücret ±%15 bandında oynar: aynı iş her seferinde aynı parayı vermesin
+  const y = Math.sin(day * 7.31 + index * 3.77) * 43758.5453
+  const sapma = 0.85 + (y - Math.floor(y)) * 0.3
+  return { kind, gun: k.gun, ucret: Math.round(k.ucret * sapma / 100) * 100 }
+}
+
+// ---- 7) ÜYELİK (kulüp aidatı) ----
+// Bağlama alan tekne sahipleri kulübe üye olur: KIŞIN da gelen sabit gelir. Sezon
+// çöküşünü yumuşatır ve bağlama yatırımına ikinci bir gerekçe verir.
+// Yat kulübü tesisi şart — yoksa üyelik kavramı yok.
+export function membershipIncome(
+  berths: Record<string, number>,
+  hasClubhouse: boolean,
+  blueFlag: boolean,
+): { uye: number; gelir: number } {
+  if (!hasClubhouse) return { uye: 0, gelir: 0 }
+  let yer = 0
+  for (const [k, n] of Object.entries(berths)) if (BERTH_KINDS[k as BerthKind]) yer += n
+  // her bağlama yerinin %60'ı üyeye dönüşür; Mavi Bayrak marinada sadakat yüksek
+  const uye = Math.round(yer * (blueFlag ? 0.75 : 0.6))
+  return { uye, gelir: uye * 420 }   // günlük aidat payı (etki ölçülerek ayarlandı)
+}

@@ -102,6 +102,25 @@ const tekrar = serializeState(s2)
 bekle(typeof tekrar.dayLostCount === 'number', 'yeni alanlar tekrar kaydediliyor')
 bekle(Number.isFinite(s2.comboMult()) && s2.comboMult() === 1, 'seri çarpanı temiz kayıtta nötr (×1)')
 
+// ── ÖDÜLLÜ REKLAM ÖDÜLÜ YENİLEMEDE YANMAMALI ──
+// Oyuncu şikâyeti (30 Ağu): "refresh atınca müşteri patlaması kayboluyor" — izlenen
+// reklamın karşılığı kaydedilmiyordu, sayfa yenilenince ödül buhar oluyordu.
+{
+  const a = new GameState()
+  a.promo = { type: 'rush', until: Date.now() + 60_000 }
+  const kayit = serializeState(a)
+  bekle(!!kayit.promo, 'aktif kampanya KAYDA giriyor')
+  const b2 = new GameState()
+  hydrateState(b2, kayit)
+  bekle(b2.promo?.type === 'rush', 'yenilemeden sonra kampanya DEVAM ediyor')
+  bekle((b2.promo?.until ?? 0) > Date.now(), 'kalan süre korunuyor')
+
+  // süresi geçmiş kampanya asılı kalmamalı
+  const c = new GameState()
+  hydrateState(c, { promo: { type: 'rush', until: Date.now() - 5_000 } })
+  bekle(c.promo === null, 'süresi DOLMUŞ kampanya yüklemede temizleniyor (rozet asılı kalmaz)')
+}
+
 // çarpan kademeleri
 s2.combo = 3; bekle(s2.comboMult() === 1.1, 'seri 3 → ×1.10')
 s2.combo = 6; bekle(s2.comboMult() === 1.25, 'seri 6 → ×1.25')

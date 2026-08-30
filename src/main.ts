@@ -6,7 +6,7 @@ import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './new
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
 import { shareLabel } from './rival'
 import { openLogbook } from './logbook-ui'
-import { makeLogbook, resolveLogbook, logbookFlags, type MarinaFacId } from './marina'
+import { makeLogbook, resolveLogbook, logbookFlags, REFIT_KINDS, type MarinaFacId } from './marina'
 import {
   FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
@@ -858,6 +858,49 @@ function openOfficePanel() {
   const tl = (n: number) => Math.round(n).toLocaleString('tr-TR')
   const row = (k: string, v: string, cls = '') => `<div class="stat"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`
 
+  // ── TERSANE (yalnız marina) ──
+  // Marina'nın tüm gelirleri pasifti; burası oyuncunun GERÇEKTEN karar verdiği yer:
+  // kızak sınırlı, gelen her işi alamazsın, hangisini alacağın kâr/gün oranına bağlı.
+  {
+    const tab = document.querySelector<HTMLElement>('#oftabs .tab[data-oftab="tersane"]')
+    const marinaMi = state.isMarina && state.refitCapacity() > 0
+    if (tab) tab.style.display = marinaMi ? '' : 'none'
+    if (marinaMi) {
+      const cap = document.getElementById('of-refit-cap')
+      if (cap) cap.innerHTML =
+        row(t('Kızak kapasitesi'), `${state.refitJobs.length} / ${state.refitCapacity()}`,
+          state.refitFree() > 0 ? 'good' : 'bad')
+        + row(t('Teslim edilen iş'), String(state.refitDone))
+        + row(t('Tersane kazancı'), `₺${tl(state.refitEarned)}`, 'good')
+        + row(t('Sezon'), `${state.season().name} — ${t('kışın iş zirve yapar')}`)
+
+      const off = document.getElementById('of-refit-offers')
+      if (off) {
+        off.innerHTML = state.refitOffers.length
+          ? state.refitOffers.map((o, i) => {
+              const k = (REFIT_KINDS as Record<string, { label: string }>)[o.kind]?.label ?? o.kind
+              const gunluk = Math.round(o.ucret / o.gun)
+              const alinabilir = state.refitFree() > 0
+              return `<div class="stat"><span class="k">${k} · ${o.gun} ${t('gün')} · ₺${tl(gunluk)}/${t('gün')}</span>`
+                + `<span class="v"><button class="btn ${alinabilir ? 'primary' : ''}" data-refit="${i}"`
+                + `${alinabilir ? '' : ' disabled'} style="padding:5px 12px; font-size:13px">`
+                + `₺${tl(o.ucret)} — ${alinabilir ? t('Kabul') : t('Kızak dolu')}</button></span></div>`
+            }).join('')
+          : `<div class="stat"><span class="k">${t('Şu an bekleyen iş yok — yeni işler gün başında gelir.')}</span></div>`
+      }
+
+      const jobs = document.getElementById('of-refit-jobs')
+      if (jobs) {
+        jobs.innerHTML = state.refitJobs.length
+          ? state.refitJobs.map(j => {
+              const k = (REFIT_KINDS as Record<string, { label: string }>)[j.kind]?.label ?? j.kind
+              return row(k, `${j.daysLeft} ${t('gün kaldı')} · ₺${tl(j.fee)}`)
+            }).join('')
+          : `<div class="stat"><span class="k">${t('Kızaklar boş.')}</span></div>`
+      }
+    }
+  }
+
   // 1) Finansal durum
   // Oğuz tanımları: Kasa = eldeki net · İşletme Sermayesi = tanktaki yakıt × satış
   // fiyatı (stok değeri) · Aktif = kasa + sermaye + inşaattan elde edilenler
@@ -1216,6 +1259,23 @@ document.getElementById('of-toggle')?.addEventListener('click', () => { document
 
 // Ofis sekmeleri — mağaza modalıyla AYNI bileşen (.tabs/.tab). Panel tek uzun liste
 // olarak taşacak kadar büyüdüğü için işe göre gruplandı: özet/fiyat/muhasebe/ihale/büyüme.
+// TERSANE İŞ KABULÜ (delegasyon: panel her tazelemede yeniden çiziliyor)
+document.getElementById('of-refit-offers')?.addEventListener('click', e => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-refit]')
+  if (!btn) return
+  const r = state.acceptRefit(Number(btn.dataset.refit))
+  if (!r.ok) {
+    ui.toast(r.reason === 'kapasite'
+      ? t('Kızak dolu — önce bir iş teslim edilmeli.')
+      : t('Bu iş artık yok.'), 'bad')
+    return
+  }
+  audio.click?.()
+  ui.toast(t('İş kızağa alındı.'), 'good')
+  persist()
+  openOfficePanel()
+})
+
 for (const tab of document.querySelectorAll<HTMLButtonElement>('#oftabs .tab')) {
   tab.addEventListener('click', () => {
     const id = tab.dataset.oftab
@@ -5567,6 +5627,22 @@ function frame() {
         ui.toast(mi.winter > 0
           ? t('Bağlama ₺{0} + kışlama ₺{1} tahsil edildi', mi.berth.toLocaleString('tr-TR'), mi.winter.toLocaleString('tr-TR'))
           : t('Bağlama geliri: +₺{0}', mi.berth.toLocaleString('tr-TR')), 'good')
+        // ÜYELİK ayrı raporlanır: kışın bağlama düşerken bu gelirin AYAKTA kaldığını
+        // görmek, yat kulübü yatırımının gerekçesini oyuncuya öğretir.
+        if (mi.uyelik > 0) {
+          ui.toast(t('Kulüp aidatı: {0} üye → +₺{1}', mi.uye, mi.uyelik.toLocaleString('tr-TR')), 'good')
+        }
+      }
+      // ---- TERSANE: biten işler ödenir, yeni teklifler gelir ----
+      const rf = state.processRefitDay()
+      if (rf.biten > 0) {
+        ui.toast(t('Tersane: {0} iş teslim edildi → +₺{1}', rf.biten, rf.kazanc.toLocaleString('tr-TR')), 'good', true)
+        audio.achieve()
+      }
+      state.rollRefitOffers()
+      if (state.refitOffers.length > 0) {
+        ui.toast(t('Tersaneye {0} bakım işi geldi — Ofis › Marina\'dan kabul et ({1} kızak boş)',
+          state.refitOffers.length, state.refitFree()), state.refitFree() > 0 ? '' : 'bad', true)
       }
       const ev = state.marinaDayEvent()
       if (ev) {
