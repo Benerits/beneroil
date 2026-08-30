@@ -2336,7 +2336,11 @@ export class World {
     const dir = ang + (far ? Math.PI : 0)
     this.pumpSlots[index] = new THREE.Vector3(base.x + Math.cos(dir) * 1.8, base.y + Math.sin(dir) * 1.8, 0)
     if (isWater) this.pumpSlots[index].x = Math.max(this.pumpSlots[index].x, 6.6) // yuva SUDA kalır
-    this.pumpAngles[index] = ang // araç pompanın uzun eksenine paralel dursun (yan durma fixi)
+    // ARAÇ AÇISI DA FLIP'LENİR (dir, ang değil). Yuva konumu yukarıda far-flip ile
+    // hesaplanıyordu ama açı flip'siz kalıyordu → karşı yakada araç yuvaya doğru gelip
+    // 180° TERS park ediyordu (burnu pompanın aksi yönüne bakıyor). Yakın yakada dir === ang,
+    // yani mevcut davranış birebir korunuyor; yalnız karşı yaka düzeliyor.
+    this.pumpAngles[index] = dir
     this.pumpBase[index] = base.clone()
     const g = new THREE.Group()
     box(1.7, 3.4, 0.2, 0xc7ccd1, 0, 0, 0.1, g)
@@ -2369,7 +2373,9 @@ export class World {
     // yoksa 90°/270° döndürülmüş karşı şarjda araç pad'in ters tarafına yanaşıyordu
     const evDir = ang + (base.x > ROAD_X ? Math.PI : 0)
     this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(evDir) * 1.1, base.y + Math.sin(evDir) * 1.1, 0)
-    this.evAngles[index] = ang // araç ünitenin açısına paralel dursun
+    // pompadaki ile aynı gerekçe: yuva evDir ile dönüyorsa açı da evDir olmalı,
+    // yoksa karşı yakadaki araç şarj ünitesine ters yanaşır
+    this.evAngles[index] = evDir
     this.evBase[index] = base.clone()
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({

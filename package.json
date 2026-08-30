@@ -53,7 +53,8 @@
     "test:mobil": "node tools/tests/mobil-check.mjs",
     "test:toast": "node tools/tests/toast-check.mjs",
     "test:rakip": "tsx tools/tests/rakip-check.mjs",
-    "test:rota": "tsx tools/tests/rota-check.mjs"
+    "test:rota": "tsx tools/tests/rota-check.mjs",
+    "test:aci": "tsx tools/tests/aci-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",
