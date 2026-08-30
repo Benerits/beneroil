@@ -1566,6 +1566,10 @@ export class CarManager {
         // Kural: HAREKET EDEN araçlar arasında çarpışma TAM AÇIK. Duran araç yol kenarı
         // engelidir; yanından sıyrılınır. Oyuncunun şikâyet ettiği "araçlar birbirinin
         // içinden geçiyor" görüntüsü akan trafikte olan şeydi, o artık yok.
+        // DURAN ARAÇ TRAFİĞİN PARÇASI DEĞİL — hold vermez, hız da düşürmez.
+        // (Yavaşlatma DENENDİ ve ölçümle reddedildi: araçlar duran aracın önünde
+        //  birikip çakışmayı 1.7 → 3.4 çift/kare'ye çıkardı, servis 239 → 216'ya düştü.
+        //  Görsel çakışma aşağıdaki gorselAyrim() ile, akışa dokunmadan çözülüyor.)
         if (o.phase === 'atPump' || o.phase === 'parked' || o.phase === 'waiting') continue
         // (eski `parked && (toPark|leaving)` istisnası artık bu kuralın içinde eridi)
         const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
@@ -1877,6 +1881,10 @@ export class CarManager {
       }
     }
 
+    // GÖRSEL AYRIM: hareket bittikten sonra üst üste binen gövdeleri ayır.
+    // Akışa dokunmaz (hold/hız/rezervasyon değişmez) — yalnız konum düzeltir.
+    this.gorselAyrim(dt)
+
     this.cars = this.cars.filter(c => {
       if (c.phase === 'gone') return false
       if ((c.phase === 'transit' || c.phase === 'leaving') && Math.abs(c.group.position.y) > 42.5) {
@@ -1895,6 +1903,38 @@ export class CarManager {
   }
 
   private onLost(car: Car) { this.opts.onCarLost(car) }
+
+
+  /** GÖRSEL AYRIM (oyuncu ekran görüntüsü: kuyrukta 15 araç iç içe).
+   *  Duran araçlar akışı kesmesin diye çarpışma hesabından çıkarıldı; bu doğruydu ama
+   *  gövdelerin üst üste binmesine yol açtı. Burada AKIŞA HİÇ DOKUNMADAN (hold yok,
+   *  hız yok, rezervasyon yok) yalnız konum düzeltiliyor.
+   *  Uniform grid'i yeniden kullanır — O(n²) değil. */
+  private gorselAyrim(dt: number) {
+    const AYRIM = 1.38            // ölçümle seçildi: 1.55 salınım yaptı, 1.15 etkisizdi
+    const KUVVET = Math.min(1, dt * 5.5) // ölçümle seçildi: dt*9 akışı bozdu, dt*3.5 etkisizdi
+    for (const c of this.cars) {
+      if (c.phase === 'gone' || c.phase === 'transit') continue
+      const cp = c.group.position
+      for (const o of this.neighbors(cp.x, cp.y, 1)) {
+        if (o === c || o.phase === 'gone' || o.phase === 'transit') continue
+        const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
+        const d2 = dx * dx + dy * dy
+        if (d2 >= AYRIM * AYRIM || d2 < 1e-6) continue
+        const d = Math.sqrt(d2)
+        const itme = (AYRIM - d) * 0.5 * KUVVET
+        const nx = dx / d, ny = dy / d
+        // Pompadaki araç YERİNDE kalmalı (nozül hizası bozulmasın); onun yerine
+        // karşısındaki iki kat itilir. Diğer hâllerde ikisi de eşit pay alır.
+        const cSabit = c.phase === 'atPump', oSabit = o.phase === 'atPump'
+        if (cSabit && oSabit) continue
+        const cPay = cSabit ? 0 : (oSabit ? 2 : 1)
+        const oPay = oSabit ? 0 : (cSabit ? 2 : 1)
+        cp.x -= nx * itme * cPay; cp.y -= ny * itme * cPay
+        o.group.position.x += nx * itme * oPay; o.group.position.y += ny * itme * oPay
+      }
+    }
+  }
 
   /** VIP KURTARMA (ödüllü reklam karşılığı): sabrı tazelenir ve kuyrukta öne geçer.
    *  Para vermez — ekonomiyi şişirmemek için ödül "fırsat"tır, "nakit" değil. */

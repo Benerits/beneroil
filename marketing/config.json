@@ -1,0 +1,22 @@
+{
+  "brand": {
+    "bg_top": "#fdf9ef",
+    "bg_bot": "#f3e6cf",
+    "accent": "#d64545",
+    "ink": "#22303c",
+    "ink_soft": "#7a8290",
+    "motif1": "#d64545",
+    "motif2": "#e0a33c",
+    "motif3": "#27a05a",
+    "phone_w": 840,
+    "rot": -4,
+    "frame_r": 78,
+    "screen_r": 58
+  },
+  "screens": [
+    { "key": "build",  "shot": "build.png" },
+    { "key": "serve",  "shot": "serve.png" },
+    { "key": "night",  "shot": "night.png" },
+    { "key": "empire", "shot": "empire.png" }
+  ]
+}

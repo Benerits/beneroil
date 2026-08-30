@@ -46,6 +46,8 @@ function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet =
     return onFar ? new THREE.Vector3(2 * ROAD_X - 1.8, -y, 0) : new THREE.Vector3(1.8, y, 0)
   })
   let served = 0, lost = 0, rampLost = 0, svcSpawns = 0
+  // görsel çakışma sayaçları (oyuncunun ekranda gördüğü "iç içe geçme")
+  let cakisma = 0, cakismaAgir = 0, cakismaOrnek = 0
   const mgr = new CarManager(scene, null, {
     pumpCount: () => pumps, evCount: () => evs,
     pumpSlot: i => pumpSlots[Math.min(i, pumpSlots.length - 1)],
@@ -82,11 +84,32 @@ function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet =
     for (const c of mgr.cars) {
       if (c.phase === 'atPump' && !busy.has(c)) busy.set(c, i + 60)
     }
+    // ── GÖRSEL ÇAKIŞMA: gövdeleri üst üste binen araç çifti (oyuncunun ŞİKÂYET ETTİĞİ şey) ──
+    // Örnekleme: her 30 karede bir (her karede O(n²) taramak testi yavaşlatır).
+    if (i % 30 === 0) {
+      const gorunur = mgr.cars.filter(c => c.phase !== 'gone' && c.phase !== 'transit')
+      for (let a = 0; a < gorunur.length; a++) {
+        for (let b = a + 1; b < gorunur.length; b++) {
+          const A = gorunur[a], B = gorunur[b]
+          const dx = A.group.position.x - B.group.position.x
+          const dy = A.group.position.y - B.group.position.y
+          // 1.6 birim: iki aracın gövdesi bu mesafenin altındaysa gözle ÜST ÜSTE görünür
+          if (dx * dx + dy * dy < 1.6 * 1.6) {
+            cakisma++
+            if (dx * dx + dy * dy < 1.0 * 1.0) cakismaAgir++   // içine girmiş
+          }
+        }
+      }
+      cakismaOrnek++
+    }
     for (const [c, until] of [...busy]) {
       if (i >= until) { busy.delete(c); if (c.phase === 'atPump') mgr.releaseCar(c) }
     }
   }
   const st = mgr.evapStats, gs = mgr.graph.stats
+  // örnek başına ortalama çakışan çift — mutlak sayı örnekleme sayısına bağlı olmasın
+  const cakOrt = cakismaOrnek ? (cakisma / cakismaOrnek) : 0
+  const cakAgirOrt = cakismaOrnek ? (cakismaAgir / cakismaOrnek) : 0
   if (process.env.DIAG) {
     const byPhase = {}
     for (const c of mgr.cars) { const k = `${c.phase}${c.hardStuckT > 3 ? '*STUCK' : ''}`; byPhase[k] = (byPhase[k] || 0) + 1 }
@@ -99,9 +122,10 @@ function run(label, { pumps, evs, far, wide, minutes = 10, graph = true, quiet =
   // GERÇEKTEN takılmış araçlar sayılır (aksi halde grafik kuyruğu "sıkışma" görünür).
   const stuck = mgr.cars.filter(c => c.hardStuckT > 3 && !c.waitingForToken).length
   if (!quiet) console.log(`${label}: servis=${served} kayıp=${lost}${highway ? ' rampKayıp=' + rampLost : ''} | buharlaşma=${st.total} (near ${st.near}/far ${st.far}) | ` +
-    `rezervasyon: verildi ${gs.granted}, beklendi ${gs.denied} | kalıcı sıkışan=${stuck}`)
+    `rezervasyon: verildi ${gs.granted}, beklendi ${gs.denied} | kalıcı sıkışan=${stuck} | ` +
+    `ÇAKIŞMA ort ${cakOrt.toFixed(1)} çift/kare (içiçe ${cakAgirOrt.toFixed(1)})`)
   // servis şeridinde doğan araç sayısı — "şerit gerçekten kullanılıyor mu" kanıtı
-  return { st, stuck, served, rampLost, laneUse: svcSpawns }
+  return { st, stuck, served, rampLost, laneUse: svcSpawns, cakisma: cakOrt, cakismaAgir: cakAgirOrt }
 }
 
 let fail = 0

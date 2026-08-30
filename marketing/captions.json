@@ -1,0 +1,14 @@
+{
+  "en-US": {
+    "build":  { "kicker": "GAS STATION TYCOON", "head_pre": "Build your ", "head_hi": "own station", "head_post": "", "sub": "From one pump to a fuel empire — pumps, EV chargers, market & more", "badge": "FREE" },
+    "serve":  { "kicker": "YOU RUN THE PUMP", "head_pre": "Serve every ", "head_hi": "customer", "head_post": " yourself", "sub": "Pick the nozzle, fill the exact liters, earn the tip", "badge": "1,600+ PLAYERS" },
+    "night":  { "kicker": "24/7 BUSINESS", "head_pre": "The neon ", "head_hi": "never sleeps", "head_post": "", "sub": "Night rush, live economy, daily profit reports", "badge": "LIVE ECONOMY" },
+    "empire": { "kicker": "EXPAND ACROSS THE ROAD", "head_pre": "Grow into an ", "head_hi": "empire", "head_post": "", "sub": "Buy land, open a second station, even go nuclear", "badge": "NEW" }
+  },
+  "tr": {
+    "build":  { "kicker": "BENZİN İSTASYONU TYCOON", "head_pre": "Kendi ", "head_hi": "istasyonunu", "head_post": " kur", "sub": "Tek pompadan yakıt imparatorluğuna — pompa, EV şarj, market ve dahası", "badge": "ÜCRETSİZ" },
+    "serve":  { "kicker": "POMPA SENİN ELİNDE", "head_pre": "Her müşteriye ", "head_hi": "sen", "head_post": " servis yap", "sub": "Tabancayı seç, tam litresini doldur, bahşişi kap", "badge": "1.600+ OYUNCU" },
+    "night":  { "kicker": "7/24 İŞLETME", "head_pre": "Neonlar ", "head_hi": "hiç sönmez", "head_post": "", "sub": "Gece yoğunluğu, canlı ekonomi, günlük kâr raporu", "badge": "CANLI EKONOMİ" },
+    "empire": { "kicker": "YOLUN KARŞISINA GENİŞLE", "head_pre": "", "head_hi": "İmparatorluğa", "head_post": " dönüş", "sub": "Arsa al, ikinci istasyonu aç, istersen nükleere geç", "badge": "YENİ" }
+  }
+}

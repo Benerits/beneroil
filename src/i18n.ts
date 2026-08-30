@@ -23,8 +23,7 @@ export let lang: Lang = detect()
 // Doğru `lang` ayrıca ekran okuyucu ve tarayıcı çeviri teklifi için de gerekli.
 // DOM guard: bu modül NODE testlerinden de import ediliyor (state.ts → i18n.ts).
 // Guard'sız hâli tüm node testlerini "document is not defined" ile düşürüyordu.
-if (typeof document !== 'undefined') // (headless birim testleri i18n'i Node'da import ediyor — orada `document` yok)
-if (typeof document !== 'undefined') document.documentElement.lang = lang
+if (typeof document !== 'undefined' && document.documentElement) document.documentElement.lang = lang
 
 export function setLang(l: Lang) {
   localStorage.setItem(LANG_KEY, l)
@@ -2921,7 +2920,26 @@ export function translateDom(root: ParentNode = document) {
   if (!d) return
   for (const el of root.querySelectorAll<HTMLElement>('[data-i18n]')) {
     const key = el.getAttribute('data-i18n') || ''
-    if (key && d[key]) el.textContent = d[key]
+    if (!key || !d[key]) continue
+    // ELEMAN ÇOCUKLARI KORUNMALI: `el.textContent = …` çocuk DÜĞÜMLERİ de siler.
+    // index.html'de rozet taşıyan düğme var:
+    //   <button data-i18n="Bakım">Bakım <span id="maintbadge">0</span></button>
+    // TR'de sözlük yok → hiç dokunulmuyor, rozet duruyor. EN/FR'de ise textContent
+    // ataması <span id="maintbadge">'i DOM'dan siliyordu; ui.update() her karede
+    // null'a düşüp TypeError atıyor, kare döngüsü ölüyordu (yalnız EN/FR'de).
+    // Çözüm: alt elemanı olan düğümde SADECE metin düğümü değiştirilir, çevresindeki
+    // boşluk korunur (rozet metne yapışmasın).
+    if (el.firstElementChild) {
+      let yazildi = false
+      for (const n of [...el.childNodes]) {
+        if (n.nodeType !== Node.TEXT_NODE || !n.textContent?.trim()) continue
+        if (yazildi) { n.textContent = ''; continue }
+        const m = /^(\s*)[\s\S]*?(\s*)$/.exec(n.textContent)
+        n.textContent = (m?.[1] ?? '') + d[key] + (m?.[2] ?? '')
+        yazildi = true
+      }
+      if (!yazildi) el.insertBefore(document.createTextNode(d[key] + ' '), el.firstChild)
+    } else el.textContent = d[key]
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-i18n-ph]')) {
     const key = el.getAttribute('data-i18n-ph') || ''
