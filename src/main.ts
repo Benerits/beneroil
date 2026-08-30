@@ -2801,12 +2801,15 @@ function golgeTazele() { renderer.shadowMap.needsUpdate = true }
 function buildVisual(id: string, pos?: THREE.Vector2) {
   golgeTazele()
   const base = id.split('#')[0]
+  // pos = footprint MERKEZİ; gövde ofseti açıyla döner (bkz. unitBodyPos)
   if (base.startsWith('pump-') && pos) {
-    world.addPump(parseInt(base.slice(5)), new THREE.Vector2(pos.x - 0.9, pos.y))
+    const rot = placedRot[id] ?? 0
+    world.addPump(parseInt(base.slice(5)), unitBodyPos(base, pos.x, pos.y, rot), rot)
     return
   }
   if (base.startsWith('charger-') && pos) {
-    world.addEvCharger(parseInt(base.slice(8)), new THREE.Vector2(pos.x - 0.5, pos.y))
+    const rot = placedRot[id] ?? 0
+    world.addEvCharger(parseInt(base.slice(8)), unitBodyPos(base, pos.x, pos.y, rot), rot)
     return
   }
   if (base.startsWith('tankadd-')) {
@@ -3287,12 +3290,16 @@ function rebuildFromState() {
   for (let i = 1; i < state.pumps; i++) {
     const sp = pvv(`pump-${i}`)
     // Kayıtlı açıyla kur (charger gibi) → far-flip + oyuncu açısı birlikte, reload'da yön korunur.
-    world.addPump(i, sp ? new THREE.Vector2(sp.x - 0.9, sp.y) : undefined, placedRot[`pump-${i}`] ?? 0)
+    // placedPos footprint MERKEZİ; gövde ofseti açıyla döner (unitBodyPos) → reload'da yapı
+    // yerleştirildiği yerde kalır, zıplamaz.
+    const pr = placedRot[`pump-${i}`] ?? 0
+    world.addPump(i, sp ? unitBodyPos(`pump-${i}`, sp.x, sp.y, pr) : undefined, pr)
   }
   for (let i = 0; i < state.evChargers; i++) {
     const sp = pvv(`charger-${i}`)
     // Kayıtlı açıyla kur → araç yanaşma slotu da doğru hesaplanır (rotateBuilding slot güncellemez).
-    world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined, placedRot[`charger-${i}`] ?? 0)
+    const cr = placedRot[`charger-${i}`] ?? 0
+    world.addEvCharger(i, sp ? unitBodyPos(`charger-${i}`, sp.x, sp.y, cr) : undefined, cr)
   }
   // Karşıda (yol karşısı) pompa/şarj varsa karşı istasyonu aktive et — otomatik giriş-çıkış + karşı şerit trafiği.
   // (Yalnız karşıya EKİPMAN koymuş oyuncular; sadece arsa/tesis olan mevcut oyuncular ETKİLENMEZ.)
@@ -3358,7 +3365,8 @@ function rebuildFromState() {
   if (placedPos.gateout) { const g = pv('gateout'); if (g) { world.removeLampNear(g.y); world.buildGate('out', g) } }
   {
     const s0 = placedPos['pump-0']
-    if (s0) world.movePump(0, new THREE.Vector2(s0[0] - 0.9, s0[1]), placedRot['pump-0'] ?? 0)
+    const r0 = placedRot['pump-0'] ?? 0
+    if (s0) world.movePump(0, unitBodyPos('pump-0', s0[0], s0[1], r0), r0)
   }
   if (placedPos.tank) world.moveTank(new THREE.Vector2(placedPos.tank[0], placedPos.tank[1]))
   // charger + pump'lar yukarıda açılarıyla (far-flip dahil) kuruldu; burada ATLANIR
@@ -3481,6 +3489,7 @@ function overlaps(a: Rect, b: Rect): boolean {
 let placing: {
   id: string; w: number; d: number; grass: boolean; move: boolean
   root: THREE.Group; planeMat: THREE.MeshBasicMaterial
+  preview: THREE.Object3D | null // GÖVDE önizlemesi — dünya konumu ölçülebilsin (yerlesim-check)
   valid: boolean; cx: number; cy: number; rot: number
 } | null = null
 const placedRot: Record<string, number> = {}
@@ -3682,6 +3691,35 @@ function footprintOf(id: string, move = false): { w: number; d: number; grass?: 
   return id in PLACEABLE ? PLACEABLE[id](move) : null
 }
 
+/** POMPA/ŞARJ GÖVDE OFSETİ — hayalet ile gerçek yerleşimin AYRIŞTIĞI nokta (tek doğru kaynak).
+ *
+ *  NEDEN: Bu iki ünitede gövde, footprint MERKEZİNDE durmaz; merkezin batısındadır
+ *  (pompa 0.9, şarj 0.5 birim) — araç yuvası da simetrik olarak doğusunda. Yani footprint
+ *  merkezi = gövde ile yuvanın ORTASI.
+ *
+ *  BUG: Hayalet bu ofseti DÖNEN root'un ÇOCUĞU olarak uyguluyordu (startPlacement:
+ *  `preview.position.x = -0.9`), yani ofset hem oyuncunun açısıyla hem karşı-yaka
+ *  180° flip'iyle birlikte dönüyordu. Buna karşılık commit (confirmPlacement),
+ *  taşıma (applyDynamicMove), kurulum (buildVisual) ve reload (rebuildFromState)
+ *  ofseti SABİT −x olarak uyguluyordu. Sonuç: pompa hayaletin gösterdiği yere değil
+ *  1.27 birim (90°/270°) ya da 1.8 birim (180° ve KARŞI YAKA) uzağa oturuyordu.
+ *  Şarjda commit ofseti hiç uygulamıyordu → reload'da 0.5 birim zıplıyordu.
+ *
+ *  ÇÖZÜM: ofset DÖNER. Böylece gövde+yuva ikilisi her açıda footprint'in içinde kalır,
+ *  fixedObstacles'ın (gövde+yuva ortası) hesabı da footprint merkeziyle birebir tutar.
+ *  SAVE UYUMU: placedPos hâlâ footprint MERKEZİNİ tutar — format değişmedi. Yaygın hâl
+ *  olan "yakın yaka + rot 0" için sonuç eskisiyle BİREBİR aynı (cx-0.9); yalnız zaten
+ *  bozuk olan döndürülmüş/karşı yaka üniteler oyuncunun gördüğü yere kayar. */
+function unitBodyPos(id: string, cx: number, cy: number, rot: number): THREE.Vector2 {
+  const b = id.split('#')[0]
+  const off = b.startsWith('pump-') ? 0.9 : b.startsWith('charger-') ? 0.5 : 0
+  if (!off) return new THREE.Vector2(cx, cy)
+  // karşı yakada ünite 180° döner (world.addPump/addEvCharger far-flip'i) — hayalet de öyle döner
+  const ang = rot * Math.PI / 2 + (cx > ROAD_X ? Math.PI : 0)
+  const yuvarla = (v: number) => Math.round(v * 1e6) / 1e6 // cos(π/2)=6e-17 kirini temizle
+  return new THREE.Vector2(yuvarla(cx - Math.cos(ang) * off), yuvarla(cy - Math.sin(ang) * off))
+}
+
 // ---- Rezerv görselleştirme: "yer boş ama kırmızı" şikâyetinin fixi ----
 // Pompanın araç yuvası, servis şeridi, ofis çevresi gibi GÖRÜNMEZ rezervler yerleştirmeyi
 // engelliyor ama oyuncu alanı boş görüyordu (#242, #341, #223). Yerleştirme modunda bu
@@ -3716,10 +3754,11 @@ function startPlacement(id: string, move = false) {
   root.add(footprintGrid(f.w, f.d))
   const preview = makePreview(id)
   if (preview) {
-    // pompa/şarj gövdesi footprint merkezinin BATISINDA kurulur (commit: pompa cx-0.9, şarj cx-0.5);
-    // hayaleti de aynı offsetle göster → onaylanınca göründüğü yere oturur (WYSIWYG, "1 kare geri" bug'ı biter)
-    if (id.startsWith('pump-')) preview.position.x = -0.9
-    else if (id.startsWith('charger-')) preview.position.x = -0.5
+    // pompa/şarj gövdesi footprint merkezinin BATISINDA kurulur; ofset root'un çocuğu olduğu
+    // için AÇIYLA + karşı-yaka flip'iyle birlikte döner. Commit/reload tarafı da artık aynı
+    // dönüşümü uyguluyor (unitBodyPos) → onaylanınca yapı hayaletin gösterdiği yere oturur.
+    const off = unitBodyPos(id, 0, 0, 0) // rot=0/yakın yaka referansı: (-0.9,0) ya da (-0.5,0)
+    preview.position.set(off.x, off.y, preview.position.z)
     root.add(preview)
   }
   world.scene.add(root)
@@ -3730,7 +3769,7 @@ function startPlacement(id: string, move = false) {
   const mevcut = placedPos[id]
   const bx = move && mevcut ? mevcut[0] : 0
   const by = move && mevcut ? mevcut[1] : 0
-  placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, valid: false, cx: bx, cy: by, rot: placedRot[id] ?? 0 }
+  placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, preview, valid: false, cx: bx, cy: by, rot: placedRot[id] ?? 0 }
   root.rotation.z = placing.rot * Math.PI / 2
   world.showGrid(true)
   showReserves(id) // görünmez rezervler (araç yolu/yuva) turuncu görünür — "boş ama kırmızı" bitti
@@ -3776,16 +3815,21 @@ function cancelPlacement() {
 }
 
 /** taşımayı uygula — pompa/şarj/tank özel, kalanlar buildVisual */
-function applyDynamicMove(id: string, cx: number, cy: number) {
+function applyDynamicMove(id: string, cx: number, cy: number, rot?: number) {
+  // cx,cy = footprint MERKEZİ. Pompa/şarj gövdesi merkezin ofsetinde durur ve bu ofset
+  // AÇIYLA DÖNER (unitBodyPos) — hayaletteki önizleme de aynı şekilde döndüğü için
+  // yapı artık tam hayaletin gösterdiği noktaya oturur.
   if (id.startsWith('pump-')) {
     const n = parseInt(id.slice(5))
+    const r = rot ?? placedRot[`pump-${n}`] ?? 0 // taşırken açıyı/far-flip'i koru
     cars.evictSlot('fuel', n) // slottaki araç eski koordinatta asılı kalmasın
-    world.movePump(n, new THREE.Vector2(cx - 0.9, cy), placedRot[`pump-${n}`] ?? 0) // taşırken açıyı/far-flip'i koru
+    world.movePump(n, unitBodyPos(id, cx, cy, r), r)
   }
   else if (id.startsWith('charger-')) {
     const n = parseInt(id.slice(8))
+    const r = rot ?? placedRot[`charger-${n}`] ?? 0 // taşırken açıyı koru
     cars.evictSlot('ev', n)
-    world.moveCharger(n, new THREE.Vector2(cx - 0.5, cy), placedRot[`charger-${n}`] ?? 0) // taşırken açıyı koru
+    world.moveCharger(n, unitBodyPos(id, cx, cy, r), r)
   }
   else if (id === 'tank') world.moveTank(new THREE.Vector2(cx, cy))
   else if (id === 'gatein') { world.removeLampNear(cy); world.buildGate('in', new THREE.Vector2(cx, cy)); cars.rerouteForGates() }
@@ -3859,7 +3903,7 @@ function nudgePlacing(dx: number, dy: number) {
 function confirmPlacement() {
   const p = placing!
   if (p.move) {
-    applyDynamicMove(p.id, p.cx, p.cy)
+    applyDynamicMove(p.id, p.cx, p.cy, p.rot) // hayaletteki AÇIYLA taşı (eski açı değil)
     // otopark taşındı/döndü: park etmiş araçları uğurla — eski açı/konumda asılı kalmasınlar
     if (p.id.split('#')[0] === 'parking') cars.evictParked()
     ui.toast(t('Taşındı!'), 'good')
@@ -3877,12 +3921,14 @@ function confirmPlacement() {
   }
   if (p.id.startsWith('charger-')) {
     // Charger döndürülebilir: pozisyon + açı + araç yanaşma slotu birlikte kurulur.
+    // (Burada ofset HİÇ uygulanmıyordu: şarj cx'e kuruluyor ama reload cx-0.5'e kuruyordu →
+    //  ünite her açılışta 0.5 birim batıya kayıyordu. Artık iki yol da unitBodyPos kullanıyor.)
     const idx = Number(p.id.slice('charger-'.length))
-    world.moveCharger(idx, new THREE.Vector2(p.cx, p.cy), p.rot)
+    world.moveCharger(idx, unitBodyPos(p.id, p.cx, p.cy, p.rot), p.rot)
   } else if (p.id.startsWith('pump-')) {
     // Pompa da döndürülebilir: seçilen açıyla (far-flip dahil) yeniden kur — slot açıyla döner.
     const idx = Number(p.id.slice('pump-'.length))
-    world.movePump(idx, new THREE.Vector2(p.cx - 0.9, p.cy), p.rot)
+    world.movePump(idx, unitBodyPos(p.id, p.cx, p.cy, p.rot), p.rot)
   } else if (p.id !== 'tank' && p.id !== 'gatein' && p.id !== 'gateout' && p.id !== 'gatein2' && p.id !== 'gateout2') {
     world.rotateBuilding(p.id, p.rot)
   }
@@ -4140,6 +4186,41 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
   // TEST KANCALARI (yalnız ?full=1): otomatik doğrulama bina kartı akışını sürebilsin
   get ui() { return ui },
   sec(id: string) { selectedBuilding = id; world.setSelected(id); refreshBuildingCard() },
+  // YERLEŞİM KANCASI (yalnız ?full=1): hayalet ile GERÇEK yerleşim aynı noktaya mı düşüyor?
+  // tools/tests/yerlesim-check.mjs bunu sayıyla ölçer (hayalet gövdesi ↔ sahnedeki gövde).
+  place: {
+    start(id: string, move = false) { startPlacement(id, move) },
+    at(x: number, y: number) { repositionPlacing(x, y) },
+    rot(n: number) { if (placing) { placing.rot = ((n % 4) + 4) % 4; repositionPlacing(placing.cx, placing.cy) } },
+    confirm() { confirmPlacement() },
+    cancel() { cancelPlacement() },
+    /** hayaletin durumu + GÖVDE önizlemesinin DÜNYA konumu (footprint merkezi değil) */
+    ghost() {
+      if (!placing) return null
+      placing.root.updateMatrixWorld(true)
+      const v = new THREE.Vector3(placing.cx, placing.cy, 0)
+      if (placing.preview) placing.preview.getWorldPosition(v)
+      return {
+        id: placing.id, cx: placing.cx, cy: placing.cy, rot: placing.rot, valid: placing.valid,
+        bx: v.x, by: v.y, rz: placing.root.rotation.z,
+      }
+    },
+    /** sahnedeki GERÇEK yapının gövde konumu + yönü */
+    real(id: string) {
+      const b = world.buildings.find(x => x.id === id)
+      if (!b) return null
+      const g = b.group as THREE.Object3D
+      return { bx: g.position.x, by: g.position.y, rz: g.rotation.z }
+    },
+    /** kayda giden değerler (placedPos = footprint merkezi) + araç yuvası */
+    saved(id: string) {
+      const n = Number(id.replace(/^\D+/, ''))
+      const s = id.startsWith('pump-') ? world.pumpSlots[n] : id.startsWith('charger-') ? world.evSlots[n] : null
+      return { pos: placedPos[id] ?? null, rot: placedRot[id] ?? null, slot: s ? { x: s.x, y: s.y } : null }
+    },
+    /** reload simülasyonu: sahneyi kayıtlı state'ten yeniden kur */
+    rebuild() { rebuildFromState() },
+  },
   // SİNEMATİK KAMERA (video stüdyosu için — yalnız vitrin modunda): pürüzsüz zoom/pan
   cine: {
     getCam() { return { x: camX, y: camY, zoom: camera.zoom } },

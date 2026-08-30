@@ -2321,8 +2321,11 @@ export class World {
     // Charger kalıbı: araç yanaşma slotu AÇIYLA birlikte döner — araç hep nozül tarafına yanaşır.
     const far = base.x > ROAD_X
     const ang = rot * Math.PI / 2
-    const flip = far ? -1 : 1
-    this.pumpSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.8 * flip, base.y + Math.sin(ang) * 1.8, 0)
+    // Araç yuvası ünitenin GÖRSEL yönüyle (rot + far-flip) birlikte döner. Önceden flip
+    // yalnız X bileşenine uygulanıyordu; karşı yakada 90°/270° döndürülen pompada yuva
+    // nozülün TERS tarafına düşüyor, araç pompanın arkasına yanaşıyordu.
+    const dir = ang + (far ? Math.PI : 0)
+    this.pumpSlots[index] = new THREE.Vector3(base.x + Math.cos(dir) * 1.8, base.y + Math.sin(dir) * 1.8, 0)
     if (isWater) this.pumpSlots[index].x = Math.max(this.pumpSlots[index].x, 6.6) // yuva SUDA kalır
     this.pumpAngles[index] = ang // araç pompanın uzun eksenine paralel dursun (yan durma fixi)
     this.pumpBase[index] = base.clone()
@@ -2353,9 +2356,10 @@ export class World {
     // Araç yanaşma noktası varsayılan sağda (+1.1). Ünite döndükçe bu offset de döner,
     // böylece araç her zaman ünitenin şarj kablosu tarafından yanaşır.
     const ang = rot * Math.PI / 2
-    // karşı istasyonda yanaşma batıdan (araç yuvası batıda) — x ofseti terslenir
-    const evFlip = base.x > ROAD_X ? -1 : 1
-    this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(ang) * 1.1 * evFlip, base.y + Math.sin(ang) * 1.1, 0)
+    // karşı istasyonda yanaşma batıdan — flip TÜM ofsete uygulanır (yalnız X'e değil),
+    // yoksa 90°/270° döndürülmüş karşı şarjda araç pad'in ters tarafına yanaşıyordu
+    const evDir = ang + (base.x > ROAD_X ? Math.PI : 0)
+    this.evSlots[index] = new THREE.Vector3(base.x + Math.cos(evDir) * 1.1, base.y + Math.sin(evDir) * 1.1, 0)
     this.evAngles[index] = ang // araç ünitenin açısına paralel dursun
     this.evBase[index] = base.clone()
     const g = new THREE.Group()
