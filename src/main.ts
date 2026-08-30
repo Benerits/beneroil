@@ -2501,6 +2501,7 @@ function trackDaily(score = 0) {
   state.dailyServed++
   if (score >= 4.8) state.dailyPerfect++
   gorevOdulle()
+  tutSatisTamam() // öğretici 4. ipucu: servis bitti, para kasada → "şimdi nereye yatırıyorsun?"
 }
 
 /** Tamamlanan günlük görevlerin ödülünü öder ve haber verir (#1004). Görev sayaçlarını
@@ -3633,22 +3634,35 @@ function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
   return r
 }
 
-function fixedObstacles(skipId = ''): Rect[] {
-  const r: Rect[] = [
-    { cx: 4.3, cy: 0, w: 2.0, d: 48 },       // servis şeridi (araç yolu, daraltıldı)
-    { cx: 4.0, cy: -11.5, w: 2.4, d: 3.4 },  // tabela
+/** `lane: true` = ARAÇ KORİDORU (yol/şerit rezervi). Tabela bu rezervlere BAĞLI DEĞİLDİR:
+ *  dekoratiftir ve hardRects() onu zaten araç engeli saymaz (#352/#338), yani şeride
+ *  dikilse bile trafiği kilitleyemez. Bayrak sayesinde bunlar tek yerden elenebiliyor. */
+function fixedObstacles(skipId = ''): (Rect & { lane?: boolean })[] {
+  const r: (Rect & { lane?: boolean })[] = [
+    { cx: 4.3, cy: 0, w: 2.0, d: 48, lane: true },  // servis şeridi (araç yolu, daraltıldı)
   ]
+  // TABELA REZERVİ ARTIK SAHNEDEKİ TABELAYI TAKİP EDİYOR (ofis rezerviyle aynı kalıp).
+  // NEDEN: burada tabelanın DOĞUM konumu (4.0, −11.5) SABİT yazılıydı ve skipId='sign'
+  // olsa bile listeden düşmüyordu. İki ayrı şikâyetin de kökü buydu:
+  //   1) "tabela taşınamıyor / kırmızı yanıyor" — tabela KENDİ EVİNDE kendi rezervine
+  //      çarpıyordu; Taşı'ya basan oyuncu hiç kımıldatmadan ✓ diyemiyordu.
+  //   2) "yerleşim artıkları" — tabela başka yere taşınsa bile doğduğu kare sonsuza dek
+  //      dolu sayılıyor, oraya bir daha hiçbir şey konamıyordu.
+  if (skipId !== 'sign') {
+    const sg = world.buildings.find(b => b.id === 'sign')
+    if (sg) r.push({ cx: sg.group.position.x, cy: sg.group.position.y, w: 2.4, d: 3.4 })
+  }
   // karşı istasyon açıksa: otomatik giriş-çıkış + araç koridoru korunur (üstüne pompa/şarj konamaz)
   // Karşı istasyon kapı+araç koridoru: karşı parsel SAHİPLENİLİR SAHİPLENMEZ rezerve edilir
   // (ilk pompa aktivasyondan önce konduğundan, koruma o zaman da olmalı). Genişlik 3.0 → pompanın
   // araç yuvası (base−1.8) kapının yeterince DOĞUsuna düşer, araçlar temiz yol bulur.
   if (world.farStationOn || [...state.ownedParcels].some(k => +k.split(',')[0] >= 3))
-    r.push({ cx: 11.6, cy: 0, w: 3.0, d: 48 })
+    r.push({ cx: 11.6, cy: 0, w: 3.0, d: 48, lane: true })
   // 3.5: kapıdan pompalara giden İÇ KORİDOR + bekleme koridoru rezerve (oyuncu buraya
   // bina koyup kendi trafiğini kilitleyebiliyordu). Her iki yaka için simetrik.
-  r.push({ cx: 4.2 - 1.4, cy: 0, w: 1.5, d: 44 })
+  r.push({ cx: 4.2 - 1.4, cy: 0, w: 1.5, d: 44, lane: true })
   if (world.farStationOn || [...state.ownedParcels].some(k => +k.split(',')[0] >= 3))
-    r.push({ cx: FAR_GATE_X + 1.4, cy: 0, w: 1.5, d: 44 })
+    r.push({ cx: FAR_GATE_X + 1.4, cy: 0, w: 1.5, d: 44, lane: true })
   if (skipId !== 'tank') r.push({ cx: world.tankAnchor.x + 0.45, cy: world.tankAnchor.y + 0.45, w: 2.0, d: 2.0 }) // CANLI/main ile birebir
   if (skipId !== 'office') {
     const of = world.buildings.find(b => b.id === 'office')
@@ -3861,6 +3875,18 @@ function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
   return true
 }
 
+/** placedPos boşken taşımanın BAŞLANGIÇ noktası: sahnedeki yapının gerçek konumu.
+ *  Pompa/şarj DIŞARIDA bırakılır — onlarda grup konumu GÖVDEdir, placedPos ise footprint
+ *  MERKEZİdir (konumlariSabitle da tam bu yüzden onları atlıyor); karıştırmak yapıyı
+ *  ofset kadar kaydırırdı. */
+function sahnedekiKonum(id: string): [number, number] | null {
+  if (id.startsWith('pump-') || id.startsWith('charger-')) return null
+  const b = world.buildings.find(x => x.id === id)
+  const g = b?.group as THREE.Object3D | undefined
+  if (!g || !isFinite(g.position.x) || !isFinite(g.position.y)) return null
+  return [g.position.x, g.position.y]
+}
+
 function makeGhost(w: number, d: number): THREE.Mesh {
   const ghost = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
     new THREE.MeshBasicMaterial({ color: 0x37c97e, transparent: true, opacity: 0.42, depthTest: false }))
@@ -3955,7 +3981,14 @@ function startPlacement(id: string, move = false) {
   // kaldırıyor" — hayalet (0,0)'dan başladığı için yapı istasyonun ortasına zıplıyordu ve
   // sadece döndürmek isteyen oyuncu yerini kaybediyordu. Artık mevcut konum başlangıç noktası;
   // dokunmadan ⟳ + ✓ yapılırsa yapı yerinde kalır, yalnız yönü değişir.
-  const mevcut = placedPos[id]
+  //
+  // #1008 FİXİNİN AÇIK KALAN YARISI: placedPos yalnız (a) yerleştirme onayında ve
+  // (b) rebuildFromState sonundaki konumlariSabitle() ile dolar. rebuildFromState ise
+  // "kayıt YÜKLENDİYSE" çalışır — yani kaydı olmayan ilk oturumda ve ?full= vitrininde
+  // hiç taşınmamış yapıların (tabela, ofis…) kaydı BOŞTUR. O hâlde hayalet yine (0,0)'a,
+  // istasyonun tam ortasına düşüyordu: yapı yerinden kalkıyor, hayalet kırmızı yanıyor →
+  // "tabela/ofis taşınamıyor". Kayıt boşsa SAHNEDEKİ gerçek konumu esas al.
+  const mevcut = placedPos[id] ?? sahnedekiKonum(id)
   const bx = move && mevcut ? mevcut[0] : 0
   const by = move && mevcut ? mevcut[1] : 0
   placing = { id, w: f.w, d: f.d, grass: !!f.grass, move, root, planeMat, preview, valid: false, cx: bx, cy: by, rot: placedRot[id] ?? 0 }
@@ -4060,9 +4093,14 @@ function repositionPlacing(x: number, y: number) {
     // ama ASFALTIN ORTASI değil. Yol bandı ROAD_X çevresinde ±2.6 birim; tabela artık
     // oraya dikilemiyor, kaldırım/refüj payı korunuyor.
     const yolBandi = Math.abs(eff.cx - ROAD_X) < 2.6 + eff.w / 2
+    // ARAÇ ŞERİTLERİ TABELAYI BAĞLAMAZ (`lane` bayrağı). Eskiden yalnız İKİ şerit
+    // KOORDİNAT EŞLEŞMESİYLE eleniyordu; kapı→pompa İÇ KORİDORU (cx≈2.8, 44 birim boyunda)
+    // listede kalıyor ve yol kenarının TAMAMINI kırmızıya boyuyordu. Ölçüm: tabela yalnız
+    // cx ≤ 1 aralığına, yani arsanın dibine konabiliyordu — yola bakan bir tabela için
+    // anlamsız. Artık şerit rezervlerinin hepsi tek bayrakla düşüyor.
     placing.valid = !yolBandi
       && !placedRects.some(o => o.id !== 'sign' && overlaps(eff, o))
-      && !fixedObstacles('sign').some(o => !(o.cx === 4.3 && o.d === 48) && !(o.cx === 11.6 && o.d === 48) && overlaps(eff, o))
+      && !fixedObstacles('sign').some(o => !o.lane && overlaps(eff, o))
   } else {
     placing.cx = Math.round(x)
     placing.cy = Math.round(y)
@@ -4413,6 +4451,14 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
     },
     /** reload simülasyonu: sahneyi kayıtlı state'ten yeniden kur */
     rebuild() { rebuildFromState() },
+    /** "boş görünüyor ama KIRMIZI yanıyor" teşhisi: hayaleti hangi rezerv reddediyor?
+     *  Sabit rezervler (`lane` = araç şeridi) + yerleştirilmiş yapı dikdörtgenleri. */
+    engeller(id: string) {
+      return {
+        sabit: fixedObstacles(id).map(o => ({ cx: o.cx, cy: o.cy, w: o.w, d: o.d, lane: !!o.lane })),
+        yapilar: placedRects.map(o => ({ id: o.id, cx: o.cx, cy: o.cy, w: o.w, d: o.d })),
+      }
+    },
   },
   // KAYIT KAYBI KANCASI (yalnız ?full=1): tools/tests/kayit-kaybi-check.mjs
   // "arsa al → sahneyi yeniden kur → kaydet → yükle → hiçbir yapı kaybolmadı" turunu
@@ -4649,38 +4695,99 @@ connectLive()
   }
 }
 
-// ---- Onboarding: ilk oturum 3 adım rehberi (yeni oyuncu kafası karışmasın) ----
+// ---- ÖĞRETİCİ: ilk 3-5 dakikanın BAĞLAMSAL el kitabı ----
+//
+// TASARIM İLKESİ (oyun sahibi): "Grind uzatmak retention değil churn üretir — tycoon'da
+// doğru cevap her zaman daha fazla bekleme değil, DAHA FAZLA KARAR." Öğretici de oyunu
+// YAVAŞLATMAZ: zorunlu bir tur değil, çekirdek döngünün (müşteri → servis → para →
+// yükseltme → daha çok müşteri) her halkasında oyuncunun vereceği KARARI gösteren tek
+// cümlelik bir ipucu. Buton turu YOK, modal YOK, oyunu durduran adım YOK.
+//
+// Neden yeni bir sistem kurulmadı: HUD ipucu kutusu (#tuthint), ui.toast ve günlük
+// görevler (dailyQuests) zaten vardı. Öğretici bunların üstüne oturur ve 5. ipuçtan sonra
+// "bugün ne yapmalıyım"ı GÜNLÜK GÖREVLERE devreder — kalıcı hedef zaten orada.
+//
+// EN KRİTİK DÜZELTME: eski tutActive() `auth.loggedIn()` şartı arıyordu. Oyuna giriş
+// kapısının ta kendisi MİSAFİR düğmesi (#gguest) olduğundan öğretici, onu en çok gereken
+// kitleye — hesapsız yeni oyuncuya — HİÇ GÖRÜNMÜYORDU. ("ne yapacağımı anlamadım", ~25 kayıt.)
+const TUT_KEY = 'benzinlik-ogretici'          // 'bitti' → bir daha gösterme (kayıt formatına DOKUNMAZ)
+const TUT_ESKI_KEY = 'beneloil-onboarded'     // eski anahtar: görmüş oyuncuya tekrar gösterme
+const TUT_SON = 5
 let tutStep = 0
 const tutEl = document.getElementById('tuthint') as HTMLDivElement | null
+const tutTextEl = document.getElementById('tut-text') as HTMLSpanElement | null
+
+function tutBitti() { return !!(localStorage.getItem(TUT_KEY) || localStorage.getItem(TUT_ESKI_KEY)) }
+/** öğretici bu oturumda gösterilebilir mi (vitrin/promo modu ve görmüş oyuncu hariç) */
 function tutActive() {
-  return !isFullMode && !isPromoMode && auth.loggedIn() && !localStorage.getItem('beneloil-onboarded')
-    && state.day <= 1 && (state.stats.served || 0) === 0
+  return !isFullMode && !isPromoMode && !tutBitti() && state.day <= 1
 }
+/** ipucunu ekrana bas — HER İPUCU BİR KARAR gösterir, buton tarifi değil */
+function tutGoster(step: number, html: string) {
+  if (!tutEl || !tutTextEl) return
+  tutStep = step
+  tutTextEl.innerHTML = html
+  tutEl.style.display = 'flex'
+}
+/** öğretici kapanır: ATLA'ya basınca, son ipucundan sonra ya da pompacı işi devralınca */
+function tutBitir() {
+  tutStep = TUT_SON
+  localStorage.setItem(TUT_KEY, 'bitti')
+  if (tutEl) tutEl.style.display = 'none'
+}
+
+// 1) İLK MÜŞTERİ SAHNEDE → KARAR: hangi yakıt? (müşterinin istediği renk)
 function tutStart() {
-  if (tutStep !== 0 || !tutEl || !tutActive()) return
-  tutStep = 1
-  tutEl.innerHTML = t('Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.')
-  tutEl.style.display = 'block'
+  if (tutStep !== 0 || !tutActive() || (state.stats.served || 0) > 0) return
+  tutGoster(1, t('Hoş geldin patron! İlk müşterin geldi — panelde ne istediğine bak ve <b>o renkteki tabancayı</b> seç.'))
 }
+// 2) tabanca seçildi → KARAR: ne kadar veriyorsun?  3) dolum başladı → KARAR: hız mı özen mi?
 function tutAdvance(to: number) {
-  if (tutStep === 0 || !tutEl) return
+  if (tutStep === 0 || tutStep >= TUT_SON) return
   if (to === 2 && tutStep < 2) {
-    tutStep = 2
-    tutEl.innerHTML = t('Tabanca seçildi ✓ Şimdi <b>tutar gir</b> ya da <b>FULLE</b> bas, sonra <b>BAŞLAT</b>.')
+    tutGoster(2, t('Tabanca seçildi. Şimdi <b>tutar gir</b> ya da <b>FULLE</b> bas — sonra <b>BAŞLAT</b>.'))
   } else if (to === 3 && tutStep < 3) {
-    tutStep = 3
-    localStorage.setItem('beneloil-onboarded', '1')
-    tutEl.innerHTML = t('İlk satışın! İpucu: <b>cam temizle</b> = daha çok bahşiş. Büyümek için <b>mağazadan</b> pompa/tesis al, <b>ofisten</b> fiyatı ayarla.')
-    setTimeout(() => { if (tutEl) tutEl.style.display = 'none' }, 9000)
+    tutGoster(3, t('Dolum başladı. Beklerken <b>cam temizle</b>: bahşiş ve yıldız artar — hızlı servis seriyi büyütür.'))
   }
 }
-/** onboarding ipucunu kapat — pompacı işi devraldığında (manuel servis olmayacak) takılı kalmasın */
-function tutDismiss() {
-  if (!tutEl || tutStep >= 3) return
-  tutStep = 3
-  localStorage.setItem('beneloil-onboarded', '1')
-  tutEl.style.display = 'none'
+// 4) İLK SATIŞ TAMAM → asıl karar burada: para NEREYE gidiyor? (döngünün 3.→4. halkası)
+function tutSatisTamam() {
+  if (tutStep === 0 || tutStep >= 4 || !tutActive()) return
+  // Butonun EKRANDAKİ adı yazılır ("İnşaat"); "mağaza" deseydik oyuncu aradığını bulamazdı.
+  tutGoster(4, t('İlk satışın kasada. Asıl karar bu: parayı nereye yatıracaksın? <b>İNŞAAT</b>’ı aç — 2. pompa aynı anda iki müşteri demek.'))
 }
+// 5) MAĞAZA AÇILDI → öğretici biter ve hedef belirlemeyi GÜNLÜK GÖREVLERE devreder.
+// Bu son söz KUTUYLA DEĞİL TOAST'la verilir: mağaza açıkken kutu tam sekme şeridinin
+// (İstasyon/Tesisler/Enerji/Arsa) üstüne oturuyordu — ölçüldü. Toast hem çakışmaz hem de
+// yapışkan olduğu için mesaj kutusuna düşer, oyuncu sonra tekrar okuyabilir.
+function tutMagazaAcildi() {
+  if (tutStep === 0 || tutStep >= TUT_SON || !tutActive()) return
+  tutBitir()
+  ui.toast(t('Kilitli satırların NEDENİ hep yazar. Sıradaki hedefin için günlük görevlere bak — hazırsın patron!'), 'good', true)
+}
+/** ipucu takılı kalmasın: pompacı manuel servisi devraldığında öğreticinin dayanağı kalmaz */
+function tutDismiss() {
+  if (tutStep === 0 || tutStep >= TUT_SON) return
+  tutBitir()
+}
+// ATLANABİLİR (zorunlu tutmak deneyimli oyuncuyu kaçırır): ✕ her ipucunda görünür
+document.getElementById('tut-skip')?.addEventListener('click', () => {
+  tutBitir()
+  ui.toast(t('Öğretici kapatıldı — Ayarlar’dan istediğin an yeniden başlatabilirsin.'), '')
+})
+// MAĞAZA hem masaüstü #shopbtn'inden hem alt navbardan (openSection('build') → aynı butonu
+// tıklar) açılır; tek dinleyici iki yolu da yakalar.
+document.getElementById('shopbtn')?.addEventListener('click', () => tutMagazaAcildi())
+// AYARLAR → yeniden başlat (öğreticiyi kaçıran/yeniden görmek isteyen oyuncu için)
+document.getElementById('set-tutorial')?.addEventListener('click', () => {
+  localStorage.removeItem(TUT_KEY)
+  localStorage.removeItem(TUT_ESKI_KEY)
+  tutStep = 0
+  if (tutEl) tutEl.style.display = 'none'
+  ui.toast(state.day <= 1
+    ? t('Öğretici yeniden başladı — sıradaki müşteride ilk ipucu gelecek.')
+    : t('Öğretici sıfırlandı — ipuçları yeni bir istasyonun 1. gününde gösterilir.'), 'good', true)
+})
 
 // oyun içi canlı t("OYUNDA") sayacı — 60 sn'de bir tazelenir (sosyal kanıt)
 function refreshOnline() {
@@ -6325,7 +6432,12 @@ function frame() {
 // §6.1 trafik hata ayıklama katmanı — YALNIZ ?traffic=1 ile kurulur (normal oyunda kod çalışmaz)
 const trafficDbg = trafficDebugOn ? new TrafficDebug(world.scene) : null
 mountNewsButtons()  // Ayarlar'a "Yenilikler" + "Bildirim Geçmişi" düğmeleri
-maybeShowNews()     // sürüm değiştiyse notları bir kez göster (#465)
+// "NELER YENİ" DÖNEN OYUNCU İÇİNDİR. Ölçüm (öğretici oturumu, ekran görüntüsü): hiç
+// oynamamış oyuncuya açılışta sürüm notları duvarı çıkıyor, ilk müşteri panelini VE
+// öğreticinin ilk ipucunu kapatıyordu — "ne yapacağımı anlamadım" temasını doğrudan
+// besleyen bir ilk izlenim. 1. günde ve öğretici sürerken ertelenir (okundu işareti de
+// atılmaz, ilerleyen günlerde çıkar); oyuncu Ayarlar > Yenilikler'den her an açabilir.
+if (state.day > 1 || tutBitti()) maybeShowNews()  // sürüm değiştiyse notları bir kez göster (#465)
 scheduleFrame()
 // ARKA PLAN SÜRÜCÜSÜ: worker zamanlayıcıları tarayıcı tarafından KISILMAZ (ana thread
 // zamanlayıcılarının aksine). Sekme gizliyken frame()'i doğrudan çağırır — oyun akar.
