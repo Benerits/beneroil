@@ -281,6 +281,20 @@ function moodEmoji(frac: number): string | null {
 
 import { ModelLib, cloneModel, CAR_FILES, fitModel } from './models'
 
+// ================== ROTA ÖNBELLEĞİ ==================
+// NEDEN: istasyon yerleşimi (Car.solids) yalnız oyuncu bina kurunca/taşıyınca değişir, ama
+// aynı rota (kuyruk→pompa, pompa→çıkış, kapı→pompa) saniyede onlarca kez baştan
+// temizleniyordu. Aynı (başlangıç, ara noktalar, pad) üçlüsünün temizlenmiş sonucu burada
+// saklanır; yerleşim imzası değişince tamamı boşalır (Car.solids setter'ı).
+const rotaOnbellek = new Map<string, THREE.Vector3[]>()
+// Taşarsa komple boşalt: LRU tutmaya değmez, zaten her yerleşim değişiminde sıfırlanıyor.
+// Sınır, yol üzerindeki SÜREKLİ değişen başlangıç noktalarının anahtarı şişirmesine karşı.
+const ROTA_ONBELLEK_MAX = 1200
+/** ara noktalar yerleşimden türer → 0.1 ızgara yeter (ucuz anahtar: sayı birleştirme) */
+const q10 = (v: number) => Math.round(v * 10)
+/** aracın anlık konumu SÜREKLİ değişir → 0.5 ızgara, yoksa her çağrı ıska olurdu */
+const q2 = (v: number) => Math.round(v * 2)
+
 export class Car {
   group: THREE.Group
   kind: CarKind
@@ -332,6 +346,13 @@ export class Car {
   /** geri geri park manevrası sürüyor */
   reversing = false
   private solidStuckT = 0
+  /** ÖNDEN ÇİZİLEN ÇIKIŞ ROTASI: araç pompaya VARIRKEN hesaplanır (arriveAtSlot).
+   *  Oyun sahibi: "pompaya gelip sonra çıkış yolu aramasından ziyade baştan pathi ona
+   *  göre çizse" — uğurlanınca hazır rota kullanılır, hesap için duraksama olmaz. */
+  cikisYolu: THREE.Vector3[] | null = null
+  /** hazır rotanın geçerlilik damgası: "yerleşim sürümü|hesaplandığı konum". Bina
+   *  taşındıysa veya araç yerinden oynadıysa damga tutmaz → rota tazelenir. */
+  cikisImza = ''
   truckStagePos: THREE.Vector3 | null = null
   /** otopark yanaşma noktası — çıkışta önce buradan çıkılır (stage) */
   parkStage: THREE.Vector3 | null = null
@@ -674,8 +695,37 @@ export class Car {
 
   /** MARİNA tekne modelleri (şube kitinden gelir; yoksa prosedürel gövde kullanılır) */
   static boatKit: Record<string, THREE.Group | null> | null = null
+  private static _solids: { cx: number; cy: number; w: number; d: number }[] = []
+  /** yerleşim sürümü — Car.solids İÇERİĞİ değişince artar. Önden hesaplanmış çıkış
+   *  rotaları bununla geçersizleşir (bina taşındıysa hazır rota artık geçerli değil). */
+  static solidSurum = 0
+  private static solidImza = 0
+  /** rota önbelleği telemetrisi (debug katmanı + testler okur) */
+  static rotaCacheStats = { hit: 0, miss: 0, flush: 0 }
   /** ana döngü her karede doldurur: sert engeller (pompa, bina...) */
-  static solids: { cx: number; cy: number; w: number; d: number }[] = []
+  static get solids() { return Car._solids }
+  static set solids(v: { cx: number; cy: number; w: number; d: number }[]) {
+    Car._solids = v
+    // UCUZ İMZA: main.ts her karede YENİ dizi atıyor (hardRects()), bu yüzden kimlik
+    // karşılaştırması işe yaramaz — içerik gerçekten değiştiyse önbellek boşalır.
+    // String kurmuyoruz: kare başına çöp üretmeyen FNV benzeri sayısal karma.
+    let h = v.length | 0
+    for (const r of v) {
+      h = Math.imul(h ^ (r.cx * 977 | 0), 0x01000193)
+      h = Math.imul(h ^ (r.cy * 977 | 0), 0x01000193)
+      h = Math.imul(h ^ (r.w * 331 | 0) ^ (r.d * 331 | 0), 0x01000193)
+    }
+    if (h !== Car.solidImza) {
+      Car.solidImza = h
+      Car.solidSurum++
+      rotaOnbellek.clear()
+      Car.rotaCacheStats.flush++
+    }
+  }
+  /** ÖLÇÜM: reaktif kaçış (1.6 sn kıpırdayamayıp engelin etrafından dolanma) kaç kez
+   *  tetiklendi. Oyuncunun "arabalar pompalara takılıyor" dediği olayın SAYISAL karşılığı —
+   *  rota temizliği çalışıyorsa bu sayı düşmeli. Testler/telemetri okur, oyunu etkilemez. */
+  static reaktifKacis = 0
   /** yağ değişimi körüğü gibi BİNA İÇİNE sürüşlerde duvar çarpışmasını kapatır */
   ghostSolid = false
   /** üst üste sıkışma sayacı — ikinciden sonra kısa süreli araç-araç geçişi açılır */
@@ -732,6 +782,7 @@ export class Car {
         else this.solidStuckT = 0
         if (this.solidStuckT > 1.6 && this.path.length < 12) {
           this.solidStuckT = 0
+          Car.reaktifKacis++
           const base = Math.atan2(target.y - pos.y, target.x - pos.x)
           let best: THREE.Vector3 | null = null
           let bestScore = Infinity
@@ -1014,32 +1065,111 @@ function segmentDikdortgeniKesiyor(
   return true
 }
 
-/** Rotayı engellerden ARINDIR: kesişen her segmentin etrafına yanal ara nokta koyar.
+/** Nokta, şişirilmiş dikdörtgenin içinde mi (kaçınılmaz engel elemesi için). */
+function noktaKutuda(p: THREE.Vector3, r: { cx: number; cy: number; w: number; d: number }, pad: number): boolean {
+  return Math.abs(p.x - r.cx) <= r.w / 2 + pad && Math.abs(p.y - r.cy) <= r.d / 2 + pad
+}
+
+/** Aracın gövdesinin GERÇEKTEN çarptığı sınır (Car.insideSolid ile aynı ölçü, +pay). */
+const PAD_FIZIK = 0.5
+/** Konforlu pay ile rota bulunamazsa düşülen dar pay: "hiç rota yok" demektense
+ *  dar ama duvara sürtmeyen bir rota üret. */
+const PAD_DAR = 0.65
+
+/** ENGEL KÜMESİ: verilen gövdeyle (pad'le şişirilmiş halde) çakışan komşuları yutarak büyür.
+ *  NEDEN: pompa sırası 4.5 birim aralıkla dizilir ama gövdeler 3.4 derindir — pay eklenince
+ *  aralarında boşluk KALMAZ, sıra tek bir DUVAR olur. Tek gövdenin kenarından dolaşmayı
+ *  denemek boşunaydı (her aday komşu pompaya çarpıyordu); duvarın UCUNDAN dolaşmak gerekir. */
+function engelKumesi(
+  engel: { cx: number; cy: number; w: number; d: number },
+  engeller: { cx: number; cy: number; w: number; d: number }[], pad: number,
+): { cx: number; cy: number; w: number; d: number } {
+  let minX = engel.cx - engel.w / 2 - pad, maxX = engel.cx + engel.w / 2 + pad
+  let minY = engel.cy - engel.d / 2 - pad, maxY = engel.cy + engel.d / 2 + pad
+  for (let tur = 0; tur < 4; tur++) {
+    let buyudu = false
+    for (const r of engeller) {
+      const rminX = r.cx - r.w / 2 - pad, rmaxX = r.cx + r.w / 2 + pad
+      const rminY = r.cy - r.d / 2 - pad, rmaxY = r.cy + r.d / 2 + pad
+      if (rminX > maxX || rmaxX < minX || rminY > maxY || rmaxY < minY) continue // değmiyor
+      if (rminX >= minX && rmaxX <= maxX && rminY >= minY && rmaxY <= maxY) continue // zaten içeride
+      minX = Math.min(minX, rminX); maxX = Math.max(maxX, rmaxX)
+      minY = Math.min(minY, rminY); maxY = Math.max(maxY, rmaxY)
+      buyudu = true
+    }
+    if (!buyudu) break
+  }
+  // pad'i geri çıkar: dönen kutu "şişirilmemiş" biçimde, çağıran yine pad ekleyecek
+  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, w: maxX - minX - 2 * pad, d: maxY - minY - 2 * pad }
+}
+
+/** Bir segmenti tıkayan engeli aşacak ara nokta adayı üret; yoksa null.
+ *  DİRSEK adayları kritik: döndürülmüş pompaya yanaşma "önce hizasına çık, SONRA yanaş"
+ *  hareketini ister; avludan otoparka geçiş de "önce pompa sırasının UCUNA git, sonra batıya
+ *  dön" ister. Eski yalnız-yanal-orta-nokta üretimi ikisini de asla bulamıyordu. */
+function araNokta(
+  a: THREE.Vector3, b: THREE.Vector3,
+  engel: { cx: number; cy: number; w: number; d: number },
+  engeller: { cx: number; cy: number; w: number; d: number }[], pad: number,
+): THREE.Vector3 | null {
+  const U = engelKumesi(engel, engeller, pad)
+  const e = 0.35 // kenardan minik ek pay: teğet geçip yeniden takılmasın
+  const yU = U.cy + U.d / 2 + pad + e, yA = U.cy - U.d / 2 - pad - e // duvarın kuzey/güney ucu
+  const xD = U.cx + U.w / 2 + pad + e, xB = U.cx - U.w / 2 - pad - e // duvarın doğu/batı ucu
+  const ox = (a.x + b.x) / 2, oy = (a.y + b.y) / 2
+  const adaylar = [
+    new THREE.Vector3(a.x, b.y, 0), new THREE.Vector3(b.x, a.y, 0),   // basit dirsekler
+    new THREE.Vector3(a.x, yU, 0), new THREE.Vector3(a.x, yA, 0),     // kendi kolonunda duvarın ucuna
+    new THREE.Vector3(b.x, yU, 0), new THREE.Vector3(b.x, yA, 0),     // hedefin kolonunda duvarın ucuna
+    new THREE.Vector3(xD, a.y, 0), new THREE.Vector3(xB, a.y, 0),
+    new THREE.Vector3(xD, b.y, 0), new THREE.Vector3(xB, b.y, 0),
+    new THREE.Vector3(ox, yU, 0), new THREE.Vector3(ox, yA, 0),       // yanal orta nokta (eski davranış)
+    new THREE.Vector3(xD, oy, 0), new THREE.Vector3(xB, oy, 0),
+  ]
+  // DOLANMA BÜTÇESİ: rotayı temizlemek uğruna aracı istasyonun öbür ucundan dolaştırmak
+  // müşteriyi sabırsızlandırıp SERVİSİ düşürür. Bütçeyi aşan aday reddedilir; o durumda
+  // eski davranış (reaktif kaçış) devrede kalır — kötü ama en azından hızlı.
+  const dogrudan = a.distanceTo(b)
+  const butce = dogrudan * 1.9 + 5
+  return adaylar
+    // ara nokta KATI CİSMİN İÇİNDE olamaz (duvarın köşesi başka kutuya düşerse araç binaya sürer)
+    .filter(c => !Car.solids.some(r => noktaKutuda(c, r, 0.15)))
+    .map(c => ({ c, u: c.distanceTo(a) + c.distanceTo(b) }))
+    .filter(x => x.u <= butce)
+    .sort((m, n) => m.u - n.u)
+    .find(x => !engeller.some(r =>
+      segmentDikdortgeniKesiyor(a.x, a.y, x.c.x, x.c.y, r, pad)
+      || segmentDikdortgeniKesiyor(x.c.x, x.c.y, b.x, b.y, r, pad)))?.c ?? null
+}
+
+/** Rotayı engellerden ARINDIR: kesişen her segmentin etrafına ara nokta koyar.
  *  Sınırlı yineleme (2 tur) — çözemezse mevcut reaktif kaçış zaten devrede kalır. */
 function rotayiTemizle(yol: THREE.Vector3[], pad = 1.0): THREE.Vector3[] {
   if (!Car.solids.length || yol.length < 2) return yol
+  // KAÇINILMAZ ENGELLERİ ELE: aracın yanaştığı pompanın GÖVDESİ yuvanın hemen dibindedir;
+  // araç çıkışta da kendi pompasının dibinden yola koyulur. Onun etrafından "dolaşmaya"
+  // çalışmak anlamsız detour üretir.
+  // ÖLÇÜT FİZİKSEL PAY: konfor payıyla eleseydik, yalnızca yakınından geçen gövdeler de
+  // sessizce görmezden gelinirdi — döndürülmüş pompaya yanaşma tam bu yüzden düzelmiyordu
+  // (yaklaşma noktası şişirilmiş zarfın içinde kalıyor, gövde listeden düşüyordu).
+  const bas = yol[0], son = yol[yol.length - 1]
+  const engeller = Car.solids.filter(r => !noktaKutuda(bas, r, PAD_FIZIK) && !noktaKutuda(son, r, PAD_FIZIK))
+  if (!engeller.length) return yol
+  // İKİ KADEMELİ PAY: önce konforlu pay (araç genişliği), o boşluk yoksa fiziksel sınır.
+  const kademeler = pad > PAD_DAR ? [pad, PAD_DAR] : [pad]
   let cikti = yol
-  for (let tur = 0; tur < 2; tur++) {
+  // 3 TUR: bir ara nokta koyunca ortaya çıkan yeni bacaklar da taranır (duvarın ucundan
+  // dolaşmak çoğu zaman İKİ dirsek ister: önce sıranın ucuna, sonra batıya).
+  for (let tur = 0; tur < 3; tur++) {
     const yeni: THREE.Vector3[] = [cikti[0]]
     let degisti = false
     for (let i = 1; i < cikti.length; i++) {
       const a = cikti[i - 1], b = cikti[i]
-      const engel = Car.solids.find(r => segmentDikdortgeniKesiyor(a.x, a.y, b.x, b.y, r, pad))
-      if (engel) {
-        // engelin İKİ yanından geçen aday ara noktalar; hedefe yakın olanı seçilir
-        const yatay = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
-        const adaylar = yatay
-          ? [engel.cy + engel.d / 2 + pad + 0.4, engel.cy - engel.d / 2 - pad - 0.4]
-              .map(y => new THREE.Vector3((a.x + b.x) / 2, y, 0))
-          : [engel.cx + engel.w / 2 + pad + 0.4, engel.cx - engel.w / 2 - pad - 0.4]
-              .map(x => new THREE.Vector3(x, (a.y + b.y) / 2, 0))
-        // her iki bacağı da temiz olan ilk adayı al
-        const iyi = adaylar
-          .sort((m, n) => m.distanceTo(b) - n.distanceTo(b))
-          .find(c => !Car.solids.some(r =>
-            segmentDikdortgeniKesiyor(a.x, a.y, c.x, c.y, r, pad)
-            || segmentDikdortgeniKesiyor(c.x, c.y, b.x, b.y, r, pad)))
-        if (iyi) { yeni.push(iyi); degisti = true }
+      for (const p of kademeler) {
+        const engel = engeller.find(r => segmentDikdortgeniKesiyor(a.x, a.y, b.x, b.y, r, p))
+        if (!engel) break // bu kademede zaten temiz — daha darına inmeye gerek yok
+        const iyi = araNokta(a, b, engel, engeller, p)
+        if (iyi) { yeni.push(iyi); degisti = true; break }
       }
       yeni.push(b)
     }
@@ -1047,6 +1177,42 @@ function rotayiTemizle(yol: THREE.Vector3[], pad = 1.0): THREE.Vector3[] {
     if (!degisti) break
   }
   return cikti
+}
+
+/** Rota temizliği için aracın yarı genişliği + emniyet payı.
+ *  TIR/kamyonet gövdesi binekten belirgin geniştir: sabit 1.0 pay ile tır, binek için
+ *  yeterli olan boşluğa dalıp pompaya sürtüyordu (oyuncu: "arabalar pompalara takılıyor").
+ *  MARİNA: pay teknenin GENİŞLİĞİNDEN (beam) türer — süperyat jet ski gibi manevra yapamaz. */
+function rotaPadi(car: Car): number {
+  if (car.boat) return Math.max(1.0, BOAT_SPEC[car.boat].beam / 2 + 0.55)
+  return car.isTruck ? 1.35 : 1.0
+}
+
+/** ENGEL-FARKINDA ROTA (önbellekli). Aracın MEVCUT konumundan başlayarak ham waypoint
+ *  listesini temizler; başlangıç noktası dönen listede yer almaz (setPath'e verilir).
+ *
+ *  Neden başlangıç da hesaba katılıyor: ölçümde çıkış rotalarının kirliliğinin TAMAMI
+ *  "aracın bulunduğu yer → ilk waypoint" bacağındaydı (araç pompadan çıkarken KOMŞU
+ *  pompanın gövdesini kesiyordu). Eski rotayiTemizle yalnız waypoint'ler ARASINI
+ *  tarıyordu, o yüzden bu bacağı hiç görmüyordu. */
+function temizRota(car: Car, ham: THREE.Vector3[]): THREE.Vector3[] {
+  if (!Car.solids.length || ham.length === 0) return ham
+  const pad = rotaPadi(car)
+  const p0 = car.group.position
+  // UCUZ ANAHTAR: yalnız sayı birleştirme. Ara noktalar yerleşimden türediği için 0.1
+  // ızgarada birebir tekrar eder; aracın anlık konumu sürekli değiştiğinden 0.5 ızgara.
+  let anahtar = pad + '|' + q2(p0.x) + ',' + q2(p0.y)
+  for (const p of ham) anahtar += '|' + q10(p.x) + ',' + q10(p.y)
+  const hazir = rotaOnbellek.get(anahtar)
+  if (hazir) { Car.rotaCacheStats.hit++; return hazir }
+  Car.rotaCacheStats.miss++
+  const tam = [new THREE.Vector3(p0.x, p0.y, 0), ...ham]
+  // KOPYALA: ham noktalar dünyadan gelen CANLI vektörler olabilir (pompa yuvası gibi);
+  // önbellekte referans tutulursa ünite taşınınca saklı rota sessizce bozulurdu.
+  const temiz = rotayiTemizle(tam, pad).slice(1).map(p => p.clone())
+  if (rotaOnbellek.size >= ROTA_ONBELLEK_MAX) rotaOnbellek.clear()
+  rotaOnbellek.set(anahtar, temiz)
+  return temiz
 }
 
 
@@ -1883,10 +2049,10 @@ export class CarManager {
       new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, p.y - G.dirY * 2.5, 0),
       p.clone(),
     ]
-    // ENGELLERİ BAŞTAN HESABA KAT (oyuncu gözlemi: "önce pompaya gidiyor, sonra rotasını
-    // güncelliyor"). Eskiden araç bina üstünden geçen rotayla yola çıkıp 1.6 sn takıldıktan
-    // SONRA dolanıyordu — görünen şey "fikir değiştirme"ydi. Artık rota kurulurken temizlenir.
-    return rotayiTemizle(ham)
+    // HAM rota döner: temizlik artık ÇAĞRI YERİNDE temizRota(car, ...) ile yapılıyor —
+    // böylece aracın MEVCUT konumundan ilk waypoint'e giden bacak da taranır ve sonuç
+    // önbelleğe girer (eskiden burada temizlenip önbelleksiz kalıyordu).
+    return ham
   }
 
   /** tıra boş tır parkı yeri bul ve gönder; başarılıysa true */
@@ -1919,7 +2085,9 @@ export class CarManager {
     }
     path.push(new THREE.Vector3(GT.gateX + GT.sideSign * 0.2, stage.y, 0))
     path.push(stage.clone())
-    car.setPath(path, () => {
+    // tır parkına gidiş TEMİZLENİR (tır payı geniş); geri geri yanaşma bacağı TEMİZLENMEZ:
+    // o kasıtlı bir manevradır, park yerinin dibindeki engelden "kaçınmak" onu bozar.
+    car.setPath(temizRota(car, path), () => {
       // manevra noktasına geldi: geri geri yanaş (cool kısım)
       car.reversing = true
       car.setPath([spot.clone()], () => {
@@ -1953,7 +2121,7 @@ export class CarManager {
     out.push(new THREE.Vector3(GL.lane, GL.gateOutY + GL.dirY * 4, 0))
     out.push(new THREE.Vector3(GL.lane, GL.dirY * 44, 0))
     car.truckStagePos = null
-    car.setPath(out)
+    car.setPath(temizRota(car, out)) // tır parkından ÇIKIŞ da engel-farkında
   }
 
   private truckOcc: (Car | null)[] = []
@@ -1975,33 +2143,35 @@ export class CarManager {
         // henüz yolda: baştan tam giriş rotası
         if (c.slotIndex >= 0) {
           const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
-          c.setPath(this.entryPath(slot, c.station), () => this.arriveAtSlot(c))
+          // yeniden rotalamada da ENGEL-FARKINDA: kapı taşınınca yeni rota bir binanın
+          // üstünden geçebilir; eskiden burada hiç temizlik yoktu
+          c.setPath(temizRota(c, this.entryPath(slot, c.station)), () => this.arriveAtSlot(c))
         } else if (c.waitIndex >= 0) {
-          c.setPath([
+          c.setPath(temizRota(c, [
             new THREE.Vector3(G.lane, G.gateInY - G.dirY * 3.5, 0),
             new THREE.Vector3(G.gateX, G.gateInY, 0),
             this.waitSpotAt(c.waitIndex, c.station),
-          ], () => { c.phase = 'waiting' })
+          ]), () => { c.phase = 'waiting' })
         }
       } else if (c.phase === 'driving') {
         // apron içindekiler: kalan rotayı mevcut konumdan kur (eski kapı waypoint'i atılır)
         if (c.slotIndex >= 0) {
           const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
-          c.setPath([
+          c.setPath(temizRota(c, [
             new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0),
             slot.clone(),
-          ], () => this.arriveAtSlot(c))
+          ]), () => this.arriveAtSlot(c))
         } else if (c.waitIndex >= 0) {
-          c.setPath([this.waitSpotAt(c.waitIndex, c.station)], () => { c.phase = 'waiting' })
+          c.setPath(temizRota(c, [this.waitSpotAt(c.waitIndex, c.station)]), () => { c.phase = 'waiting' })
         }
       } else if (c.phase === 'leaving' && depth > -1.3) {
         // henüz yola çıkmamış çıkan araç: yeni çıkışa yönlendir
         const outY = G.gateOutY
-        c.setPath([
+        c.setPath(temizRota(c, [
           new THREE.Vector3(G.gateX, outY, 0),
           new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
           new THREE.Vector3(G.lane, G.dirY * 44, 0),
-        ])
+        ]))
       }
     }
   }
@@ -2036,7 +2206,7 @@ export class CarManager {
       this.evOcc[slot] = car
       car.slotIndex = slot
       car.phase = 'driving'
-      car.setPath(this.entryPath(this.opts.evSlot(slot), car.station), () => this.arriveAtSlot(car))
+      car.setPath(temizRota(car, this.entryPath(this.opts.evSlot(slot), car.station)), () => this.arriveAtSlot(car))
       car.showBars()
       return
     }
@@ -2052,7 +2222,7 @@ export class CarManager {
       this.pumpOcc[slot] = car
       car.slotIndex = slot
       car.phase = 'driving'
-      car.setPath(this.entryPath(this.opts.pumpSlot(slot), car.station), () => this.arriveAtSlot(car))
+      car.setPath(temizRota(car, this.entryPath(this.opts.pumpSlot(slot), car.station)), () => this.arriveAtSlot(car))
       car.showBars()
       return
     }
@@ -2067,11 +2237,13 @@ export class CarManager {
       waitOcc[wi] = car
       car.waitIndex = wi
       car.phase = 'driving'
-      car.setPath([
+      // BEKLEME NOKTASINA gidiş de temizlenir: iç bekleme koridoru pompa hattının
+      // yanından geçer, oyuncu oraya bina koyduysa rota gövdenin üstünden geçiyordu.
+      car.setPath(temizRota(car, [
         new THREE.Vector3(G.lane, gy - G.dirY * 3.5, 0),
         new THREE.Vector3(G.gateX, gy, 0),
         this.waitSpotAt(wi, car.station),
-      ], () => {
+      ]), () => {
         car.phase = 'waiting'
       })
       car.showBars()
@@ -2088,8 +2260,39 @@ export class CarManager {
       : (this.opts.pumpAngle?.(car.slotIndex) ?? 0)
     car.group.rotation.z = (car.station === 'far' ? -Math.PI / 2 : Math.PI / 2) + ang
     car.showBubble()
+    // ÇIKIŞ ROTASINI ŞİMDİ ÇİZ (oyun sahibi: "pompaya gelip sonra çıkış yolu aramasından
+    // ziyade BAŞTAN pathi ona göre çizse"). Araç yuvaya oturduğu anda çıkışı hazırdır;
+    // uğurlanınca hesap yapmadan yola koyulur. Damga (yerleşim sürümü + konum) tutmazsa
+    // releaseCar tazeler — bina taşınmışsa bayat rota kullanılmaz.
+    car.cikisYolu = temizRota(car, this.cikisRotasi(car, car.group.position.y))
+    car.cikisImza = this.cikisImzasi(car)
     if (car.vip) this.opts.onVip?.(car)
     this.opts.onCarReady(car)
+  }
+
+  /** ÇIKIŞ ROTASI tek kaynaktan: hem varışta önden hesaplanır hem uğurlamada kullanılır. */
+  private cikisRotasi(car: Car, y: number): THREE.Vector3[] {
+    const G = this.geom(car.station)
+    const outY = G.gateOutY
+    const off = this.gateOutOff()
+    // Çıkış koridoruna KAPI YAKININDA katıl (maks 7 birim önce) — kendi hizasından DEĞİL.
+    // Eski hali (y±3): uzak pompadan çıkan araç önce kapı kolonuna (giriş hizasına) sürüyor,
+    // sonra çit dibinden tüm istasyonu boydan geçiyordu — giriş ağzıyla çakışma + saçma manevra.
+    const preY = G.dirY > 0
+      ? Math.max(Math.min(y + 3, outY - 1.8), outY - 7)
+      : Math.min(Math.max(y - 3, outY + 1.8), outY + 7)
+    return [
+      new THREE.Vector3(G.gateX + G.sideSign * 0.45, preY, 0),
+      new THREE.Vector3(G.gateX, outY + off, 0),
+      new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
+      new THREE.Vector3(G.lane, G.dirY * 44, 0),
+    ]
+  }
+
+  /** hazır çıkış rotasının geçerlilik damgası: yerleşim sürümü + aracın konumu (0.1 ızgara) */
+  private cikisImzasi(car: Car): string {
+    const p = car.group.position
+    return Car.solidSurum + '|' + car.station + '|' + Math.round(p.x * 10) + ',' + Math.round(p.y * 10)
   }
 
   private sendToSlot(car: Car, slot: number) {
@@ -2102,10 +2305,13 @@ export class CarManager {
     car.phase = 'driving'
     const p = this.opts.pumpSlot(slot)
     const G = this.geom(car.station)
-    car.setPath([
+    // KUYRUK → POMPA: ölçümde en kirli rotalardan biri (dar kapı senaryosunda çağrıların
+    // %86'sı engelden geçiyordu). Bekleme noktası pompa hattının yanında olduğu için
+    // apron şeridine çıkarken KOMŞU pompa gövdelerini biçiyordu.
+    car.setPath(temizRota(car, [
       new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, p.y - G.dirY * 2.5, 0),
       p,
-    ], () => this.arriveAtSlot(car))
+    ]), () => this.arriveAtSlot(car))
   }
 
   /** servis bitti, tesis kullanacak → otoparka çek. Otopark yok/dolu ise false. */
@@ -2142,11 +2348,13 @@ export class CarManager {
     car.parkStage = stage.clone()
     // ön-sahneleme x'i yakaya göre aynalanır (3.0 near apron'uydu; far'da karşılığı)
     const preStageX = car.station === 'far' ? 2 * ROAD_X - 3.0 : 3.0
-    car.setPath([
+    // OTOPARKA çekiliş: pompadan otoparka giderken tüm istasyonu boydan geçer, yolda
+    // market/kafe/ofis vardır — engel-farkında olmazsa binaya sürtüp reaktif kaçışa düşer.
+    car.setPath(temizRota(car, [
       new THREE.Vector3(preStageX, car.group.position.y, 0),
       stage,
       p,
-    ], () => {
+    ]), () => {
       car.phase = 'parked'
       car.group.rotation.z = sp.rot
     })
@@ -2169,10 +2377,10 @@ export class CarManager {
     const preStageX = car.station === 'far' ? 2 * ROAD_X - 3.0 : 3.0
     // İKİ ETAP: kapıya kadar normal çarpışma (yoldaki binalardan geçmesin), kapı→içeri
     // ghostSolid ile duvar yok sayılır — yoksa araç kapıda sürtünüp kalıyordu.
-    car.setPath([
+    car.setPath(temizRota(car, [
       new THREE.Vector3(preStageX, car.group.position.y, 0),
       entry.clone(),
-    ], () => {
+    ]), () => {
       car.ghostSolid = true
       car.setPath([inside.clone()], () => {
         car.phase = 'parked'
@@ -2252,15 +2460,16 @@ export class CarManager {
     }
     car.holdTime = 0
     car.overrideT = 0
-    // hedefe göre temiz rota
+    // hedefe göre temiz rota — "temiz" artık gerçekten ENGEL-FARKINDA. Kurtarma anında
+    // aynı kirli rotayı tekrar vermek aracı aynı köşeye geri sokuyordu (sonsuz döngü).
     if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind !== 'ev') {
       const slot = this.opts.pumpSlot(car.slotIndex)
       const G = this.geom(car.station)
-      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
+      car.setPath(temizRota(car, [new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()]), () => this.arriveAtSlot(car))
     } else if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind === 'ev') {
       const slot = this.opts.evSlot(car.slotIndex)
       const G = this.geom(car.station)
-      car.setPath([new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()], () => this.arriveAtSlot(car))
+      car.setPath(temizRota(car, [new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()]), () => this.arriveAtSlot(car))
     } else if (car.phase === 'toPark' && car.truckSlot >= 0) {
       this.leaveTruckPark(car)
     } else if (car.phase !== 'atPump' && car.phase !== 'parked' && car.phase !== 'waiting') {
@@ -2298,21 +2507,15 @@ export class CarManager {
         new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
         new THREE.Vector3(G.lane, G.dirY * 44, 0),
       )
-      car.setPath(out)
+      car.setPath(temizRota(car, out))
+      car.cikisYolu = null
       return
     }
-    const y = car.group.position.y
-    // Çıkış koridoruna KAPI YAKININDA katıl (maks 7 birim önce) — kendi hizasından DEĞİL.
-    // Eski hali (y±3): uzak pompadan çıkan araç önce kapı kolonuna (giriş hizasına) sürüyor,
-    // sonra çit dibinden tüm istasyonu boydan geçiyordu — giriş ağzıyla çakışma + saçma manevra.
-    const preY = G.dirY > 0
-      ? Math.max(Math.min(y + 3, outY - 1.8), outY - 7)
-      : Math.min(Math.max(y - 3, outY + 1.8), outY + 7)
-    car.setPath([
-      new THREE.Vector3(G.gateX + G.sideSign * 0.45, preY, 0),
-      new THREE.Vector3(G.gateX, outY + off, 0),
-      new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
-      new THREE.Vector3(G.lane, G.dirY * 44, 0),
-    ])
+    // ÖNDEN ÇİZİLMİŞ ÇIKIŞ: araç pompaya varırken hesaplandı. Damga tutuyorsa (yerleşim
+    // değişmedi + araç yerinden oynamadı) hesap YAPMADAN yola koyulur — oyuncunun
+    // "önce pompaya gelip sonra çıkış yolu arıyor" dediği duraksama ortadan kalkar.
+    const hazir = car.cikisYolu && car.cikisImza === this.cikisImzasi(car) ? car.cikisYolu : null
+    car.cikisYolu = null
+    car.setPath(hazir ?? temizRota(car, this.cikisRotasi(car, car.group.position.y)))
   }
 }
