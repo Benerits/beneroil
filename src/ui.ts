@@ -43,9 +43,56 @@ const ICON_COLORS: Record<string, string> = {
   'clean-solar': '#2f9fd6', 'maint-smr': '#d64545', 'order-uranium': '#27a05a',
 }
 
+/** Koyu temada kart zemini koyulaşınca bu tonlar 3:1 grafik kontrastının ALTINA düşüyordu
+ *  (gri tank/otopark, kahve, koyu mavi tabela/otopark/WC, koyu kırmızı lokanta).
+ *  Yalnız bunlar açılır; kalan tonlar iki temada da geçiyor, kimlik bozulmasın diye elleşilmedi. */
+const ICON_COLORS_DARK: Record<string, string> = {
+  tank: '#8f9dad', truckpark: '#8f9dad', coffee: '#b5804f', restaurant: '#e0686d',
+  sign: '#5b8ef5', parking: '#5b8ef5', toilet: '#5b8ef5',
+}
+
+/** Şu an koyu tema mı? Üç durum: attribute varsa o kazanır, yoksa sistem tercihi. */
+function darkNow(): boolean {
+  const attr = document.documentElement.getAttribute('data-theme')
+  if (attr === 'dark') return true
+  if (attr === 'light') return false
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+}
+
 function sicon(id: string, symbol: string): string {
-  const c = ICON_COLORS[id] ?? (id.startsWith('fix-') ? '#d64545' : '#7a8290')
+  const base = ICON_COLORS[id] ?? (id.startsWith('fix-') ? '#d64545' : '#7a8290')
+  const c = (darkNow() && ICON_COLORS_DARK[id]) || base
   return `<div class="sicon" style="color:${c};background:${c}1c;border-color:${c}44">${icon(symbol)}</div>`
+}
+
+/* ═══ TEMA (KARANLIK MOD) ═══
+   Üç durum: 'system' (varsayılan) · 'light' · 'dark'.
+   'system'de attribute YAZILMAZ — böylece telefon gece moduna geçtiğinde oyun,
+   JS'e hiç dokunmadan, CSS'in prefers-color-scheme kuralıyla anında takip eder. */
+export type ThemeMode = 'system' | 'light' | 'dark'
+const THEME_KEY = 'benzinlik-theme'
+
+export function getTheme(): ThemeMode {
+  try {
+    const v = localStorage.getItem(THEME_KEY)
+    if (v === 'light' || v === 'dark' || v === 'system') return v
+  } catch { /* gizli sekme: depolama kapalı → sistem tercihi */ }
+  return 'system'
+}
+
+export function applyTheme(m: ThemeMode) {
+  const root = document.documentElement
+  if (m === 'system') root.removeAttribute('data-theme')
+  else root.setAttribute('data-theme', m)
+}
+
+export function setTheme(m: ThemeMode) {
+  applyTheme(m)
+  try { localStorage.setItem(THEME_KEY, m) } catch { /* kalıcılık yoksa oturumluk çalışsın */ }
+  // seçili düğme kırmızı (birincil) — hangi durumda olduğun tek bakışta görünsün
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-theme-opt]')) {
+    b.classList.toggle('primary', b.dataset.themeOpt === m)
+  }
 }
 
 /** yerleştirilebilirlerin kapladığı kare boyutu (görsel bilgi) */
@@ -275,6 +322,16 @@ export class UI {
       try { await auth.deleteAccount(); location.href = '/' }
       catch (e) { this.toast((e as Error).message || t('Silinemedi, tekrar dene.'), 'bad') }
     })
+
+    // KARANLIK MOD seçici (Sistem / Açık / Koyu). Ayarların gövdesi mobilde Profil
+    // sheet'ine TAŞINIYOR (main.ts appendChild) ama ID/düğmeler korunduğu için bu
+    // dinleyiciler taşındıktan sonra da çalışır.
+    setTheme(getTheme())
+    for (const b of document.querySelectorAll<HTMLButtonElement>('[data-theme-opt]')) {
+      b.addEventListener('click', () => { setTheme(b.dataset.themeOpt as ThemeMode); this.shopRenderT = 0 })
+    }
+    // TEST KANCASI: tools/tests/tema-check.mjs üç durumu gerçek sayfada sürebilsin.
+    ;(window as unknown as { __setTheme?: (m: string) => void }).__setTheme = m => setTheme(m as ThemeMode)
 
     // ses ayarları: müzik seviyeli slider + efekt aç/kapa
     const musicVol = el<HTMLInputElement>('musicvol')
