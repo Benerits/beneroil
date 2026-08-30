@@ -657,6 +657,43 @@ function mesajKutusuAc() {
   ui.markInboxRead()
 }
 document.getElementById('inboxbtn')?.addEventListener('click', mesajKutusuAc)
+
+// ── HUD BİLGİ BALONCUKLARI (Twitter #5, 29 Ağu: "Üst Bar'da bulunan itemlere
+//    tıklandığında bilgi kutuları gelmeli") — her gösterge ne anlama geliyor,
+//    değeri nereden geliyor, oyuncu ne yapabilir.
+const CHIP_BILGI: Record<string, () => { baslik: string; metin: string }> = {
+  gun: () => ({ baslik: t('Oyun Günü'), metin: t('Bir oyun günü 160 saniye sürer. Gün dönümünde kira/yovmiye kesilir, ihale teslimatı kapanır, şube müdürlerinin geliri kasana yazılır ve itibarın günün hizmet kalitesine göre güncellenir.') }),
+  saat: () => ({ baslik: t('Saat'), metin: t('Gün 06:00\'da başlar. Gece trafiği azalır ama sokak lambaları ve tabela ışığı müşteri çeker; güneş panelleri yalnız gündüz üretir.') }),
+  kasa: () => ({ baslik: t('Kasa'), metin: t('Elindeki nakit. Yakıt alımı, inşaat ve yovmiye buradan çıkar. Kumbaralarda bekleyen para HENÜZ kasada değildir — tesise tıklayıp toplaman gerekir.') }),
+  itibar: () => {
+    const r = state.repToday()
+    const toplam = r.served + r.lost
+    return { baslik: t('İtibar'), metin: t('Gün sonunda O GÜNÜN kayıp oranına göre güncellenir. Bugün: {0} servis, {1} kaçan. Gün sonu hedefi {2}. Kayıpsız gün 5.0\'a çeker; müşteri kaçırmak düşürür.',
+      String(r.served), String(r.lost), r.target.toFixed(1)) + (toplam < 3 ? ' ' + t('Bugün neredeyse hiç müşteri görmedin — itibar yavaşça 3.0\'a doğru aşınır.') : '') }
+  },
+  yakit: () => ({ baslik: t('Yakıt Deposu'), metin: t('Tanktaki litre. Bitince o yakıtın müşterisi kaçar. Yakıt Siparişi ekranından tanker çağır — tedarikçi seçimin fiyatı ve teslim süresini değiştirir.') }),
+  batarya: () => ({ baslik: t('Batarya'), metin: t('Depolanan elektrik (kWh). Şarj üniteleri buradan besleniyor. Güneş paneli gündüz doldurur, jeneratör dizelden üretir, şebeke sürekli akıtır.') }),
+  seri: () => ({ baslik: t('Giriş Serisi'), metin: t('Üst üste kaç gün girdiğin. Seri uzadıkça günlük giriş bonusu büyür (₺500\'den ₺2.000\'e kadar). Bir gün atlarsan sıfırlanır.') }),
+  isik: () => ({ baslik: t('Işık'), metin: t('Gece aydınlatman. Sokak lambası ve tabela seviyesi arttıkça gece müşteri akışı ve itibar artar.') }),
+}
+{
+  const kutu = document.getElementById('chipinfo')
+  const kapat = () => kutu?.classList.remove('show')
+  document.addEventListener('click', e => {
+    const chip = (e.target as HTMLElement).closest?.('.chip[data-bilgi]') as HTMLElement | null
+    if (!chip || !kutu) { kapat(); return }
+    e.stopPropagation()
+    const veri = CHIP_BILGI[chip.dataset.bilgi!]?.()
+    if (!veri) return
+    kutu.innerHTML = `<b>${veri.baslik}</b>${veri.metin}`
+    kutu.classList.add('show')
+    // konum: chip'in altında, ekran içinde kelepçeli
+    const r = chip.getBoundingClientRect()
+    const k = kutu.getBoundingClientRect()
+    kutu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - k.width - 8))}px`
+    kutu.style.top = `${Math.min(r.bottom + 8, window.innerHeight - k.height - 8)}px`
+  })
+}
 // TEDARİKÇİ SEÇİMİ (#1067 "akaryakıt alımı için birkaç farklı marka satıcı olabilir"):
 // gerçek marka adı kullanılmıyor (ticari marka) — kurgusal üç dağıtımcı, hız/fiyat takası.
 document.getElementById('supplierrow')?.addEventListener('click', e => {

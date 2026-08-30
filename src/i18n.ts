@@ -24,6 +24,20 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Oyun Günü": "Game Day",
+  "Bir oyun günü 160 saniye sürer. Gün dönümünde kira/yovmiye kesilir, ihale teslimatı kapanır, şube müdürlerinin geliri kasana yazılır ve itibarın günün hizmet kalitesine göre güncellenir.": "One game day lasts 160 seconds. At the turn of the day rent and wages are deducted, contract deliveries close, branch managers' income lands in your cash, and your reputation is updated from that day's service quality.",
+  "Saat": "Clock",
+  "Gün 06:00'da başlar. Gece trafiği azalır ama sokak lambaları ve tabela ışığı müşteri çeker; güneş panelleri yalnız gündüz üretir.": "The day starts at 06:00. Night traffic drops, but street lamps and a lit sign still pull customers in; solar panels only produce during daylight.",
+  "Elindeki nakit. Yakıt alımı, inşaat ve yovmiye buradan çıkar. Kumbaralarda bekleyen para HENÜZ kasada değildir — tesise tıklayıp toplaman gerekir.": "Your cash on hand. Fuel purchases, construction and wages come out of it. Money waiting in facility cash boxes is NOT here yet — tap the building to collect it.",
+  "Gün sonunda O GÜNÜN kayıp oranına göre güncellenir. Bugün: {0} servis, {1} kaçan. Gün sonu hedefi {2}. Kayıpsız gün 5.0'a çeker; müşteri kaçırmak düşürür.": "Updated at the end of the day from THAT day's loss rate. Today: {0} served, {1} lost. End-of-day target {2}. A day without losses pulls it to 5.0; turning customers away drags it down.",
+  "Yakıt Deposu": "Fuel Tank",
+  "Tanktaki litre. Bitince o yakıtın müşterisi kaçar. Yakıt Siparişi ekranından tanker çağır — tedarikçi seçimin fiyatı ve teslim süresini değiştirir.": "Litres in the tank. When it runs dry, customers for that fuel leave. Call a tanker from the Fuel Order screen — your supplier choice changes the price and delivery time.",
+  "Batarya": "Battery",
+  "Depolanan elektrik (kWh). Şarj üniteleri buradan besleniyor. Güneş paneli gündüz doldurur, jeneratör dizelden üretir, şebeke sürekli akıtır.": "Stored electricity (kWh). Chargers draw from here. Solar fills it during the day, the generator makes it from diesel, the grid feeds it continuously.",
+  "Giriş Serisi": "Login Streak",
+  "Üst üste kaç gün girdiğin. Seri uzadıkça günlük giriş bonusu büyür (₺500'den ₺2.000'e kadar). Bir gün atlarsan sıfırlanır.": "How many days in a row you've logged in. The longer the streak, the bigger the daily bonus (from ₺500 up to ₺2,000). Miss a day and it resets.",
+  "Işık": "Lighting",
+  "Gece aydınlatman. Sokak lambası ve tabela seviyesi arttıkça gece müşteri akışı ve itibar artar.": "Your night lighting. More street lamps and a higher sign level increase night-time customer flow and reputation.",
   "Müdür YOK — bu şube HİÇ kazanmıyor. Sv.1 müdür tutsan günlük ~₺{0} gelirdi (yovmiye düşülmüş). Şubeye git → Ofis › Şubeler.": "NO MANAGER — this branch earns nothing. With a Lv.1 manager it would bring in about ₺{0} a day (wages deducted). Go to the branch → Office › Branches.",
   "Efektler": "Effects",
   "Tedarikçi: {0}": "Supplier: {0}",
@@ -1183,6 +1197,20 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Oyun Günü": "Jour de jeu",
+  "Bir oyun günü 160 saniye sürer. Gün dönümünde kira/yovmiye kesilir, ihale teslimatı kapanır, şube müdürlerinin geliri kasana yazılır ve itibarın günün hizmet kalitesine göre güncellenir.": "Une journée de jeu dure 160 secondes. Au changement de jour, loyer et salaires sont prélevés, les livraisons de contrat se clôturent, les revenus des gérants arrivent en caisse et ta réputation est mise à jour selon la qualité du service.",
+  "Saat": "Heure",
+  "Gün 06:00'da başlar. Gece trafiği azalır ama sokak lambaları ve tabela ışığı müşteri çeker; güneş panelleri yalnız gündüz üretir.": "La journée commence à 06h00. Le trafic de nuit baisse, mais les lampadaires et l'enseigne éclairée attirent encore des clients ; les panneaux solaires ne produisent que le jour.",
+  "Elindeki nakit. Yakıt alımı, inşaat ve yovmiye buradan çıkar. Kumbaralarda bekleyen para HENÜZ kasada değildir — tesise tıklayıp toplaman gerekir.": "Ton argent disponible. Carburant, construction et salaires en sortent. L'argent en attente dans les tirelires n'y est PAS encore — clique sur le bâtiment pour l'encaisser.",
+  "Gün sonunda O GÜNÜN kayıp oranına göre güncellenir. Bugün: {0} servis, {1} kaçan. Gün sonu hedefi {2}. Kayıpsız gün 5.0'a çeker; müşteri kaçırmak düşürür.": "Mise à jour en fin de journée selon le taux de perte du jour. Aujourd'hui : {0} servis, {1} perdus. Objectif de fin de journée {2}. Une journée sans perte la pousse vers 5,0 ; perdre des clients la fait baisser.",
+  "Yakıt Deposu": "Réservoir",
+  "Tanktaki litre. Bitince o yakıtın müşterisi kaçar. Yakıt Siparişi ekranından tanker çağır — tedarikçi seçimin fiyatı ve teslim süresini değiştirir.": "Litres dans la cuve. À sec, les clients de ce carburant s'en vont. Commande un camion depuis l'écran Commande — le fournisseur choisi change le prix et le délai.",
+  "Batarya": "Batterie",
+  "Depolanan elektrik (kWh). Şarj üniteleri buradan besleniyor. Güneş paneli gündüz doldurur, jeneratör dizelden üretir, şebeke sürekli akıtır.": "Électricité stockée (kWh). Les bornes y puisent. Le solaire la remplit le jour, le générateur la produit au diesel, le réseau l'alimente en continu.",
+  "Giriş Serisi": "Série de connexions",
+  "Üst üste kaç gün girdiğin. Seri uzadıkça günlük giriş bonusu büyür (₺500'den ₺2.000'e kadar). Bir gün atlarsan sıfırlanır.": "Nombre de jours consécutifs de connexion. Plus la série est longue, plus le bonus quotidien grandit (de ₺500 à ₺2 000). Un jour manqué et elle repart à zéro.",
+  "Işık": "Éclairage",
+  "Gece aydınlatman. Sokak lambası ve tabela seviyesi arttıkça gece müşteri akışı ve itibar artar.": "Ton éclairage nocturne. Plus de lampadaires et une enseigne de niveau supérieur augmentent le flux de clients la nuit et la réputation.",
   "Müdür YOK — bu şube HİÇ kazanmıyor. Sv.1 müdür tutsan günlük ~₺{0} gelirdi (yovmiye düşülmüş). Şubeye git → Ofis › Şubeler.": "AUCUN GÉRANT — cette station ne rapporte rien. Avec un gérant niv.1 elle rapporterait environ ₺{0} par jour (salaires déduits). Va à la station → Bureau › Stations.",
   "Efektler": "Effets",
   "Tedarikçi: {0}": "Fournisseur : {0}",

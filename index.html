@@ -653,20 +653,20 @@
   </svg>
 
   <div class="hud">
-    <div class="chip" style="min-width:62px"><span class="cl" data-i18n="GÜN">GÜN</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="day">1</span></span></div>
+    <div class="chip" data-bilgi="gun" style="min-width:62px"><span class="cl" data-i18n="GÜN">GÜN</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="day">1</span></span></div>
     <!-- C10 (analiz): giriş serisi rozeti — seri ≥2 olunca görünür, seriyi görünür kılmak dönüş kancası -->
-    <div class="chip" id="streak-chip" style="min-width:56px; display:none"><span class="cl" data-i18n="SERİ">SERİ</span><span class="cv" style="color:var(--orange)"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px"><path d="M12 2c1 3-1 4.5-2 6-1.2 1.8-1.5 3.4-.6 5.2C10.2 15 12 15.6 12 18c2.6-1 4.6-3.3 4.6-6.4 0-1.9-.8-3.3-1.8-4.6C13.6 5.5 12.7 4 12 2zM8.4 13.5c-.8 1.2-1.3 2.3-1.3 3.6C7.1 20 9.3 22 12 22s4.9-2 4.9-4.9c0-.4 0-.8-.1-1.1C15.6 18.6 13.9 20 12 20c-2 0-3.5-1.4-3.6-3.4 0-1.1.3-2.1 0-3.1z"/></svg> <span id="streak-n">2</span></span></div>
-    <div class="chip" id="hud-light-chip" style="min-width:78px; display:none"><span class="cl" data-i18n="IŞIK">IŞIK</span><span class="cv" id="hud-light" style="display:flex; align-items:center; gap:4px; font-weight:800"></span></div>
-    <div class="chip" style="min-width:66px"><span class="cl" data-i18n="SAAT">SAAT</span><span class="cv" style="display:inline-flex; align-items:center; gap:4px"><svg class="ic" style="width:13px;height:13px"><use href="#i-clock"/></svg><span id="hud-clock">06:00</span></span></div>
-    <div class="chip" style="min-width:152px"><span class="cl" data-i18n="KASA">KASA</span><span class="cv"><svg class="ic"><use href="#i-coin"/></svg> <span id="money">0</span> ₺</span></div>
+    <div class="chip" id="streak-chip" data-bilgi="seri" style="min-width:56px; display:none"><span class="cl" data-i18n="SERİ">SERİ</span><span class="cv" style="color:var(--orange)"><svg class="ic" viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px"><path d="M12 2c1 3-1 4.5-2 6-1.2 1.8-1.5 3.4-.6 5.2C10.2 15 12 15.6 12 18c2.6-1 4.6-3.3 4.6-6.4 0-1.9-.8-3.3-1.8-4.6C13.6 5.5 12.7 4 12 2zM8.4 13.5c-.8 1.2-1.3 2.3-1.3 3.6C7.1 20 9.3 22 12 22s4.9-2 4.9-4.9c0-.4 0-.8-.1-1.1C15.6 18.6 13.9 20 12 20c-2 0-3.5-1.4-3.6-3.4 0-1.1.3-2.1 0-3.1z"/></svg> <span id="streak-n">2</span></span></div>
+    <div class="chip" id="hud-light-chip" data-bilgi="isik" style="min-width:78px; display:none"><span class="cl" data-i18n="IŞIK">IŞIK</span><span class="cv" id="hud-light" style="display:flex; align-items:center; gap:4px; font-weight:800"></span></div>
+    <div class="chip" data-bilgi="saat" style="min-width:66px"><span class="cl" data-i18n="SAAT">SAAT</span><span class="cv" style="display:inline-flex; align-items:center; gap:4px"><svg class="ic" style="width:13px;height:13px"><use href="#i-clock"/></svg><span id="hud-clock">06:00</span></span></div>
+    <div class="chip" data-bilgi="kasa" style="min-width:152px"><span class="cl" data-i18n="KASA">KASA</span><span class="cv"><svg class="ic"><use href="#i-coin"/></svg> <span id="money">0</span> ₺</span></div>
     <div id="fuelrail">
-    <div class="chip fuelchip"><span class="cl" data-i18n="BENZİN">BENZİN</span><span class="cv"><svg class="ic" style="color:var(--green)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-benzin" style="background:var(--green)"></div></div> <span id="lvl-benzin">0</span></span></div>
-    <div class="chip fuelchip"><span class="cl" data-i18n="DİZEL">DİZEL</span><span class="cv"><svg class="ic" style="color:var(--orange)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-dizel" style="background:var(--orange)"></div></div> <span id="lvl-dizel">0</span></span></div>
-    <div class="chip fuelchip"><span class="cl" data-i18n="LPG">LPG</span><span class="cv"><svg class="ic" style="color:var(--blue)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-lpg" style="background:var(--blue)"></div></div> <span id="lvl-lpg">0</span></span></div>
+    <div class="chip fuelchip" data-bilgi="yakit"><span class="cl" data-i18n="BENZİN">BENZİN</span><span class="cv"><svg class="ic" style="color:var(--green)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-benzin" style="background:var(--green)"></div></div> <span id="lvl-benzin">0</span></span></div>
+    <div class="chip fuelchip" data-bilgi="yakit"><span class="cl" data-i18n="DİZEL">DİZEL</span><span class="cv"><svg class="ic" style="color:var(--orange)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-dizel" style="background:var(--orange)"></div></div> <span id="lvl-dizel">0</span></span></div>
+    <div class="chip fuelchip" data-bilgi="yakit"><span class="cl" data-i18n="LPG">LPG</span><span class="cv"><svg class="ic" style="color:var(--blue)"><use href="#i-fuel"/></svg> <div class="bar"><div id="fill-lpg" style="background:var(--blue)"></div></div> <span id="lvl-lpg">0</span></span></div>
     <div class="chip fuelchip" id="battchip"><span class="cl" data-i18n="BATARYA">BATARYA</span><span class="cv"><svg class="ic"><use href="#i-batt"/></svg> <div class="bar"><div id="battfill"></div></div> <span id="battkwh">0</span></span></div>
     </div>
     <div class="chip" id="onlinechip" style="min-width:72px; display:none"><span class="cl" data-i18n="OYUNDA">OYUNDA</span><span class="cv"><svg class="ic"><use href="#i-user"/></svg> <span id="hud-online">0</span></span></div>
-    <div class="chip" id="repchip" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
+    <div class="chip" id="repchip" data-bilgi="itibar" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
     <div class="chip" id="questchip" style="min-width:104px; cursor:pointer" title="Günlük görevler"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
     <div class="spacer"></div>
     <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Reklam İzle: Müşteri Patlaması">Reklam İzle: Müşteri Patlaması</span></button>
@@ -841,6 +841,7 @@
 
   <!-- HUD hızlı şube geçişi (#1038): ofis panelini açmadan haritalar arası geçiş -->
   <div id="locmenu"></div>
+  <div id="chipinfo"></div>
 
   <div class="backdrop" id="inboxwrap">
     <div class="modal">
@@ -1203,6 +1204,16 @@ Sorun / Öneri Bildir
     .mvok { width:auto; padding:0 16px; background:#27a05a; color:#fff; border-color:#1c7d45; font-size:15px; }
     .mvcancel { background:#e2574d; color:#fff; border-color:#c33; }
   
+    /* HUD BİLGİ BALONCUĞU (Twitter #5, 29 Ağu: "üst bardaki itemlere tıklandığında
+       bilgi kutuları gelmeli") — gösterge ne anlama geliyor, tıklayınca yazar. */
+    #chipinfo { position:fixed; z-index:33; display:none; max-width:min(300px,88vw);
+      background:var(--paper); border:1.5px solid var(--edge); border-bottom-width:3px;
+      border-radius:var(--r-md); box-shadow:var(--shadow); padding:10px 12px;
+      font-size:12.5px; font-weight:700; line-height:1.5; color:var(--ink) }
+    #chipinfo.show { display:block }
+    #chipinfo b { display:block; font-size:13px; margin-bottom:3px; color:var(--red) }
+    .chip[data-bilgi] { cursor:pointer }
+
     /* HIZLI ŞUBE GEÇİŞİ (#1038) */
     #locmenu { position:fixed; z-index:31; display:none; background:var(--paper);
       border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:var(--r-lg);

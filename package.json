@@ -12,6 +12,7 @@
     "assets": "node tools/gen-assets.mjs",
     "test:twitter": "tsx tools/tests/twitter-check.mjs",
     "test:perf": "node tools/tests/perf-check.mjs",
+    "test:hudbilgi": "node tools/tests/hud-bilgi-check.mjs",
     "test:smoke": "node tools/tests/smoke-oyun.mjs",
     "test:faz": "tsx tools/tests/faz-checks.mjs",
     "test:traffic": "tsx tools/tests/traffic-load.mjs",
