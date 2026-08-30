@@ -105,6 +105,9 @@ export class UI {
   onMaint: (id: string) => void = () => {}
   onCardClose: () => void = () => {}
   onMove: (id: string) => void = () => {}
+  /** DÖNDÜR (6 şikayet: #918 "hangi harfle döndürülüyor", #1142 "döndürme özelliği güzel
+   *  olur" — özellik VARDI ama yalnız taşıma modunda R ile, kimse bulamıyordu). */
+  onRotate: (id: string) => void = () => {}
   onReset: () => void = () => {}
   onToggleClosed: () => void = () => {}
   onPriceChange: (f: FuelType | 'elec', delta: number) => void = () => {}
@@ -161,9 +164,11 @@ export class UI {
   private infoCard = el<HTMLDivElement>('infocard')
   private infoAction = el<HTMLButtonElement>('binfo-action')
   private infoMove = el<HTMLButtonElement>('binfo-move')
+  private infoRot = el<HTMLButtonElement>('binfo-rot')
   private infoSell = el<HTMLButtonElement>('binfo-sell')
   private currentAction: string | null = null
   private currentMove: string | null = null
+  private currentRot: string | null = null
   private currentBuy: string | null = null
   private currentSell: string | null = null
   onSell: (id: string) => void = () => {}
@@ -376,6 +381,9 @@ export class UI {
     this.infoSell.addEventListener('click', () => {
       if (this.currentSell) this.onSell(this.currentSell)
     })
+    this.infoRot.addEventListener('click', () => {
+      if (this.currentRot) this.onRotate(this.currentRot)
+    })
     this.infoMove.addEventListener('click', () => {
       if (this.currentMove) this.onMove(this.currentMove)
     })
@@ -519,9 +527,14 @@ export class UI {
       this.infoMove.style.display = 'flex'
       this.infoMove.textContent = stripEmoji(t(card.move.label))
       this.currentMove = card.move.id
+      this.infoRot.style.display = 'flex'
+      this.infoRot.textContent = t('Döndür')
+      this.currentRot = card.move.id
     } else {
       this.infoMove.style.display = 'none'
       this.currentMove = null
+      this.infoRot.style.display = 'none'
+      this.currentRot = null
     }
     const buyBtn = el<HTMLButtonElement>('binfo-buy')
     if (card.buy) {
@@ -593,6 +606,7 @@ export class UI {
     this.cardAnchor = null
     this.currentAction = null
     this.currentMove = null
+    this.currentRot = null
     this.currentSell = null
   }
 

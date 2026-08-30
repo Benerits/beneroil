@@ -3822,6 +3822,59 @@ ui.onMove = id => {
   startPlacement(id, true)
 }
 
+/**
+ * YERİNDE DÖNDÜR (6 şikayet: #918 "marketi döndürmeye çalışıyorum beceremedim hangi
+ * harfle", #1142 "yapıları döndürme özelliği güzel olur", #935/#780/#750 "scroll/orta
+ * tuş/ok tuşuyla döndüremiyorum", #1207 "yönünü değiştirecek [şey] aşağıya geliyor").
+ *
+ * Döndürme ZATEN vardı ama yalnız taşıma modunda R tuşuyla — yani önce "Taşı" demen,
+ * sonra R'yi keşfetmen gerekiyordu. Kimse bulamadı. Artık bina kartında doğrudan
+ * "Döndür" butonu var: yapı yerinden kalkmadan 90° döner.
+ */
+const SABIT_YON = new Set(['tank', 'gatein', 'gateout', 'gatein2', 'gateout2'])
+ui.onRotate = id => {
+  if (!footprintOf(id)) return
+  if (SABIT_YON.has(id)) {
+    ui.toast(t('Bu ünitenin yönü sabittir (araç yanaşması) — sadece yerini seçebilirsin.'), '')
+    return
+  }
+  const yeni = ((placedRot[id] ?? 0) + 1) % 4
+  // ÇAKIŞMA KONTROLÜ: döndürünce ayak izi 90° döner (w↔d). Yeni hâli sığmıyorsa
+  // döndürme yapılmaz — yapı başka bir yapının/rezervin üstüne binmesin.
+  const f = footprintOf(id)!
+  const pos = placedPos[id]
+  if (pos) {
+    const tek = yeni % 2 === 1
+    const eff = { cx: pos[0], cy: pos[1], w: tek ? f.d : f.w, d: tek ? f.w : f.d }
+    const digerleri = placedRects.filter(r => r.id !== id)
+    const carpisma = digerleri.some(o => overlaps(eff, o))
+      || fixedObstacles(id).some(o => overlaps(eff, o))
+    if (carpisma) {
+      ui.toast(t('Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.'), 'bad')
+      return
+    }
+    const i = placedRects.findIndex(r => r.id === id)
+    if (i >= 0) placedRects[i] = { id, ...eff }
+  }
+  placedRot[id] = yeni
+  world.rotateBuilding(id, yeni)
+  // pompa/şarj: açı değişince araç yanaşma noktası da döner
+  if (id.startsWith('pump-')) {
+    const p2 = placedPos[id]
+    if (p2) world.movePump(parseInt(id.slice(5)), new THREE.Vector2(p2[0] - 0.9, p2[1]), yeni)
+  } else if (id.startsWith('charger-')) {
+    const p2 = placedPos[id]
+    if (p2) world.addEvCharger(parseInt(id.slice(8)), new THREE.Vector2(p2[0] - 0.5, p2[1]), yeni)
+  }
+  golgeTazele()
+  Car.solids = hardRects()
+  cars.rerouteForGates()          // otopark/pompa yönü değişti: rotalar tazelensin
+  audio.click()
+  ui.toast(t('Döndürüldü ({0}°)', String(yeni * 90)), 'good', true)
+  persist()
+  if (selectedBuilding === id) refreshBuildingCard()
+}
+
 ui.onSell = id => {
   if (!sellInfo(state, id)) return
   const refund = applySell(state, id)
@@ -3874,6 +3927,9 @@ const isFullMode = new URLSearchParams(location.search).has('full')
 // doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
 if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
   get state() { return state }, get cars() { return cars }, get world() { return world }, get att() { return attendantFigs },
+  // TEST KANCALARI (yalnız ?full=1): otomatik doğrulama bina kartı akışını sürebilsin
+  get ui() { return ui },
+  sec(id: string) { selectedBuilding = id; world.setSelected(id); refreshBuildingCard() },
   // SİNEMATİK KAMERA (video stüdyosu için — yalnız vitrin modunda): pürüzsüz zoom/pan
   cine: {
     getCam() { return { x: camX, y: camY, zoom: camera.zoom } },

@@ -24,6 +24,8 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  "Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.": "Doesn't fit here — rotating would overlap another building or the vehicle lane. Move it first.",
+  "Döndürüldü ({0}°)": "Rotated ({0}°)",
   "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Move mode: arrows/tap to move · R key or ⟳ to ROTATE · ✓ to place",
   "Yerleştirme modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Placement mode: arrows/tap to move · R key or ⟳ to ROTATE · ✓ to place",
   "Oyun Günü": "Game Day",
@@ -1199,6 +1201,8 @@ const EN: Record<string, string> = {
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
 // metin eklerken hem EN hem FR'ye aynı anahtarla ekle (eksikse TR'ye düşer).
 const FR: Record<string, string> = {
+  "Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.": "Ça ne rentre pas ici — en pivotant, ça chevaucherait un autre bâtiment ou la voie. Déplace-le d'abord.",
+  "Döndürüldü ({0}°)": "Pivoté ({0}°)",
   "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Mode déplacement : flèches/toucher pour bouger · touche R ou ⟳ pour PIVOTER · ✓ pour placer",
   "Yerleştirme modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Mode placement : flèches/toucher pour bouger · touche R ou ⟳ pour PIVOTER · ✓ pour placer",
   "Oyun Günü": "Jour de jeu",
