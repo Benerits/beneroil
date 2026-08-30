@@ -27,6 +27,8 @@ export const LOC_FIELDS = [
   'hasHotel', 'hasCleaner', 'supplier',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
   'uraniumPending', 'uraniumEta', 'closed', 'wideGates', 'smrWreck',
+  // karşı istasyon bayrağı da ŞUBEYE aittir: kasabada açık olması otoyolu açmaz
+  'farStationOn',
 ] as const
 
 /** Şube anlık görüntüsü: ekipman alanları + tank/parsel/kumbara/otomasyon kümeleri */
@@ -288,6 +290,15 @@ export class GameState {
   hasCoffee2 = false
   hasRestaurant2 = false
   hasTruckPark2 = false // karşı yaka tır parkı (tek kurulumlu tesislerin karşı nüshası — Oğuz)
+  /** KARŞI İSTASYON AÇIK MI (kapılar + karşı şerit trafiği kurulu mu).
+   *
+   *  NEDEN STATE'TE: eskiden yalnız sahne nesnesinde (world.farStationOn) yaşıyordu ve
+   *  her açılışta "karşıda pompa/şarj var mı" sorusundan TÜRETİLİYORDU. Karşıya yalnız
+   *  TESİS koymuş (market2/wash2/tır parkı…) oyuncuda türetme false çıkıyor, karşı
+   *  giriş/çıkış kapıları sayfa yenilenince YOK OLUYORDU ("karşı taraftaki kapılar
+   *  kayboluyor"). Artık bayrak kayda giriyor: bir kez açılan karşı istasyon kapanmaz.
+   *  ŞUBE BAZLI (LOC_FIELDS): her şubenin kendi karşı yakası vardır. */
+  farStationOn = false
   marketingBudget = 0 // günlük reklam bütçesi ₺ (0-8000) — trafik arz+talep sink'i (ADDITIVE)
   opexStart = 0 // OPEX rampasının başladığı oyun günü (ilk yüklemede atanır — ADDITIVE)
   /** aktif B2B sözleşmesi (ADDITIVE alan; null = yok) — geç oyunun karar motoru */
@@ -1247,6 +1258,13 @@ export class GameState {
     this.hasDiesel = false; this.hasSMR = false; this.smrWreck = false; this.hasWash = false; this.hasOil = false
     this.hasCoffee = false; this.hasRestaurant = false; this.hasTruckPark = false
     this.hasHotel = false; this.hasCleaner = false
+    // KARŞI YAKA da devrolur: bedeli handoverValue içinde ÖDENİYOR (equipmentValue artık
+    // karşı tesisleri de sayıyor) ama alanlar sıfırlanmıyordu → oyuncu hem parayı hem
+    // tesisi alıyordu. Ayrıca main.ts devirde placedPos'u temizlediği için tesisler
+    // varsayılan yerlerine ışınlanıyordu ("devirden sonra karşı bina ortada duruyor").
+    this.toilet2Level = 0
+    this.hasWash2 = false; this.hasOil2 = false; this.hasCoffee2 = false
+    this.hasRestaurant2 = false; this.hasTruckPark2 = false
     this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
     for (const f of FUELS) { this.tankCounts[f] = 1; this.tanks[f] = 0 }
     this.brokenPumps.clear(); this.brokenChargers.clear()
@@ -1458,6 +1476,16 @@ export class GameState {
     if (this.hasTruckPark) v += TRUCKPARK_COST
     if (this.hasHotel) v += HOTEL_COST
     if (this.wideGates) v += WIDEGATE_COST
+    // KARŞI YAKA NÜSHALARI (yalnız market2 sayılıyordu): sunucu buildingValue() bunların
+    // HEPSİNİ sayıyor. İstemci saymayınca karşıya tesis kurmak "para gitti, servet artmadı"
+    // gibi görünüyor; devir bedeli ve OPEX eksik, şube geçişinde servet zıplıyordu.
+    // Maliyet tabloları server/index.js COST/FLAT ile BİREBİR aynı olmalı.
+    v += sum(TOILET_COSTS, this.toilet2Level)
+    if (this.hasWash2) v += WASH_COST
+    if (this.hasOil2) v += OIL_COST
+    if (this.hasCoffee2) v += COFFEE_COST
+    if (this.hasRestaurant2) v += RESTAURANT_COST
+    if (this.hasTruckPark2) v += TRUCKPARK_COST
     return v
   }
   /** sahip olunan arsaların taban değeri (düşük tahmin — vergi matrahı) */
@@ -2569,6 +2597,13 @@ export function checkAchievements(s: GameState) {
 const SAVE_FIELDS = [
   'money', 'reputation', 'stationName', 'pumps', 'pumpSpeedLevel', 'signLevel', 'tankLevel', 'marketLevel', 'market2Level', 'toiletLevel',
   'toilet2Level', 'hasWash2', 'hasOil2', 'hasCoffee2', 'hasRestaurant2',
+  // KARŞI YAKA KAYIT AÇIĞI (oyuncu raporu "karşı tır parkı her sabah siliniyor"):
+  // hasTruckPark2 LOC_FIELDS'ta vardı ama SAVE_FIELDS'ta YOKTU. Yani yalnız PASİF
+  // şubelerin anlık görüntüsünde yaşıyordu; AKTİF şubede yenileme/kapanışta yanıyordu.
+  // Üstelik sunucu buildingValue() bu alanı SAYIYOR — istemci göndermeyince şube
+  // geçişinde servet zıplayıp anti-cheat kırpması tetikleniyordu. farStationOn da
+  // ADDITIVE: eski kayıtta yok → hydrate dokunmaz, sınıf varsayılanı (false) kalır.
+  'hasTruckPark2', 'farStationOn',
   'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'supplier', 'managerPolicy', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',

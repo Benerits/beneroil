@@ -1979,6 +1979,15 @@ export class World {
     this.wideGates = on
     this.buildGate('in')
     this.buildGate('out') // buildGate bordürü de yeniden kurar
+    // KARŞI YAKA DA GENİŞLER (oyuncu raporu: "karşı giriş/çıkışı genişletince kalıcı
+    // olmuyor, mağaza MAKS diyor"). Geniş kapı ŞUBE genelinde tek bir satın alma; ama
+    // yalnız near kapılar yeniden kuruluyordu, karşı kapılar hep dar kalıyordu. Kapı
+    // ağzı/rampa/bordür boşluğu buildGate içinde this.wideGates'ten okunduğu için
+    // karşı kapıları MEVCUT y'lerinde yeniden kurmak yetiyor.
+    if (this.farStationOn) {
+      this.buildGate('in', this.gateIn2.clone(), 'far')
+      this.buildGate('out', this.gateOut2.clone(), 'far')
+    }
   }
   private tankLevelNow = 0
   private tankFillMeshes: Record<FuelType, THREE.Mesh[]> = { benzin: [], dizel: [], lpg: [] }

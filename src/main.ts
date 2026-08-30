@@ -2792,6 +2792,14 @@ function enableFarStationClear() {
   const inY = clearFarGateY(8, null)      // giriş üstte (+y), far araç güneye iner
   const outY = clearFarGateY(-8, inY)     // çıkış altta (-y), girişten ≥6 uzak
   world.enableFarStation(inY, outY)
+  // KALICILIK (oyuncu raporu "karşı taraftaki kapılar kayboluyor"): bayrak artık kayda
+  // giriyor — yenilemede karşı istasyon "karşıda pompa var mı" tahmininden değil,
+  // state'ten geri gelir. Kapı y'lerini de HEMEN placedPos'a yazıyoruz: yoksa her
+  // açılışta clearFarGateY yeniden hesaplıyor ve karşı yakaya yeni bina konunca
+  // kapılar kendiliğinden kayıyordu ("kapılar yer değiştiriyor").
+  state.farStationOn = true
+  if (!placedPos.gatein2) placedPos.gatein2 = [FAR_GATE_X, inY]
+  if (!placedPos.gateout2) placedPos.gateout2 = [FAR_GATE_X, outY]
 }
 
 /** satın alma sonrası sahnedeki görsel karşılığını kurar */
@@ -3294,17 +3302,26 @@ function rebuildFromState() {
     // Kayıtlı açıyla kur → araç yanaşma slotu da doğru hesaplanır (rotateBuilding slot güncellemez).
     world.addEvCharger(i, sp ? new THREE.Vector2(sp.x - 0.5, sp.y) : undefined, placedRot[`charger-${i}`] ?? 0)
   }
-  // Karşıda (yol karşısı) pompa/şarj varsa karşı istasyonu aktive et — otomatik giriş-çıkış + karşı şerit trafiği.
-  // (Yalnız karşıya EKİPMAN koymuş oyuncular; sadece arsa/tesis olan mevcut oyuncular ETKİLENMEZ.)
-  if (world.pumpSlots.slice(0, state.pumps).some(s => s.x > ROAD_X)
-      || world.evSlots.slice(0, state.evChargers).some(s => s.x > ROAD_X)) {
-    enableFarStationClear()
+  // GENİŞ KAPI kapılardan ÖNCE uygulanır: buildGate kapı ağzı/rampa/bordür boşluğunu
+  // this.wideGates'ten okur. Eskiden karşı kapılar bu satırdan önce kurulduğu için her
+  // yenilemede DAR doğuyordu → "karşı giriş/çıkışı genişletince kalıcı olmuyor".
+  if (state.wideGates) world.setWideGates(true)
+  // Karşı istasyon üç yoldan açılır:
+  //  (a) KAYITLI bayrak — asıl kaynak, bir kez açılan karşı istasyon bir daha kapanmaz;
+  //  (b) karşıda duran pompa/şarj — bayraktan ÖNCEKİ kayıtların kendini onarması için;
+  //  (c) karşıda tesis var ama kapı yok — karşı müşteri kapısız gelemediğinden o tesisler
+  //      sessizce gelirsiz kalıyordu ("karşı yol giriş/çıkışı açılamıyor").
+  const farByEquip = world.pumpSlots.slice(0, state.pumps).some(s => s.x > ROAD_X)
+    || world.evSlots.slice(0, state.evChargers).some(s => s.x > ROAD_X)
+  const farByFacility = state.market2Level > 0 || state.toilet2Level > 0 || state.hasWash2
+    || state.hasOil2 || state.hasCoffee2 || state.hasRestaurant2 || state.hasTruckPark2
+  if (state.farStationOn || farByEquip || farByFacility) {
+    enableFarStationClear() // state.farStationOn'u da true'ya çeker (eski kayıt onarımı)
     // oyuncu karşı kapıları TAŞIDIYSA kayıtlı konumlarına geri kur
     if (placedPos.gatein2) world.buildGate('in', new THREE.Vector2(placedPos.gatein2[0], placedPos.gatein2[1]), 'far')
     if (placedPos.gateout2) world.buildGate('out', new THREE.Vector2(placedPos.gateout2[0], placedPos.gateout2[1]), 'far')
   }
   world.setSign(state.signLevel, placedPos.sign ? new THREE.Vector2(placedPos.sign[0], placedPos.sign[1]) : undefined)
-  if (state.wideGates) world.setWideGates(true)
   world.upgradeTankVisual(state.tankLevel) // seviye + yakıt-başına adet
   const pv = (id: string) => (placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined)
   if (state.marketLevel > 0) world.buildMarket(state.marketLevel, pv('market'))
@@ -3888,8 +3905,12 @@ function confirmPlacement() {
   }
   placedPos[p.id] = [p.cx, p.cy]
   placedRot[p.id] = p.rot
-  // karşıya (yol karşısı) İLK pompa/şarj konunca karşı istasyon aktive olur: otomatik giriş-çıkış + karşı şerit trafiği
-  if ((p.id.startsWith('pump-') || p.id.startsWith('charger-')) && p.cx > ROAD_X && !world.farStationOn) {
+  // Karşıya (yol karşısı) İLK gelir ünitesi konunca karşı istasyon aktive olur: otomatik
+  // giriş-çıkış + karşı şerit trafiği. Eskiden yalnız pompa/şarj tetikliyordu; karşı
+  // market/tuvalet/yıkama/tır parkı kuran oyuncuda kapı hiç açılmıyor, o tesisler
+  // müşterisiz (dolayısıyla gelirsiz) kalıyordu — "karşı yol giriş/çıkışı açılamıyor".
+  if ((p.id.startsWith('pump-') || p.id.startsWith('charger-') || FAR_ONLY.has(p.id.split('#')[0]))
+      && p.cx > ROAD_X && !world.farStationOn) {
     enableFarStationClear() // kapıları mevcut karşı-yapılardan kaçırarak kur
     ui.toast('Yol karşısı istasyon açıldı! Otomatik giriş-çıkış geldi — karşı şeritten müşteri gelecek.', 'good', true)
   }
@@ -4815,18 +4836,35 @@ function buildingCard(id: string): BuildingCard | null {
           : undefined,
       }
     }
-    case 'gatein2':
+    // KARŞI KAPILAR: genişlik satırı + satın alma butonu near kapılarla AYNI. "Geniş
+    // Giriş-Çıkış" tek satın almadır ve artık her iki yakayı da genişletir; panel bunu
+    // göstermeyince oyuncu mağazada "MAKS" görüp "karşı kapı genişlemiyor" sanıyordu.
+    case 'gatein2': {
+      const wg = getShopItems(state).find(r => r.id === 'widegate')
       return {
         icon: 'i-move', name: t('Karşı Giriş Kapısı'),
         desc: t('Karşı (yol karşısı) istasyona müşteriler buradan girer. Taşı ile yol kenarında yerini ayarla.'),
-        stats: [['Kural', t('Çıkışla arası en az 5 birim')]],
+        stats: [
+          [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
+          ['Kural', t('Çıkışla arası en az 5 birim')]],
+        buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
+          ? { label: t('Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          : undefined,
       }
-    case 'gateout2':
+    }
+    case 'gateout2': {
+      const wg = getShopItems(state).find(r => r.id === 'widegate')
       return {
         icon: 'i-move', name: t('Karşı Çıkış Kapısı'),
         desc: t('Karşı istasyondan araçlar buradan çıkıp yola karışır. Taşı ile yerini belirle.'),
-        stats: [['Kural', t('Girişle arası en az 5 birim')]],
+        stats: [
+          [t('Genişlik'), state.wideGates ? t('Geniş · 2 şerit') : t('Tek şerit'), state.wideGates ? 'good' : ''],
+          ['Kural', t('Girişle arası en az 5 birim')]],
+        buy: (!state.wideGates && wg && wg.status === 'buy' && wg.cost !== null)
+          ? { label: t('Geniş Giriş-Çıkış — ₺{0}', wg.cost.toLocaleString('tr-TR')), id: 'widegate' }
+          : undefined,
       }
+    }
     case 'sign':
       return {
         icon: 'i-sign', name: t('Tabela'),
