@@ -2166,8 +2166,19 @@ export class World {
     pad.position.z = 0.024
     pad.receiveShadow = true
     g.add(pad)
-    // yön oku: giriş istasyona, çıkış yola bakar. Near istasyon batıda (in→-x); far istasyon doğuda → ok tersine döner.
-    const dir = (kind === 'in' ? -1 : 1) * (far ? -1 : 1)
+    // YÖN OKU — İKİ KEZ AYNALAMA HATASI (oyun sahibi: "karşı istasyonun giriş çıkış
+    // oklarının yeri yanlış gibi"). Burada ok karşı yaka için `(far ? -1 : 1)` ile elle
+    // ters çevriliyordu; AMA aşağıdaki register() zaten ROAD_X'in doğusundaki her grubu
+    // 180° döndürüyor (farFlip). İki aynalama üst üste binince ok TAM TERSİNE dönüyordu:
+    // ölçüldü — araçlar karşı GİRİŞ kapısından (y=+8) içeri girerken (36→180 örnek,
+    // hepsi `driving`) oradaki ok yolu gösteriyordu; çıkış kapısında da tersi.
+    // Ayrıca 180° dönüş "GİRİŞ"/"ÇIKIŞ" tabelasını da çeviriyor, panel kameraya SIRTINI
+    // dönüyordu (ekran görüntüsünde karşı kapıda yalnız çıplak direk görünüyor).
+    // ÇÖZÜM: aynalama TEK KAYNAKTA (farFlip) kalsın. Ok yerel eksende hesaplanır:
+    // giriş istasyona (−x), çıkış yola (+x) bakar; karşı yakada grubun kendisi dönerek
+    // ikisini de doğru dünya yönüne çevirir. Tabela ise yerelde ters kurulur ki
+    // dönüşten sonra yine kameraya (+x) baksın.
+    const dir = kind === 'in' ? -1 : 1
     const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.34), lam(0xe8e4d8))
     shaft.position.set(-dir * 0.35, 0, 0.03)
     g.add(shaft)
@@ -2185,7 +2196,7 @@ export class World {
       ctx.fillStyle = '#fff'; ctx.font = '800 44px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillText(kind === 'in' ? t('GİRİŞ') : t('ÇIKIŞ'), cw / 2, ch / 2 + 2)
-    })
+    }, far ? new THREE.Vector3(-1, 0, 0) : undefined) // karşı yakada grup 180° dönecek → yerelde ters kur
     label.position.set(0, 1.45, 1.62)
     g.add(label)
     g.position.set(v.x, v.y, 0)

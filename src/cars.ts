@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
-import { LaneNetwork, StationGeom, UnitPoint, Pt } from './traffic-graph'
+import { LaneNetwork, StationGeom, UnitPoint, ParkPoint, ParkLane, Pt } from './traffic-graph'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
@@ -354,8 +354,10 @@ export class Car {
    *  taşındıysa veya araç yerinden oynadıysa damga tutmaz → rota tazelenir. */
   cikisImza = ''
   truckStagePos: THREE.Vector3 | null = null
-  /** otopark yanaşma noktası — çıkışta önce buradan çıkılır (stage) */
-  parkStage: THREE.Vector3 | null = null
+  /** aracın park ettiği ŞERİT (giriş kolu + çıkış kolu + koridor ağızları).
+   *  Eski tek `parkStage` noktasının yerini aldı: çıkış artık GİRİŞTEN AYRI hattan
+   *  yapılıyor, yani park etmeye gelenle çıkan kafa kafaya gelmiyor. */
+  parkLane: ParkLane | null = null
   /** kararlı otopark yeri kimliği ('parking#2:1') — B4: indeksle takip bina taşınınca kayıyordu */
   parkId: string | null = null
   /** aracın gizli yakıt ihtiyacı (litre) — tipine göre: binek/SUV/kamyon */
@@ -1362,6 +1364,16 @@ export class CarManager {
     }
     return out
   }
+  /** Bu yakanın park yerleri — otopark da ŞERİT AĞINA girer (pompa kolu kalıbının aynısı).
+   *  Yaka filtresi burada: near müşteri karşı yakadaki otoparka gitmez (yolu dik keserdi). */
+  private parkPoints(st: 'near' | 'far'): ParkPoint[] {
+    const out: ParkPoint[] = []
+    for (const s of this.opts.parkSpots()) {
+      if ((s.pos.x > ROAD_X) !== (st === 'far')) continue
+      out.push({ id: s.id, x: s.pos.x, y: s.pos.y, sx: s.stage.x, sy: s.stage.y })
+    }
+    return out
+  }
   private waitOccFor(st: 'near' | 'far') { return st === 'far' ? this.waitOccFar : this.waitOcc }
   /** o şubede kaç kuyruk slotu var — şerit ağından gelir (geniş kapı 10, dar 8, marina 4) */
   private waitSlotCount(st: 'near' | 'far') {
@@ -1454,13 +1466,19 @@ export class CarManager {
         return { station: st, gateX: G.gateX, lane: G.lane, gateInY: G.gateInY, gateOutY: G.gateOutY,
           sideSign: G.sideSign, dirY: G.dirY, wide: this.opts.wideGates(),
           units: this.unitPoints(st as 'near' | 'far'),
+          parks: this.parkPoints(st as 'near' | 'far'),
           water: (this.opts.isWater?.() ?? false) && st === 'near' }
       })
+    // İMZAYA KATI CİSİM SÜRÜMÜ DE GİRER: otopark koridorları katı cisimlere göre elenir
+    // (kapalı slot listeye girmez), yani oyuncu pompayı/binayı taşıyınca koridorlar
+    // yeniden hesaplanmalı. Sürüm sayacı yalnız yerleşim değişince artar (kare başına DEĞİL).
     const key = stationsNow.map(g => `${g.station}:${g.gateX}:${g.gateInY}:${g.gateOutY}:${g.wide}:${g.water}`
-      + `:${(g.units ?? []).map(u => `${u.id}@${u.x.toFixed(1)},${u.y.toFixed(1)}`).join(',')}`).join('|')
+      + `:${(g.units ?? []).map(u => `${u.id}@${u.x.toFixed(1)},${u.y.toFixed(1)}`).join(',')}`
+      + `:${(g.parks ?? []).map(p => `${p.id}@${p.x.toFixed(1)},${p.y.toFixed(1)}>${p.sx.toFixed(1)},${p.sy.toFixed(1)}`).join(',')}`).join('|')
+      + '|s' + Car.solidSurum
     if (key !== this.graphKey) {
       this.graphKey = key
-      this.graph.rebuild(stationsNow)
+      this.graph.rebuild(stationsNow, (x, y) => Car.isSolidAt(x, y))
     }
 
     // yoldan geçen trafik
@@ -1843,6 +1861,10 @@ export class CarManager {
     for (let i = 0; i < spots.length; i++) {
       if (this.truckOcc[i]) continue
       if ((spots[i].spot.x > ROAD_X) !== (car.station === 'far')) continue // yaka eşleşmesi
+      // YOLU KAPALI YERE GÖNDERME (otoparkla aynı gerekçe): manevra ya da park noktası
+      // katı cismin içinde kalıyorsa tır oraya asla varamaz, gövdenin dibinde kilitlenir.
+      if (Car.isSolidAt(spots[i].stage.x, spots[i].stage.y)) continue
+      if (Car.isSolidAt(spots[i].spot.x, spots[i].spot.y)) continue
       si = i; break
     }
     if (si < 0) return false
@@ -1860,7 +1882,12 @@ export class CarManager {
       path.push(new THREE.Vector3(GT.lane, GT.gateInY - GT.dirY * 3.5, 0))
       path.push(new THREE.Vector3(GT.gateX, GT.gateInY, 0))
     }
-    path.push(new THREE.Vector3(GT.gateX + GT.sideSign * 0.2, stage.y, 0))
+    // TIR PARKINA GİDİŞ DE OMURGADAN: eskiden kapının 0.2 birim içinden (gateX+0.2)
+    // geçen ÜÇÜNCÜ bir kolon kullanılıyordu — o kolon giden omurganın (xOut) tam üstüne
+    // düşüyor ve tır oradan ters yönde ilerliyordu; çıkan araçlarla kafa kafaya gelme
+    // ihtimali doğuyordu. Artık GELEN omurga kullanılıyor (tır da giren trafiktir).
+    const LN = this.graph.get(car.station)
+    path.push(new THREE.Vector3(LN ? LN.xIn : GT.gateX + GT.sideSign * 0.8, stage.y, 0))
     path.push(stage.clone())
     // tır parkına gidiş TEMİZLENİR (tır payı geniş); geri geri yanaşma bacağı TEMİZLENMEZ:
     // o kasıtlı bir manevradır, park yerinin dibindeki engelden "kaçınmak" onu bozar.
@@ -2061,8 +2088,11 @@ export class CarManager {
     // ölü kayıtları temizle (otopark taşındı/yıkıldı → id artık yok)
     const live = new Set(spots.map(s => s.id))
     for (const id of [...this.parkOcc.keys()]) if (!live.has(id)) this.parkOcc.delete(id)
-    const sp = spots.find(s => !this.parkOcc.has(s.id)
-      && (s.pos.x > ROAD_X) === (car.station === 'far'))
+    // ŞERİT AĞINDAN SEÇ: yalnız YOLU AÇIK slotlar listede. Kapalı slota gönderilen araç
+    // pompa gövdesinin dibinde sonsuza dek kilitleniyordu (bkz. traffic-graph parkLanes).
+    const lane = this.graph.parkLanesOf(car.station).find(l => !this.parkOcc.has(l.id))
+    if (!lane) return false
+    const sp = spots.find(s => s.id === lane.id)
     if (!sp) return false
     // pompayı/şarjı hemen boşalt ki sıradaki müşteri girsin — slotIndex'i EZME (B4), ayrı alan
     if (car.slotIndex >= 0) {
@@ -2077,22 +2107,15 @@ export class CarManager {
     car.filling = false
     car.hideBubble()
     car.hideBars()
-    // spot+stage+açı: araç otoparkın KENDİ girişinden (stage) yanaşır — sabit park şeridi
-    // detourı (ofis önü yığılması) yok; park açısı otoparkın rotasyonuna uyar (yan park bitti).
-    const p = sp.pos.clone(); p.z = 0
-    const stage = sp.stage.clone(); stage.z = 0
-    car.parkStage = stage.clone()
-    // ön-sahneleme x'i yakaya göre aynalanır (3.0 near apron'uydu; far'da karşılığı)
-    const preStageX = car.station === 'far' ? 2 * ROAD_X - 3.0 : 3.0
-    // OTOPARKA çekiliş: pompadan otoparka giderken tüm istasyonu boydan geçer, yolda
-    // market/kafe/ofis vardır — engel-farkında olmazsa binaya sürtüp reaktif kaçışa düşer.
-    car.setPath(temizRota(car, [
-      new THREE.Vector3(preStageX, car.group.position.y, 0),
-      stage,
-      p,
-    ]), () => {
+    // ÖNCEDEN ÇİZİLMİŞ OTOPARK ŞERİDİ: koridor ağzı → slotun hizası → park yeri.
+    // Sabit "ön-sahneleme kolonu" (x=3.0) SİLİNDİ: gelen ve giden omurgaların ARASINDA
+    // duran üçüncü bir kolondu, park etmeye giden araçlar orada iki şeridin içinden
+    // rastgele yönde geçiyordu. Artık araç koridora ağzından girer, tek yönde akar.
+    car.parkLane = lane
+    car.setPath(temizRota(car, this.vs(this.graph.parkEntryPath(lane))), () => {
       car.phase = 'parked'
-      car.group.rotation.z = sp.rot
+      // ters cepheden yanaştıysa burnu da ters yöne bakar (yoksa araç geri geri park etmiş gibi durur)
+      car.group.rotation.z = sp.rot + (lane.side < 0 ? Math.PI : 0)
     })
     return true
   }
@@ -2100,6 +2123,9 @@ export class CarManager {
   /** YAĞ DEĞİŞİMİ KÖRÜĞÜ: araç garaj kapısından İÇERİ sürer (Oğuz: "arabalar yağ
    *  değişiminin içine girsinler"). Doluluk/ödül orkestrasyonu main'de (oilPending). */
   sendToOilBay(car: Car, entry: THREE.Vector3, inside: THREE.Vector3, rot: number): boolean {
+    // OTOPARKLA AYNI KURAL: kapı ağzı katı cismin içinde kalıyorsa araç oraya varamaz —
+    // gövdenin dibinde kilitlenir. Gönderme, çağıran hızlı akışa düşsün.
+    if (Car.isSolidAt(entry.x, entry.y)) return false
     if (car.slotIndex >= 0) {
       if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
       else this.pumpOcc[car.slotIndex] = null
@@ -2110,13 +2136,13 @@ export class CarManager {
     car.filling = false
     car.hideBubble()
     car.hideBars()
-    const preStageX = car.station === 'far' ? 2 * ROAD_X - 3.0 : 3.0
     // İKİ ETAP: kapıya kadar normal çarpışma (yoldaki binalardan geçmesin), kapı→içeri
     // ghostSolid ile duvar yok sayılır — yoksa araç kapıda sürtünüp kalıyordu.
-    car.setPath(temizRota(car, [
-      new THREE.Vector3(preStageX, car.group.position.y, 0),
-      entry.clone(),
-    ]), () => {
+    // SABİT ÖN-SAHNELEME KOLONU (x=3.0) SİLİNDİ: gelen (xIn) ve giden (xOut) omurgaların
+    // ARASINDA duran üçüncü bir kolondu ve araç orada rastgele yönde ilerliyordu. Araç
+    // zaten avlunun içinde; kapı ağzına doğrudan (engel-farkında) gider — hem daha kısa
+    // hem de iki omurganın hiçbirini ters yönde kullanmıyor.
+    car.setPath(temizRota(car, [entry.clone()]), () => {
       car.ghostSolid = true
       car.setPath([inside.clone()], () => {
         car.phase = 'parked'
@@ -2175,10 +2201,15 @@ export class CarManager {
     car.filling = false
     car.hideBubble()
     car.hideBars()
-    if (fromPark) { // otoparktan çıkış: kendi stage'inden çıkar, sonra ÇIKIŞ ŞERİDİNE katılır
-      const out: THREE.Vector3[] = []
-      if (car.parkStage) { out.push(car.parkStage.clone()); car.parkStage = null }
-      out.push(...this.cikisRotasi(car).slice(1)) // ilk nokta aracın kendi y'si — stage yeter
+    if (fromPark) {
+      // OTOPARKTAN ÇIKIŞ: ÇIKIŞ koridorundan (girişten ayrı hat) ağza, oradan istasyonun
+      // giden omurgasına. Önceden tek "stage" noktasından hem girilip hem çıkılıyordu:
+      // aynı çizgide iki yön demekti, çıkmaz sokakta kafa kafaya gelmenin tarifi.
+      const lane = car.parkLane
+      car.parkLane = null
+      const out = lane
+        ? this.vs(this.graph.parkExitPath(car.station, lane))
+        : this.cikisRotasi(car).slice(1)
       car.setPath(temizRota(car, out))
       car.cikisYolu = null
       return

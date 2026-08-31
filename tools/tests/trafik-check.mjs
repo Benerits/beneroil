@@ -88,5 +88,106 @@ const serit = readFileSync(new URL('../../src/traffic-graph.ts', import.meta.url
 bekle(!/tryAcquire|RESERVE_TTL|waitQ/.test(yorumsuz(serit)), 'rezervasyon defteri silinmiş')
 bekle(/UNIT_CLEAR/.test(serit) && /LANE_SEP/.test(serit), 'şerit ayrıklığı sabitlerle garanti')
 
+// ── DOLAMBAÇLILIK (kat edilen yol ÷ kuş uçuşu) — near ve far AYNI olmalı ──
+// NEDEN VAR: oyun sahibi "karşı istasyonda araçlar saçma rotalar takip ediyor" dedi.
+// Şerit ağı near'ın (ROAD_X,0) etrafında 180° dönmüş hâli olduğu için karşı yakada
+// dolambaçlılık near'dan FARKLI çıkarsa aynalamada bir yer bozulmuş demektir.
+// traffic-graph saf geometridir (three.js/DOM bilmez) → burada doğrudan koşturulabilir.
+{
+  const { LaneNetwork } = await import('../../src/traffic-graph.ts')
+  const ROAD_X = 7.9, GATE_X = 4.2
+  const ayna = p => ({ x: 2 * ROAD_X - p.x, y: -p.y }) // 180° dönüş: near → far
+  const nearUnits = [
+    { id: 'pump-0', x: 1.8, y: -2.2 }, { id: 'pump-1', x: 1.8, y: 2.2 },
+    { id: 'ev-0', x: 1.8, y: 6.2 }, { id: 'ev-1', x: 1.8, y: 8.8 },
+  ]
+  const net = new LaneNetwork()
+  net.rebuild([
+    { station: 'near', gateX: GATE_X, lane: 6.95, gateInY: -8, gateOutY: 8,
+      sideSign: -1, dirY: 1, wide: true, units: nearUnits },
+    { station: 'far', gateX: 2 * ROAD_X - GATE_X, lane: 8.85, gateInY: 8, gateOutY: -8,
+      sideSign: 1, dirY: -1, wide: true, units: nearUnits.map(u => ({ ...u, ...ayna(u) })) },
+  ])
+  const uzunluk = pts => pts.reduce((s, p, i) => i ? s + Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y) : 0, 0)
+  /** kapı ağzından üniteye: kat edilen yol ÷ kuş uçuşu */
+  const oran = (st, u) => {
+    const L = net.get(st)
+    const kapi = { x: L.gateX, y: L.gateInY }
+    const yol = [kapi, ...net.entryPath(st, u, false)]
+    return uzunluk(yol) / Math.hypot(u.x - kapi.x, u.y - kapi.y)
+  }
+  const olc = st => {
+    const us = st === 'near' ? nearUnits : nearUnits.map(u => ({ ...u, ...ayna(u) }))
+    return us.map(u => oran(st, u))
+  }
+  const yakin = olc('near'), karsi = olc('far')
+  const ort = a => a.reduce((x, y) => x + y, 0) / a.length
+  const enBuyukFark = Math.max(...yakin.map((v, i) => Math.abs(v - karsi[i])))
+  bekle(enBuyukFark < 0.01,
+    `dolambaçlılık AYNALI: near ort ${ort(yakin).toFixed(3)} · far ort ${ort(karsi).toFixed(3)} (en büyük fark ${enBuyukFark.toFixed(4)})`)
+  // Üst sınır: kapı → omurga → ünite hizası → kol (dik dörtgen rota). Bunun üstü
+  // "gereksiz uzun rota" demektir; 1.6 sınırı ölçülmüş değerlerin (≈1.2) çok üstünde
+  // değil, yani bir gün biri araya nokta eklerse test görür.
+  bekle(Math.max(...yakin, ...karsi) <= 1.6,
+    `en dolambaçlı ünite rotası ${Math.max(...yakin, ...karsi).toFixed(3)} ≤ 1.6`)
+
+  // ── ÇIKIŞ ROTASI GERİ ADIM ATMASIN ──
+  // Giden omurga dar avluda kapı hattının YOL TARAFINA düşebiliyor; o durumda eski rota
+  // aracı kapı ağzına, yani 0.3 birim GERİ (avlunun içine) çekip sonra yola çıkarıyordu.
+  // Ekranda kapıda küçük bir "S" kıvrımı, ölçümde gereksiz yol. Ölçüt: kapıdan yola doğru
+  // olan derinlik, çıkış rotası boyunca ASLA artmamalı (araç içeri geri dönmemeli).
+  // DAR AVLU da denenir: giden omurga kapının YOL TARAFINA düştüğünde (dOut < 0) hata
+  // ancak orada ortaya çıkıyor — geniş avlu tek başına regresyonu görmez.
+  const darNet = new LaneNetwork()
+  const darUnits = [{ id: 'pump-0', x: 2.4, y: -2 }, { id: 'pump-1', x: 2.4, y: 2 }]
+  darNet.rebuild([
+    { station: 'near', gateX: GATE_X, lane: 6.95, gateInY: -8, gateOutY: 8,
+      sideSign: -1, dirY: 1, wide: true, units: darUnits },
+    { station: 'far', gateX: 2 * ROAD_X - GATE_X, lane: 8.85, gateInY: 8, gateOutY: -8,
+      sideSign: 1, dirY: -1, wide: true, units: darUnits.map(u => ({ ...u, ...ayna(u) })) },
+  ])
+  for (const [ad, N] of [['geniş avlu', net], ['dar avlu', darNet]]) {
+    for (const st of ['near', 'far']) {
+      const L = N.get(st)
+      const yol = N.exitPath(st, { x: L.xIn, y: 0 })
+      const derin = pt => L.sideSign * (pt.x - L.gateX) // + = avlunun içi
+      let geri = 0
+      for (let i = 1; i < yol.length; i++) if (derin(yol[i]) > derin(yol[i - 1]) + 1e-6) geri++
+      bekle(geri === 0, `${ad} · ${st}: çıkış rotasında geri adım yok (${yol.map(q => derin(q).toFixed(2)).join(' → ')})`)
+    }
+  }
+
+  // ── OTOPARK ŞERİT AĞA DAHİL Mİ (oyuncu şikâyeti: park yerleri boş, araçlar üst üste) ──
+  const parkNet = new LaneNetwork()
+  const lot = [0, 1, 2, 3].map(i => ({ id: `parking:${i}`, x: -2.5 + 1.25 * (i + 0.5) - 3, y: -6.5, sx: -2.5 + 1.25 * (i + 0.5) - 3, sy: -4.1 }))
+  parkNet.rebuild([{ station: 'near', gateX: GATE_X, lane: 6.95, gateInY: -8, gateOutY: 8,
+    sideSign: -1, dirY: 1, wide: true, units: nearUnits, parks: lot }])
+  const serit = parkNet.parkLanesOf('near')
+  bekle(serit.length === 4, `açık alandaki otoparkın 4 yerinin hepsi şeride bağlandı (${serit.length}/4)`)
+  bekle(serit.every(l => Math.hypot(l.inArm.x - l.outArm.x, l.inArm.y - l.outArm.y) > 1.0),
+    'park koridorunda GİRİŞ ve ÇIKIŞ hattı ayrık (çıkmaz sokakta kafa kafaya gelme yok)')
+  // Kapalı yola araç gönderilmemeli: yanaşma hattını katı cisimle kapat, slot listeden düşsün
+  const kapali = new LaneNetwork()
+  kapali.rebuild(
+    [{ station: 'near', gateX: GATE_X, lane: 6.95, gateInY: -8, gateOutY: 8,
+      sideSign: -1, dirY: 1, wide: true, units: nearUnits, parks: lot }],
+    (x, y) => Math.abs(y + 5.2) < 1.4, // otoparkın İKİ cephesini de kesen bant
+  )
+  bekle(kapali.parkLanesOf('near').length < 4,
+    `yolu katı cisimle kapalı park yeri listeye girmiyor (${kapali.parkLanesOf('near').length}/4 kaldı)`)
+}
+// ── KAPI OKU İKİ KEZ AYNALANMASIN (oyuncu: "karşı istasyonun okları yanlış yerde") ──
+// register() ROAD_X'in doğusundaki grubu zaten 180° döndürüyor (farFlip). buildGate ayrıca
+// `(far ? -1 : 1)` ile çevirirse ok TAM TERSİNİ gösterir; tabela da kameraya sırtını döner.
+// (kontrol YORUMSUZ kaynakta: yukarıdaki açıklama hatanın kendisini anlatıyor)
+bekle(!/\(far \? -1 : 1\)/.test(yorumsuz(dunya)), 'kapı oku İKİ KEZ aynalanmıyor (aynalama tek kaynakta: farFlip)')
+bekle(/const dir = kind === 'in' \? -1 : 1/.test(dunya), 'ok yerel eksende: giriş −x, çıkış +x')
+bekle(/far \? new THREE\.Vector3\(-1, 0, 0\) : undefined/.test(dunya),
+  'karşı kapı tabelası 180° dönüşten SONRA kameraya bakıyor (yerelde ters kuruluyor)')
+
+bekle(/parkLanesOf\(car\.station\)/.test(cars), 'otopark yeri ŞERİT AĞINDAN seçiliyor (elle waypoint değil)')
+bekle(!/preStageX/.test(cars), 'sabit "ön-sahneleme kolonu" (x=3.0) silinmiş — omurgaların arasında üçüncü kolon yok')
+bekle(/parkExitPath/.test(cars), 'otopark çıkışı AYRI hattan (giriş koridoruna girmiyor)')
+
 console.log(hata ? `\n${hata} HATA` : '\nTRAFİK TEMİZ')
 process.exit(hata ? 1 : 0)
