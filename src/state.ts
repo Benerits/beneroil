@@ -349,6 +349,10 @@ export const RENEW_RATIO = 0.6             // ekipman yenileme = alış değerin
 // Sv.3 + arıza tamir eder. Yovmiyesi pasif geliri "aktifin %30'unu geçmesin" kuralına göre.
 export const MANAGER_COSTS = [18_000, 34_000, 60_000]   // Sv.1/2/3 kurulum
 export const MANAGER_WAGES = [0, 400, 750, 1_200]       // index = seviye, günlük yovmiye
+/** MÜDÜR TUR SÜRESİ (sn) — index = seviye. ONLINE tur (managerTick) ile OFFLINE tur
+ *  simülasyonu (offlineManagerRun) BU TEK KAYNAKTAN okur; iki yer ayrışırsa müdür
+ *  "oyun açıkken çalışıp kapalıyken çalışmayan" bir vaat ihlaline döner. */
+export const MANAGER_TOUR_SEC = [45, 45, 32, 22]
 // PERSONEL EĞİTİMİ (rapor §7 #7): pompacı/şarjcı kademesi — hız, bahşiş, hata oranı
 export const STAFF_TRAIN_COSTS = [12_000, 26_000, 48_000] // Sv.1→2, 2→3, 3→4
 export const POMPACI_WAGE = 120       // pompacı GÜNLÜK yovmiyesi (her oyun günü kasadan)
@@ -2501,6 +2505,59 @@ export class GameState {
   }
   staffErrorMult(): number { return Math.max(0.25, 1 - 0.25 * (this.staffLevel - 1)) } // arıza/hata riski
 
+  /** Müdürün TUR SÜRESİ (sn) — seviyeye göre. Tek kaynak: MANAGER_TOUR_SEC. */
+  managerTourSec(): number { return MANAGER_TOUR_SEC[Math.min(3, Math.max(0, this.managerLevel))] }
+  /** Müdür kumbaraları KENDİ topluyor mu? (seviye + oyuncunun talimatı)
+   *  managerTick ve offlineManagerRun AYNI koşulu kullanır. */
+  managerCollectsPending(): boolean { return this.managerLevel > 0 && !!this.managerPolicy.collect }
+
+  /**
+   * MÜDÜRÜN OFFLINE TURLARI — oyuncu raporu: "3. level müdür offlineken kumbaraları
+   * toplamıyor, yıkama/hava-su vs onları da toplasın".
+   *
+   * KÖK NEDEN: offline pencerede kumbaralara para YAZILIYOR (main.ts applyAwayEarnings →
+   * addPending) ama HİÇ TOPLANMIYORDU; müdür yalnız oyun açıkken tur atıyordu. İki kayıp:
+   *  (1) müdürlü oyuncu dönüşte kumbaraları elle boşaltmak zorunda kalıyor (vaat ihlali),
+   *  (2) DAHA KÖTÜSÜ para YANIYOR: addPending tavanı aşan kısmı %40 verimle alır, sert
+   *      tavan cap×3. Oto yıkama 1,4 ₺/sn × 7200 sn = ₺10.080 üretir ama kumbaraya en
+   *      fazla ₺2.100 girer — müdür online olsa 22-45 sn'de bir toplayıp bunu önlerdi.
+   *
+   * Burada müdür turları SADIK biçimde simüle edilir: her tur `tur` saniyelik ciroyu
+   * kumbaralara yazar, sonra `collectPending` ile boşaltır. Toplama TEK YOLDAN
+   * (collectPending) geçer → prestij çarpanı ve facLost temizliği online ile aynıdır.
+   * Müdürü olmayan / `collect:false` seçen oyuncuda davranış BİREBİR eskisi gibidir.
+   *
+   * @param gains  [kumbaraId, tesis adı, ₺/sn] — offline biriken kumbaralı tesisler
+   * @param offSec offline pencere (sn)
+   * @param budget müdürün kasaya yazabileceği ÜST SINIR (anti-cheat bütçesi, main.ts).
+   *               Bütçe dolunca müdür durur; kalan ciro eski davranışla kumbarada birikir.
+   * @returns collected = kasaya yazılan ₺ (prestij dahil), tours = simüle edilen tur sayısı
+   */
+  offlineManagerRun(gains: [string, string, number][], offSec: number, budget = Infinity):
+    { collected: number; tours: number } {
+    const tur = this.managerTourSec()
+    if (!this.managerCollectsPending() || offSec < tur) {
+      // MÜDÜRSÜZ YOL — dokunulmadı: tüm pencere tek seferde kumbaraya yazılır.
+      for (const [id, name, rate] of gains) this.addPending(id, Math.round(rate * offSec), name)
+      return { collected: 0, tours: 0 }
+    }
+    const turSayisi = Math.floor(offSec / tur)
+    let collected = 0
+    // TUR BAŞINA YUVARLAMA YOK: 300+ turda `Math.round` yukarı sapması toplamı üretilen
+    // cironun ÜSTÜNE çıkarıyordu (Sv.2'de ölçüldü: ₺74.309 üretim → ₺74.475 ödeme).
+    // pendingCash zaten kesirli tutar (addPending'in %40 taşma matematiği); yuvarlama
+    // TEK yerde, collectPending'de yapılır → bedava para üretilemez.
+    for (let i = 0; i < turSayisi; i++) {
+      for (const [id, name, rate] of gains) this.addPending(id, rate * tur, name)
+      if (collected >= budget) continue // bütçe bitti → kalan turlar kumbarada birikir
+      for (const [id] of gains) collected += this.collectPending(id)
+    }
+    // SON TUR TAMAMLANMADI: artık süre kumbarada kalır (online'da da öyle olurdu)
+    const kalan = offSec - turSayisi * tur
+    if (kalan > 0) for (const [id, name, rate] of gains) this.addPending(id, rate * kalan, name)
+    return { collected, tours: turSayisi }
+  }
+
   /** MÜDÜR TURU: seviyeye göre kumbara toplar, panel temizler, arıza tamir eder.
    *  Dönen liste oyuncuya rapor edilir (toast). tick()'ten çağrılır. */
   managerTick(dt: number): { collected: number; cleaned: boolean; fixed: number; ordered: number } | null {
@@ -2509,7 +2566,7 @@ export class GameState {
     // TUR SIKLIĞI SEVİYEYLE ARTAR (#988 "otomatik toplayacak bir şey ekleyelim, sürekli
     // kumbaralar doluyor"): tek sabit 45 sn'lik tur, 10 tesisli istasyonda kumbaraların
     // dolmasına yetişemiyordu. Sv.1 45 sn · Sv.2 32 sn · Sv.3 22 sn.
-    const turSuresi = [45, 45, 32, 22][Math.min(3, this.managerLevel)]
+    const turSuresi = this.managerTourSec()
     if (this.managerT < turSuresi) return null // gün ≈ 160 sn
     this.managerT = 0
     const pol = this.managerPolicy

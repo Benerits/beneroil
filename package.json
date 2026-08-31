@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "assets": "node tools/gen-assets.mjs",
     "test:mudur": "tsx tools/tests/mudur-check.mjs",
+    "test:offlinemudur": "tsx tools/tests/offline-mudur-check.mjs",
     "test:yakit": "tsx tools/tests/yakit-check.mjs",
     "test:dondurme": "node tools/tests/dondurme-check.mjs",
     "test:otopark": "node tools/tests/otopark-check.mjs",
