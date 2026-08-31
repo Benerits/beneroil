@@ -2075,14 +2075,46 @@ function removeBuildingVisual(id: string) {
     : (countable !== undefined)
       ? (countable === 0 ? base : `${base}#${countable}`)
       : id
+  // TIKLANAN ÖRNEK GİTSİN (#634 #1046 "yanlış ünite yıkılıyor"): yukarıdaki eşleme
+  // her zaman SON örneğin görselini kaldırıyor — isim dizisinde boşluk kalmasın diye
+  // (#495) doğru bir karar, ama tek başına oyuncuya yalan söylüyordu. Oyuncu soldaki
+  // üniteye tıklayıp "yık" diyor, soldaki duruyor, sağdaki yok oluyordu.
+  // Çözüm ikisini de korur: görsel olarak son örnek kaldırılır (dizi bütün kalır),
+  // ardından TIKLANAN örnek, kaldırılanın konumuna taşınır. Sonuç: ayakta kalan
+  // konumlar kümesi = eskisi eksi TIKLANAN nokta. Tam olarak oyuncunun istediği şey.
+  const sonPos = placedPos[target]
+  const sonRot = placedRot[target]
+  const sonRect = placedRects.find(r => r.id === target)
+  const tiklanan = id.includes('#') ? Number(id.split('#')[1]) : 0
+
   world.removeBuildingGroup(target)
   delete placedPos[target]
   delete placedRot[target]
   const ri = placedRects.findIndex(r => r.id === target)
   if (ri >= 0) placedRects.splice(ri, 1)
-  // kaldırılan tesisin kumbarası da gitsin: yoksa yok olan binaya ait para toplanamaz halde kalır
-  delete state.pendingCash[id]; delete state.pendingCash[target]
-  delete state.facLost[id]; delete state.facLost[target]
+
+  let yenidenKur = false
+  if (countable !== undefined && Number.isInteger(tiklanan) && tiklanan < countable && sonPos) {
+    const kalan = tiklanan === 0 ? base : `${base}#${tiklanan}`
+    placedPos[kalan] = sonPos
+    if (sonRot !== undefined) placedRot[kalan] = sonRot; else delete placedRot[kalan]
+    const ki = placedRects.findIndex(r => r.id === kalan)
+    if (sonRect) {
+      const yeni = { ...sonRect, id: kalan }
+      if (ki >= 0) placedRects[ki] = yeni; else placedRects.push(yeni)
+    } else if (ki >= 0) placedRects.splice(ki, 1)
+    yenidenKur = true   // sahne/şerit/gölge tutarlılığını rebuildFromState kursun
+  }
+
+  // KUMBARA YALNIZ SON ÖRNEKTE SİLİNİR. pendingCash tesis TÜRÜ başına tek kayıt tutuyor,
+  // yani 5 hava-su ünitesi aynı kumbarayı paylaşıyor. Buradaki koşulsuz silme, oyuncu
+  // 5 üniteden BİRİNİ satınca beşinin birikmiş parasını da siliyordu: ₺600 iade alıp
+  // ₺2.400 kaybetmek mümkündü. Artık tür tamamen kalkmadıkça kumbaraya dokunulmuyor.
+  if (countable === undefined || countable === 0) {
+    delete state.pendingCash[id]; delete state.pendingCash[target]
+    delete state.facLost[id]; delete state.facLost[target]
+  }
+  return yenidenKur
 }
 
 /** Ödeme yapılamayınca teminatları haczet: binaları istasyondan kaldır (iade YOK), krediyi kapat. */
@@ -4873,7 +4905,7 @@ ui.onSell = id => {
   if (!sellInfo(state, id)) return
   const refund = applySell(state, id)
   if (refund === null) return
-  removeBuildingVisual(id)
+  if (removeBuildingVisual(id)) rebuildFromState()   // tıklanan örnek taşındı: sahne tazelensin
   audio.build()
   ui.toast(t('Yıkıldı — yatırımın yarısı iade: +₺{0}', refund.toLocaleString('tr-TR')), 'good', true)
   selectedBuilding = null
@@ -4975,6 +5007,16 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
     yuk() { return JSON.parse(JSON.stringify(savePayload())) as Record<string, unknown> },
     /** kaydı YENİDEN uygula (reload'un applySaveData + rebuildFromState ayağı) */
     yukle(d: Record<string, unknown>) { applySaveData(d); rebuildFromState() },
+    /** YIKIM KANCASI (#634/#1046): oyuncunun bastığı düğmeyle AYNI yol (ui.onSell).
+     *  Test hangi örneğin gerçekten gittiğini ve kumbaraya ne olduğunu ölçebilsin. */
+    yik(id: string) {
+      ui.onSell?.(id)
+      return {
+        binalar: world.buildings.map(b => b.id),
+        konumlar: Object.fromEntries(Object.entries(placedPos)),
+        kumbara: { ...state.pendingCash },
+      }
+    },
     arsaAl(c: number, r: number, beton = true) {
       state.ownedParcels.add(parcelKey(c, r)); world.markOwned(c, r)
       if (beton) { state.pavedParcels.add(parcelKey(c, r)); world.paveParcel(c, r) }

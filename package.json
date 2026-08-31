@@ -65,7 +65,8 @@
     "test:harita": "tsx tools/tests/harita-check.mjs",
     "test:rehber": "tsx tools/tests/rehber-check.mjs",
     "test:para": "tsx tools/tests/para-check.mjs",
-    "test:reklam": "tsx tools/tests/reklam-check.mjs"
+    "test:reklam": "tsx tools/tests/reklam-check.mjs",
+    "test:yikim": "tsx tools/tests/yikim-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",
