@@ -318,6 +318,28 @@ const SENARYOLAR = {
         const s = document.createElement('style')
         s.textContent = '#panel{display:none !important}#infocard{display:none !important}#toasts{display:none !important}'
         document.head.appendChild(s)
+        // TAM EKRAN HARİTA (soğuk açılış): HUD, navbar ve modal çerçevesi iner, harita
+        // kareyi baştan sona doldurur. Gerekçe: ilk kare DURDURUCU olmalı; modal
+        // çerçevesi + arkada yarı görünen istasyon + iki sıra HUD dikkati bölüyordu.
+        // Ayrı style etiketi, çünkü oyun akışına dönerken bunu TEK BAŞINA kaldıracağız.
+        const tam = document.createElement('style')
+        tam.id = 'vo-tamekran'
+        // NOT: harita YATAY bir panel, video ise DİKEY (1080x1350). Paneli 100vh'ye
+        // germek altını boş krem bırakıyordu. Onun yerine koyu zeminde DİKEYDE
+        // ORTALANIYOR; kalan alt boşluk zaten alt bant yazısının yeri. Üst bant da
+        // kapatılıyor: bu beat'te yalnız yazAlt kullanılıyor ama bandın gradyanı
+        // haritanın ortasından gri bir şerit gibi geçiyordu.
+        tam.textContent = `
+          .hud, #navbar, #sheettabs { display:none !important }
+          #vo .top { display:none !important }
+          #mapwrap { background:#0d1420 !important; padding:0 !important;
+                     display:flex !important; align-items:center !important;
+                     justify-content:center !important }
+          #mapwrap .modal { width:100vw !important; max-width:100vw !important;
+                            height:auto !important; max-height:100vh !important;
+                            border-radius:0 !important; border:0 !important }
+          #mapwrap .mclose { display:none !important }`
+        document.head.appendChild(tam)
         document.getElementById('locbtn')?.click()
         document.querySelector('#locmenu button[data-qloc="__harita"]')?.click()
       })
@@ -355,6 +377,9 @@ const SENARYOLAR = {
 
       // ── 6,2 → 8,6: OYUN GERÇEK — harita kapanır, dolu istasyon ──
       await p.evaluate(() => {
+        // OYUN AKIŞINA DÖN: tam ekran kalkar, HUD geri gelir, harita kapanır.
+        // Hook haritaydı; burada "bu ne oyunu?" sorusunu oynanış cevaplıyor.
+        document.getElementById('vo-tamekran')?.remove()
         document.getElementById('mapwrap')?.classList.remove('show')
         window.__dbg.cine?.setCam?.(0, 4, 1.25)
         window.__vo.yaz('', 'Her şubenin\nkendi ekonomisi', 'kira · trafik · arsa')
