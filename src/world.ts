@@ -404,7 +404,7 @@ export class World {
   private concreteMat: THREE.MeshLambertMaterial
   private nightMats: NightMat[] = []
   private nightLights: THREE.PointLight[] = []
-  private steam: { mesh: THREE.Mesh; offset: number; drift: number }[] = []
+  private steam: { mesh: THREE.Mesh; offset: number; drift: number; bx: number; by: number; bz: number }[] = []
   private steamT = 0
   /** RÜZGÂR TÜRBİNİ kanatları — update()'te döner. Hız state'ten gelen rüzgâra bağlı;
    *  durgun havada yavaşlar, böylece üretimin değişkenliği EKRANDA da görünür. */
@@ -1101,7 +1101,7 @@ export class World {
     this.steamT += dt
     for (const p of this.steam) {
       const t = (this.steamT * 0.3 + p.offset) % 1
-      p.mesh.position.set(p.drift * t, p.drift * t * 0.6, 4.8 + t * 2.4)
+      p.mesh.position.set(p.bx + p.drift * t, p.by + p.drift * t * 0.6, p.bz + t * 2.4)
       const sc = 0.55 + t * 1.1
       p.mesh.scale.setScalar(sc)
       ;(p.mesh.material as THREE.MeshLambertMaterial).opacity = 0.7 * (1 - t)
@@ -2639,14 +2639,17 @@ export class World {
   buildSolar(side: 'north' | 'south', pos?: THREE.Vector2, regId = 'solar') {
     const g = new THREE.Group()
     if (this.statics?.solarPanel) {
-      // iki sıra panel dizisi: tek grup modeli 2 kez, arada servis yolu
-      for (let i = 0; i < 2; i++) {
-        const m = fitModel(this.statics.solarPanel, 4.2)
-        m.position.set(0, -1.9 + i * 3.8, 0)
+      // ÖLÇEK: ilk sürümde 4,2 birimlik iki dizi vardı ve paneller kaba duruyordu
+      // (oyuncu: "çok büyük kalmış, küçültelim zarif dursun"). Artık daha küçük
+      // dizi (2,6) ama ÜÇ sıra: ayak izi aynı kalıyor, tesis "santral" gibi
+      // okunuyor, tek tek paneller ise ince duruyor.
+      for (let i = 0; i < 3; i++) {
+        const m = fitModel(this.statics.solarPanel, 2.6)
+        m.position.set(0, -2.3 + i * 2.3, 0)
         g.add(m)
       }
       // inverter kabini (kit parçası yok — küçük kutu yeterli, ölçek uyumlu)
-      box(0.7, 0.5, 0.5, 0x59616b, 2.0, 2.9, 0.25, g)
+      box(0.5, 0.4, 0.4, 0x59616b, 1.7, 2.9, 0.2, g)
     } else {
       for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1),
@@ -3275,61 +3278,41 @@ export class World {
 
   buildSMR(side: 'north' | 'south', pos?: THREE.Vector2) {
     const g = new THREE.Group()
-    // hiperboloit soğutma kulesi
-    const pts: THREE.Vector2[] = []
-    for (let i = 0; i <= 16; i++) {
-      const t = i / 16
-      const z = t * 4.6
-      const r = 0.95 * Math.sqrt(1 + Math.pow((z - 3.2) / 1.9, 2))
-      pts.push(new THREE.Vector2(r, z))
+    // REAKTÖR — SADECE KENNEY PARÇALARI (oyuncu kararı): elde yapılan hiperboloit
+    // soğutma kulesi ve içindeki su yüzeyi KALDIRILDI, yerine İKİ BACA geldi.
+    // Silueti artık kitin geri kalanıyla aynı dilde: iki baca + muhafaza tankı.
+    // Buhar (parçacık, asset değil) korunuyor ama artık BÜYÜK BACANIN tepesinden
+    // çıkıyor — tesisin çalıştığı uzaktan görünsün, sahne cansız kalmasın.
+    const bacaYuksek = 5.2, bacaAlcak = 3.9
+    if (this.statics?.reactorStack) {
+      const b1 = fitModel(this.statics.reactorStack, bacaYuksek, 'z')
+      b1.position.set(0, -0.9, 0)
+      g.add(b1)
+      const b2 = fitModel(this.statics.reactorStack, bacaAlcak, 'z')
+      b2.position.set(0.15, 1.2, 0)
+      g.add(b2)
+    } else {
+      // yedek: kit inmezse iki silindir — yapı yine iki bacalı okunur
+      cyl(0.62, bacaYuksek, 0xdfe3e8, 0, -0.9, bacaYuksek / 2, 'z', g)
+      cyl(0.52, bacaAlcak, 0xdfe3e8, 0.15, 1.2, bacaAlcak / 2, 'z', g)
     }
-    const tower = new THREE.Mesh(new THREE.LatheGeometry(pts, 30),
-      new THREE.MeshLambertMaterial({ color: 0xe8e6e1, side: THREE.DoubleSide }))
-    tower.rotation.x = Math.PI / 2
-    tower.castShadow = true
-    g.add(tower)
-    // kule içi su yüzeyi (üstten bakınca içi boş görünmesin)
-    const water = new THREE.Mesh(new THREE.CircleGeometry(1.05, 24), lam(0x2e4a66))
-    water.position.z = 3.9
-    g.add(water)
-    // hareketli buhar (update() içinde yükselir/kaybolur)
-    for (let i = 0; i < 4; i++) {
-      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10),
-        new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }))
-      puff.position.set(0, 0, 4.8)
-      g.add(puff)
-      this.steam.push({ mesh: puff, offset: i / 4, drift: (Math.random() - 0.5) * 0.6 })
-    }
-    // REAKTÖR ÇEKİRDEĞİ — Kenney parçaları (industrial2 tank + industrial baca).
-    // NOT: pakette hazır nükleer reaktör YOK; muhafaza binası detail-tank-large,
-    // yardımcı baca chimney-large ile kuruluyor. Soğutma kulesi + buhar elde
-    // yapılmaya devam ediyor: kitte karşılığı yok ve reaktörün silueti o.
+    // muhafaza tankı (Kenney detail-tank-large)
     if (this.statics?.reactorTank) {
       const tank = fitModel(this.statics.reactorTank, 2.0, 'z')
-      tank.position.set(2.2, -0.8, 0)
+      tank.position.set(2.3, -0.4, 0)
       g.add(tank)
     } else {
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xdfe3e8))
-      dome.position.set(2.2, -0.8, 0.9)
-      dome.castShadow = true
-      g.add(dome)
-      cyl(0.7, 0.9, 0xdfe3e8, 2.2, -0.8, 0.45, 'z', g)
+      cyl(0.9, 1.6, 0xdfe3e8, 2.3, -0.4, 0.8, 'z', g)
     }
-    if (this.statics?.reactorStack) {
-      const st = fitModel(this.statics.reactorStack, 3.2, 'z')
-      st.position.set(2.3, 1.5, 0)
-      g.add(st)
-    } else {
-      box(1.0, 0.7, 0.7, 0x59616b, 2.2, 0.9, 0.35, g)
+    // hareketli buhar — büyük bacanın ağzından (update() içinde yükselir/kaybolur)
+    for (let i = 0; i < 4; i++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10),
+        new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }))
+      puff.position.set(0, -0.9, bacaYuksek)
+      g.add(puff)
+      this.steam.push({ mesh: puff, offset: i / 4, drift: (Math.random() - 0.5) * 0.5,
+                        bx: 0, by: -0.9, bz: bacaYuksek })
     }
-    const sign = canvasPanel(0.7, 0.7, 128, 128, (ctx, w, h) => {
-      ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 4, 0, 7); ctx.fill()
-      ctx.font = '70px -apple-system, sans-serif'
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('', w / 2, h / 2 + 4)
-    })
-    sign.position.set(2.92, -0.8, 0.9)
-    g.add(sign)
     const at = pos ?? new THREE.Vector2(1.8, side === 'south' ? -20.5 : 20.5)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
