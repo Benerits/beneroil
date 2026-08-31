@@ -403,6 +403,70 @@ const SENARYOLAR = {
       await bekle(p, 2700)
     },
   },
+  // 7) RÜZGÂR TÜRBİNİ — YENİ ÖZELLİK DUYURUSU ("Rüzgâr enerjisi çağı!")
+  //
+  //    Hook, türbinin OYUNDAKİ FARKI: güneş gece üretmiyor, türbin üretiyor.
+  //    Bunu anlatmak yerine GÖSTERİYORUZ — gece sahnesinde dönen kanatlar.
+  //    Süre 13 sn (ortalama izleme 12,8 sn), hook ilk 2 saniyede.
+  ruzgar: {
+    ad: '07-ruzgar-turbini',
+    save: { money: 6_200_000, day: 96, reputation: 4.8, pumps: 8, evChargers: 4,
+            marketLevel: 3, managerLevel: 2, hasWash: true, hasOil: true,
+            activeLoc: 'kasaba', unlockedLocs: ['kasaba'],
+            tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
+    isinma: 20000,
+    async oyna(p) {
+      await p.evaluate(() => {
+        const s = document.createElement('style')
+        // çekimde kimse servis yapmıyor → "müşteri sıkıldı gitti" gibi NEGATİF
+        // toast'lar reklama giriyordu; panel de kadrajı kapatıyor.
+        s.textContent = '#panel{display:none !important}#infocard{display:none !important}#toasts{display:none !important}'
+        document.head.appendChild(s)
+        const d = window.__dbg
+        // GECE: türbinin güneşten farkı ancak geceleyin görünür.
+        // state.sunFactor'ı ELLE YAZMAK İŞE YARAMIYOR — gün döngüsü her karede
+        // üzerine yazıyor (ilk denemede sahne pırıl pırıl gündüz çıktı). Saatin
+        // KENDİSİ değişmeli: __dbg.saat(0,75) = tam gece.
+        d.saat(0.75)
+        // KADRAJ ÖLÇÜLDÜ: türbin 8,4 birim yüksekliğinde; yakın planda kanatlar
+        // kadrajın üstünden taşıyordu. dy=-4/zoom=1.0 tamamını alıyor ve altında
+        // istasyon kalıyor — "bu bir benzin istasyonu oyunu" bilgisi kaybolmuyor.
+        const w = d.world.buildings.find(b => b.id === 'wind')
+        if (w) d.cine.setCam(w.group.position.x, w.group.position.y - 4, 1.0)
+        window.__vo.yaz('YENİ', 'Rüzgâr enerjisi\nçağı!', '')
+      })
+      await bekle(p, 2400)
+
+      // güneş paneli gece SIFIR — karşıtlık kurulur
+      await p.evaluate(() => window.__vo.yaz('YENİ', 'Rüzgâr enerjisi\nçağı!', 'Güneş gece üretmez.'))
+      await bekle(p, 1900)
+
+      // türbine yaklaş: kanatlar dönüyor
+      await p.evaluate(() => {
+        const d = window.__dbg
+        d.saat(0.78)
+        const w = d.world.buildings.find(b => b.id === 'wind')
+        if (w) d.cine.setCam(w.group.position.x, w.group.position.y - 3, 1.25)
+        window.__vo.sil()
+      })
+      await bekle(p, 400)
+      await p.evaluate(() => window.__vo.yazAlt('Türbin geceleyin de döner', ''))
+      await bekle(p, 2400)
+
+      // bina kartı: gerçek sayılar (üretim / rüzgâr / yıpranma)
+      await p.evaluate(() => { window.__dbg.sec('wind') })
+      await bekle(p, 900)
+      await p.evaluate(() => window.__vo.yazAlt('Rüzgâr değişken — bazen tam güç', ''))
+      await bekle(p, 2200)
+
+      // bakım: bedeli de göster (dürüst duyuru)
+      await p.evaluate(() => window.__vo.yazAlt('Yıprandıkça bakım ister', ''))
+      await bekle(p, 1800)
+
+      await p.evaluate(() => { window.__vo.sil(); window.__vo.yaz('BENELOIL', 'Rüzgâr Türbini', 'beneloil.com') })
+      await bekle(p, 2100)
+    },
+  },
 }
 
 // ─────────────────────────── ÇEKİM ───────────────────────────

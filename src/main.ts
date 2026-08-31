@@ -5064,6 +5064,10 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
   sube(id: string) { subeyeGec(id as LocId) },
   /** Şube kilidini video/test için açar — mağaza akışını atlamaz, state.unlockLoc kullanır. */
   subeAc(id: string) { return state.unlockLoc(id as LocId) },
+  /** GÜN SAATİNİ AYARLA (tanıtım videosu + test). state.sunFactor'ı elle yazmak
+   *  İŞE YARAMIYOR: gün döngüsü her karede üzerine yazıyor. Saatin KENDİSİ
+   *  değişmeli. 0..1 arası oran; 0,75 = tam gece, 0,25 = öğle. */
+  saat(oran: number) { dayTime = Math.max(0, oran) * DAY_CYCLE },
   // YERLEŞİM KANCASI (yalnız ?full=1): hayalet ile GERÇEK yerleşim aynı noktaya mı düşüyor?
   // tools/tests/yerlesim-check.mjs bunu sayıyla ölçer (hayalet gövdesi ↔ sahnedeki gövde).
   place: {
