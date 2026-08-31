@@ -3741,6 +3741,15 @@ function maybeShowDevirModal() {
         ? sat(t('Devraldığın kadro'), `${t('Müdür Sv.{0}', String(Math.round(num(r.manager))))} · ${t('Personel Sv.{0}', String(Math.round(num(r.staff, 1))))}`)
         : '')
     + `</div>`
+    // #1250 "devirden sonra kumbaralar birikmiyor": devir SESSİZCE müdür veriyor ve
+    // müdürün varsayılan politikası kumbaraları toplamak. Para kaybolmuyor, doğrudan
+    // kasaya giriyor — ama oyuncu kumbaraların hiç dolmadığını görüp bozuk sanıyor.
+    // Ölçüldü: devir sonrası ilk müdür turu ₺500 kumbarayı ₺625 olarak kasaya aktarıyor.
+    + (num(r.manager) > 0
+        ? `<div style="margin-top:10px;padding:9px 11px;border-radius:12px;background:#eef6ee;border:1px solid #cfe3cf;font-size:12px;font-weight:700;color:#3d5b45;text-align:left">`
+          + t('Müdürün kumbaraları senin için otomatik topluyor — kumbaralar dolu görünmüyorsa sebebi bu, para doğrudan kasana giriyor. Ofis → Müdür\'den kapatabilirsin.')
+          + `</div>`
+        : '')
     + `<button id="devir-ok" style="width:100%;margin-top:16px;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">${t('Yeni turu başlat')}</button>`
     + `</div>`
   document.body.appendChild(o)

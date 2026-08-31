@@ -1318,6 +1318,8 @@ const EN: Record<string, string> = {
     'These are PERMANENT — your new station starts from here, not from zero.',
   'Kasana geçti': 'Credited to your cash',
   'Devraldığın kadro': 'Crew you inherited',
+  'Müdürün kumbaraları senin için otomatik topluyor — kumbaralar dolu görünmüyorsa sebebi bu, para doğrudan kasana giriyor. Ofis → Müdür\'den kapatabilirsin.':
+    'Your manager empties the collection boxes for you — that is why they never look full; the money goes straight to your till. You can turn this off in Office → Manager.',
   'Yeni turu başlat': 'Start the new run',
   'Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.':
     'You are READY to hand over. <b>+₺{0}</b> lands in your cash and you earn <b>star #{1}</b>: income multiplier ×{2} → <b>×{3}</b>.',
@@ -3072,6 +3074,8 @@ const FR: Record<string, string> = {
     'Tout cela est PERMANENT — ta nouvelle station part d’ici, pas de zéro.',
   'Kasana geçti': 'Versé dans ta caisse',
   'Devraldığın kadro': 'Équipe héritée',
+  'Müdürün kumbaraları senin için otomatik topluyor — kumbaralar dolu görünmüyorsa sebebi bu, para doğrudan kasana giriyor. Ofis → Müdür\'den kapatabilirsin.':
+    'Votre gérant vide les tirelires à votre place — c\'est pourquoi elles ne semblent jamais pleines ; l\'argent va directement en caisse. Désactivable dans Bureau → Gérant.',
   'Yeni turu başlat': 'Lancer le nouveau tour',
   'Devretmeye HAZIRSIN. Kasana <b>+₺{0}</b> geçer ve <b>{1}. yıldızı</b> alırsın: gelir çarpanın ×{2} → <b>×{3}</b>.':
     'Tu es PRÊT à céder. <b>+₺{0}</b> arrivent dans ta caisse et tu gagnes <b>l’étoile n°{1}</b> : ton multiplicateur de revenus ×{2} → <b>×{3}</b>.',
