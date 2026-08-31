@@ -106,6 +106,24 @@ async function initDb() {
   // webgl_fail: 3D bağlamı açılamayan oturum sayısı (istemci showWebGLFailure'da bump'lar).
   // Bu olay ÖLÇÜLMÜYORDU: renderer throw edince modül ölüyor, hiçbir sayaç çalışmıyordu.
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS webgl_fail int NOT NULL DEFAULT 0`)
+  // TRAFİK SAYAÇLARI (saatlik trend): olay kaydı TEŞHİS içindir, bu sayaçlar TREND.
+  // 5 dakikada bir istemciden tek kompakt istek gelir; burada saatlik toplanır.
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_icice int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_sikisan int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_bekleyen int NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_ornek int NOT NULL DEFAULT 0`)
+  // TRAFİK OLAY KAYDI — anomali ANINDA sahnenin tam durumu. Her satır tek başına
+  // yeniden kurulabilir bir hata raporudur (istemci: src/trafik-olay.ts, replay
+  // kancası: __dbg.kayit.trafikSahnesi). PII YOK: yalnız oyun durumu.
+  await pool.query(`CREATE TABLE IF NOT EXISTS benzinlik_trafficlog (
+    id serial PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    kind text,
+    day int,
+    loc text,
+    payload jsonb
+  )`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS benzinlik_trafficlog_kind_at ON benzinlik_trafficlog (kind, created_at DESC)`)
   await pool.query(`CREATE TABLE IF NOT EXISTS beneloil_notification (
     id serial PRIMARY KEY, user_id int, title text, body text, created_at timestamptz NOT NULL DEFAULT now()
   )`)
@@ -847,6 +865,36 @@ async function bumpStat(kind) {
        ON CONFLICT (hour) DO UPDATE SET ${kind} = benzinlik_stat_hourly.${kind} + 1`)
   } catch { /* stat kaydı kritik değil */ }
 }
+/** Saatlik sayaçlara DEĞER ekler (bumpStat 1 artırır; trafik ölçümü toplam gönderir).
+ *  Kolon adları SQL'e enterpole edildiği için yalnız BEYAZ LİSTE geçer. */
+const STAT_TOPLAM_KOLON = new Set(['trafik_icice', 'trafik_sikisan', 'trafik_bekleyen', 'trafik_ornek'])
+async function bumpStatBy(kolonlar) {
+  if (!pool) return
+  const alanlar = Object.keys(kolonlar).filter(k => STAT_TOPLAM_KOLON.has(k))
+  if (!alanlar.length) return
+  try {
+    const sut = alanlar.join(', ')
+    const deg = alanlar.map((_, i) => `$${i + 1}`).join(', ')
+    const upd = alanlar.map((k, i) => `${k} = benzinlik_stat_hourly.${k} + $${i + 1}`).join(', ')
+    await pool.query(
+      `INSERT INTO benzinlik_stat_hourly(hour, ${sut}) VALUES (date_trunc('hour', now()), ${deg})
+       ON CONFLICT (hour) DO UPDATE SET ${upd}`, alanlar.map(k => kolonlar[k]))
+  } catch { /* stat kaydı kritik değil */ }
+}
+/** Ham gövdeyi OKUR ve tavanı aşarsa null döner (413 için — readBody JSON'a çevirir,
+ *  ham boyutu göremezdik). */
+function readRawLimited(req, max) {
+  return new Promise(resolve => {
+    let s = '', asti = false
+    req.on('data', c => {
+      if (asti) return
+      s += c
+      if (s.length > max) { asti = true; resolve(null) }
+    })
+    req.on('end', () => { if (!asti) resolve(s) })
+    req.on('error', () => { if (!asti) { asti = true; resolve(null) } })
+  })
+}
 function rateLimit(key, max, windowMs) {
   const now = Date.now()
   const b = buckets.get(key)
@@ -1026,7 +1074,44 @@ async function handleApi(req, res, url) {
       const mb = await readBody(req).catch(() => ({}))
       const ALLOWED = new Set(['gate_shown', 'gate_converted', 'ad_views', 'session_minutes', 'webgl_fail', 'steam_yes', 'steam_no', 'steam_skip'])
       const k = String((mb && mb.k) || '')
+      // TRAFİK SAYACI: 1 değil TOPLAM yazar (istemci 5 dakikalık birikimi tek istekte
+      // gönderir). Kolonlar bumpStatBy beyaz listesinden geçer; sayılar kırpılır.
+      if (k === 'trafik') {
+        if (rateLimit('metric:trafik:' + clientIp(req), 30, 3600_000)) {
+          const n = v => Math.max(0, Math.min(1_000_000, Math.round(Number(v) || 0)))
+          await bumpStatBy({
+            trafik_icice: n(mb.icice), trafik_sikisan: n(mb.sikisan),
+            trafik_bekleyen: n(mb.bekleyen), trafik_ornek: n(mb.ornek),
+          })
+        }
+        return json(res, 200, { ok: true })
+      }
       if (ALLOWED.has(k) && rateLimit('metric:' + k + ':' + clientIp(req), 90, 3600_000)) bumpStat(k)
+      return json(res, 200, { ok: true })
+    }
+    /**
+     * TRAFİK OLAY KAYDI — anomali ANINDA sahnenin tam durumu (istemci: src/trafik-olay.ts).
+     * Sınırlar: gövde > 16 KB → 413 · dakikada IP başına 2 istek → 429.
+     * PII YOK: yalnız oyun durumu (kind/day/loc + araç konumları + yuvalar + yerleşim).
+     */
+    if (url === '/api/trafik-olay' && req.method === 'POST') {
+      if (!rateLimit('trafikolay:' + clientIp(req), 2, 60_000)) return json(res, 429, { error: 'rate' })
+      const raw = await readRawLimited(req, 16 * 1024)
+      if (raw === null) return json(res, 413, { error: 'too big' })
+      let o = null
+      try { o = raw ? JSON.parse(raw) : null } catch { o = null }
+      const KINDS = new Set(['icice', 'sikisma', 'yigilma', 'kuyruk'])
+      const kind = String((o && o.k) || '')
+      if (!o || !KINDS.has(kind)) return json(res, 400, { error: 'kind' })
+      const day = Math.max(0, Math.min(1_000_000, Math.round(Number(o.day) || 0)))
+      const loc = String(o.loc || '').slice(0, 32)
+      if (pool) {
+        try {
+          await pool.query(
+            `INSERT INTO benzinlik_trafficlog(kind, day, loc, payload) VALUES ($1,$2,$3,$4)`,
+            [kind, day, loc, JSON.stringify(o)])
+        } catch { /* teşhis kaydı kritik değil — oyuncuya asla hata dönmez */ }
+      }
       return json(res, 200, { ok: true })
     }
     if (url === '/api/visit' && req.method === 'POST') {

@@ -1,9 +1,10 @@
 import * as THREE from 'three'
-import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS } from './world'
+import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, SLOT_MIN_ARA } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
+import { trafikOlayKur, trafikOlayTick, type TrafikOlay } from './trafik-olay'
 import { shareLabel } from './rival'
 import { openLogbook } from './logbook-ui'
 import { makeLogbook, resolveLogbook, logbookFlags, REFIT_KINDS, type MarinaFacId } from './marina'
@@ -3978,14 +3979,101 @@ function binaOnarimi() {
   const onarilan = eksikYapilariGeriGetir()
   if (onarilan) konumlariSabitle()   // geri gelen yapıların konumu da sabitlensin
   const ayrilan = ustUsteBinenleriAyir()
-  if ((onarilan + ayrilan) <= 0) return
+  // POMPA/ŞARJ AYRIŞTIRMA: yukarıdaki geçiş yalnız '#N' nüshalı sayılabilir tesisleri
+  // taşır; pompa/şarj oraya bilerek girmez (onların kendi konum tablosu ve KENDİ taşıma
+  // yolu — movePump/moveCharger — var). Yığılmanın ölçülen kaynağı tam da bu ikisiydi,
+  // o yüzden onlara ayrı bir geçiş açıldı.
+  const yuva = uniteleriAyristir()
+  if ((onarilan + ayrilan + yuva) <= 0) return
   if (!onarimBildirildi) {
     onarimBildirildi = true
-    ui.toast(t('Kayıtta kaybolmuş {0} tesis bulundu ve istasyona geri kondu — hiçbir şey silinmedi.',
-      String(onarilan + ayrilan)), 'good', true)
+    if (yuva > 0 && onarilan + ayrilan === 0) {
+      ui.toast(t('Üst üste binmiş {0} pompa/şarj ünitesi ayrıştırıldı — hiçbir şey silinmedi.',
+        String(yuva)), 'good', true)
+    } else {
+      ui.toast(t('Kayıtta kaybolmuş {0} tesis bulundu ve istasyona geri kondu — hiçbir şey silinmedi.',
+        String(onarilan + ayrilan + yuva)), 'good', true)
+    }
   }
   Car.solids = hardRects()
   persist()   // onarım kalıcı olsun (yoksa her açılışta tekrar gerekir)
+}
+
+/**
+ * POMPA/ŞARJ YUVA AYRIŞTIRMA (fail-closed) — "pompa önünde 4-5 araç iç içe, alttaki
+ * pompalar boş" şikâyetinin ikinci yarısı.
+ *
+ * KÖK NEDEN (ölçüldü, canlı sahne probu ?full=1): varsayılan yuva tablosu 4 girişliydi
+ * ama dizi 8 uzunluğundaydı; taşan indeks `?? tablo[3]` ile son girişe düşüyordu. Yani
+ * KONUMU OLMAYAN her ünite (kayıtta placedPos boşsa) tek noktada üst üste doğuyor,
+ * o yuvaların TÜM araçları aynı koordinatta iç içe geçiyordu. Tablo 8 ayrı noktaya
+ * çıkarıldı (world.ts) — ama MEVCUT bozuk kayıtlar kendiliğinden düzelmiyor, çünkü
+ * konumlariSabitle/ustUsteBinenleriAyir pompa ve şarjı bilerek atlıyor.
+ *
+ * BU GEÇİŞ: aynı türden iki yuva SLOT_MIN_ARA'dan yakınsa, indeksi BÜYÜK olanı en yakın
+ * BOŞ ve GEÇERLİ noktaya taşır (kare halkalar hâlinde dışa tarama — deterministik),
+ * hem görseli (movePump/moveCharger) hem yuvayı hem de kaydı (placedPos/placedRects)
+ * günceller. Yer bulunamazsa ünite DURDUĞU YERDE kalır — asla silinmez, asla kaybolmaz.
+ *
+ * DOKUNULMAZLIK KURALI: konumu OLAN ünite (placedPos dolu) referans alınır ve mümkün
+ * olduğunca yerinde bırakılır; taşınan hep ÇAKIŞMAYA sonradan katılan (büyük indeksli)
+ * olur. Oyuncunun elle yerleştirdiği hiçbir şey kendiliğinden kıpırdamaz.
+ */
+function uniteleriAyristir(): number {
+  type Tur = 'pump' | 'charger'
+  /** ayak izi merkezinden ARAÇ YUVASI: gövde merkezin off kadar batısında, yuva
+   *  yuvaOff kadar doğusunda → yuva = merkez + yön × (yuvaOff − off). Açı ve karşı-yaka
+   *  180° flip'i unitBodyPos ile AYNI kaynaktan gelir (iki hesap ayrışmasın). */
+  const yuvaOf = (tur: Tur, cx: number, cy: number, rot: number) => {
+    const d = tur === 'pump' ? 0.9 : 0.6
+    const ang = rot * Math.PI / 2 + (cx > ROAD_X ? Math.PI : 0)
+    return new THREE.Vector2(cx + Math.cos(ang) * d, cy + Math.sin(ang) * d)
+  }
+  let ayrilan = 0
+  for (const tur of ['pump', 'charger'] as Tur[]) {
+    const n = tur === 'pump' ? state.pumps : state.evChargers
+    const slots = tur === 'pump' ? world.pumpSlots : world.evSlots
+    const fw = tur === 'pump' ? 4.4 : 4.0
+    const fd = tur === 'pump' ? 4.0 : 2.6
+    /** kabul edilmiş (artık kıpırdamayacak) yuvalar */
+    const sabit: THREE.Vector2[] = []
+    for (let i = 0; i < n; i++) {
+      const id = `${tur}-${i}`
+      const s = slots[i]
+      if (!s || !isFinite(s.x) || !isFinite(s.y)) continue
+      const cur = new THREE.Vector2(s.x, s.y)
+      const cakisiyor = (p: THREE.Vector2) => sabit.some(o => o.distanceTo(p) < SLOT_MIN_ARA)
+      if (!cakisiyor(cur)) { sabit.push(cur); continue }
+      // ── taşı: mevcut ayak izi merkezinden başlayarak en yakın boş geçerli nokta ──
+      const rot = placedRot[id] ?? 0
+      const p0 = placedPos[id]
+      const c0 = p0 ? { x: p0[0], y: p0[1] } : { x: s.x - (tur === 'pump' ? 0.9 : 0.6), y: s.y }
+      let hedef: [number, number] | null = null
+      const uygun = (cx: number, cy: number) => {
+        if (cakisiyor(yuvaOf(tur, cx, cy, rot))) return false
+        return isValidPlacement({ cx, cy, w: fw, d: fd }, id, false)
+      }
+      for (let r = 1; r <= 30 && !hedef; r++) {
+        for (let dx = -r; dx <= r && !hedef; dx++) for (let dy = -r; dy <= r && !hedef; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const cx = Math.round(c0.x + dx), cy = Math.round(c0.y + dy)
+          if (uygun(cx, cy)) hedef = [cx, cy]
+        }
+      }
+      // FAIL-CLOSED: uygun nokta yoksa ünite yerinde bırakılır (silme/gizleme YOK)
+      if (!hedef) { sabit.push(cur); continue }
+      const gov = unitBodyPos(id, hedef[0], hedef[1], rot)
+      if (tur === 'pump') world.movePump(i, gov, rot); else world.moveCharger(i, gov, rot)
+      placedPos[id] = hedef
+      const yeni = { cx: hedef[0], cy: hedef[1], w: fw, d: fd }
+      const k = placedRects.findIndex(x => x.id === id)
+      if (k >= 0) placedRects[k] = { id, ...yeni }; else placedRects.push({ id, ...yeni })
+      const ns = slots[i]
+      sabit.push(new THREE.Vector2(ns.x, ns.y))
+      ayrilan++
+    }
+  }
+  return ayrilan
 }
 
 /**
@@ -4889,10 +4977,15 @@ const COUNTABLE: Record<string, () => number> = {
  *  oyuncu orayı almamışsa oyun sahipsiz araziye kuruyordu) */
 function defaultSlotFree(kind: 'pump' | 'evcharger'): boolean {
   const i = kind === 'pump' ? state.pumps : state.evChargers
-  const y = (kind === 'pump' ? PUMP_SLOTS_POS : EV_SLOTS_POS)[Math.min(i, 3)].y
+  const tablo = kind === 'pump' ? PUMP_SLOTS_POS : EV_SLOTS_POS
+  // TABLO ARTIK 8 GİRİŞLİ: indeks kırpması (Math.min(i,3)) kalktı, taşarsa son giriş.
+  // Ayak izi merkezi yuvadan TÜRETİLİR — ilk dört girişte sonuç eskisiyle birebir
+  // aynı sayıyı verir (pompa 1.8−0.9=0.9 · şarj 1.8−1.3=0.5), yalnız ikinci kolondaki
+  // yeni varsayılanlar için de doğru çalışır.
+  const s = tablo[Math.min(i, tablo.length - 1)]
   const p = kind === 'pump'
-    ? { cx: 0.9, cy: y, w: 4.4, d: 4.0 }
-    : { cx: 0.5, cy: y, w: 4.0, d: 2.6 }
+    ? { cx: s.x - 0.9, cy: s.y, w: 4.4, d: 4.0 }
+    : { cx: s.x - 1.3, cy: s.y, w: 4.0, d: 2.6 }
   // arazi yasal mı? (tam isValidPlacement değil: varsayılan yerleşim tabela gibi sabit
   // engellerle tasarım gereği köşeden kesişir, onlar sorun değil)
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
@@ -5052,6 +5145,58 @@ function buyToast(id: string) {
 
 // FULL / vitrin modu: ?full=1 ile her şey kurulu başlar
 const isFullMode = new URLSearchParams(location.search).has('full')
+
+/** trafikSahnesi() ile doğan statik araç gövdeleri (her çağrıda yenilenir) */
+let replayGrup: THREE.Group | null = null
+/** replay sahnesindeki araç başına faz etiketi (küçük canvas sprite) */
+function fazEtiketi(faz: string, x: number, y: number): THREE.Sprite {
+  const cv = document.createElement('canvas')
+  cv.width = 128; cv.height = 32
+  const c2 = cv.getContext('2d')!
+  c2.fillStyle = '#0d1420'; c2.fillRect(0, 0, 128, 32)
+  c2.fillStyle = '#ffe9a8'; c2.font = 'bold 20px system-ui'; c2.textAlign = 'center'
+  c2.fillText(faz, 64, 23)
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }))
+  sp.position.set(x, y, 1.8)
+  sp.scale.set(2.2, 0.55, 1)
+  return sp
+}
+
+// ---- TRAFİK OLAY KAYDI (canlı teşhis) ----
+// Anomali anında sahnenin tam durumu sunucuya gider; olay tek başına yeniden
+// kurulabilir bir hata raporudur (bkz. src/trafik-olay.ts). VİTRİN/TANITIM modunda
+// KAPALI: ?full=1 sahnesi gerçek oyuncu değildir, ölçümü kirletir.
+const aracKimlikleri = new WeakMap<Car, number>()
+let aracKimlikSayaci = 0
+const aracKimligi = (c: Car) => {
+  let n = aracKimlikleri.get(c)
+  if (n === undefined) { n = ++aracKimlikSayaci; aracKimlikleri.set(c, n) }
+  return n
+}
+const bir = (v: number) => Math.round(v * 10) / 10
+trafikOlayKur({
+  cars: () => cars.cars.map(c => ({
+    id: aracKimligi(c), x: c.group.position.x, y: c.group.position.y,
+    phase: c.phase as string, slotIndex: c.slotIndex, kind: c.kind as string,
+  })),
+  pumpSlots: () => world.pumpSlots.slice(0, state.pumps),
+  evSlots: () => world.evSlots.slice(0, state.evChargers),
+  yapi: () => Object.entries(placedPos)
+    .map(([id, p]) => [id, bir(p[0]), bir(p[1]), placedRot[id] ?? 0] as [string, number, number, number]),
+  gun: () => state.day,
+  loc: () => state.activeLoc,
+  pompa: () => state.pumps,
+  sarj: () => state.evChargers,
+  // Kuyruk "dolu" sayılması için BEKLEYEN araç sayısı şerit ağındaki slot sayısına
+  // dayanmalı — sabit bir sayı değil (geniş kapıda 10, dar kapıda 8, marinada 4).
+  kuyrukDolu: () => {
+    let slot = 0
+    for (const st of ['near', 'far'] as const) slot += cars.graph.get(st)?.queue.length ?? 0
+    if (slot <= 0) return false
+    return cars.cars.filter(c => c.phase === 'waiting').length >= slot
+  },
+  giremeyen: () => state.stats.turnedAway,
+}, !isFullMode && !isPromoMode)
 // VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
 // doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
 if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
@@ -5128,6 +5273,60 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
         konumlar: Object.fromEntries(Object.entries(placedPos)),
         kumbara: { ...state.pendingCash },
       }
+    },
+    /**
+     * TRAFİK OLAYINI YENİDEN KUR (yalnız ?full=1) — prod'daki anomaliyi LOKALDE GÖRMEK.
+     *
+     * NEDEN: olay kaydı (POST /api/trafik-olay) tek başına yeniden kurulabilir bir hata
+     * raporudur; ama "yeniden kurulabilir" olması için oyunun kendi yolundan sahneye
+     * uygulanması gerekir. Bu kanca snapshot'ın YERLEŞİMİNİ (yapi + sayaçlar) kayıt
+     * yükleme kalıbıyla uygular, ardından araçları o anki konumlarında STATİK gövde
+     * olarak doğurur — fizik/AI yok, sadece görsel + faz etiketi.
+     *
+     * Dönüş: { kuruldu, uyumsuz }. `uyumsuz`, snapshot'taki yuva ile yeniden kurulan
+     * sahnenin yuvası ayrışan üniteleri listeler (yerleşim kodu ile prod ayrışmışsa
+     * teşhis burada görünür); snapshot OTORİTERDİR, yuvalar ona göre düzeltilir.
+     */
+    trafikSahnesi(snap: TrafikOlay) {
+      const yuk = savePayload() as unknown as Record<string, unknown>
+      const s2 = yuk.s as Record<string, unknown>
+      s2.pumps = snap.pumps; s2.evChargers = snap.ev; s2.day = snap.day
+      // yerleşim TAM olarak snapshot'tan gelsin: mevcut alanlar önce temizlenir
+      // (applySaveData Object.assign ile BİRLEŞTİRİR, kalıntı bırakırdı)
+      for (const k of Object.keys(placedPos)) delete placedPos[k]
+      for (const k of Object.keys(placedRot)) delete placedRot[k]
+      placedRects.length = 0
+      const pp: Record<string, [number, number]> = {}
+      const pr: Record<string, number> = {}
+      for (const [id, x, y, rot] of snap.yapi ?? []) { pp[id] = [x, y]; pr[id] = rot ?? 0 }
+      yuk.placedPos = pp; yuk.placedRot = pr; yuk.placedRects = []
+      applySaveData(yuk)
+      rebuildFromState()
+      // ── yuva mutabakatı: snapshot otoriter ──
+      const uyumsuz: string[] = []
+      const esitle = (id: string, hedef: [number, number] | undefined, v: THREE.Vector3 | undefined) => {
+        if (!hedef || !v) return
+        if (Math.hypot(v.x - hedef[0], v.y - hedef[1]) > 0.15) {
+          uyumsuz.push(`${id}: sahne (${v.x.toFixed(1)},${v.y.toFixed(1)}) ≠ kayıt (${hedef[0]},${hedef[1]})`)
+        }
+        v.set(hedef[0], hedef[1], 0)
+      }
+      for (let i = 0; i < (snap.slots?.pump?.length ?? 0); i++) esitle(`pump-${i}`, snap.slots.pump[i], world.pumpSlots[i])
+      for (let i = 0; i < (snap.slots?.ev?.length ?? 0); i++) esitle(`charger-${i}`, snap.slots.ev[i], world.evSlots[i])
+      // ── statik araç gövdeleri ──
+      if (replayGrup) { world.scene.remove(replayGrup); replayGrup = null }
+      const g = new THREE.Group()
+      for (const [x, y, phase, , kind] of snap.cars ?? []) {
+        const renk = kind === 'ev' ? 0x35c7d6 : 0xd9584a
+        const m = new THREE.Mesh(new THREE.BoxGeometry(2.66, 1.2, 0.9),
+          new THREE.MeshLambertMaterial({ color: renk }))
+        m.position.set(x, y, 0.45)
+        g.add(m)
+        g.add(fazEtiketi(String(phase), x, y))
+      }
+      world.scene.add(g)
+      replayGrup = g
+      return { kuruldu: (snap.cars ?? []).length, uyumsuz }
     },
     arsaAl(c: number, r: number, beton = true) {
       state.ownedParcels.add(parcelKey(c, r)); world.markOwned(c, r)
@@ -6798,6 +6997,7 @@ function frame() {
   }
   state.tick(dt)
   cars.update(dt)
+  trafikOlayTick(dt)   // trafik anomali gözcüsü (1 sn nabız, içeride kendi eşiklerini tutar)
   world.updateTankFill({
     benzin: state.tanks.benzin / state.fuelCapacity('benzin'),
     dizel: state.tanks.dizel / state.fuelCapacity('dizel'),

@@ -28,14 +28,80 @@ export const LANE_NEAR = 6.95
 export const LANE_FAR = 8.85
 /** Karşı (yol karşısı) istasyonun kapı x'i — near kapı 4.2'nin ROAD_X etrafında aynası (15.8-4.2). */
 export const FAR_GATE_X = 11.6
+/**
+ * POMPA / ŞARJ VARSAYILAN ARAÇ YUVALARI — 8 AYRI NOKTA (ölçülmüş yığılma fixi).
+ *
+ * ÖLÇÜM (canlı sahne probu, ?full=1, 4 pompa): `world.pumpSlots` 8 kayıtlıydı ama
+ * tablo yalnız 4 giriş içeriyordu; 5..8. slot `?? PUMP_SLOTS_POS[3]` ile AYNI noktaya
+ * ((1.8,−18)) düşüyordu. Aynı hata EV tarafında da vardı (5..8 → (1.8,−21.5)).
+ * Sonuç: konumu OLMAYAN her ünite (kayıtta placedPos boşsa — canlıda tesislerin
+ * ~%14'ünde bu alan boştu) üst üste doğuyor, o slotların TÜM araçları tek noktada
+ * iç içe geçiyordu. Oyuncunun ekranda gördüğü "pompa önünde 4-5 araç iç içe, alttaki
+ * pompalar boş" görüntüsü buydu.
+ *
+ * TABLO NE TUTAR: ARAÇ YUVASININ (aracın durduğu nokta) dünya koordinatı.
+ * Ünite gövdesi buradan türer: pompa gövdesi yuvanın 1.8, şarj gövdesi 1.1 batısında.
+ * (Eski kod tablodan yalnız .y okuyup gövde x'ini 0 / 0.7 diye SABİT yazıyordu; ilk dört
+ *  girişte sonuç birebir aynı — 1.8−1.8=0, 1.8−1.1=0.7 — ama artık ikinci bir kolon
+ *  tanımlanabiliyor, tek kolona 8 ünite ≥3 birim aralıkla sığmıyordu.)
+ *
+ * YENİ NOKTALARIN SEÇİM KURALI:
+ *  · kendi tablosundaki HER noktadan ≥ 3.0 birim uzak (araç gövdesi 2.66; en yakın çift 3.12),
+ *  · yol (x 5.6..10.2) ve KUYRUK/servis şeridi (fixedObstacles: x 2.05..3.55 ve 3.3..5.3)
+ *    dışında — yuva x'i en fazla 1.8, ikinci kolon −0.6,
+ *  · varsayılan ofis (−5,4.5), tank (−5.05,−6.05), tabela (4,−11.5) ve kapı
+ *    dikdörtgenleriyle çakışmaz,
+ *  · sahibi olunabilir parsellerin içinde (ana arsa y −10..10, güney y −24..−10).
+ * İkinci kolon (x −0.6) güneyde mevcut kolonun ARASINA kaydırılmış (Δx 2.4 · Δy 2.0
+ * → 3.12 birim): iki kolon da kapı koridorunun batısında kalır, şeride girmez.
+ *
+ * NOT: bu tablo yalnız KONUMU OLMAYAN ünite için kullanılır (yeni kurulum ya da kaydı
+ * bozulmuş oyuncu). Oyuncunun elle yerleştirdiği ünite placedPos'tan gelir, buraya
+ * asla düşmez. Kalan çakışmalar (ör. varsayılan tuvalet/market noktası) yeniden
+ * kurulumdaki AYRIŞTIRMA geçişiyle (main.ts uniteleriAyristir) temizlenir.
+ */
 export const PUMP_SLOTS_POS = [
   new THREE.Vector3(1.8, -2.2, 0), new THREE.Vector3(1.8, 2.2, 0),
   new THREE.Vector3(1.8, -14, 0), new THREE.Vector3(1.8, -18, 0),
+  // ↓ yeni: 5..8. pompa. İlk dördü DEĞİŞMEDİ (mevcut kayıtlar birebir korunur).
+  new THREE.Vector3(1.8, -6.2, 0),    // ana arsa, pompa-0 ile şarj-2 arasındaki boşluk
+  new THREE.Vector3(-0.6, -9.6, 0),   // ikinci kolon (gövde x −2.4)
+  new THREE.Vector3(-0.6, -16, 0),    // güney: pompa-2 ile pompa-3 arasına kaydırılmış
+  new THREE.Vector3(-0.6, -20, 0),
 ]
 export const EV_SLOTS_POS = [
-  new THREE.Vector3(1.8, 6.2, 0), new THREE.Vector3(1.8, 8.8, 0),
+  // 0 numaralı yuva 6.2 → 5.7 kaydırıldı (TEK değişen eski giriş, 0.5 birim). Gerekçe:
+  // 6.2 ile 8.8 arası 2.6 idi, yani ayrıştırma eşiğinin (2.8) ALTINDA — tablo kendi
+  // kuralını çiğniyordu ve onarım geçişi HER kayıtta boş yere tetiklenirdi. 8.8 sabit
+  // kaldı: gövdesi kuzey parsel sınırına (y=10) dayanıyor, yukarı kaydırmak yeni
+  // oyuncunun 2. şarj ünitesini "arsan yok" diye elle yerleştirmeye düşürürdü.
+  new THREE.Vector3(1.8, 5.7, 0), new THREE.Vector3(1.8, 8.8, 0),
   new THREE.Vector3(1.8, -11.8, 0), new THREE.Vector3(1.8, -21.5, 0),
+  // ↓ yeni: 5..8. şarj ünitesi
+  new THREE.Vector3(-0.6, 3.6, 0),    // ikinci kolon, ana arsa
+  new THREE.Vector3(-0.6, 11.6, 0),   // kuzey arsa
+  new THREE.Vector3(1.8, 16.4, 0),    // kuzey arsa: varsayılan tuvalet ile SMR arası boşluk
+  new THREE.Vector3(-0.6, 20.6, 0),
 ]
+/** Aynı türden iki ünite yuvasının izin verilen EN KISA mesafesi. Altına düşen çift
+ *  yeniden kurulumda ayrıştırılır (main.ts uniteleriAyristir). Araç gövdesi 2.66. */
+export const SLOT_MIN_ARA = 2.8
+/** Pompa gövdesinin araç yuvasına uzaklığı (yuva gövdenin doğusunda). */
+export const PUMP_SLOT_OFF = 1.8
+/** Şarj ünitesi gövdesinin araç yuvasına uzaklığı. */
+export const EV_SLOT_OFF = 1.1
+/**
+ * Tablodan i. varsayılan yuvayı verir. TABLO TAŞMASI ARTIK YIĞMAZ: eskiden taşan indeks
+ * `?? tablo[3]` ile son girişe düşüyor, N adet ünite TEK noktada üst üste doğuyordu.
+ * Tablo 8 girişli olduğu için normalde taşma yok; yine de fail-safe olarak taşan indeks
+ * son girişten güneye doğru SLOT_MIN_ARA aralıkla açılır (asla aynı noktaya düşmez).
+ */
+function varsayilanYuva(tablo: THREE.Vector3[], i: number): THREE.Vector3 {
+  const v = tablo[i]
+  if (v) return v.clone()
+  const son = tablo[tablo.length - 1]
+  return new THREE.Vector3(son.x, son.y - SLOT_MIN_ARA * (i - tablo.length + 1), 0)
+}
 export const TANK_POS = new THREE.Vector3(-5.5, -6.5, 0)
 /** araçların kullandığı giriş/çıkış rampaları */
 export const APRON_IN_Y = -8
@@ -1953,7 +2019,7 @@ export class World {
 
   private ownedMarks = new Map<string, THREE.Group>()
   /** dinamik servis noktaları: pompa/şarj taşınınca araçlar yeni yere gelir */
-  pumpSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => (PUMP_SLOTS_POS[i] ?? PUMP_SLOTS_POS[3]).clone())
+  pumpSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => varsayilanYuva(PUMP_SLOTS_POS, i))
   /** pompa/şarj oyuncu açıları (rad) — araç slotta bu açıyla hizalanır (döndürülmüş ünitede yan durma fixi) */
   pumpAngles: number[] = []
   evAngles: number[] = []
@@ -1961,7 +2027,7 @@ export class World {
    *  türetme 3.6 birim kayıyordu: hayalet duvar kapı koridorunun üstüne geliyordu, B1) */
   pumpBase: THREE.Vector2[] = []
   evBase: THREE.Vector2[] = []
-  evSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => (EV_SLOTS_POS[i] ?? EV_SLOTS_POS[3]).clone())
+  evSlots: THREE.Vector3[] = Array.from({ length: 8 }, (_, i) => varsayilanYuva(EV_SLOTS_POS, i))
   tankAnchor = new THREE.Vector2(TANK_POS.x, TANK_POS.y)
   /** taşınabilir giriş/çıkış noktaları (yol kenarı şeridi) */
   /** MARİNA DENİZİ: iki doku katmanı ters yönde ve farklı hızda kayar.
@@ -2353,7 +2419,11 @@ export class World {
     // MARİNA (Oğuz: "pompayı deniz sınırına çekelim, gemiler tahtaya çıkmasın"):
     // varsayılan pompa RIHTIM hattına (x≈4.0) kurulur; tekne yuvası her koşulda SUDA
     // (ada doğu kıyısı 5.3 + tekne payı → x ≥ 6.6). Tekne iskeleye BORDALAR, karaya çıkmaz.
-    const base = at ?? new THREE.Vector2(isWater ? 4.0 : 0, PUMP_SLOTS_POS[Math.min(index, 3)].y)
+    // VARSAYILAN GÖVDE = tablo yuvası − 1.8 (yuva gövdenin doğusunda). Eskiden burada
+    // gövde x'i 0 diye SABİT yazılı, y ise `[Math.min(index,3)]` ile 3'e KIRPILIYORDU:
+    // konumu olmayan 4.,5.,6.,7. pompa aynı (0,−18) noktasında doğup üst üste biniyordu.
+    const dv = varsayilanYuva(PUMP_SLOTS_POS, index)
+    const base = at ?? new THREE.Vector2(isWater ? 4.0 : dv.x - PUMP_SLOT_OFF, dv.y)
     // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında, ünite 180° döner.
     // Charger kalıbı: araç yanaşma slotu AÇIYLA birlikte döner — araç hep nozül tarafına yanaşır.
     const far = base.x > ROAD_X
@@ -2393,7 +2463,9 @@ export class World {
   }
 
   addEvCharger(index: number, at?: THREE.Vector2, rot = 0) {
-    const base = at ?? new THREE.Vector2(0.7, EV_SLOTS_POS[Math.min(index, 3)].y)
+    // pompadaki ile aynı gerekçe: gövde = tablo yuvası − 1.1, indeks KIRPILMAZ
+    const dv = varsayilanYuva(EV_SLOTS_POS, index)
+    const base = at ?? new THREE.Vector2(dv.x - EV_SLOT_OFF, dv.y)
     // Araç yanaşma noktası varsayılan sağda (+1.1). Ünite döndükçe bu offset de döner,
     // böylece araç her zaman ünitenin şarj kablosu tarafından yanaşır.
     const ang = rot * Math.PI / 2
