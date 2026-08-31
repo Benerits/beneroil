@@ -167,7 +167,7 @@ console.log('\n== 6) Kod denetimi: onarım yolları yerinde ==')
 // Bugün aynı kalıp üç kez çıktı (web-smoke hiç koşmuyordu, ui-check listesi bayattı).
 // Artık: yaygın portlar taranıyor, hiçbiri yoksa test HATA ile bitiyor — atlanan
 // ölçüm geçmiş sayılmaz.
-const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5173', '5174']
+const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5311', '5173', '5174']
 let PORT = null
 for (const p of PORTLAR) {
   try { if ((await fetch(`http://localhost:${p}/`, { signal: AbortSignal.timeout(1500) })).ok) { PORT = p; break } }

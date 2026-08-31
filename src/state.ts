@@ -193,6 +193,7 @@ export const LOC_FIELDS = [
   'hasDiesel', 'hasSMR', 'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasTruckPark2',
   'hasHotel', 'hasCleaner', 'supplier',
   'airWaterCount', 'selfWashCount', 'parkingCount', 'solarDirt', 'smrWear', 'uranium',
+  'windCount', 'windWear',
   'uraniumPending', 'uraniumEta', 'closed', 'wideGates', 'smrWreck',
   // karşı istasyon bayrağı da ŞUBEYE aittir: kasabada açık olması otoyolu açmaz
   'farStationOn',
@@ -367,6 +368,18 @@ const GRID_COSTS = [8000, 15000]
 const BATTERY_COSTS = [5000, 9000, 16000, 34000, 72000, 155000]
 const EV_COSTS = [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000]
 const SOLAR_COST = 9000
+/** RÜZGÂR TÜRBİNİ — güneşin TAMAMLAYICISI, kopyası değil.
+ *  Güneş yalnız gündüz üretir (sunFactor gece 0); türbin GECE DE üretir ama
+ *  rüzgâr değişkendir (0,35-1,30 arası salınır). Bu yüzden hem daha pahalı hem de
+ *  düzenli bakım ister: tür kuralı gereği her güçlü yapının bir bedeli olmalı.
+ *  Denge: 4 kWh/sn × ort. ~0,85 rüzgâr ≈ 3,4 kWh/sn, ama 24 saat — güneşin günlük
+ *  üretiminin ~2 katı, fiyatı ~2,4 katı. */
+const WIND_COST = 22000
+/** Türbin bakım ücreti (güneş paneli temizliği ₺300, reaktör bakımı daha ağır). */
+export const WIND_SERVICE_COST = 600
+/** Yıpranma hızı: 0,0009/sn → ~11 dakikada %60'a ulaşır. Panel kirlenmesinden
+ *  (0,0005) daha hızlı, yani türbin daha çok ilgi ister — gücünün karşılığı. */
+const WIND_WEAR_RATE = 0.0009
 const DIESELGEN_COST = 4000
 const SMR_COST = 40000
 // Arsa haritası: sütun 0 = istasyon kolonu, 1-2 batıya doğru; 3-5 yolun KARŞI tarafı (doğu).
@@ -813,6 +826,8 @@ export class GameState {
   battery = 0 // kWh
   solarCount = 0
   get hasSolar() { return this.solarCount > 0 }
+  windCount = 0
+  get hasWind() { return this.windCount > 0 }
   hasDiesel = false
   hasSMR = false
   /** patlamış reaktör enkazı — temizlenene dek yeni reaktör kurulamaz (SAVE/LOC alanı) */
@@ -954,6 +969,22 @@ export class GameState {
 
   // bakım / arıza
   solarDirt = 0 // 0..1
+  windWear = 0  // 0..1 — türbin dişli/kanat yıpranması, üretimi düşürür
+  /** RÜZGÂR FAKTÖRÜ 0,35..1,30 — kaydedilmez, tick() içinde ilerler. İki farklı
+   *  periyotlu salınım: tek sinüs "nefes alıp veren" yapay bir ritim veriyordu,
+   *  iki periyot düzensiz ve doğal hissettiriyor. Gece/gündüzden BAĞIMSIZ —
+   *  türbinin güneşten farkı bu. */
+  windPhase = 0
+  windFactor() {
+    const a = Math.sin(this.windPhase * 0.11)
+    const b = Math.sin(this.windPhase * 0.037 + 1.7)
+    return 0.35 + 0.95 * Math.max(0, Math.min(1, 0.5 + 0.35 * a + 0.15 * b))
+  }
+  /** türbinin o anki üretimi kWh/sn (0 türbin → 0) */
+  windRate() {
+    if (this.windCount <= 0) return 0
+    return 4 * this.windCount * (1 - 0.6 * this.windWear) * this.windFactor()
+  }
   smrWear = 0 // 0..1
   /** bakım özeni: her bakım/tamir artırır, zamanla azalır; yüksekken arıza olasılığı düşer */
   maintCare = 0
@@ -997,6 +1028,7 @@ export class GameState {
   freeRate() {
     let r = 0
     if (this.solarCount > 0) r += 3 * this.solarCount * (1 - 0.7 * this.solarDirt) * this.sunFactor
+    r += this.windRate()   // GECE DE üretir: güneşin tamamlayıcısı
     if (this.dieselRunning()) r += 7
     if (this.hasSMR && this.uranium > 0) r += 15
     if (this.gridLevel >= 2) r *= 1.3 // altyapı bonusu bedava üretimi de güçlendirir
@@ -1053,6 +1085,16 @@ export class GameState {
       }
     }
     // kirlenme / yıpranma
+    // RÜZGÂR: faz her zaman ilerler (türbin yokken de — kurulduğunda hava zaten
+    // bir durumda olsun, "yeni türbin hep tam rüzgârda doğuyor" hissi olmasın).
+    this.windPhase += dt
+    if (this.hasWind && this.windWear < 1) {
+      const before = this.windWear
+      this.windWear = Math.min(1, this.windWear + WIND_WEAR_RATE * dt)
+      if (before < 0.6 && this.windWear >= 0.6) {
+        this.events.push(t('Rüzgâr türbini yıprandı — üretim düşüyor, bakım gerekiyor!'))
+      }
+    }
     if (this.hasSolar && this.solarDirt < 1) {
       const before = this.solarDirt
       // 0.0045 → 0.0015: paneller ~4 oyun-gününde kirlenir (eski hâli 1,5 günde
@@ -1158,7 +1200,7 @@ export class GameState {
     // bakım özeni zamanla azalır
     this.maintCare = Math.max(0, this.maintCare - 0.0004 * dt)
     // EKİPMAN YAŞLANMASI (Katman 2b): ünite sayısıyla orantılı, ~1 oyun gününde %1.5
-    const units = this.pumps + this.evChargers + this.solarCount + (this.hasSMR ? 3 : 0)
+    const units = this.pumps + this.evChargers + this.solarCount + this.windCount + (this.hasSMR ? 3 : 0)
     this.wear = Math.min(1, this.wear + dt * 0.000055 * Math.max(1, units))
 
     // rastgele arızalar — seyrek; para azken (Murphy) artar, bakım özeni yüksekken düşer
@@ -1839,7 +1881,7 @@ export class GameState {
     this.pumps = 1; this.evChargers = 0; this.signLevel = 0; this.tankLevel = 0
     this.marketLevel = 0; this.market2Level = 0; this.toiletLevel = 0
     this.gridLevel = 0; this.batteryLevel = 0; this.battery = 0
-    this.solarCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0; this.lampCount = 0
+    this.solarCount = 0; this.windCount = 0; this.airWaterCount = 0; this.selfWashCount = 0; this.parkingCount = 0; this.lampCount = 0
     this.marinaFacs = []; this.berths = {}; this.winterSlots = 0; this.marinaViolations = 0
     this.refitJobs = []; this.refitOffers = []
     this.hasDiesel = false; this.hasSMR = false; this.smrWreck = false; this.hasWash = false; this.hasOil = false
@@ -1852,7 +1894,7 @@ export class GameState {
     this.toilet2Level = 0
     this.hasWash2 = false; this.hasOil2 = false; this.hasCoffee2 = false
     this.hasRestaurant2 = false; this.hasTruckPark2 = false
-    this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0
+    this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0; this.windWear = 0
     for (const f of FUELS) { this.tankCounts[f] = 1; this.tanks[f] = 0 }
     this.brokenPumps.clear(); this.brokenChargers.clear()
     for (const f of FUELS) this.orders[f] = { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
@@ -2132,7 +2174,7 @@ export class GameState {
     v += sum(TOILET_COSTS, this.toiletLevel) + sum(GRID_COSTS, this.gridLevel)
     v += sum(BATTERY_COSTS, this.batteryLevel) + sum(EV_COSTS, this.evChargers)
     for (const f of FUELS) v += sum(TANK_ADD_COSTS, this.tankCounts[f])
-    v += SOLAR_COST * this.solarCount + AIRWATER_COST * this.airWaterCount
+    v += SOLAR_COST * this.solarCount + WIND_COST * this.windCount + AIRWATER_COST * this.airWaterCount
     v += SELFWASH_COST * this.selfWashCount + PARKING_COST * this.parkingCount
     if (this.hasDiesel) v += DIESELGEN_COST
     if (this.hasSMR) v += SMR_COST
@@ -2246,6 +2288,7 @@ export class GameState {
     ]
     if (this.evChargers > 0) c.push([`charger#${this.evChargers - 1}`, t('DC Şarj')])
     if (this.solarCount > 0) c.push([`solar#${this.solarCount - 1}`, t('Güneş Santrali')])
+    if (this.windCount > 0) c.push([`wind#${this.windCount - 1}`, t('Rüzgâr Türbini')])
     if (this.parkingCount > 0) c.push([`parking#${this.parkingCount - 1}`, t('Otopark')])
     if (this.selfWashCount > 0) c.push([`selfwash#${this.selfWashCount - 1}`, t('Self Yıkama')])
     if (this.airWaterCount > 0) c.push([`airwater#${this.airWaterCount - 1}`, t('Hava-Su Ünitesi')])
@@ -2624,6 +2667,13 @@ export class GameState {
       }
     }
     let cleaned = false
+    // Sv.2 politikası panel temizliği + TÜRBİN BAKIMI'nı birlikte yürütür: ikisi de
+    // "üretim tesisinin bakımı" işi, oyuncuya iki ayrı anahtar vermek gereksiz.
+    if (this.managerLevel >= 2 && pol.cleanSolar && this.hasWind && this.windWear > 0.35
+        && this.money >= WIND_SERVICE_COST) {
+      this.money -= WIND_SERVICE_COST; this.windWear = 0
+      this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
+    }
     if (this.managerLevel >= 2 && pol.cleanSolar && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
       this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
     }
@@ -3258,6 +3308,11 @@ export function getShopItems(s: GameState): ShopRow[] {
     t('Bedava üretim — ama kirlenir, düzenli temizlik ister (sınırsız kurulur)'),
     SOLAR_COST,
     s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
+  row('wind', 'i-wind', s.windCount ? t('Rüzgâr Türbini ({0})', s.windCount) : t('Rüzgâr Türbini'),
+    t('+4 kWh/sn · gece de'),
+    t('Güneşin aksine GECE de üretir — ama rüzgâr değişkendir ve türbin bakım ister.'),
+    WIND_COST,
+    s.gridLevel < 1 ? t('Elektrik altyapısı gerekli') : null)
   row('dieselgen', 'i-gen', t('Dizel Jeneratör'), t('+7 kWh/sn'),
     t('Tanktan mazot yakar — gürültüsü şarjdaki müşterileri kaçırır'),
     s.hasDiesel ? null : DIESELGEN_COST,
@@ -3288,6 +3343,13 @@ export function getMaintenanceItems(s: GameState): MaintRow[] {
       id: 'clean-solar', icon: 'i-clean',
       title: t('Panel Temizliği (kir %{0})', Math.round(s.solarDirt * 100)),
       cost: 300, urgent: s.solarDirt > 0.6, disabled: s.solarDirt < 0.15,
+    })
+  }
+  if (s.hasWind) {
+    rows.push({
+      id: 'service-wind', icon: 'i-wrench',
+      title: t('Türbin Bakımı (yıpranma %{0})', Math.round(s.windWear * 100)),
+      cost: WIND_SERVICE_COST, urgent: s.windWear > 0.6, disabled: s.windWear < 0.15,
     })
   }
   if (s.hasSMR) {
@@ -3447,7 +3509,7 @@ const SAVE_FIELDS = [
   // geçişinde servet zıplayıp anti-cheat kırpması tetikleniyordu. farStationOn da
   // ADDITIVE: eski kayıtta yok → hydrate dokunmaz, sınıf varsayılanı (false) kalır.
   'hasTruckPark2', 'farStationOn',
-  'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'hasDiesel', 'hasSMR',
+  'gridLevel', 'evChargers', 'batteryLevel', 'battery', 'elecPrice', 'toiletFee', 'solarCount', 'windCount', 'windWear', 'hasDiesel', 'hasSMR',
   'hasWash', 'hasOil', 'hasCoffee', 'hasRestaurant', 'hasTruckPark', 'hasHotel', 'hasCleaner', 'supplier', 'managerPolicy', 'airWaterCount', 'selfWashCount', 'parkingCount',
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
@@ -3722,6 +3784,7 @@ export function doMaintenance(s: GameState, id: string): boolean {
   s.money -= item.cost
   s.maintCare = Math.min(1, s.maintCare + 0.2) // düzenli bakım = daha az arıza
   if (id === 'clean-solar') s.solarDirt = 0
+  else if (id === 'service-wind') s.windWear = 0
   else if (id === 'maint-smr') s.smrWear = 0
   else if (id === 'order-uranium') { s.uraniumPending = true; s.uraniumEta = URANIUM_ETA }
   else if (id.startsWith('fix-pump-')) s.brokenPumps.delete(Number(id.slice(9)))
@@ -3782,6 +3845,7 @@ function applyPurchase(s: GameState, id: string): boolean {
     case 'battery': s.batteryLevel++; break
     case 'evcharger': s.evChargers++; break
     case 'solar': s.solarCount++; break
+    case 'wind': s.windCount++; break
     case 'dieselgen': s.hasDiesel = true; break
     case 'smr':
       if (s.smrWreck) return false // enkaz temizlenmeden reaktör kurulamaz (para düşmedi)
@@ -3858,6 +3922,7 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
     case 'dieselgen': return s.hasDiesel ? { refund: half(DIESELGEN_COST) } : null
     case 'smr': return s.hasSMR ? { refund: half(SMR_COST) } : null
     case 'solar': return s.solarCount > 0 ? { refund: half(SOLAR_COST) } : null // 2c: herhangi bir örnek satılabilir
+    case 'wind': return s.windCount > 0 ? { refund: half(WIND_COST) } : null
     case 'parking': return s.parkingCount > 0 ? { refund: half(PARKING_COST) } : null // 2c: herhangi bir örnek satılabilir
     case 'selfwash': return s.selfWashCount > 0 ? { refund: half(SELFWASH_COST) } : null // 2c: herhangi bir örnek satılabilir
     case 'airwater': return s.airWaterCount > 0 ? { refund: half(AIRWATER_COST) } : null // 2c: herhangi bir örnek satılabilir
@@ -3902,6 +3967,7 @@ export function applySell(s: GameState, id: string): number | null {
     case 'dieselgen': s.hasDiesel = false; break
     case 'smr': s.hasSMR = false; s.uranium = 0; s.smrWear = 0; break
     case 'solar': s.solarCount--; break
+    case 'wind': s.windCount--; break
     case 'parking': s.parkingCount--; break
     case 'selfwash': s.selfWashCount--; break
     case 'airwater': s.airWaterCount--; break

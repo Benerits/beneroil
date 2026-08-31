@@ -101,6 +101,13 @@ export interface StaticLib {
   treeSmall: THREE.Group | null
   lamp: THREE.Group | null
   planter: THREE.Group | null
+  // ENERJİ PARÇALARI (Kenney city-kit-industrial v2 — kendi paletiyle industrial2'de).
+  // Pakette hazır NÜKLEER REAKTÖR YOK; reaktör bu parçalardan kuruluyor
+  // (tank = muhafaza binası, baca = kule), buhar animasyonu korunuyor.
+  solarPanel: THREE.Group | null
+  windmill: THREE.Group | null
+  reactorTank: THREE.Group | null
+  reactorStack: THREE.Group | null
 }
 
 export async function loadStatics(): Promise<StaticLib | null> {
@@ -111,7 +118,17 @@ export async function loadStatics(): Promise<StaticLib | null> {
         .then(g => convert(g.scene as unknown as THREE.Group))
         .catch(() => null)
 
-    const [market1, market2, office, toilet, treeLarge, treeSmall, lamp, planter] = await Promise.all([
+    // industrial ve industrial2 AYRI KLASÖRLER: iki paketin colormap atlası farklı
+    // (11.107 vs 11.986 bayt) ve GLB'ler dokuyu dışarıdan 'colormap.png' adıyla
+    // çağırıyor. Tek klasöre koymak birinin renklerini bozardı — commercial2 ile
+    // aynı kalıp: her kit kendi paletiyle kendi klasöründe.
+    const loadInd = (path: string) =>
+      loader.loadAsync(asset(`/kenney/${path}.glb`))
+        .then(g => convert(g.scene as unknown as THREE.Group))
+        .catch(() => null)
+
+    const [market1, market2, office, toilet, treeLarge, treeSmall, lamp, planter,
+           solarPanel, windmill, reactorTank, reactorStack] = await Promise.all([
       load('commercial/building-d'),
       load('commercial/building-e'),
       load('commercial/building-a'),
@@ -120,8 +137,13 @@ export async function loadStatics(): Promise<StaticLib | null> {
       load('suburban/tree-small'),
       load('roads/light-curved'),
       load('suburban/planter'),
+      loadInd('industrial2/solar-panel-portrait-group'),
+      loadInd('industrial2/windmill'),
+      loadInd('industrial2/detail-tank-large'),
+      loadInd('industrial/chimney-large'),
     ])
-    return { market1, market2, office, toilet, treeLarge, treeSmall, lamp, planter }
+    return { market1, market2, office, toilet, treeLarge, treeSmall, lamp, planter,
+             solarPanel, windmill, reactorTank, reactorStack }
   } catch (err) {
     console.warn('Şehir modelleri yüklenemedi:', err)
     return null

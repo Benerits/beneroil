@@ -929,7 +929,27 @@ const EN: Record<string, string> = {
   'DC Şarj Ünitesi #{0}': 'DC Charger #{0}', '+1 ünite': '+1 unit',
   'Elektrikli araç müşterileri gelmeye başlar; ünite arttıkça EV trafiği artar':
     'EV customers start arriving; more units bring more EV traffic',
-  'Güneş Santrali': 'Solar Plant', 'Dizel Jeneratör': 'Diesel Generator', 'Modüler Reaktör': 'Modular Reactor',
+  'Güneş Santrali': 'Solar Plant',
+  'Rüzgâr Türbini': 'Wind Turbine',
+  'Rüzgâr Türbini ({0})': 'Wind Turbine ({0})',
+  'Rüzgâr Türbini (×{0})': 'Wind Turbine (×{0})',
+  'RÜZGÂR TÜRBİNİ': 'WIND TURBINE',
+  '+4 kWh/sn · gece de': '+4 kWh/s · at night too',
+  'Güneşin aksine GECE de üretir — ama rüzgâr değişkendir ve türbin bakım ister.':
+    'Unlike solar it generates AT NIGHT too — but wind is variable and the turbine needs servicing.',
+  'Güneşin aksine GECE DE üretir. Rüzgâr değişkendir — bazen tam güç, bazen yarım. Yıprandıkça verim düşer, bakım ister.':
+    'Unlike solar it generates AT NIGHT too. Wind is variable — sometimes full power, sometimes half. Output drops as it wears; it needs servicing.',
+  'Rüzgâr türbini kuruldu — gece de üretir! Rüzgâr değişken, bakımını aksatma.':
+    'Wind turbine built — it generates at night too! Wind is variable; keep up with servicing.',
+  'Rüzgâr türbini yıprandı — üretim düşüyor, bakım gerekiyor!':
+    'The wind turbine has worn down — output is dropping, it needs servicing!',
+  'Türbin Bakımı (yıpranma %{0})': 'Turbine Service (wear {0}%)',
+  'Bakım — ₺600': 'Service — ₺600',
+  'BAKIM ₺600': 'SERVICE ₺600',
+  'Rüzgâr': 'Wind',
+  'Kuvvetli': 'Strong',
+  'Orta': 'Moderate',
+  'Durgun': 'Calm', 'Dizel Jeneratör': 'Diesel Generator', 'Modüler Reaktör': 'Modular Reactor',
   'Bedava üretim — ama kirlenir, düzenli temizlik ister (sınırsız kurulur)':
     'Free power — but gets dirty, needs regular cleaning (unlimited)',
   'Tanktan mazot yakar — gürültüsü şarjdaki müşterileri kaçırır':
@@ -2544,6 +2564,26 @@ const FR: Record<string, string> = {
   'Elektrikli araç müşterileri gelmeye başlar; ünite arttıkça EV trafiği artar':
     'Les clients en véhicule électrique commencent à arriver ; plus de bornes, plus de trafic VE',
   'Güneş Santrali': 'Centrale solaire',
+  'Rüzgâr Türbini': 'Éolienne',
+  'Rüzgâr Türbini ({0})': 'Éolienne ({0})',
+  'Rüzgâr Türbini (×{0})': 'Éolienne (×{0})',
+  'RÜZGÂR TÜRBİNİ': 'ÉOLIENNE',
+  '+4 kWh/sn · gece de': '+4 kWh/s · la nuit aussi',
+  'Güneşin aksine GECE de üretir — ama rüzgâr değişkendir ve türbin bakım ister.':
+    'Contrairement au solaire, elle produit AUSSI LA NUIT — mais le vent est variable et l\'éolienne demande de l\'entretien.',
+  'Güneşin aksine GECE DE üretir. Rüzgâr değişkendir — bazen tam güç, bazen yarım. Yıprandıkça verim düşer, bakım ister.':
+    'Contrairement au solaire, elle produit AUSSI LA NUIT. Le vent est variable — parfois pleine puissance, parfois la moitié. Le rendement baisse avec l\'usure ; un entretien est nécessaire.',
+  'Rüzgâr türbini kuruldu — gece de üretir! Rüzgâr değişken, bakımını aksatma.':
+    'Éolienne construite — elle produit aussi la nuit ! Le vent est variable, ne négligez pas l\'entretien.',
+  'Rüzgâr türbini yıprandı — üretim düşüyor, bakım gerekiyor!':
+    'L\'éolienne est usée — le rendement baisse, un entretien est nécessaire !',
+  'Türbin Bakımı (yıpranma %{0})': 'Entretien de l\'éolienne (usure {0} %)',
+  'Bakım — ₺600': 'Entretien — 600 ₺',
+  'BAKIM ₺600': 'ENTRETIEN 600 ₺',
+  'Rüzgâr': 'Vent',
+  'Kuvvetli': 'Fort',
+  'Orta': 'Modéré',
+  'Durgun': 'Calme',
   'Dizel Jeneratör': 'Générateur diesel',
   'Modüler Reaktör': 'Réacteur modulaire',
   'Bedava üretim — ama kirlenir, düzenli temizlik ister (sınırsız kurulur)':

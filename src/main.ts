@@ -3249,6 +3249,7 @@ function buildVisual(id: string, pos?: THREE.Vector2) {
     case 'battery': world.buildBattery(state.batteryLevel, pos); break
     case 'evcharger': world.addEvCharger(state.evChargers - 1); break
     case 'solar': world.buildSolar(state.landSouth ? 'south' : 'north', pos, id); break
+    case 'wind': world.buildWind(pos, id); break
     case 'dieselgen': world.buildDiesel(pos); break
     case 'smr': world.buildSMR(state.landNorth ? 'north' : 'south', pos); break
     case 'wash': world.buildWash(pos); break
@@ -3286,6 +3287,9 @@ const PLACEABLE: Record<string, (forMove: boolean) => Footprint> = {
   toilet: () => ({ w: 3, d: 4 }),
   battery: () => ({ w: 3, d: 2 }),
   solar: () => ({ w: 5, d: 7, grass: true }),
+  // TÜRBİN: gövde ince ama kanatlar süpürüyor; 4x4 hem görsel hem 'yanına bina
+  // dikilmesin' açısından makul. Çimde kurulabilir (güneş paneli gibi).
+  wind: () => ({ w: 4, d: 4, grass: true }),
   dieselgen: () => ({ w: 2, d: 2 }),
   smr: () => ({ w: 6, d: 5 }),
   wash: () => ({ w: 4.5, d: 5 }),
@@ -3907,6 +3911,10 @@ function rebuildFromState() {
     const iid = i === 0 ? 'solar' : `solar#${i}`
     tekilKur(iid, () => world.buildSolar(state.landSouth ? 'south' : 'north', pv(iid), iid))
   }
+  for (let i = 0; i < state.windCount; i++) {
+    const iid = i === 0 ? 'wind' : `wind#${i}`
+    tekilKur(iid, () => world.buildWind(pv(iid), iid))
+  }
   if (state.hasDiesel) tekilKur('dieselgen', () => world.buildDiesel(pv('dieselgen')))
   if (state.hasSMR) tekilKur('smr', () => world.buildSMR(state.landNorth ? 'north' : 'south', pv('smr')))
   else if (state.smrWreck) tekilKur('smrwreck', () => world.buildSMRWreck(state.landNorth ? 'north' : 'south', pv('smr'))) // patlama kalıntısı — aynı temelde
@@ -4010,6 +4018,7 @@ function beklenenYapiIdleri(): string[] {
   if (state.hasDiesel) out.push('dieselgen')
   if (state.hasSMR) out.push('smr')
   say(state.solarCount, 'solar')
+  say(state.windCount, 'wind')
   say(state.airWaterCount, 'airwater')
   say(state.lampCount, 'lamp')
   say(state.selfWashCount, 'selfwash')
@@ -4869,6 +4878,7 @@ document.getElementById('zonecancel')?.addEventListener('click', () => cancelPla
 const COUNTABLE: Record<string, () => number> = {
   parking: () => state.parkingCount,
   solar: () => state.solarCount,
+  wind: () => state.windCount,
   selfwash: () => state.selfWashCount,
   airwater: () => state.airWaterCount,
   lamp: () => state.lampCount,
@@ -5022,6 +5032,7 @@ function buyToast(id: string) {
     case 'battery': ui.toast('Batarya deposu kuruldu — üretim biriktikçe dolacak.', 'good'); break
     case 'evcharger': syncSignPrices(); ui.toast('DC şarj ünitesi kuruldu!', 'good'); break
     case 'solar': ui.toast('Güneş santrali kuruldu. Paneller zamanla kirlenir!', 'good'); break
+    case 'wind': ui.toast(t('Rüzgâr türbini kuruldu — gece de üretir! Rüzgâr değişken, bakımını aksatma.'), 'good'); break
     case 'dieselgen': ui.toast('Jeneratör kuruldu. Gürültüsü EV müşterilerini kaçırabilir!', 'good'); break
     case 'smr': ui.toast('Reaktör devrede! BAKIMI ASLA AKSATMA — patlarsa her şey gider!', 'bad'); break
     case 'wash': ui.toast('Oto yıkama açıldı — müşteriler araç yıkatacak!', 'good'); break
@@ -5661,7 +5672,7 @@ if (isFullMode) {
     'pump', 'pump', 'pump', 'sign', 'sign', 'sign', 'widegate',
     'tank', 'tank', 'tank', 'market', 'market', 'toilet', 'toilet', 'grid', 'grid',
     'battery', 'battery', 'battery', 'evcharger', 'evcharger', 'evcharger', 'evcharger',
-    'solar', 'dieselgen', 'smr', 'wash', 'oil',
+    'solar', 'wind', 'dieselgen', 'smr', 'wash', 'oil',
     'airwater', 'selfwash', 'coffee', 'restaurant', 'truckpark', 'hotel', 'cleaner', 'parking',
   ]
   state.money = 10_000_000
@@ -6068,6 +6079,20 @@ function buildingCard(id: string): BuildingCard | null {
         ],
         action: { label: t('Ücreti Değiştir ({0} → {1})', state.toiletFee === 0 ? t('Ücretsiz') : '₺' + state.toiletFee, state.toiletFee === 0 ? '₺5' : state.toiletFee === 5 ? '₺10' : t('Ücretsiz')), maintId: 'toilet-fee' },
       }
+    case 'wind': {
+      const w = state.windFactor()
+      const net = state.windRate() / Math.max(1, state.windCount) * (state.gridLevel >= 2 ? 1.3 : 1)
+      return {
+        icon: 'i-wind', name: state.windCount > 1 ? t('Rüzgâr Türbini (×{0})', state.windCount) : t('Rüzgâr Türbini'),
+        desc: t('Güneşin aksine GECE DE üretir. Rüzgâr değişkendir — bazen tam güç, bazen yarım. Yıprandıkça verim düşer, bakım ister.'),
+        stats: [
+          [t('Üretim'), `+${net.toFixed(1)} kWh/sn`, net < 1.5 ? 'bad' : 'good'],
+          [t('Rüzgâr'), w > 1.05 ? t('Kuvvetli') : w > 0.7 ? t('Orta') : t('Durgun'), w > 1.05 ? 'good' : w <= 0.7 ? 'bad' : ''],
+          [t('Yıpranma'), `%${Math.round(state.windWear * 100)}`, state.windWear > 0.6 ? 'bad' : ''],
+        ],
+        action: state.windWear >= 0.15 ? { label: t('Bakım — ₺600'), maintId: 'service-wind' } : undefined,
+      }
+    }
     case 'solar': {
       const net = 3 * (1 - 0.7 * state.solarDirt) * (state.gridLevel >= 2 ? 1.3 : 1) * state.sunFactor
       return {
@@ -6709,6 +6734,10 @@ function frame() {
   // GÜNEŞ EĞRİSİ (Oğuz: "gece üretimi 0'a düşebilir"): paneller karanlıkla ters orantılı
   // üretir — gece 0, şafak/akşam rampa. Batarya deposu artık gerçek değer kazanır.
   state.sunFactor = 1 - nightNow
+  // KANAT HIZI = RÜZGÂR: üretimin değişkenliği sayı olarak kartta, HAREKET olarak
+  // sahnede görünür. Durgun havada kanatlar belirgin yavaşlar — oyuncu üretimin
+  // neden düştüğünü karta bakmadan anlar.
+  world.windSpin = state.windFactor()
 
   // GÜN İÇİ SAAT (HUD): döngü kesri → 24 saat; gün 06:00'da başlar (kredi taksidi
   // gün başında kesildiğinden oyuncular saati görmek istiyor). Metin değişince yazılır.
@@ -7064,6 +7093,7 @@ function frame() {
   state.brokenPumps.forEach(i => warns.set(`pump-${i}`, { text: t('ARIZA · TAMİR ₺800'), maintId: `fix-pump-${i}` }))
   state.brokenChargers.forEach(i => warns.set(`charger-${i}`, { text: t('ARIZA · TAMİR ₺1.000'), maintId: `fix-charger-${i}` }))
   if (state.hasSolar && state.solarDirt >= 0.6) warns.set('solar', { text: t('TEMİZLİK ₺300'), maintId: 'clean-solar' })
+  if (state.hasWind && state.windWear >= 0.6) warns.set('wind', { text: t('BAKIM ₺600'), maintId: 'service-wind' })
   if (state.hasSMR && state.smrWear >= 0.5) {
     warns.set('smr', { text: state.smrWear > 0.75 ? t('BAKIM ŞART ₺1.500') : 'BAKIM ₺1.500', maintId: 'maint-smr' })
   } else if (state.hasSMR && state.uranium <= 15 && !state.uraniumPending) {

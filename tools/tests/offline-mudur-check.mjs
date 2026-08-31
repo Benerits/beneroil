@@ -328,7 +328,7 @@ check('müdürsüzde eski ₺600\'lük gösterim korunuyor',
 // Node ölçümü src/state.ts'i doğrudan koşturur; bu bölüm aynı kodun tarayıcı derlemesinde
 // de çalıştığını kanıtlar (import zinciri, i18n/DOM guard'ları, minify sonrası davranış).
 // DEV SUNUCU YOKSA TEST HATA VERİR — atlanan ölçüm geçmiş sayılmaz.
-const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5173', '5174']
+const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5311', '5173', '5174']
 let PORT = null
 for (const p of PORTLAR) {
   try { if ((await fetch(`http://localhost:${p}/`, { signal: AbortSignal.timeout(1500) })).ok) { PORT = p; break } }

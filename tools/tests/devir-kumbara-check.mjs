@@ -152,7 +152,7 @@ console.log('\n== 3) Gelir yolları: pasif vs müşteri kaynaklı ==')
 
 // ──────────────────────────────────────── 4) TARAYICI: GERÇEK GELİR ÖLÇÜMÜ
 // Bu bölüm testin ASIL kanıtı. Dev sunucu yoksa SESSİZCE ATLANMAZ — HATA verir.
-const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5173', '5174']
+const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5311', '5173', '5174']
 let PORT = null
 for (const p of PORTLAR) {
   try { if ((await fetch(`http://localhost:${p}/`, { signal: AbortSignal.timeout(1500) })).ok) { PORT = p; break } }

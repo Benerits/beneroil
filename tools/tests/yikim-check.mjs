@@ -22,7 +22,7 @@ import { chromium } from 'playwright-core'
 let pass = 0, fail = 0
 const check = (ad, ok, ek = '') => { console.log(`  ${ok ? '✓' : '✗'} ${ad}${ek ? ' — ' + ek : ''}`); ok ? pass++ : fail++ }
 
-const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5173', '5174']
+const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5311', '5173', '5174']
 let PORT = null
 for (const p of PORTLAR) {
   try { if ((await fetch(`http://localhost:${p}/`, { signal: AbortSignal.timeout(1500) })).ok) { PORT = p; break } }

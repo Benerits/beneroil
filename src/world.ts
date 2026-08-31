@@ -406,6 +406,10 @@ export class World {
   private nightLights: THREE.PointLight[] = []
   private steam: { mesh: THREE.Mesh; offset: number; drift: number }[] = []
   private steamT = 0
+  /** RÜZGÂR TÜRBİNİ kanatları — update()'te döner. Hız state'ten gelen rüzgâra bağlı;
+   *  durgun havada yavaşlar, böylece üretimin değişkenliği EKRANDA da görünür. */
+  private blades: { mesh: THREE.Object3D; id: string }[] = []
+  windSpin = 1
   private sun: THREE.DirectionalLight
   private hemi: THREE.HemisphereLight
   private grid: THREE.GridHelper
@@ -1101,6 +1105,11 @@ export class World {
       const sc = 0.55 + t * 1.1
       p.mesh.scale.setScalar(sc)
       ;(p.mesh.material as THREE.MeshLambertMaterial).opacity = 0.7 * (1 - t)
+    }
+    // kanatlar: dönüş hızı rüzgâra orantılı (state.windFactor → main her karede yazar)
+    if (this.blades.length) {
+      const w = 2.4 * Math.max(0.12, this.windSpin)
+      for (const b of this.blades) b.mesh.rotation.y += w * dt
     }
   }
 
@@ -2308,6 +2317,7 @@ export class World {
     const b = this.buildings.find(x => x.id === id)
     if (!b) return null
     this.buildings = this.buildings.filter(x => x.id !== id)
+    if (id.startsWith('wind')) this.blades = this.blades.filter(x => x.id !== id)
     if (id === 'smr') {
       this.steam = this.steam.filter(s => {
         let o: THREE.Object3D | null = s.mesh.parent
@@ -2325,6 +2335,7 @@ export class World {
     this.scene.remove(b.group as THREE.Group)
     this.unregister(id)
     if (id === 'smr') this.steam = []
+    if (id.startsWith('wind')) this.blades = this.blades.filter(x => x.id !== id)
     if (id === 'market') this.marketGroup = null
     if (id === 'market2') this.market2Group = null
     if (id === 'toilet') this.toiletGroup = null
@@ -2622,22 +2633,59 @@ export class World {
     this.register('battery', t('BATARYA DEPOSU'), g, level * 1.2 + 1.1)
   }
 
+  /** GÜNEŞ SANTRALİ — Kenney city-kit-industrial v2 panel dizisi (industrial2 kiti).
+   *  Model yüklenemezse eski kutu-geometri paneller yedek olarak kurulur; sahne
+   *  asla boş kalmaz (kit indirilemeyen bağlantıda oyun yine oynanır). */
   buildSolar(side: 'north' | 'south', pos?: THREE.Vector2, regId = 'solar') {
     const g = new THREE.Group()
-    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1),
-        new THREE.MeshLambertMaterial({ color: 0x1e3a5f, side: THREE.DoubleSide }))
-      p.position.set(-1 + r * 2.0, -2.4 + c * 2.4, 0.75)
-      p.rotation.y = -0.55
-      p.castShadow = true
-      g.add(p)
-      box(0.08, 0.08, 0.55, 0x8f979e, -1 + r * 2.0, -2.4 + c * 2.4, 0.28, g)
+    if (this.statics?.solarPanel) {
+      // iki sıra panel dizisi: tek grup modeli 2 kez, arada servis yolu
+      for (let i = 0; i < 2; i++) {
+        const m = fitModel(this.statics.solarPanel, 4.2)
+        m.position.set(0, -1.9 + i * 3.8, 0)
+        g.add(m)
+      }
+      // inverter kabini (kit parçası yok — küçük kutu yeterli, ölçek uyumlu)
+      box(0.7, 0.5, 0.5, 0x59616b, 2.0, 2.9, 0.25, g)
+    } else {
+      for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+        const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1),
+          new THREE.MeshLambertMaterial({ color: 0x1e3a5f, side: THREE.DoubleSide }))
+        p.position.set(-1 + r * 2.0, -2.4 + c * 2.4, 0.75)
+        p.rotation.y = -0.55
+        p.castShadow = true
+        g.add(p)
+        box(0.08, 0.08, 0.55, 0x8f979e, -1 + r * 2.0, -2.4 + c * 2.4, 0.28, g)
+      }
+      box(0.7, 0.5, 0.5, 0x59616b, 1.6, 2.6, 0.25, g)
     }
-    box(0.7, 0.5, 0.5, 0x59616b, 1.6, 2.6, 0.25, g)
     const at = pos ?? new THREE.Vector2(-4, side === 'south' ? -20 : 20)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.register(regId, t('GÜNEŞ SANTRALİ'), g, 2.4)
+  }
+
+  /** RÜZGÂR TÜRBİNİ — Kenney windmill.glb; 'blades' düğümü ayrı, update()'te döner.
+   *  Türün kuralı gereği görünür iz bırakır: uzun mast sahnede uzaktan seçilir. */
+  buildWind(pos?: THREE.Vector2, regId = 'wind') {
+    const g = new THREE.Group()
+    let blades: THREE.Object3D | null = null
+    if (this.statics?.windmill) {
+      const m = fitModel(this.statics.windmill, 8.4, 'z')
+      m.traverse(o => { if (o.name === 'blades') blades = o })
+      g.add(m)
+    } else {
+      // yedek: direk + göbek (kanatsız da olsa yapı görünür kalsın)
+      cyl(0.16, 7.4, 0xe8e6e1, 0, 0, 3.7, 'z', g)
+      box(0.5, 0.5, 0.5, 0xdfe3e8, 0, 0, 7.5, g)
+    }
+    // beton kaide: modelin tabanı zeminde yüzmesin
+    cyl(0.75, 0.16, 0x9aa2ab, 0, 0, 0.08, 'z', g)
+    const at = pos ?? new THREE.Vector2(-8.5, -20)
+    g.position.set(at.x, at.y, 0)
+    this.scene.add(g)
+    if (blades) this.blades.push({ mesh: blades as THREE.Object3D, id: regId })
+    this.register(regId, t('RÜZGÂR TÜRBİNİ'), g, 9.2)
   }
 
   buildDiesel(pos?: THREE.Vector2) {
@@ -3252,13 +3300,28 @@ export class World {
       g.add(puff)
       this.steam.push({ mesh: puff, offset: i / 4, drift: (Math.random() - 0.5) * 0.6 })
     }
-    // reaktör çekirdek binası
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xdfe3e8))
-    dome.position.set(2.2, -0.8, 0.9)
-    dome.castShadow = true
-    g.add(dome)
-    cyl(0.7, 0.9, 0xdfe3e8, 2.2, -0.8, 0.45, 'z', g)
-    box(1.0, 0.7, 0.7, 0x59616b, 2.2, 0.9, 0.35, g)
+    // REAKTÖR ÇEKİRDEĞİ — Kenney parçaları (industrial2 tank + industrial baca).
+    // NOT: pakette hazır nükleer reaktör YOK; muhafaza binası detail-tank-large,
+    // yardımcı baca chimney-large ile kuruluyor. Soğutma kulesi + buhar elde
+    // yapılmaya devam ediyor: kitte karşılığı yok ve reaktörün silueti o.
+    if (this.statics?.reactorTank) {
+      const tank = fitModel(this.statics.reactorTank, 2.0, 'z')
+      tank.position.set(2.2, -0.8, 0)
+      g.add(tank)
+    } else {
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xdfe3e8))
+      dome.position.set(2.2, -0.8, 0.9)
+      dome.castShadow = true
+      g.add(dome)
+      cyl(0.7, 0.9, 0xdfe3e8, 2.2, -0.8, 0.45, 'z', g)
+    }
+    if (this.statics?.reactorStack) {
+      const st = fitModel(this.statics.reactorStack, 3.2, 'z')
+      st.position.set(2.3, 1.5, 0)
+      g.add(st)
+    } else {
+      box(1.0, 0.7, 0.7, 0x59616b, 2.2, 0.9, 0.35, g)
+    }
     const sign = canvasPanel(0.7, 0.7, 128, 128, (ctx, w, h) => {
       ctx.fillStyle = '#e0b13e'; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2 - 4, 0, 7); ctx.fill()
       ctx.font = '70px -apple-system, sans-serif'
