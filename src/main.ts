@@ -2255,9 +2255,15 @@ const cars = new CarManager(world.scene, modelLib, {
   farGateInY: () => world.gateIn2.y,
   farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
-  onTruckParked: () => {
+  // PARA DOĞRU KUMBARAYA: eskiden her park koşulsuz 'truckpark'a yazıyordu, yani karşı
+  // yakaya park eden tırın parası bu yakanın kumbarasına gidiyordu (#269 "görünmez gelir"
+  // kalıbı — yıkama/yağ/hava-su için çözülmüştü, tır parkı atlanmıştı). Bu kod zaten hiç
+  // çalışmıyordu çünkü karşı yakada park yeri üretilmiyordu; ikisi birlikte düzeltildi.
+  onTruckParked: car => {
     const fee = 40 + Math.round(Math.random() * 40)
-    state.addPending('truckpark', fee, t('Tır parkı'))
+    const karsi = car.station === 'far' && state.hasTruckPark2
+    state.addPending(karsi ? 'truckpark2' : 'truckpark', fee,
+      karsi ? t('Karşı tır parkı') : t('Tır parkı'))
     ui.toast(t('Tır park etti: ₺{0} kumbarada', fee), 'good', true)
   },
   onCarReady: car => { if (!ui.activeCar && !isAttendantCar(car)) autoSelect(car); tutStart() },

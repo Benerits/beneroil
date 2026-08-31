@@ -3121,15 +3121,32 @@ export class World {
   }
 
   /** tır parkı: park noktası + manevra (yanaşma) noktası çiftleri */
-  getTruckSpots(): { spot: THREE.Vector3; stage: THREE.Vector3 }[] {
-    const b = this.buildings.find(x => x.id === 'truckpark')
-    if (!b) return []
-    const g = b.group as THREE.Group
-    g.updateMatrixWorld(true)
-    return [-1.4, 0, 1.4].map(ly => ({
-      spot: new THREE.Vector3(0, ly, 0).applyMatrix4(g.matrixWorld),
-      stage: new THREE.Vector3(5.4, ly, 0).applyMatrix4(g.matrixWorld),
-    }))
+  /** HER İKİ YAKANIN tır park yerleri.
+   *
+   *  #269 #1249 "karşı tır parkı atanamıyor": burası yalnız 'truckpark' id'li binayı
+   *  arıyor, bulamayınca BOŞ dizi dönüyordu. Karşı yaka tır parkı 'truckpark2' olarak
+   *  kayıtlı — yani hiç park yeri üretmiyordu ve tır oraya ASLA yanaşamıyordu. Oyuncu
+   *  karşı tır parkının parasını ödüyor, bina duruyor, ama tır parkı olarak hiç işlev
+   *  görmüyordu (yalnız tick() pasif geliri geliyordu, o yüzden testlerde "gelir üretti"
+   *  diye yeşil görünüyordu — ölçülen şey tırlar değildi).
+   *  cars.ts tarafı zaten hazırdı: yaka eşleşmesi ve yol aynalaması yazılıydı, yalnız
+   *  beslenecek nokta yoktu. */
+  getTruckSpots(): { spot: THREE.Vector3; stage: THREE.Vector3; id: string }[] {
+    const out: { spot: THREE.Vector3; stage: THREE.Vector3; id: string }[] = []
+    for (const id of ['truckpark', 'truckpark2']) {
+      const b = this.buildings.find(x => x.id === id)
+      if (!b) continue
+      const g = b.group as THREE.Group
+      g.updateMatrixWorld(true)
+      for (const ly of [-1.4, 0, 1.4]) {
+        out.push({
+          spot: new THREE.Vector3(0, ly, 0).applyMatrix4(g.matrixWorld),
+          stage: new THREE.Vector3(5.4, ly, 0).applyMatrix4(g.matrixWorld),
+          id,
+        })
+      }
+    }
+    return out
   }
 
   /** OYUNCUNUN KURDUĞU sokak lambası — kapı yerleştirince silinen dekoratif lambalardan
