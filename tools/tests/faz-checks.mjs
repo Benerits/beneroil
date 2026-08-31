@@ -7,6 +7,8 @@
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} }
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'tr' }, configurable: true })
 
+import { readFileSync } from 'node:fs' // sunucu sabitlerini kaynaktan okumak için (senkron testi)
+
 const { GameState, PARCEL_COLS, PARCEL_ROWS, FUEL_COST, FUEL_PRICE, priceBounds, serializeState, hydrateState,
   buyItem, sellInfo, applySell, LOC_FIELDS, parcelCost } =
   await import('../../src/state.ts')
@@ -964,14 +966,21 @@ console.log('== 23) Katman 4b piyasa + 4c sezon/sıralama ==')
   const got = s2.collectPending('market')
   check(`normal oyunda (6 ziyaret) ciro TAMAMEN kasaya girer (₺${got}/300)`, got === 300)
 
-  // sunucu clamp'i istemci sert tavanını KESMEMELİ (yoksa senkronda para kaybı)
+  // sunucu clamp'i istemci sert tavanını KESMEMELİ (yoksa senkronda para kaybı).
+  // Clamp DEĞERİ ARTIK SUNUCUDAN OKUNUYOR: sabiti teste kopyalamak, iki taraf ayrışınca
+  // testin yeşil kalmasına sebep oluyordu (istemci tavanı büyürken clamp 8000'de kaldı
+  // → otel kumbarası 9.000'de sessizce kırpılıyordu).
+  const srvSrc = readFileSync(new URL('../../server/index.js', import.meta.url), 'utf8')
+  const srvClamp = Number((srvSrc.match(/PENDING_HARD_CAP\s*=\s*([\d_]+)/) || [])[1]?.replace(/_/g, '') || 0)
+  check('sunucu PENDING_HARD_CAP sabiti bulundu', srvClamp > 0, `=${srvClamp}`)
   const maxCap = Math.max(...['market', 'toilet', 'selfwash', 'airwater', 'parking', 'truckpark',
-    'restaurant', 'oil', 'wash', 'coffee', 'market2', 'restaurant2', 'oil2'].map(id => {
+    'hotel', 'restaurant', 'oil', 'wash', 'coffee', 'market2', 'restaurant2', 'oil2'].map(id => {
       const t2 = new GameState(); t2.marketLevel = 3; t2.market2Level = 3; t2.toiletLevel = 2
-      t2.selfWashCount = 9; t2.airWaterCount = 9; t2.parkingCount = 9
+      // sayaçlı tesisler tavanı doyuran adette (SAYAC_KUMBARA_MAX ve üstü) denenir
+      t2.selfWashCount = 40; t2.airWaterCount = 40; t2.parkingCount = 40
       return t2.pendingCap(id) * 3
     }))
-  check(`istemci sert tavanı sunucu clamp'ini (8000) aşmıyor (max ${maxCap})`, maxCap <= 8000)
+  check(`istemci sert tavanı sunucu clamp'ini (${srvClamp}) aşmıyor (max ${maxCap})`, maxCap <= srvClamp)
 
   // #456 + #216-4: itibar 5.0'da donmamalı
   const r1 = new GameState()

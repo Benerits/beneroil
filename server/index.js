@@ -583,6 +583,16 @@ function marinaValue(s) {
   return v
 }
 const FLAT = { solar: 9000, dieselgen: 4000, smr: 40000, wash: 8000, oil: 12000, coffee: 7000, restaurant: 15000, truckpark: 12000, airwater: 1500, selfwash: 6000, parking: 1200, widegate: 6000, lamp: 2500 }
+/**
+ * KUMBARA SERT TAVANI — istemci state.ts pendingCap() × 3 (addPending'in "hard = cap*3"
+ * taşma tavanı) ile senkron olmak ZORUNDA. Aksi hâlde meşru oyuncunun biriken kumbarası
+ * kayıtta sessizce kırpılır ("topladım ama para eksik").
+ * İstemcideki en yüksek tekil kumbara: self yıkama 400 × SAYAC_KUMBARA_MAX(12) = 4.800
+ * → sert tavan 14.400. Eski 8.000 clamp'i hem 6+ üniteli self yıkamayı hem de OTELİ
+ * (cap 3.000 → sert tavan 9.000) kırpıyordu. 16.000 = en yüksek meşru değerin üstü,
+ * hile freni olarak hâlâ dar (kasa tavanı 10 milyar).
+ */
+const PENDING_HARD_CAP = 16_000
 const sumUpto = (arr, k) => { let t = 0; const n = Math.max(0, Math.min(arr.length, Math.floor(k) || 0)); for (let i = 0; i < n; i++) t += arr[i]; return t }
 function buildingValue(s) {
   if (!s || typeof s !== 'object') return 0
@@ -723,7 +733,7 @@ function sanitizeSave(save) {
   if (s.pendingCash && typeof s.pendingCash === 'object') {
     // kumbara cap'i tesis gelişmişliğine göre 1800'e kadar çıkabilir (istemci pendingCap);
     // sabit 600 clamp'i geliştirilmiş kumbarayı senkronda kırpıyordu → 2500'e (güvenli tavan) çıkarıldı
-    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, 8000, 0) // taşma tavanı 3x cap
+    for (const k of Object.keys(s.pendingCash)) s.pendingCash[k] = clamp(s.pendingCash[k], 0, PENDING_HARD_CAP, 0)
   }
   if (typeof s.stationName === 'string') s.stationName = s.stationName.slice(0, 14)
   if (s.prices && typeof s.prices === 'object') {
@@ -807,7 +817,7 @@ function sanitizeSave(save) {
         }
       }
       if (sn.pendingCash && typeof sn.pendingCash === 'object') {
-        for (const key of Object.keys(sn.pendingCash)) sn.pendingCash[key] = clamp(sn.pendingCash[key], 0, 8000, 0)
+        for (const key of Object.keys(sn.pendingCash)) sn.pendingCash[key] = clamp(sn.pendingCash[key], 0, PENDING_HARD_CAP, 0)
       }
       for (const arr of ['ownedParcels', 'pavedParcels']) {
         if (Array.isArray(sn[arr])) sn[arr] = sn[arr].filter(k2 => {

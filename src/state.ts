@@ -322,6 +322,19 @@ export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) 
 export const INSURANCE_DAILY = 0.0004      // varlık değerinin binde 0.4'ü / gün
 export const LICENSE_PERIOD = 30           // ruhsat yenileme aralığı (oyun günü)
 export const LAMP_COST = 2_500 // sokak lambası (dekoratif; gece görünürlük + küçük itibar)
+/** SAYAÇLI TESİS KUMBARA ÖLÇEĞİ — self yıkama / hava-su / otopark kumbara tavanı kaç
+ *  üniteye kadar doğrusal büyür. Gelir adetle SINIRSIZ arttığı için tavan da büyümeli;
+ *  bu sayı gelir kısıtı değil SUİSTİMAL FRENİDİR (kurcalanmış save'de kumbara şişmesin).
+ *  ⚠️ server/index.js pendingCash clamp'i buradan türetilir — biri değişirse ikisi de
+ *  değişmeli, yoksa meşru oyuncunun kumbarası kayıtta kırpılır ("param gitti"). */
+export const SAYAC_KUMBARA_MAX = 12
+/** İTİBAR YÜKSELİŞ TAVANI için gereken en az günlük müşteri örneği. Bunun altında
+ *  (gün başı, tenha dakika) tavan uygulanmaz — 2 müşteriyle gün yargılanmaz. */
+export const REP_TAVAN_ORNEK = 8
+/** Müşteri AKIŞI ile AYRIK OLAY ayrımı: |Δitibar| bu eşiğin üstündeyse ayrık olaydır
+ *  (yanlış yakıt -0.4, devir -0.5, reaktör patlaması -1) ve canlı çapayı deler — tam
+ *  ısırır. Altındakiler akıştır (servis +0.08..+0.17, kaçan müşteri -0.2, EV kaçtı -0.3). */
+export const REP_OLAY_ESIK = 0.3
 export const DECOR_COSTS = [15_000, 40_000, 90_000] // dekorasyon kademeleri (itibar +0.15/kademe)
 export const RENEW_RATIO = 0.6             // ekipman yenileme = alış değerinin %60'ı
 // MÜDÜR (rapor §7 #5): kademeli otomasyon — Sv.1 kumbara toplar, Sv.2 + panel temizler,
@@ -2434,9 +2447,17 @@ export class GameState {
       case 'coffee2': return 500
       case 'restaurant2': return 1200
       case 'toilet': return 500 * Math.max(1, this.toiletLevel)                          // seviyeyle büyür
-      case 'selfwash': return 400 * Math.min(5, Math.max(1, this.selfWashCount))
-      case 'airwater': return 250 * Math.min(6, Math.max(1, this.airWaterCount))
-      case 'parking': return 300 * Math.min(6, Math.max(1, this.parkingCount))
+      // SAYAÇLI TESİSLER: gelir ünite adediyle SINIRSIZ çarpılıyor (tick() self yıkama,
+      // main.ts hava-su) ama kumbara tavanı 5/6 ünitede duruyordu. Bu, yukarıdaki
+      // "cap getiriyle AYNI oranda büyür" kuralının İHLALİYDİ: 6. üniteden sonra gelen
+      // ciro tavanı aşıp %40 verimle eriyordu. ÖLÇÜLDÜ (5 dk'da bir toplayan oyuncu):
+      // 8 ünite ünite başına ×0.79, 12 ünite ×0.66 kazandırıyordu — "ünite ekledim
+      // gelir artmadı" (#624 #661 #939 #1005 #1152) kayıtlarının ölçülebilir kolu buydu.
+      // Tavan artık gelirle aynı doğrusal ölçekte; SAYAC_KUMBARA_MAX yalnız suistimal
+      // freni (sunucu pendingCash clamp'i bununla senkron tutulur).
+      case 'selfwash': return 400 * Math.min(SAYAC_KUMBARA_MAX, Math.max(1, this.selfWashCount))
+      case 'airwater': return 250 * Math.min(SAYAC_KUMBARA_MAX, Math.max(1, this.airWaterCount))
+      case 'parking': return 300 * Math.min(SAYAC_KUMBARA_MAX, Math.max(1, this.parkingCount))
       case 'truckpark': return 1200   // pasif yüksek kazanan
       case 'truckpark2': return 1200
       case 'hotel': return 3000       // en yüklü pasif kalem — tavanı da yüksek
@@ -2550,10 +2571,40 @@ export class GameState {
   /** yeni oyuncu koruması: ilk 2 gün cezalar yumuşar (ilerleme HIZLANMAZ, sadece erken ölüm sarmalı kırılır) */
   get graceActive() { return this.day <= 2 }
 
+  /**
+   * ---- 5.0 DONUKLUĞUNUN KÖK NEDENİ (#67 #195 #250 #456 #578 #1025 #1111 #1115) ----
+   * Gün sonu mutabakatı (reconcileReputation) itibarı O GÜNÜN kalitesine çekiyordu, ama
+   * GÜN İÇİ müşteri akışı onu anında geri itiyordu: servis edilen her müşteri ~+0.10,
+   * mutabakat ise günde EN ÇOK ±0.30. ÖLÇÜLDÜ: %20 müşteri kaybeden bir günün -0.30
+   * cezası, ertesi gün 3-4 müşteri servis edilince tamamen siliniyordu (5.000 → 4.700 →
+   * 5.000). Sonuç: itibar 5.0'a yapışıp bir daha kıpırdamıyordu ("sistem bozuk") ve
+   * kaçan müşterinin cezası fiilen yoktu ("FULLE ile ceza yemeden gelir" exploit'i).
+   *
+   * ÇÖZÜM — CANLI ÇAPA: müşteri akışından gelen küçük itibar hareketleri artık o günün
+   * CANLI hedefini (repToday().target = 5 − kayıpOranı×7) aşamaz ve altına da inemez;
+   * itibar gün boyunca hedefe yakınsar. Gün sonu mutabakatı bu değeri yumuşatmaya devam
+   * eder. Kayıpsız oynayan oyuncuda hedef zaten 5.0 → DAVRANIŞ BİREBİR AYNI, denge
+   * değişmez. Müşteri kaybeden oyuncuda itibar hem düşer hem geri çıkabilir.
+   *
+   * NEDEN SADECE KÜÇÜK DELTALAR: |d| > REP_OLAY_ESIK olan hareketler müşteri akışı değil
+   * AYRIK OLAYLARDIR (yanlış yakıt -0.4, reaktör patlaması -1, devir -0.5). Onlar çapayı
+   * deler ve tam ısırır — yoksa "istasyonu havaya uçurdum, itibarım aynı kaldı" olurdu.
+   */
   addRep(d: number) {
     if (this.graceActive && d < 0) d *= 0.5 // grace: itibar cezaları yarı
-    const floor = this.graceActive ? 2.5 : 0 // grace: itibar 2.5 altına düşmez (trafik çökmesin)
-    this.reputation = Math.max(floor, Math.min(5, this.reputation + d))
+    let floor = this.graceActive ? 2.5 : 0 // grace: itibar 2.5 altına düşmez (trafik çökmesin)
+    let ceil = 5
+    if (Math.abs(d) <= REP_OLAY_ESIK) {
+      const r = this.repToday()
+      // Örnek az iken (gün başı, tenha dakika) çapa uygulanmaz: 2 müşteriyle gün yargılanmaz.
+      if (r.served + r.lost >= REP_TAVAN_ORNEK) {
+        // Çapa İTMEZ, yalnız SINIRLAR: hedefin üstündeysen akış seni daha yukarı taşımaz,
+        // altındaysan akış seni daha aşağı itemez. Mevcut değer her zaman aralığın içinde.
+        ceil = Math.min(5, Math.max(this.reputation, r.target))
+        floor = Math.max(floor, Math.min(this.reputation, r.target))
+      }
+    }
+    this.reputation = Math.max(floor, Math.min(ceil, this.reputation + d))
   }
 
   // ---- İTİBAR MUTABAKATI (#456 + #216-4: "itibar 5.0'a çıkıyor, ne olursa olsun düşmüyor") ----
@@ -2561,7 +2612,11 @@ export class GameState {
   // kaybedilen -0.2; yüzlerce servise karşı birkaç kayıp olunca değer 5.0'a çakılıp donuyordu.
   // ÇÖZÜM: her gün sonunda itibar, O GÜNÜN hizmet kalitesine doğru çekilir. Artık 5.0'da
   // kalmak için kayıpsız gün gerekir; istasyonu ihmal etmek itibarı gerçekten düşürür.
-  private repMark = { served: 0, lost: 0 }
+  /** O GÜNÜN penceresi: gün başındaki kümülatif servis/kayıp sayacı.
+   *  KAYDA GİRER (serializeState/hydrateState) — public olmasının sebebi budur.
+   *  Kaydedilmezse her yenilemeden sonra pencere ÖMÜR BOYU toplamına kayıyordu ve
+   *  itibar hedefi yaşam boyu kayıp oranına (≈0) sabitlenip 5.0'da donuyordu. */
+  repMark = { served: 0, lost: 0 }
   /** İTİBAR ŞEFFAFLIĞI (#1025 "ne yaptıysam ne düşürebildim ne de arttırabildim"):
    *  itibar gün sonunda O GÜNÜN kayıp oranına doğru çekiliyor. Kayıpsız oynayan oyuncuda
    *  hedef zaten 5.0 olduğu için değer kıpırdamıyordu ve bu hiçbir yerde yazmıyordu.
@@ -3083,6 +3138,9 @@ export function serializeState(s: GameState): Record<string, unknown> {
   out.tanks = { ...s.tanks }
   out.tankCounts = { ...s.tankCounts }
   out.stats = { ...s.stats, liters: { ...s.stats.liters } }
+  // İTİBAR GÜN PENCERESİ (ADDITIVE): gün başındaki servis/kayıp sayacı. Eski istemci
+  // yok sayar; kaydedilmezse itibar mutabakatı ömür boyu orana kayıp 5.0'da donar.
+  out.repMark = { ...s.repMark }
   out.facDaily = { ...s.facDaily }
   out.facTotal = { ...s.facTotal }
   out.fuelLog = s.fuelLog.slice(-40)
@@ -3143,6 +3201,18 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       if (typeof st[k] === 'number') s.stats[k] = st[k]
     }
     if (st.liters) Object.assign(s.stats.liters, st.liters)
+  }
+  // İTİBAR GÜN PENCERESİ: alan varsa geri yükle (ADDITIVE koruma). Alan YOKSA (eski kayıt)
+  // pencereyi ŞU ANKİ sayaçlara sabitle — {0,0} bırakmak, yüklemeden sonraki ilk gün
+  // dönüşünün ömür boyu servis/kayıp oranını "bugün" sanmasına ve hedefin 5.0'a
+  // çakılmasına sebep oluyordu (itibarın donmasının kayıt tarafındaki kolu).
+  {
+    const rm = data.repMark as { served?: unknown; lost?: unknown } | undefined
+    const say = (v: unknown, ust: number) =>
+      typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(ust, Math.round(v))) : ust
+    s.repMark = rm && typeof rm === 'object'
+      ? { served: say(rm.served, s.stats.served), lost: say(rm.lost, s.stats.lost) }
+      : { served: s.stats.served, lost: s.stats.lost }
   }
   if (data.orders && typeof data.orders === 'object') {
     for (const f of FUELS) {
