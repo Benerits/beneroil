@@ -69,7 +69,8 @@
     "test:para": "tsx tools/tests/para-check.mjs",
     "test:reklam": "tsx tools/tests/reklam-check.mjs",
     "test:yikim": "tsx tools/tests/yikim-check.mjs",
-    "test:tirpark": "tsx tools/tests/tir-park-check.mjs"
+    "test:tirpark": "tsx tools/tests/tir-park-check.mjs",
+    "test:vitrin": "tsx tools/tests/vitrin-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

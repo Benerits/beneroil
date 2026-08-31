@@ -3592,7 +3592,21 @@ function showVerifyGate() {
 const GUEST_MAX_DAY = 5
 let guestGateShown = false
 let firstTenGateShown = false // ilk-10k dönüşüm kapısı oturumda 1 kez
+/** VİTRİN/PROMO MODUNDA DÖNÜŞÜM KAPISI ÇIKMAZ.
+ *
+ *  ?full=1 pazarlama modu: kasayı ₺10.000.000 yapıyor → 'first-10k' başarımı anında
+ *  açılıyor → kayıt kapısı geri geliyor → `guestPaused` TEKRAR true oluyor. O bayrak
+ *  entryChance'i 0'a çekiyor, yani ARAÇLAR İSTASYONA HİÇ GİRMİYOR: ölçüldü, 8 aracın
+ *  8'i 30 saniye boyunca 'transit'te kaldı, pompada 0 araç.
+ *
+ *  Sonuç: vitrin modunda çekilen HER ekran görüntüsü ve HER tanıtım videosu ölü bir
+ *  istasyon gösteriyordu — arabalar yalnız yoldan geçiyordu. rehberDuyur/rehberNabiz
+ *  aynı gerekçeyle zaten susturulmuş; kapılarda o koruma unutulmuştu.
+ *
+ *  Gerçek misafir akışı DEĞİŞMEDİ: guard yalnız ?full=1 / ?promo içindir. */
+const donusumKapisiKapali = () => isFullMode || isPromoMode
 function maybeGuestGate() {
+  if (donusumKapisiKapali()) return
   if (auth.loggedIn() || guestGateShown || state.day < GUEST_MAX_DAY) return
   guestGateShown = true
   guestPaused = true
@@ -6816,7 +6830,7 @@ function frame() {
     state.adTamirUsed = 0
     // B6 (analiz): İLK GÜN raporu = duygusal kontrol noktası — misafire kayıp-anı
     // hatırlatması (oturumda tek gate: 10k gate'i zaten çıktıysa tekrarlama)
-    if (!auth.loggedIn() && state.day === 2 && brut > 0 && !firstTenGateShown && !guestGateShown) {
+    if (!donusumKapisiKapali() && !auth.loggedIn() && state.day === 2 && brut > 0 && !firstTenGateShown && !guestGateShown) {
       firstTenGateShown = true
       showAuthGate(t('İlk günün kapandı: ₺{0} kâr! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus.', brut.toLocaleString('tr-TR')))
     }
@@ -7029,7 +7043,7 @@ function frame() {
     updateFarHint()
     // Dönüşüm anı: misafir İLK ₺10.000 başarımını açtı — gurur zirvesinde kayıt kapısı.
     // (Kapatılabilir: "Misafir olarak devam et" görünür kalır; oturumda 1 kez.)
-    if (!auth.loggedIn() && !firstTenGateShown && state.achievements.has('first-10k')) {
+    if (!donusumKapisiKapali() && !auth.loggedIn() && !firstTenGateShown && state.achievements.has('first-10k')) {
       firstTenGateShown = true
       showAuthGate(t('İlk ₺10.000’i kazandın! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu.'))
     }

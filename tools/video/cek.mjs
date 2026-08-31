@@ -282,6 +282,66 @@ const SENARYOLAR = {
       await bekle(p, 2200)
     },
   },
+
+  // 6) ŞUBE AĞI HARİTASI — GÜNCELLEME DUYURUSU (major update, erişim odaklı).
+  //
+  //    SÜRE 14 sn, HOOK ilk 2,4 sn'de. Gerekçe bu dosyanın başındaki ölçüm:
+  //    ortalama izleme 12,8 sn. 20 sn'lik kurguda haritanın açıldığı ana izleyicinin
+  //    çoğu ulaşmıyor — o yüzden harita 4. saniyede EKRANDA olmalı, sonda değil.
+  //
+  //    Sessiz izlenir varsayılır (Twitter otomatik oynatma sessizdir): her beat'in
+  //    mesajı yazıyla taşınır, sesle değil.
+  harita: {
+    ad: '06-sube-agi-haritasi',
+    save: { money: 8_400_000, day: 140, reputation: 4.9, pumps: 8, evChargers: 4,
+            marketLevel: 3, managerLevel: 3, hasWash: true, hasOil: true, hasCoffee: true,
+            hasRestaurant: true, hasTruckPark: true, solarCount: 3,
+            unlockedLocs: ['kasaba', 'cevreyolu', 'otoyol'], activeLoc: 'kasaba',
+            tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
+    isinma: 5000,   // trafik otursun: hook karesinde istasyon DOLU görünsün, boş beton değil
+    async oyna(p) {
+      // ── HOOK (0 → 2,4 sn): kalabalık istasyon + tek iddia ──
+      await p.evaluate(() => {
+        const d = window.__dbg
+        // ?full=1 vitrin state'i şubeleri/yıldızı kurmuyor; harita PANELİ 3B sahneye
+        // dokunmadığı için bu alanları doğrudan dayatmak güvenli (runner yalnız
+        // kasa/gün/itibar dayatıyor, bkz. oyunuAc notu).
+        if (d?.state) {
+          d.state.unlockedLocs = ['kasaba', 'cevreyolu', 'otoyol']
+          d.state.brandStars = 6
+        }
+        d.cine?.setCam?.(-3.4, 6.0, 2.2)
+        window.__vo.yaz('GÜNCELLEME', 'Tek istasyonla\nbaşladın.', '')
+      })
+      await bekle(p, 2400)
+
+      // ── 2,4 → 4,0: vaat ──
+      await p.evaluate(() => window.__vo.yaz('GÜNCELLEME', 'Tek istasyonla\nbaşladın.', 'Şimdi bir AĞ kur.'))
+      await bekle(p, 1600)
+
+      // ── 4,0 → 7,0: HARİTA EKRANDA (videonun asıl vaadi, erken gelsin) ──
+      await p.evaluate(() => {
+        window.__vo.sil()
+        document.getElementById('locbtn')?.click()
+        document.querySelector('#locmenu button[data-qloc="__harita"]')?.click()
+      })
+      await bekle(p, 900)
+      await p.evaluate(() => window.__vo.yazAlt('9 şube · tek harita', ''))
+      await bekle(p, 2100)
+
+      // ── 7,0 → 9,6: her şube farklı ekonomi (kilit + yıldız eşiği) ──
+      await p.evaluate(() => window.__vo.yazAlt('Her şubenin kendi ekonomisi', 'kira · trafik · arsa'))
+      await bekle(p, 2600)
+
+      // ── 9,6 → 12,0: ortak tedarik hattı (yeni sistemin en az bilinen yanı) ──
+      await p.evaluate(() => window.__vo.yazAlt('Komşu şubeler tedarik hattı paylaşır', ''))
+      await bekle(p, 2400)
+
+      // ── 12,0 → 14,0: kapanış ──
+      await p.evaluate(() => { window.__vo.sil(); window.__vo.yaz('BENELOIL', 'Şube Ağı', 'beneloil.com') })
+      await bekle(p, 2000)
+    },
+  },
 }
 
 // ─────────────────────────── ÇEKİM ───────────────────────────
@@ -338,14 +398,28 @@ for (const ad of liste) {
     }, s.save).catch(() => {})
   }, 500)
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 90, everyNthFrame: 1 })
+  const t0 = Date.now()
   await s.oyna(p)
+  const gercekSn = (Date.now() - t0) / 1000
   clearInterval(sabitle)
   await cdp.send('Page.stopScreencast').catch(() => {})
   await p.waitForTimeout(300)
   await p.close()
   await ctx.close()
   const n = readdirSync(klasor).filter(f => f.endsWith('.jpg')).length
-  console.log(`  ✓ ${s.ad}: ${n} kare (${(n / 15).toFixed(1)} sn) → ${klasor}`)
+  // GERÇEK YAKALAMA HIZI RAPORLANIR. Eski satır sabit 15 fps varsayıp süreyi yazıyordu
+  // ama uret.sh videoyu 60 fps'te birleştiriyor — 842 kare "56,1 sn" diye raporlanıyor,
+  // video ise 14,0 sn çıkıyordu. Daha kötüsü: makine yavaşlayıp yakalama hızı düşerse
+  // sabit 60 fps'te birleştirme videoyu HIZLI oynatır ve bu log'dan anlaşılmaz.
+  // Artık ölçülen fps yazılıyor; 60'tan belirgin saparsa uyarı basılıyor.
+  const fps = n / Math.max(0.001, gercekSn)
+  const sure60 = n / 60
+  console.log(`  ✓ ${s.ad}: ${n} kare · ölçülen ${fps.toFixed(1)} fps · gerçek ${gercekSn.toFixed(1)} sn`
+    + ` → 60 fps'te ${sure60.toFixed(1)} sn video → ${klasor}`)
+  if (Math.abs(fps - 60) > 6) {
+    console.log(`  ⚠ yakalama hızı 60 fps'ten saptı (${fps.toFixed(1)}). uret.sh 60 fps'te birleştiriyor,`)
+    console.log(`    yani video ${(60 / fps).toFixed(2)}× hızlı oynar. Birleştirmeyi ${Math.round(fps)} fps ile yap.`)
+  }
 }
 await b.close()
 console.log(`\nçıktı: ${OUT}`)
