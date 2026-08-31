@@ -33,6 +33,20 @@ export interface UnitPoint {
   y: number
 }
 
+/**
+ * OTOPARK YERİ — park noktası (x,y) + otoparkın KENDİ yanaşma noktası (sx,sy).
+ * world.getParkingSpots() ile aynı kaynak; şerit ağı bunlardan koridor türetir.
+ */
+export interface ParkPoint {
+  /** 'parking:2' / 'parking#3:0' — nokta öncesi kısım OTOPARK BİNASININ kimliği */
+  id: string
+  x: number
+  y: number
+  /** stage (yanaşma) noktası — otoparkın yerel +Y cephesi */
+  sx: number
+  sy: number
+}
+
 export interface StationGeom {
   station: string
   gateX: number
@@ -44,6 +58,8 @@ export interface StationGeom {
   wide: boolean    // geniş kapı alındı mı
   /** bu istasyonun pompa/şarj servis noktaları */
   units?: UnitPoint[]
+  /** bu istasyonun (yakanın) park yerleri */
+  parks?: ParkPoint[]
   /** MARİNA: şeritler suda kalmalı, tekne boyu araçtan kat kat büyük */
   water?: boolean
 }
@@ -78,7 +94,39 @@ export const QUEUE_TAIL_MAX = 17
 /** GERİYE DÖNÜK: ünite yokken (henüz pompa kurulmamış) kullanılan varsayılan apron ofseti. */
 export const APRON_LANE_OFF = 1.75
 
+/**
+ * OTOPARK KORİDORU — giriş ve çıkış hattı arası mesafe. LANE_SEP ile aynı gerekçe:
+ * park etmeye GİDEN araç ile parktan ÇIKAN araç aynı çizgide olursa kafa kafaya gelir.
+ * Otoparkta bu daha da kritik: koridor bir çıkmaz sokaktır, kaçacak yer yoktur.
+ */
+export const PARK_AISLE_SEP = 1.05
+/** Koridorun slot dizisinin ötesine uzadığı pay — araç dönüşünü koridorun UCUNDA yapar,
+ *  slotların hizasında değil (yoksa dönüş yayı komşu slottaki aracın üstünden geçer). */
+export const PARK_END_PAD = 1.7
+/** Koridor/kol temizlik taraması: bu adımla nokta nokta örneklenir (araç yarı boyu altı). */
+const PARK_TARAMA = 0.35
+
 export interface Pt { x: number; y: number }
+
+/**
+ * BİR PARK YERİNİN ÖNCEDEN ÇİZİLMİŞ YOLU.
+ * Giriş: entry → inArm → spot.   Çıkış: spot → outArm → exit → istasyon çıkış şeridi.
+ * inArm/outArm hatları PARK_AISLE_SEP kadar ayrık → koridorda kafa kafaya gelme yok.
+ */
+export interface ParkLane {
+  id: string
+  spot: Pt
+  /** giriş koridorunda bu slotun hizası (koldan slota dik iniş buradan başlar) */
+  inArm: Pt
+  /** çıkış koridorunda bu slotun hizası */
+  outArm: Pt
+  /** giriş koridorunun ağzı (araç koridora BURADAN girer) */
+  entry: Pt
+  /** çıkış koridorunun ağzı (araç koridordan BURADAN çıkar) */
+  exit: Pt
+  /** +1 stage cephesinden, −1 ters cepheden yanaşma. Park AÇISI buna göre 180° döner. */
+  side: number
+}
 
 /** Bir istasyonun ÖNCEDEN HESAPLANMIŞ şerit ağı. */
 export interface StationLanes {
@@ -95,6 +143,8 @@ export interface StationLanes {
   xOut: number
   /** kuyruk slotları — gelen omurga üzerinde SABİT noktalar (araç slota kayar) */
   queue: Pt[]
+  /** KULLANILABİLİR park yerleri (yolu katı cisimle kapalı olanlar burada YOKTUR) */
+  parks: ParkLane[]
 }
 
 export class LaneNetwork {
@@ -109,7 +159,7 @@ export class LaneNetwork {
    * Yerleşimden ŞERİT AĞINI TÜRET. Yalnız yerleşim imzası değişince çağrılır —
    * kare başına DEĞİL (mobil performans kuralı).
    */
-  rebuild(geoms: StationGeom[]) {
+  rebuild(geoms: StationGeom[], blocked?: (x: number, y: number) => boolean) {
     this.byStation.clear()
     this.zones = []
     for (const g of geoms) {
@@ -169,6 +219,7 @@ export class LaneNetwork {
       const L: StationLanes = {
         station: g.station, gateX: g.gateX, gateInY: g.gateInY, gateOutY: g.gateOutY,
         lane: g.lane, sideSign: g.sideSign, dirY: g.dirY, xIn, xOut, queue,
+        parks: this.parkLanes(g, blocked),
       }
       this.byStation.set(g.station, L)
 
@@ -181,8 +232,131 @@ export class LaneNetwork {
         this.zones.push({ id: `arm-${g.station}-${u.id}`, cx: (xIn + u.x) / 2, cy: u.y,
           w: Math.abs(xIn - u.x), d: 0.4, capacity: 1 })
       }
+      for (const p of L.parks) {
+        this.zones.push({ id: `park-${g.station}-${p.id}`, cx: (p.inArm.x + p.spot.x) / 2,
+          cy: (p.inArm.y + p.spot.y) / 2, w: 0.5, d: 0.5, capacity: 1 })
+      }
     }
   }
+
+  /**
+   * OTOPARK ŞERİTLERİ — pompa/şarj kolu kalıbının OTOPARKA UYGULANMIŞ hâli.
+   *
+   * NEDEN VAR (ölçülmüş hata): otopark şerit ağının DIŞINDAYDI. Rota elle yazılmış üç
+   * noktaydı (sabit bir x kolonu → stage → park yeri) ve "stage" noktası oyuncunun
+   * yerleşimine göre bir POMPA GÖVDESİNİN İÇİNE düşebiliyordu. Oyunun VARSAYILAN
+   * yerleşiminde tam olarak bu oluyor: otopark (0.4,−0.2), pompalar (0,±2.2) — 4 park
+   * yerinden ikisinin hem yanaşma noktası hem park noktası pompa gövdesinin çarpışma
+   * zarfının içinde kalıyor. Araç oraya asla varamıyor, gövdenin dibinde kilitleniyor;
+   * arkasından gelenler de aynı noktaya yığılıyor. Oyuncunun gördüğü "araçlar üst üste,
+   * park yerleri boş" görüntüsü buydu (ölçüm: kalıcı sıkışan 1, otopark bölgesinde
+   * 1.43 çakışma çift/kare).
+   *
+   * YENİ MODEL — üç kural:
+   *  1. TEK YÖNLÜ KORİDOR: giriş hattı ve çıkış hattı PARK_AISLE_SEP kadar ayrı iki
+   *     paralel çizgi. Koridor çıkmaz sokaktır; aynı çizgide iki yön kafa kafaya gelir.
+   *  2. SLOT BAŞINA KOL: koridordan park yerine dik iniş. Kol yalnız o slota aittir
+   *     (parkOcc zaten slot başına tek araç tutar).
+   *  3. KAPALIYSA YOK SAYILIR: yolu ya da park noktası katı cisimle kapalı olan slot
+   *     listeye HİÇ GİRMEZ. Araç ulaşamayacağı yere gönderilmez → kilitlenme imkânsız.
+   *     (Oyuncu otoparkı taşıdığında slotlar kendiliğinden geri gelir.)
+   */
+  private parkLanes(g: StationGeom, blocked?: (x: number, y: number) => boolean): ParkLane[] {
+    const parks = g.parks ?? []
+    if (!parks.length) return []
+    const bos = (x: number, y: number) => !blocked || !blocked(x, y)
+    /** iki nokta arası hat temiz mi (nokta nokta tara) */
+    const hatBos = (a: Pt, b: Pt) => {
+      const len = Math.hypot(b.x - a.x, b.y - a.y)
+      const n = Math.max(1, Math.ceil(len / PARK_TARAMA))
+      for (let i = 0; i <= n; i++) {
+        if (!bos(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n)) return false
+      }
+      return true
+    }
+    // OTOPARK BİNASINA GÖRE GRUPLA: koridor bir binanın slot dizisinden türer
+    const lots = new Map<string, ParkPoint[]>()
+    for (const p of parks) {
+      const lot = p.id.includes(':') ? p.id.slice(0, p.id.lastIndexOf(':')) : p.id
+      const list = lots.get(lot)
+      if (list) list.push(p); else lots.set(lot, [p])
+    }
+    const out: ParkLane[] = []
+    for (const list of lots.values()) {
+      // n = park yerinden yanaşma noktasına bakan birim vektör (otoparkın "ön cephesi"),
+      // u = slot dizisinin yönü. İkisi dik; otopark döndürülse de birlikte dönerler.
+      const p0 = list[0]
+      const d0 = Math.hypot(p0.sx - p0.x, p0.sy - p0.y)
+      if (d0 < 0.2) continue // bozuk veri: yanaşma noktası park yerinin üstünde
+      const n = { x: (p0.sx - p0.x) / d0, y: (p0.sy - p0.y) / d0 }
+      const u = { x: -n.y, y: n.x }
+      // slotları koridor ekseni boyunca sırala (dizinin uçlarını bulmak için)
+      const sirali = list
+        .map(p => ({ p, t: (p.x - p0.x) * u.x + (p.y - p0.y) * u.y }))
+        .sort((a, b) => a.t - b.t)
+      const kaydir = (p: Pt, along: number, off: number): Pt =>
+        ({ x: p.x + u.x * along + n.x * off, y: p.y + u.y * along + n.y * off })
+      const derinlik = (p: Pt) => g.sideSign < 0 ? (g.gateX - p.x) : (p.x - g.gateX)
+
+      // İKİ CEPHE DENENİR: önce otoparkın kendi ön cephesi (+1), kapalıysa arka cephe (−1).
+      // Arka cepheden yanaşan araç 180° ters park eder — açı ParkLane.side ile taşınır.
+      let best: ParkLane[] = []
+      for (const side of [1, -1]) {
+        const inOff = side * d0
+        const outOff = side * (d0 + PARK_AISLE_SEP)
+        const tMin = sirali[0].t - PARK_END_PAD, tMax = sirali[sirali.length - 1].t + PARK_END_PAD
+        const uclar = [tMin, tMax].map(t => ({
+          t, gir: kaydir(p0, t, inOff), cik: kaydir(p0, t, outOff),
+        })).filter(e => bos(e.gir.x, e.gir.y) && bos(e.cik.x, e.cik.y))
+        if (!uclar.length) continue
+        // Koridor ORTADAN kapalı olabilir (oyuncu otoparkı pompa sırasının dibine kurmuş).
+        // Her uçtan koridoru tarayıp NEREYE KADAR açık olduğunu bul; slot yalnız kendi
+        // tarafındaki ağızdan servis edilir. Kapalı bölge iki tarafı fiziksel olarak
+        // ayırdığı için karşılıklı iki araç aynı koridor parçasına HİÇ giremez.
+        const menzil = uclar.map(e => {
+          let ok = e.t
+          const yon = e.t === tMin ? 1 : -1
+          for (let s = 0; s <= (tMax - tMin) / PARK_TARAMA; s++) {
+            const t = e.t + yon * s * PARK_TARAMA
+            const gp = kaydir(p0, t, inOff), cp = kaydir(p0, t, outOff)
+            if (!bos(gp.x, gp.y) || !bos(cp.x, cp.y)) break
+            ok = t
+          }
+          return { ...e, ok, yon }
+        })
+        // Koridor BAŞTAN SONA açıksa tek ağız kullanılır (kapıya yakın olan): tek yönlü
+        // akış en yalın hâliyle korunur. Kapalıysa her uç kendi tarafına hizmet eder.
+        const tamAcik = menzil.some(e => e.yon > 0 && e.ok >= tMax - 1e-6)
+          && menzil.some(e => e.yon < 0 && e.ok <= tMin + 1e-6)
+        const agizlar = tamAcik
+          ? [menzil.slice().sort((a, b) => derinlik(a.gir) - derinlik(b.gir))[0]]
+          : menzil
+        const aday: ParkLane[] = []
+        for (const { p, t } of sirali) {
+          const inArm = kaydir(p0, t, inOff)
+          const outArm = kaydir(p0, t, outOff)
+          if (!bos(p.x, p.y) || !bos(inArm.x, inArm.y) || !bos(outArm.x, outArm.y)) continue
+          if (!hatBos(inArm, p)) continue        // kol: koridordan park yerine
+          if (!hatBos(p, outArm)) continue       // kol: park yerinden çıkış koridoruna
+          // bu slota hizmet edebilecek ağızlardan KAPIYA EN YAKIN olanı
+          const uc = agizlar
+            .filter(e => e.yon > 0 ? t <= e.ok : t >= e.ok)
+            .filter(e => hatBos(e.gir, inArm) && hatBos(outArm, e.cik))
+            .sort((a, b) => derinlik(a.gir) - derinlik(b.gir))[0]
+          if (!uc) continue
+          aday.push({ id: p.id, spot: { x: p.x, y: p.y }, inArm, outArm,
+            entry: uc.gir, exit: uc.cik, side })
+        }
+        if (aday.length > best.length) best = aday
+        if (best.length === list.length) break // bu cephe tam açık, ötekini denemeye gerek yok
+      }
+      out.push(...best)
+    }
+    return out
+  }
+
+  /** bu yakanın KULLANILABİLİR park şeritleri (yolu kapalı slotlar listede yoktur) */
+  parkLanesOf(station: string): ParkLane[] { return this.byStation.get(station)?.parks ?? [] }
 
   get(station: string): StationLanes | null { return this.byStation.get(station) ?? null }
 
@@ -236,13 +410,35 @@ export class LaneNetwork {
   exitPath(station: string, from: Pt): Pt[] {
     const L = this.byStation.get(station)
     if (!L) return []
-    return [
+    // KAPI AĞZI NOKTASI SADECE İLERİDEYSE EKLENİR.
+    // Giden omurga (xOut) dar avluda kapı hattının YOL TARAFINA düşebiliyor
+    // (EXIT_DEPTH_MIN negatif — bkz. sabit). O durumda {gateX, gateOutY} aracın
+    // ARKASINDA kalıyordu: araç kapıya varmışken 0.3 birim GERİ, avlunun içine
+    // dönüyor, sonra yola çıkıyordu. Ekranda kapı ağzında küçük bir "S" kıvrımı,
+    // ölçümde gereksiz yol. Her iki yakada da simetrik olarak oluyordu.
+    const dOut = L.sideSign * (L.xOut - L.gateX) // kapıdan avlunun içine derinlik
+    const yol: Pt[] = [
       { x: L.xOut, y: from.y },                       // kol: giden omurgaya çık
       { x: L.xOut, y: L.gateOutY },                   // omurga boyunca çıkış kapısına
-      { x: L.gateX, y: L.gateOutY },                  // kapı ağzı
+    ]
+    if (dOut > 0.1) yol.push({ x: L.gateX, y: L.gateOutY }) // kapı ağzı (yalnız ileriyse)
+    yol.push(
       { x: L.lane, y: L.gateOutY + L.dirY * 4 },      // yola katıl
       { x: L.lane, y: L.dirY * 44 },                  // ve git
-    ]
+    )
+    return yol
+  }
+
+  /** OTOPARK GİRİŞ ŞERİDİ: koridor ağzı → slotun hizası → park yeri.
+   *  Aracın bulunduğu yerden koridor ağzına kadar olan bacak çağıranın işi (engel-farkında
+   *  temizlikten geçer); ağızdan SONRASI önceden hesaplanmıştır ve temizdir. */
+  parkEntryPath(lane: ParkLane): Pt[] { return [lane.entry, lane.inArm, lane.spot] }
+
+  /** OTOPARK ÇIKIŞ ŞERİDİ: çıkış koridoru → ağız → istasyonun giden omurgası → kapı → yol.
+   *  Giriş koridoruna HİÇ girmez (PARK_AISLE_SEP kadar ayrık), yani park etmeye gelen
+   *  araçla kafa kafaya gelmesi geometrik olarak imkânsız. */
+  parkExitPath(station: string, lane: ParkLane): Pt[] {
+    return [lane.outArm, lane.exit, ...this.exitPath(station, lane.exit)]
   }
 
   /** doluluk raporu (yalnız hata ayıklama katmanı okur) */

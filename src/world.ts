@@ -2166,8 +2166,19 @@ export class World {
     pad.position.z = 0.024
     pad.receiveShadow = true
     g.add(pad)
-    // yön oku: giriş istasyona, çıkış yola bakar. Near istasyon batıda (in→-x); far istasyon doğuda → ok tersine döner.
-    const dir = (kind === 'in' ? -1 : 1) * (far ? -1 : 1)
+    // YÖN OKU — İKİ KEZ AYNALAMA HATASI (oyun sahibi: "karşı istasyonun giriş çıkış
+    // oklarının yeri yanlış gibi"). Burada ok karşı yaka için `(far ? -1 : 1)` ile elle
+    // ters çevriliyordu; AMA aşağıdaki register() zaten ROAD_X'in doğusundaki her grubu
+    // 180° döndürüyor (farFlip). İki aynalama üst üste binince ok TAM TERSİNE dönüyordu:
+    // ölçüldü — araçlar karşı GİRİŞ kapısından (y=+8) içeri girerken (36→180 örnek,
+    // hepsi `driving`) oradaki ok yolu gösteriyordu; çıkış kapısında da tersi.
+    // Ayrıca 180° dönüş "GİRİŞ"/"ÇIKIŞ" tabelasını da çeviriyor, panel kameraya SIRTINI
+    // dönüyordu (ekran görüntüsünde karşı kapıda yalnız çıplak direk görünüyor).
+    // ÇÖZÜM: aynalama TEK KAYNAKTA (farFlip) kalsın. Ok yerel eksende hesaplanır:
+    // giriş istasyona (−x), çıkış yola (+x) bakar; karşı yakada grubun kendisi dönerek
+    // ikisini de doğru dünya yönüne çevirir. Tabela ise yerelde ters kurulur ki
+    // dönüşten sonra yine kameraya (+x) baksın.
+    const dir = kind === 'in' ? -1 : 1
     const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.34), lam(0xe8e4d8))
     shaft.position.set(-dir * 0.35, 0, 0.03)
     g.add(shaft)
@@ -2185,7 +2196,7 @@ export class World {
       ctx.fillStyle = '#fff'; ctx.font = '800 44px -apple-system, sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillText(kind === 'in' ? t('GİRİŞ') : t('ÇIKIŞ'), cw / 2, ch / 2 + 2)
-    })
+    }, far ? new THREE.Vector3(-1, 0, 0) : undefined) // karşı yakada grup 180° dönecek → yerelde ters kur
     label.position.set(0, 1.45, 1.62)
     g.add(label)
     g.position.set(v.x, v.y, 0)
@@ -3061,7 +3072,13 @@ export class World {
   }
 
   buildParking(pos?: THREE.Vector2, regId = 'parking') {
-    const at = pos ?? new THREE.Vector2(0.4, -0.2)
+    // VARSAYILAN KONUM POMPA GÖVDESİNİN İÇİNDEYDİ (ölçüldü): otopark (0.4,−0.2), pad
+    // derinliği 3.1 → y∈[−1.75,1.35]; pompa gövdesi y∈[0.05,4.35]. Çakışma yüzünden
+    // 4 park yerinden İKİSİ fiziksel olarak erişilemezdi — oyuncu 4 yer parası ödeyip
+    // 2'sini kullanıyordu. Şerit ağı artık kapalı slota araç göndermiyor (kilitlenme yok)
+    // ama boş durmaları da kayıp. Varsayılan güneye alındı; pompa hattıyla 0.5 birim boşluk.
+    // ESKİ KAYITLAR ETKİLENMEZ: taşınmış otoparkın konumu placedPos'tan gelir (pos dolu).
+    const at = pos ?? new THREE.Vector2(0.4, -2.0)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(PARK_PAD_W, 3.1), lam(0x6b7480))
     pad.position.z = 0.02

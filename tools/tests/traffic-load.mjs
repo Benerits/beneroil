@@ -17,7 +17,7 @@ const __rnd = () => { __seed = (__seed * 1103515245 + 12345) & 0x7fffffff; retur
 Math.random = __rnd
 const { readFileSync } = await import('node:fs')
 const THREE = await import('three')
-const { CarManager } = await import('../../src/cars.ts')
+const { CarManager, Car } = await import('../../src/cars.ts')
 const { GameState, FUEL_PRICE } = await import('../../src/state.ts')
 
 const ROAD_X = 7.9
@@ -26,8 +26,20 @@ const ROAD_X = 7.9
 // (oyun sahibi: "gerekirse birbirinin içinden geçsinler"). Bu yüzden eski A/B (açık vs
 // kapalı) kıyası anlamsızlaştı; onun yerine iç içe geçme AKIŞ/YERLEŞİM olarak ayrıştırılıp
 // ölçülüyor. FORCE_COLLIDE değişkeni artık davranışı değiştirmez, koşum yine geçmelidir.
+// OTOPARK YERLEŞİMİ (T9) — oyundaki world.getParkingSpots() ile AYNI türetme:
+// 4 slot yerel x ekseninde dizili, yanaşma noktası (stage) yerel +Y'de 2.4 birim ötede.
+const PARK_YER = 4, PARK_ARALIK = 1.25, PARK_PAD_W = PARK_YER * PARK_ARALIK
+const parkYerX = i => -PARK_PAD_W / 2 + PARK_ARALIK * (i + 0.5)
+function parkLot(THREE, id, cx, cy, rot = 0) {
+  const c = Math.cos(rot), s = Math.sin(rot)
+  const w = (lx, ly) => new THREE.Vector3(cx + lx * c - ly * s, cy + lx * s + ly * c, 0)
+  return Array.from({ length: PARK_YER }, (_, i) => ({
+    id: `${id}:${i}`, pos: w(parkYerX(i), -0.1), stage: w(parkYerX(i), 2.4), rot: rot - Math.PI / 2,
+  }))
+}
+
 function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highway = null, service = null,
-                      entryMul = 1, pullMul = 1 }) {
+                      entryMul = 1, pullMul = 1, parking = null, parkChance = 0 }) {
   __seed = 20260726 // her senaryo AYNI tohumla başlar → A/B birebir karşılaştırılabilir
   const scene = new THREE.Scene()
   const state = new GameState()
@@ -62,6 +74,10 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   let icAkis = 0, icDuran = 0
   const DURAN = new Set(['atPump', 'parked', 'waiting'])
   const icKirilim = {}
+  // OTOPARK KALEMİ AYRI ÖLÇÜLÜR: pompa avlusundaki çakışmayla aynı kefeye konursa
+  // "park alanında araçlar üst üste" hatası ortalamanın içinde kaybolur.
+  const parkSpots = parking ?? []
+  let pOrnek = 0, pCakisma = 0, pAgir = 0, pDisari = 0, pDisariOrnek = 0, parkVaris = 0
   // APRON YIĞINI: aynı anda avluda (kapı ile pompalar arası) kaç araç birikti
   let apronMax = 0
   const mgr = new CarManager(scene, null, {
@@ -74,7 +90,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     prices: () => FUEL_PRICE, segments: () => state.activeSegments(),
     trafficPull: () => state.trafficPull() * pullMul,
     isPumpBroken: () => false, isChargerBroken: () => false,
-    parkSpots: () => [], truckSpots: () => [], extraObstacles: () => [],
+    parkSpots: () => parkSpots, truckSpots: () => [], extraObstacles: () => [],
     wideGates: () => wide,
     onCarReady: c => { served++; c.phase = 'atPump' },
     onCarLost: () => { lost++ },
@@ -84,6 +100,13 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     onRampFull: () => { rampLost++ },
     onTurnedAway: () => { turnedAway++ },
   })
+  // KATI CİSİMLER: oyundaki hardRects() ile aynı kalem — pompa/şarj gövdeleri. Otopark
+  // senaryosunda ŞART: park koridorlarının açık mı kapalı mı olduğu buna göre belirlenir
+  // (otoparkın kendisi oyunda da araç engeli DEĞİLDİR, bilerek listede yok).
+  Car.solids = parking
+    ? [...pumpSlots.map(s => ({ cx: s.x - 1.8, cy: s.y, w: 1.5, d: 3.4 })),
+       ...evSlots.map(s => ({ cx: s.x - 1.1, cy: s.y, w: 0.9, d: 1.4 }))]
+    : []
   // servis simülasyonu: pompaya varan araç 6 sn sonra uğurlanır (gerçek oyun temposu)
   const busy = new Map()
   const steps = minutes * 60 * 10
@@ -129,10 +152,38 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
         && c.group.position.x < 5.5 && c.group.position.x > -1).length
       if (apron > apronMax) apronMax = apron
     }
-    for (const [c, until] of [...busy]) {
-      if (i >= until) { busy.delete(c); if (c.phase === 'atPump') mgr.releaseCar(c) }
+    // ── OTOPARK ÖLÇÜMÜ (T9) ──
+    if (parking && i % 30 === 0) {
+      const bolge = mgr.cars.filter(c => (c.phase === 'toPark' || c.phase === 'parked')
+        || (c.phase === 'leaving' && parkSpots.some(s => Math.hypot(c.group.position.x - s.pos.x, c.group.position.y - s.pos.y) < 5)))
+      for (let a = 0; a < bolge.length; a++) for (let b = a + 1; b < bolge.length; b++) {
+        const dx = bolge[a].group.position.x - bolge[b].group.position.x
+        const dy = bolge[a].group.position.y - bolge[b].group.position.y
+        const d2 = dx * dx + dy * dy
+        if (d2 < 1.6 * 1.6) pCakisma++
+        if (d2 < 1.0 * 1.0) pAgir++
+      }
+      pOrnek++
+      // "park etti" diyen araç GERÇEKTEN kendi çizgili yerinde mi (ekrandaki asıl şikâyet)
+      for (const c of mgr.cars) {
+        if (c.phase !== 'parked') continue
+        pDisariOrnek++
+        const sp = parkSpots.find(s => s.id === c.parkId)
+        if (!sp || Math.hypot(c.group.position.x - sp.pos.x, c.group.position.y - sp.pos.y) > 0.6) pDisari++
+      }
     }
+    for (const c of mgr.cars) if (c.phase === 'parked' && !c.__parkSayildi) { c.__parkSayildi = true; parkVaris++ }
+    for (const [c, until] of [...busy]) {
+      if (i < until) continue
+      busy.delete(c)
+      // tesis ziyareti olan müşteri otoparka çekilir (main.ts: visits.length > 0)
+      if (c.phase === 'atPump' && parkChance && __rnd() < parkChance && mgr.sendToParking(c)) continue
+      if (c.phase === 'atPump' || c.phase === 'parked') mgr.releaseCar(c)
+    }
+    // park eden araç bir süre kalır, sonra uğurlanır
+    if (parking) for (const c of mgr.cars) if (c.phase === 'parked' && !busy.has(c)) busy.set(c, i + 140)
   }
+  Car.solids = []
   const st = mgr.evapStats
   const fl = mgr.flow
   const cakOrt = cakismaOrnek ? (cakisma / cakismaOrnek) : 0
@@ -157,8 +208,15 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     + ` | ÇAKIŞMA ${cakOrt.toFixed(1)} çift/kare · içiçe ${cakAgirOrt.toFixed(2)} (akış ${icAkisOrt.toFixed(2)} + yerleşim ${icDuranOrt.toFixed(2)})`
     + ` | AKIŞ hız ${(fl.ort * 100).toFixed(0)}% sapma ${fl.sapma.toFixed(2)} durma ${fl.duraklama} (%${(fl.durmaOrani * 100).toFixed(1)} kare)`
     + ` | apron zirve ${apronMax}`)
+  const park = { varis: parkVaris, cakisma: pOrnek ? pCakisma / pOrnek : 0,
+    agir: pOrnek ? pAgir / pOrnek : 0, disari: pDisari, disariOrnek: pDisariOrnek }
+  if (!quiet && parking) {
+    console.log(`   ↳ OTOPARK: park eden ${park.varis} | çakışma ${park.cakisma.toFixed(2)} çift/kare`
+      + ` · iç içe ${park.agir.toFixed(2)} | slot DIŞINDA park ${park.disari}/${park.disariOrnek}`
+      + ` | kullanılabilir şerit ${mgr.graph.parkLanesOf?.('near').length ?? '-'}/${parkSpots.length}`)
+  }
   return { st, stuck, served, rampLost, laneUse: svcSpawns, cakisma: cakOrt, cakismaAgir: cakAgirOrt,
-    icAkis: icAkisOrt, icDuran: icDuranOrt, flow: fl, apronMax, turnedAway }
+    icAkis: icAkisOrt, icDuran: icDuranOrt, flow: fl, apronMax, turnedAway, park }
 }
 
 let fail = 0
@@ -228,6 +286,35 @@ kontrol(t8.flow.ort >= 0.7, `T8: baskı altında akış %${(t8.flow.ort * 100).t
   `T8: baskı altında akış %${(t8.flow.ort * 100).toFixed(0)} — trafik sürünüyor`)
 kontrol(t8.turnedAway > 0, `T8: ${t8.turnedAway} müşteri kapasite yüzünden GİREMEDİ (görünür kayıp)`,
   'T8: kapasite baskısı hiç görünmedi — giremeyen müşteri sayılmıyor')
+
+// ---- T9: OTOPARK YOĞUN ----
+// Oyuncu ekran görüntüsü: park yerleri (beyaz çizgili slotlar) BOŞ dururken araçlar
+// slotların dışında tek sıra, gövde gövdeye yığılmış. Kök neden ölçüldü: otopark şerit
+// ağının DIŞINDAYDI; rota elle yazılmış üç noktaydı ve "yanaşma noktası" oyuncunun
+// yerleşimine göre bir pompa gövdesinin ÇARPIŞMA ZARFININ içine düşebiliyordu. Araç
+// oraya asla varamıyor (Car.insideSolid ilerlemeyi kesiyor), gövdenin dibinde kilitleniyor.
+// ESKİ MİMARİ AYNI SENARYODA, AYNI TOHUM (ölçüldü):
+//   otopark çakışması 3.18 çift/kare · otoparkta iç içe 2.06 · genel iç içe (akış) 4.17
+//   · akış hızı %85 · durma %10.2 kare · servis 378
+// ŞERİT AĞINA ALINDIKTAN SONRA:
+//   otopark çakışması 0.31 · iç içe 0.14 · genel iç içe 0.83 · akış %93 · durma %3.6 · servis 382
+// (İzole tekrar üretimde eski kod ayrıca 1 aracı KALICI kilitliyordu: park yeri pompa
+//  gövdesinin içindeydi, araç oraya asla varamıyor ama slotu da bırakmıyordu.)
+console.log('--- T9: OTOPARK YOĞUN (park koridoru pompa sırasının dibinde) ---')
+{
+  // 6 pompa, otopark tam pompa hattının yanında (oyundaki varsayılan yerleşimin dar hâli)
+  const t9 = run('T9 otopark · 6 pompa · trafik ×1.6', {
+    pumps: 6, evs: 2, far: false, wide: true, entryMul: 1.2, pullMul: 1.6,
+    parking: parkLot(THREE, 'parking', 0.4, -0.2), parkChance: 0.75,
+  })
+  kontrol(t9.stuck === 0, 'T9: kalıcı sıkışan 0 (park kuyruğu kilitlenmedi)', `T9: kalıcı sıkışan ${t9.stuck}`)
+  kontrol(t9.st.total === 0, 'T9: buharlaşma 0', `T9: buharlaşma ${t9.st.total}`)
+  kontrol(t9.park.varis > 0, `T9: ${t9.park.varis} araç gerçekten park etti`, 'T9: hiçbir araç park edemedi')
+  kontrol(t9.park.disari === 0, 'T9: park eden her araç KENDİ çizgili yerinde (slot dışı 0)',
+    `T9: ${t9.park.disari}/${t9.park.disariOrnek} örnekte araç slotunun dışında durdu`)
+  kontrol(t9.park.agir <= 0.3, `T9: otoparkta iç içe ${t9.park.agir.toFixed(2)} ≤ 0.3 (eski mimari 2.06)`,
+    `T9: otoparkta iç içe ${t9.park.agir.toFixed(2)} > 0.3 — park kolları ayrık değil`)
+}
 
 const sum = a => a.reduce((x, y) => x + y, 0)
 const servOn = sum(on.map(([, r]) => r.served))
