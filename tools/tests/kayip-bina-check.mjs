@@ -160,12 +160,26 @@ console.log('\n== 6) Kod denetimi: onarım yolları yerinde ==')
 }
 
 // ──────────────────────────────────────────────── 7) TARAYICI: GERÇEK SAHNE ÖLÇÜMÜ
-const PORT = process.env.PORT ?? '5399'
-let sunucuVar = false
-try { sunucuVar = (await fetch(`http://localhost:${PORT}/`, { signal: AbortSignal.timeout(1500) })).ok } catch { /* yok */ }
-if (!sunucuVar) {
-  console.log(`\n⚠ dev sunucu :${PORT} kapalı — sahne ölçümü ATLANDI (npm run dev -- --port ${PORT})`)
+// PORT SABİT DEĞİL, ARANIYOR + ATLAMA ARTIK SESSİZ DEĞİL.
+// Bu bölüm testin ASIL kanıtı (16 ünite gerçekten ayrı ayrı görünüyor mu). Tek bir
+// sabit porta bağlıyken, dev sunucu başka portta açıksa bölüm atlanıyor ve test yine
+// "✅ 0 kaldı" diyordu — yani en önemli ölçüm koşmadan yeşil rapor çıkıyordu.
+// Bugün aynı kalıp üç kez çıktı (web-smoke hiç koşmuyordu, ui-check listesi bayattı).
+// Artık: yaygın portlar taranıyor, hiçbiri yoksa test HATA ile bitiyor — atlanan
+// ölçüm geçmiş sayılmaz.
+const PORTLAR = process.env.PORT ? [process.env.PORT] : ['5399', '5173', '5174']
+let PORT = null
+for (const p of PORTLAR) {
+  try { if ((await fetch(`http://localhost:${p}/`, { signal: AbortSignal.timeout(1500) })).ok) { PORT = p; break } }
+  catch { /* sıradaki */ }
+}
+if (!PORT) {
+  console.log(`\n❌ dev sunucu bulunamadı (${PORTLAR.join(', ')}) — SAHNE ÖLÇÜMÜ KOŞMADI.`)
+  console.log('   Bu bölüm testin asıl kanıtı; atlanırsa sonuç GEÇTİ sayılmaz.')
+  console.log(`   Çalıştır: npm run dev -- --port ${PORTLAR[0]}`)
+  fail++
 } else {
+  console.log(`\n(dev sunucu :${PORT})`)
   console.log('\n== 7) Sahne ölçümü: bozuk kayıt · karşı yaka · arsa alımı ==')
   const { chromium } = await import('playwright-core')
   const b = await chromium.launch({ channel: 'chrome' })
