@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BENELOIL 4000 — Kıyas Sahneleri</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#bfe0ee;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(20,30,25,.28) 100%)}
+  /* metrik çipi: büyük sayı + etiket + kıyas satırı */
+  #chip{position:fixed;left:50%;bottom:38px;transform:translateX(-50%);background:#faf6ec;border-radius:18px;
+    padding:12px 26px 14px;box-shadow:0 3px 0 #d9d2bf,0 12px 34px rgba(0,0,0,.20);text-align:center;opacity:0;transition:opacity .5s;min-width:300px}
+  #chip .n{font-size:min(6.4vw,44px);font-weight:900;color:#d64545;letter-spacing:.5px;font-variant-numeric:tabular-nums;line-height:1.05}
+  #chip .l{font-size:min(1.9vw,13px);font-weight:800;color:#8a8474;letter-spacing:2.5px;margin-top:5px}
+  #chip .k{font-size:min(2.3vw,15px);font-weight:750;color:#3d4b58;margin-top:7px;border-top:1px solid #e5dcc8;padding-top:7px;opacity:0;transition:opacity .6s}
+  #brand{position:fixed;left:26px;top:24px;background:#d64545;color:#faf6ec;font-weight:900;letter-spacing:1.5px;
+    padding:9px 16px 10px;border-radius:12px;box-shadow:0 3px 0 #a83636,0 8px 24px rgba(0,0,0,.2);font-size:16px}
+  #final{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    pointer-events:none;opacity:0;transition:opacity 1.4s}
+  #final .t{font-size:min(9vw,64px);font-weight:900;color:#fffdf6;text-shadow:0 3px 18px rgba(0,0,0,.5);letter-spacing:2px}
+  #final .s{margin-top:10px;font-size:min(3.4vw,24px);font-weight:800;color:#fffdf6;text-shadow:0 2px 12px rgba(0,0,0,.45)}
+  #final .u{margin-top:20px;background:#faf6ec;color:#d64545;font-weight:900;letter-spacing:1px;
+    padding:12px 26px;border-radius:14px;box-shadow:0 3px 0 #d9d2bf,0 10px 30px rgba(0,0,0,.25);font-size:min(3vw,21px)}
+  /* kayıt ipucu: ilk SPACE'e kadar görünür, sonra bir daha ASLA (ekran kaydını kirletmesin) */
+  #hint{position:fixed;right:26px;bottom:30px;background:rgba(20,26,32,.78);color:#fffdf6;font-weight:700;font-size:13px;
+    padding:9px 14px;border-radius:10px;letter-spacing:.5px;transition:opacity .4s}
+  #geciz{position:fixed;inset:0;background:#faf6ec;opacity:0;pointer-events:none;transition:opacity .38s}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="vig"></div>
+<div id="brand">BENELOIL</div>
+<div id="chip"><div class="n">0</div><div class="l"></div><div class="k"></div></div>
+<div id="final"><div class="t">BENELOIL</div><div class="s">4.000 oyuncumuza teşekkürler ❤️</div><div class="u">beneloil.com</div></div>
+<div id="hint">SPACE → sonraki sahne</div>
+<div id="geciz"></div>
+<script type="importmap">{"imports":{"three":"./three.module.min.js"}}</script>
+<script type="module">
+import * as THREE from './three.module.min.js'
+import { GLTFLoader } from './GLTFLoader.js'
+
+/* ── GERÇEK METRİKLER (31 Ağu 2026, prod DB — yalnız KAYITLI oyuncuların bulut
+   kayıtları; 6.027 misafirin lokal ilerlemesi DAHİL DEĞİL → hepsi muhafazakâr) ──
+   kayıtlı 3.995→4.000 · misafir cihaz 6.027 · toplam 10.022
+   servis 19.354.496 · litre 645.934.400 (benzin 182,2M + dizel 358,2M + LPG 105,5M)
+   kWh 185.876.698 · toplam gün 397.072 (=1.088 yıl) · pompa 15.659            */
+const M = {
+  kayitli: 4000, toplam: 10022,
+  musteri: 19354496,
+  litre: 645934400, havuz: 258,          // olimpik havuz 2.500.000 L (50×25×2 m)
+  kwh: 185876698, sarj: 3098000,         // ort. 60 kWh EV bataryası ≈ 3,1M tam şarj
+  gun: 397072, yil: 1088,
+}
+const tr = n => Math.round(n).toLocaleString('tr-TR')
+
+const Q = new URLSearchParams(location.search)
+let seed = 40004
+const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296 }
+
+/* ── temel sahne ── */
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, logarithmicDepthBuffer: true })
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+const scene = new THREE.Scene()
+const GOK = { gunduz: 0xbfe0ee, aksam: 0xf4c9a0, gece: 0x101a2a }
+scene.background = new THREE.Color(GOK.gunduz)
+scene.fog = new THREE.Fog(GOK.gunduz, 1400, 6800)
+const cam = new THREE.PerspectiveCamera(55, 1, 0.5, 14000)
+function resize () { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix() }
+addEventListener('resize', resize); resize()
+const hemi = new THREE.HemisphereLight(0xdff0fa, 0x6d9155, 0.95); scene.add(hemi)
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.05); sun.position.set(0.9, 1.5, 0.6); scene.add(sun)
+const lam = c => new THREE.MeshLambertMaterial({ color: c })
+const CREAM = 0xfaf6ec, RED = 0xd64545, RED_D = 0xc94040, DARK = 0x2b2f36
+
+/* ── çim zemini (3000.html kalıbı) ── */
+function cimZemin (boyut, koyu = false) {
+  const TX = 2048
+  const cv = document.createElement('canvas'); cv.width = cv.height = TX
+  const g = cv.getContext('2d')
+  g.fillStyle = koyu ? '#31503c' : '#79a25e'; g.fillRect(0, 0, TX, TX)
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = (koyu ? ['#3a5c46', '#2a4634', '#365544'] : ['#93bd77', '#6d9155', '#84ad68'])[(rnd() * 3) | 0]
+    g.globalAlpha = 0.3 + rnd() * 0.3
+    const r = 8 + rnd() * 40; g.beginPath(); g.arc(rnd() * TX, rnd() * TX, r, 0, 7); g.fill()
+  }
+  g.globalAlpha = 1
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(boyut, boyut), new THREE.MeshLambertMaterial({ map: tex }))
+  m.rotation.x = -Math.PI / 2; m.position.y = -0.05
+  return m
+}
+
+/* ── "BENELOIL / 4000" hücreleri: TAM 4000 istasyon (3000.html tekniği) ── */
+function hucreler (hedef) {
+  function ornekle (fpx) {
+    const cv = document.createElement('canvas'); const g = cv.getContext('2d', { willReadFrequently: true })
+    const f2 = fpx * 1.25
+    cv.width = Math.ceil(fpx * 7.2); cv.height = Math.ceil(fpx * 2.75)
+    g.clearRect(0, 0, cv.width, cv.height)
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'
+    g.font = `900 ${fpx}px 'Arial Black','Arial',sans-serif`
+    g.fillText('BENELOIL', cv.width / 2, fpx * 1.02)
+    g.font = `900 ${f2}px 'Arial Black','Arial',sans-serif`
+    g.fillText('4000', cv.width / 2, fpx * 1.02 + f2 * 1.18)
+    const d = g.getImageData(0, 0, cv.width, cv.height).data
+    const cells = []
+    for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++)
+      if (d[(y * cv.width + x) * 4 + 3] > 128) cells.push({ x, y })
+    return { cells, w: cv.width, h: cv.height }
+  }
+  let lo = 14, hi = 90, pick = null
+  for (let i = 0; i < 22; i++) {
+    const f = (lo + hi) / 2, s = ornekle(f)
+    if (s.cells.length >= hedef) { pick = s; hi = f } else lo = f
+  }
+  const set = new Set(pick.cells.map(c => c.y * 10000 + c.x))
+  for (const c of pick.cells) {
+    c.nb = 0
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
+      if ((dx || dy) && set.has((c.y + dy) * 10000 + c.x + dx)) c.nb++
+    c.r = rnd()
+  }
+  pick.cells.sort((a, b) => (b.nb - a.nb) || (a.r - b.r))
+  pick.cells = pick.cells.slice(0, hedef)
+  return pick
+}
+
+/* ── GLB istasyon parçaları ── */
+const loader = new GLTFLoader()
+const loadGlb = url => new Promise((res, rej) => loader.load(url, res, undefined, rej))
+const [gCover, gPump, gBase, gMarket] = await Promise.all(
+  ['./syn-cover.glb', './syn-pump.glb', './syn-base.glb', './syn-market.glb'].map(loadGlb))
+
+/* GLB'yi verilen yerleşim listesiyle instanced kur */
+function instGlbInto (grup, glb, metas, place) {
+  glb.scene.updateMatrixWorld(true)
+  glb.scene.traverse(node => {
+    if (!node.isMesh) return
+    const local = node.matrixWorld.clone()
+    const m = new THREE.InstancedMesh(node.geometry, new THREE.MeshLambertMaterial({ vertexColors: true }), metas.length)
+    m.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+    const M4 = new THREE.Matrix4(), EU = new THREE.Euler(), QT = new THREE.Quaternion(), SC = new THREE.Vector3()
+    metas.forEach((o, i) => {
+      const pl = place(o)
+      EU.set(0, pl.ry ?? 0, 0); QT.setFromEuler(EU); SC.setScalar(pl.s ?? 1)
+      M4.compose(new THREE.Vector3(...pl.p), QT, SC).multiply(local)
+      m.setMatrixAt(i, M4)
+    })
+    m.instanceMatrix.needsUpdate = true
+    grup.add(m)
+  })
+}
+function instInto (grup, geo, mat, metas, place) {
+  const m = new THREE.InstancedMesh(geo, mat, metas.length)
+  const M4 = new THREE.Matrix4(), EU = new THREE.Euler(), QT = new THREE.Quaternion(), SC = new THREE.Vector3()
+  metas.forEach((o, i) => {
+    const pl = place(o)
+    EU.set(0, pl.ry ?? 0, 0); QT.setFromEuler(EU); SC.setScalar(pl.s ?? 1)
+    M4.compose(new THREE.Vector3(...pl.p), QT, SC)
+    m.setMatrixAt(i, M4)
+  })
+  m.instanceMatrix.needsUpdate = true
+  grup.add(m); return m
+}
+
+/* ════════ SAHNE GRUPLARI (tembel kurulum) ════════ */
+const S = 13
+const pick = hucreler(M.kayitli)
+const W = pick.w * S
+const toWorld = c => ({ x: (c.x - pick.w / 2) * S, z: (c.y - pick.h / 2) * S })
+
+let G1 = null, g1misafir = null
+function kurG1 () {
+  G1 = new THREE.Group()
+  G1.add(cimZemin(W * 2.6))
+  const meta = pick.cells.map(c => { const w = toWorld(c); return { x: w.x + (rnd() - 0.5) * 1.6, z: w.z + (rnd() - 0.5) * 1.6, ry: (rnd() - 0.5) * 0.12, side: rnd() < 0.5 ? 1 : -1 } })
+  // asfalt ped
+  instInto(G1, new THREE.BoxGeometry(11.2, 0.14, 11.2), lam(0x3f454c), meta, o => ({ p: [o.x, 0.07, o.z], ry: o.ry }))
+  instGlbInto(G1, gCover, meta, o => ({ p: [o.x, 0, o.z - 0.8], ry: o.ry, s: 0.66 }))
+  instGlbInto(G1, gBase, meta, o => ({ p: [o.x, 0.02, o.z - 0.8], ry: o.ry, s: 0.8 }))
+  instGlbInto(G1, gPump, meta, o => ({ p: [o.x - 1.15, 0.16, o.z - 0.8], ry: o.ry, s: 0.85 }))
+  instGlbInto(G1, gPump, meta, o => ({ p: [o.x + 1.15, 0.16, o.z - 0.8], ry: o.ry + Math.PI, s: 0.85 }))
+  instGlbInto(G1, gMarket, meta, o => ({ p: [o.x + 0.9 * o.side, 0.62, o.z + 3.7], ry: o.side > 0 ? 0 : Math.PI, s: 0.40 }))
+  // MİSAFİRLER (sahne 2'de belirir): yazının çevresine halka halka krem pedler
+  const mis = []
+  for (let i = 0; i < M.toplam - M.kayitli; i++) {
+    const a = rnd() * Math.PI * 2
+    const r = W * 0.62 + rnd() * W * 0.55
+    mis.push({ x: Math.cos(a) * r, z: Math.sin(a) * r * 0.62, ry: rnd() * Math.PI, sira: i })
+  }
+  g1misafir = instInto(G1, new THREE.BoxGeometry(6.4, 0.5, 6.4), lam(CREAM), mis, o => ({ p: [o.x, -3, o.z], ry: o.ry, s: 0.001 }))
+  g1misafir.metas = mis
+  scene.add(G1)
+}
+/* misafir pedleri t: 0..1 ilerledikçe sırayla yükselir */
+function misafirIlerle (t) {
+  const m = g1misafir, metas = m.metas, n = metas.length
+  const M4 = new THREE.Matrix4(), EU = new THREE.Euler(), QT = new THREE.Quaternion(), SC = new THREE.Vector3()
+  const acik = Math.floor(t * n)
+  for (let i = Math.max(0, m.sonAcik ?? 0); i < acik && i < n; i++) {
+    const o = metas[i]
+    EU.set(0, o.ry, 0); QT.setFromEuler(EU); SC.setScalar(1)
+    M4.compose(new THREE.Vector3(o.x, 0.25, o.z), QT, SC)
+    m.setMatrixAt(i, M4)
+  }
+  if (acik > (m.sonAcik ?? 0)) { m.sonAcik = acik; m.instanceMatrix.needsUpdate = true }
+}
+
+let G3 = null, g3arac = null
+function kurG3 () {
+  G3 = new THREE.Group()
+  G3.add(cimZemin(2600))
+  // 6 şeritli çift yönlü otoyol
+  const yol = new THREE.Mesh(new THREE.PlaneGeometry(2600, 46), lam(0x3f454c))
+  yol.rotation.x = -Math.PI / 2; yol.position.y = 0.02; G3.add(yol)
+  const cizgi = new THREE.Mesh(new THREE.PlaneGeometry(2600, 0.7), lam(0xe8b93e))
+  cizgi.rotation.x = -Math.PI / 2; cizgi.position.y = 0.06; G3.add(cizgi)
+  for (const off of [-15.5, -7.8, 7.8, 15.5]) {
+    for (let x = -1300; x < 1300; x += 22) {
+      const seg = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.5), lam(0xf5f2e8))
+      seg.rotation.x = -Math.PI / 2; seg.position.set(x, 0.05, off); G3.add(seg)
+    }
+  }
+  // araç filosu: gövde + kabin, instanceColor
+  const N = 420
+  const metas = []
+  const SERIT = [-19.2, -11.6, -4, 4, 11.6, 19.2]
+  for (let i = 0; i < N; i++) {
+    const s = SERIT[(rnd() * 6) | 0]
+    metas.push({ x: -1300 + rnd() * 2600, z: s, yon: s < 0 ? 1 : -1, hiz: 34 + rnd() * 30, renk: new THREE.Color().setHSL(rnd(), 0.62, 0.52) })
+  }
+  const gov = new THREE.InstancedMesh(new THREE.BoxGeometry(4.4, 1.5, 2.1), new THREE.MeshLambertMaterial(), N)
+  const kab = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2, 1.1, 1.9), new THREE.MeshLambertMaterial(), N)
+  metas.forEach((o, i) => { gov.setColorAt(i, o.renk); kab.setColorAt(i, o.renk.clone().multiplyScalar(0.82)) })
+  gov.instanceColor.needsUpdate = true; kab.instanceColor.needsUpdate = true
+  G3.add(gov); G3.add(kab)
+  g3arac = { gov, kab, metas }
+  scene.add(G3)
+}
+function aracIlerle (dt) {
+  const { gov, kab, metas } = g3arac
+  const M4 = new THREE.Matrix4(), EU = new THREE.Euler(), QT = new THREE.Quaternion(), SC = new THREE.Vector3(1, 1, 1)
+  metas.forEach((o, i) => {
+    o.x += o.yon * o.hiz * dt
+    if (o.x > 1320) o.x = -1320; if (o.x < -1320) o.x = 1320
+    EU.set(0, o.yon > 0 ? 0 : Math.PI, 0); QT.setFromEuler(EU)
+    M4.compose(new THREE.Vector3(o.x, 0.8, o.z), QT, SC); gov.setMatrixAt(i, M4)
+    M4.compose(new THREE.Vector3(o.x - o.yon * 0.5, 1.9, o.z), QT, SC); kab.setMatrixAt(i, M4)
+  })
+  gov.instanceMatrix.needsUpdate = true; kab.instanceMatrix.needsUpdate = true
+}
+
+let G4 = null, g4havuz = null
+function kurG4 () {
+  G4 = new THREE.Group()
+  G4.add(cimZemin(4200))
+  // olimpik havuz: 50×25 m, kulvarlı su dokusu
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256
+  const g = cv.getContext('2d')
+  // KULVARLAR UZAKTAN OKUNMALI: 3px'lik ton farkı sahne ölçeğinde kayboluyordu ve
+  // havuzlar 'mavi karo' gibi kalıyordu. Kalın beyaz kulvar ipi + uçlarda duvar bandı.
+  g.fillStyle = '#3f9fd0'; g.fillRect(0, 0, 512, 256)
+  for (let i = 1; i < 8; i++) { g.fillStyle = '#eef6fa'; g.fillRect(0, i * 32 - 3, 512, 6) }
+  g.fillStyle = '#eef6fa'; g.fillRect(0, 0, 10, 256); g.fillRect(502, 0, 10, 256)
+  const su = new THREE.MeshLambertMaterial({ map: (() => { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t })() })
+  const metas = []
+  const COLS = 23, GAPX = 62, GAPZ = 37
+  for (let i = 0; i < M.havuz; i++) {
+    metas.push({ x: (i % COLS - COLS / 2) * GAPX, z: (Math.floor(i / COLS) - Math.ceil(M.havuz / COLS) / 2) * GAPZ, sira: i })
+  }
+  const rim = instInto(G4, new THREE.BoxGeometry(53, 0.9, 28), lam(0xe8e2d0), metas, o => ({ p: [o.x, -4, o.z], s: 0.001 }))
+  const wat = instInto(G4, new THREE.BoxGeometry(50, 0.9, 25), su, metas, o => ({ p: [o.x, -4, o.z], s: 0.001 }))
+  rim.metas = metas; g4havuz = { rim, wat, metas, acik: 0 }
+  scene.add(G4)
+}
+function havuzIlerle (t) {
+  const { rim, wat, metas } = g4havuz
+  const hedef = Math.min(M.havuz, Math.floor(t * M.havuz))
+  if (hedef <= g4havuz.acik) return
+  const M4 = new THREE.Matrix4(), QT = new THREE.Quaternion(), SC = new THREE.Vector3(1, 1, 1)
+  for (let i = g4havuz.acik; i < hedef; i++) {
+    const o = metas[i]
+    M4.compose(new THREE.Vector3(o.x, 0.42, o.z), QT, SC); rim.setMatrixAt(i, M4)
+    M4.compose(new THREE.Vector3(o.x, 0.5, o.z), QT, SC); wat.setMatrixAt(i, M4)
+  }
+  g4havuz.acik = hedef
+  rim.instanceMatrix.needsUpdate = true; wat.instanceMatrix.needsUpdate = true
+}
+
+let G5 = null, g5kanat = null
+function kurG5 () {
+  G5 = new THREE.Group()
+  G5.add(cimZemin(3400, true))
+  const N = 96, metas = []
+  for (let i = 0; i < N; i++) {
+    metas.push({ x: (i % 12 - 5.5) * 120 + (rnd() - 0.5) * 30, z: (Math.floor(i / 12) - 3.5) * 150 + (rnd() - 0.5) * 40, faz: rnd() * Math.PI * 2 })
+  }
+  instInto(G5, new THREE.CylinderGeometry(0.9, 1.6, 42, 8), lam(0xdfe3e8), metas, o => ({ p: [o.x, 21, o.z] }))
+  instInto(G5, new THREE.BoxGeometry(4.4, 2.6, 2.6), lam(0xe8e2d0), metas, o => ({ p: [o.x, 42, o.z] }))
+  // kanatlar: her kare döner (instanced, 96 matris/kare — ucuz)
+  const kanatGeo = new THREE.BoxGeometry(0.7, 30, 1.7)
+  kanatGeo.translate(0, 15, 0)
+  const kanat = new THREE.InstancedMesh(kanatGeo, lam(0xf2f0ea), N * 3)
+  G5.add(kanat)
+  g5kanat = { kanat, metas }
+  // şarj direkleri: parlayan sarı noktalar
+  const sari = new THREE.MeshLambertMaterial({ color: 0xe8b93e, emissive: 0xe8b93e, emissiveIntensity: 0.9 })
+  instInto(G5, new THREE.BoxGeometry(1.4, 3.4, 1.4), sari, metas.slice(0, 40), o => ({ p: [o.x + 26, 1.7, o.z + 18] }))
+  scene.add(G5)
+}
+function kanatDondur (t) {
+  const { kanat, metas } = g5kanat
+  const M4 = new THREE.Matrix4(), EU = new THREE.Euler(), QT = new THREE.Quaternion(), SC = new THREE.Vector3(1, 1, 1)
+  metas.forEach((o, i) => {
+    for (let b = 0; b < 3; b++) {
+      EU.set(0, 0, t * 1.6 + o.faz + b * (Math.PI * 2 / 3)); QT.setFromEuler(EU)
+      M4.compose(new THREE.Vector3(o.x, 42, o.z + 1.8), QT, SC)
+      kanat.setMatrixAt(i * 3 + b, M4)
+    }
+  })
+  kanat.instanceMatrix.needsUpdate = true
+}
+
+let G6 = null, g6gunes = null
+function kurG6 () {
+  G6 = new THREE.Group()
+  G6.add(cimZemin(600))
+  const tek = [{ x: 0, z: 0, ry: 0, side: 1 }]
+  instInto(G6, new THREE.BoxGeometry(11.2, 0.14, 11.2), lam(0x3f454c), tek, o => ({ p: [o.x, 0.07, o.z] }))
+  instGlbInto(G6, gCover, tek, o => ({ p: [0, 0, -0.8], s: 0.66 }))
+  instGlbInto(G6, gBase, tek, o => ({ p: [0, 0.02, -0.8], s: 0.8 }))
+  instGlbInto(G6, gPump, tek, o => ({ p: [-1.15, 0.16, -0.8], s: 0.85 }))
+  instGlbInto(G6, gPump, tek, o => ({ p: [1.15, 0.16, -0.8], ry: Math.PI, s: 0.85 }))
+  instGlbInto(G6, gMarket, tek, o => ({ p: [0.9, 0.62, 3.7], s: 0.40 }))
+  g6gunes = new THREE.Mesh(new THREE.SphereGeometry(4, 18, 14), new THREE.MeshBasicMaterial({ color: 0xffd76b }))
+  G6.add(g6gunes)
+  scene.add(G6)
+}
+
+/* ════════ BÖLÜM YÖNETİCİSİ ════════ */
+const chip = document.getElementById('chip')
+const chipN = chip.querySelector('.n'), chipL = chip.querySelector('.l'), chipK = chip.querySelector('.k')
+let sayacHedef = 0, sayacBas = 0, sayacT0 = 0, sayacSure = 1
+function sayac (hedef, sure) { sayacBas = 0; sayacHedef = hedef; sayacT0 = performance.now() / 1000; sayacSure = sure }
+function sayacGuncelle () {
+  const t = Math.min(1, (performance.now() / 1000 - sayacT0) / sayacSure)
+  const e = 1 - Math.pow(1 - t, 3)
+  chipN.textContent = tr(sayacBas + (sayacHedef - sayacBas) * e)
+}
+function cipKur (label, kiyas) { chipL.textContent = label; chipK.textContent = kiyas || ''; chipK.style.opacity = 0; chip.style.opacity = 1 }
+function kiyasGoster () { chipK.style.opacity = 1 }
+
+const gokLerp = (renk) => { scene.background.lerp(new THREE.Color(renk), 0.04); scene.fog.color.copy(scene.background) }
+
+const BOLUMLER = [
+  { /* 1 — 4.000 KAYITLI OYUNCU: yazı sahasının üstüne yükseliş */
+    gir () { if (!G1) kurG1(); G1.visible = true
+      cipKur('KAYITLI OYUNCU', 'her istasyon bir oyuncu')
+      sayac(M.kayitli, 7) },
+    tik (t) { gokLerp(GOK.gunduz)
+      if (t > 4) kiyasGoster()
+      // AÇIĞA ÇIKARMA: alçak/yakından (istasyonlar iri, yazı okunmaz) yükselerek
+      // yazıyı ortaya çıkar — ilk kadraj ufukta minik bir leke OLMASIN.
+      const e = Math.min(1, t / 10), sm = e * e * (3 - 2 * e)
+      const y = 34 + sm * 640, r = W * 0.30 + sm * W * 0.46
+      cam.position.set(Math.sin(t * 0.045) * r * 0.3, y, r)
+      cam.lookAt(0, 0, -W * 0.03) },
+  },
+  { /* 2 — 10.022 TOPLAM: misafirler halka halka katılır */
+    gir () { cipKur('İSTASYON SAHİBİ · KAYITLI + MİSAFİR', '6.027 misafir aramıza katılıyor')
+      sayacBas = M.kayitli; sayacHedef = M.toplam; sayacT0 = performance.now() / 1000; sayacSure = 8
+      this.t0 = null },
+    tik (t) { gokLerp(GOK.gunduz)
+      misafirIlerle(Math.min(1, t / 8))
+      if (t > 5) kiyasGoster()
+      const y = 740 + t * 18, r = W * 1.0 + t * 22
+      cam.position.set(Math.sin(t * 0.05 + 1.2) * r * 0.3, y, r)
+      cam.lookAt(0, 0, 0) },
+  },
+  { /* 3 — 19,3M MÜŞTERİ: bitmeyen konvoy */
+    gir () { if (G1) G1.visible = false
+      if (!G3) kurG3(); G3.visible = true
+      cipKur('MÜŞTERİ SERVİS EDİLDİ', "İstanbul'un nüfusundan fazla")
+      sayac(M.musteri, 12) },
+    tik (t, dt) { gokLerp(GOK.gunduz)
+      aracIlerle(dt)
+      if (t > 7) kiyasGoster()
+      // YOL KENARI: araçlar iri ve hızlı geçmeli — 150 birim uzaktan konvoy
+      // 'renkli noktalar' gibi kalıyordu.
+      const sx = Math.sin(t * 0.06) * 46
+      cam.position.set(sx, 24 + Math.sin(t * 0.1) * 5, 64)
+      cam.lookAt(sx * 0.4, 1.5, 0) },
+  },
+  { /* 4 — 646M LİTRE: 258 olimpik havuz */
+    gir () { if (G3) G3.visible = false
+      if (!G4) kurG4(); G4.visible = true
+      cipKur('LİTRE YAKIT SATILDI', '= 258 olimpik yüzme havuzu (2,5 milyon L / havuz)')
+      sayac(M.litre, 11) },
+    tik (t) { gokLerp(GOK.gunduz)
+      havuzIlerle(Math.min(1, t / 9))
+      if (t > 6) kiyasGoster()
+      // ÖNCE BİRİM, SONRA ÇOKLUK: ilk 2 sn tek havuzun başında (kulvarlar okunur,
+      // '2,5 milyon litre' bir ölçek kazanır), sonra geri çekilip 258'i aç.
+      const p0 = g4havuz.metas[0]
+      const e = Math.min(1, Math.max(0, (t - 1.6) / 8)), sm = e * e * (3 - 2 * e)
+      const bx = p0.x + 40, by = 26, bz = p0.z + 74
+      const sx = Math.sin(t * 0.05) * 420, sy = 700, sz = 1050
+      cam.position.set(bx + (sx - bx) * sm, by + (sy - by) * sm, bz + (sz - bz) * sm)
+      const lx = p0.x + (0 - p0.x) * sm, lz = p0.z + (-40 - p0.z) * sm
+      cam.lookAt(lx, 0, lz) },
+  },
+  { /* 5 — 185,9M kWh: gece rüzgâr çiftliği */
+    gir () { if (G4) G4.visible = false
+      if (!G5) kurG5(); G5.visible = true
+      hemi.intensity = 0.4; sun.intensity = 0.3
+      cipKur('kWh ELEKTRİK VERİLDİ', '≈ 3 milyon elektrikli araç tam şarjı')
+      sayac(M.kwh, 11) },
+    tik (t) { gokLerp(GOK.gece)
+      kanatDondur(t)
+      if (t > 6) kiyasGoster()
+      cam.position.set(Math.sin(t * 0.06) * 260, 90 + Math.sin(t * 0.09) * 26, 420)
+      cam.lookAt(0, 26, 0) },
+    cik () { hemi.intensity = 0.95; sun.intensity = 1.05 },
+  },
+  { /* 6 — 1.088 YIL: tek istasyonun üstünde hızlandırılmış günler */
+    gir () { if (G5) G5.visible = false
+      if (!G6) kurG6(); G6.visible = true
+      cipKur('YIL OYUN SÜRESİ', '397.072 oyun günü — en ileri oyuncu: gün 7.935')
+      sayac(M.yil, 10) },
+    tik (t) { const gun = (t * 0.55) % 1                     // ~1,8 sn'de bir gün
+      const a = gun * Math.PI * 2
+      g6gunes.position.set(Math.cos(a) * 70, Math.sin(a) * 55, -30)
+      const gunduzMu = Math.sin(a) > -0.12
+      gokLerp(gunduzMu ? (Math.sin(a) < 0.25 ? GOK.aksam : GOK.gunduz) : GOK.gece)
+      hemi.intensity = gunduzMu ? 0.95 : 0.35
+      sun.intensity = gunduzMu ? 1.05 : 0.2
+      if (t > 6) kiyasGoster()
+      // istasyon kadrajı DOLDURSUN: 30 birim uzaktan minicik kalıyordu
+      cam.position.set(Math.sin(t * 0.12) * 14, 7.5 + Math.sin(t * 0.07) * 1.5, 17)
+      cam.lookAt(0, 2.2, 0) },
+  },
+  { /* 7 — FİNAL */
+    gir () { document.getElementById('final').style.opacity = 1
+      chip.style.opacity = 0
+      this.frozen = null },
+    tik (t) { const gun = 0.13                                // altın saat sabitlenir
+      const a = gun * Math.PI * 2
+      g6gunes.position.set(Math.cos(a) * 70, Math.sin(a) * 55, -30)
+      gokLerp(GOK.aksam); hemi.intensity = 0.8; sun.intensity = 0.9
+      cam.position.set(Math.sin(t * 0.05) * 12, 8, 19)
+      cam.lookAt(0, 2.4, 0) },
+  },
+]
+
+let bolum = -1, bolumT0 = 0, geciste = false
+const geciz = document.getElementById('geciz')
+function sonraki () {
+  if (geciste || bolum >= BOLUMLER.length - 1) return
+  geciste = true
+  geciz.style.opacity = 1
+  setTimeout(() => {
+    BOLUMLER[bolum]?.cik?.()
+    bolum++
+    bolumT0 = performance.now() / 1000
+    BOLUMLER[bolum].gir()
+    geciz.style.opacity = 0
+    setTimeout(() => { geciste = false }, 400)
+  }, 400)
+}
+addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault()
+    document.getElementById('hint').style.opacity = 0   // ilk SPACE'ten sonra bir daha görünmez
+    sonraki() }
+  if (e.code === 'KeyR') location.reload()
+})
+
+/* başlangıç: doğrudan 1. bölüm (?sahne=N ile atlama — test için) */
+bolum = -1
+{
+  const atla = Math.min(BOLUMLER.length, Math.max(1, +(Q.get('sahne') || 1)))
+  // ilk bölüme geçişsiz gir; test atlaması için öncekilerin gir() zinciri sırayla koşulur
+  for (let i = 0; i < atla; i++) { bolum = i; BOLUMLER[i].gir() }
+  bolumT0 = performance.now() / 1000
+}
+if (Q.get('clean')) document.getElementById('hint').classList.add('hide')
+
+let son = performance.now() / 1000
+renderer.setAnimationLoop(() => {
+  const simdi = performance.now() / 1000
+  const dt = Math.min(0.05, simdi - son); son = simdi
+  const t = simdi - bolumT0
+  BOLUMLER[bolum]?.tik(t, dt)
+  if (bolum < BOLUMLER.length - 1) sayacGuncelle()
+  renderer.render(scene, cam)
+})
+</script>
+</body>
+</html>
