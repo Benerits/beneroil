@@ -27,8 +27,16 @@ const tabs = all(/data-oftab="([^"]+)"/g, ofBlock)
 const panes = all(/data-ofpane="([^"]+)"/g, ofBlock)
 check(`sekme ve panel sayısı eşit (${tabs.length}/${panes.length})`,
   tabs.length === panes.length && tabs.length >= 5)
-check('kimlikler birebir eşleşiyor', JSON.stringify(tabs) === JSON.stringify(panes),
-  `sekme=${tabs} panel=${panes}`)
+// KÜME eşitliği aranıyor, SIRA değil: panelden yalnız biri görünür olduğu için
+// DOM sırası kullanıcıya hiç yansımıyor. Sıra karşılaştırması 'tersane' paneli
+// listenin başına yazıldığı için yanlış alarm veriyordu — gerçek koşul şu:
+// karşılığı olmayan sekme (tıklanır ama boş açılır) veya erişilemeyen panel olmasın.
+const sekmeFazlasi = tabs.filter(x => !panes.includes(x))
+const panelFazlasi = panes.filter(x => !tabs.includes(x))
+check('her sekmenin paneli, her panelin sekmesi var',
+  sekmeFazlasi.length === 0 && panelFazlasi.length === 0,
+  sekmeFazlasi.length || panelFazlasi.length
+    ? `panelsiz sekme=${sekmeFazlasi} sekmesiz panel=${panelFazlasi}` : '')
 check('tam BİR sekme varsayılan aktif', (ofBlock.match(/class="tab active"/g) || []).length === 1)
 check('tam BİR panel varsayılan açık', (ofBlock.match(/class="ofpane is-on"/g) || []).length === 1)
 const firstTab = ofBlock.match(/<button class="tab active" data-oftab="([^"]+)"/)?.[1]
@@ -65,15 +73,23 @@ check('modal sabit yükseklikli (sekme değişince zıplamaz)',
   /<div class="backdrop" id="officewrap">\s*<div class="modal">/.test(html))
 
 console.log('\n== 6) CarManager seçenekleri GERÇEKTEN bağlı mı ==')
-// Bu testin sebebi: birkaç seçenek (boats/waterOnly/serviceLane/carsPassThrough)
-// cars.ts'te tanımlıydı, testlerde kullanılıyordu ama main.ts'te HİÇ verilmiyordu.
+// Bu testin sebebi: birkaç seçenek (boats/waterOnly/serviceLane) cars.ts'te
+// tanımlıydı, testlerde kullanılıyordu ama main.ts'te HİÇ verilmiyordu.
 // Yük testi kendi opts'unu kurduğu için yeşil kalıyordu; oyunda ölü koddu.
 // Belirti: marinada araba doğuyordu, 4 şerit servis şeridi çalışmıyordu.
+// `carsPassThrough` LİSTEDEN ÇIKARILDI: şerit ağı mimarisiyle birlikte cars.ts'ten
+// tamamen silindi (artık kapatılacak bir araç-araç çarpışması yok). Test onu aramaya
+// devam ettiği için "ölü kod" diye YANLIŞ alarm veriyordu — silinmiş bir seçenek
+// bağlanmamış bir seçenekle aynı şey değil. Aşağıdaki "hâlâ var mı" kontrolü bu
+// karışıklığın tekrarını engelliyor: liste bayatlarsa test bunu açıkça söyler.
 const cars = fs.readFileSync(new URL('../../src/cars.ts', import.meta.url), 'utf8')
 const optsBlock = main.slice(main.indexOf('new CarManager('), main.indexOf('new CarManager(') + 3000)
 const declared = [...cars.slice(cars.indexOf('CarManagerOpts'), cars.indexOf('export class CarManager'))
   .matchAll(/^\s{2}(\w+)\??:/gm)].map(m => m[1])
-const KRITIK = ['boats', 'waterOnly', 'serviceLane', 'carsPassThrough', 'segments', 'entryChance', 'trafficPull']
+const KRITIK = ['boats', 'waterOnly', 'serviceLane', 'segments', 'entryChance', 'trafficPull']
+const bayat = KRITIK.filter(k => !declared.includes(k))
+check('kritik seçenek listesi GÜNCEL (silinmiş seçenek aranmıyor)', bayat.length === 0,
+  bayat.length ? `cars.ts'te artık yok: ${bayat} — testi güncelle` : '')
 for (const k of KRITIK) {
   check(`opts.${k} main.ts'te veriliyor`, new RegExp(`^\\s*${k}:`, 'm').test(optsBlock),
     'cars.ts\'te tanımlı ama oyuna bağlanmamış → ölü kod')
