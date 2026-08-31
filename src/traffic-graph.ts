@@ -1,45 +1,37 @@
 /**
- * REZERVASYON TABANLI TRAFİK ÇEKİRDEĞİ (trafik raporu §5)
+ * ŞERİT AĞI — ÖNCEDEN HESAPLANMIŞ TRAFİK (mimari karar, oyun sahibi)
  *
- * Sorun: rota üretimi serbest waypoint listesiydi, çakışmalar SONRADAN pazarlıkla
- * çözülüyordu (kafa-kafaya dodge, zincir döngü kırıcı, buharlaşma sigortası). Her yeni
- * istasyon aynı hata sınıfını tekrar üretiyordu (B1-B6).
+ * NEDEN DEĞİŞTİ (eski dosyanın tamamı silindi):
+ * Burada REZERVASYON GRAFİĞİ vardı: kapı ağzı/ünite koridoru "çakışma bölgesi" olarak
+ * modelleniyor, araç bölgeye girmeden token alıyor, alamazsa BEKLİYORDU. Token + FIFO
+ * kuyruğu + TTL + açlık önleme + sweep... hepsi tek bir varsayımın türeviydi:
+ * "araçlar aynı fiziksel alanı paylaşacak, o yüzden müzakere etmeliler".
  *
- * Çözüm: istasyonun darboğazları ÇAKIŞMA BÖLGESİ (zone) olarak modellenir. Bölgeler
- * `geom(station)`'dan TÜRETİLİR — yani yeni istasyon eklemek bedava, aynalama hatası
- * imkânsız. Araç bölgeye girmeden ÖNCE token rezerve eder; alamazsa bölge dışında
- * bekler. Kapasite dolu → araç ilerlemez → çakışma OLUŞMAZ.
+ * Oyun sahibinin kararı bu varsayımı KALDIRDI: "Yapılar place edildiğinde çok düzgün bir
+ * path çizilmeli ve arabalar bunu kullanmalı. Gerekirse birbirinin içinden geçsinler ama
+ * bu yollar öyle hesaplanmalı ki kesinlikle düzgün, açık şekilde takip edilebilsin.
+ * Dinamikten ziyade AKICILIK istiyorum."
  *
- * FIFO: her bölgede bekleme sırası vardır, en eski bekleyen ilk girer (açlık yok).
- * Bu dosya sahne/three.js bilmez: saf geometri + rezervasyon defteri (test edilebilir).
+ * Sektör kanıtı aynı yöne işaret ediyor: SimCity 2013 her aracı ajan olarak müzakere
+ * ettirdi ve tıkanmaları hiç çözemedi; Planet Coaster (bir tycoon) kalabalığı flow field
+ * ile akıtır, ajan müzakeresiyle değil. Bu bir TYCOON: trafik mekanik değil, DEKOR + tempo.
+ *
+ * YENİ MODEL: yerleşim değiştiğinde (bina kurulur/taşınır/döner, şube açılır) istasyon
+ * başına ŞERİT AĞI bir kez hesaplanır. Şeritler GEOMETRİK OLARAK AYRIK: gelen akış ile
+ * giden akış farklı x kolonlarında, her ünitenin kendi yaklaşma kolu var. Araç şeride
+ * girer ve sonuna kadar akar; kimse kimseyi beklemez, çünkü bekleyecek bir çakışma yok.
+ *
+ * Bu dosya sahne/three.js bilmez: saf geometri (test edilebilir, ucuz, deterministik).
  */
 
-/** Bölge = istasyonun darboğazı (kapı ağzı, ünite yaklaşma koridoru). Dikdörtgen + kapasite. */
-export interface Zone {
-  id: string
-  cx: number
-  cy: number
-  w: number
-  d: number
-  capacity: number
-  /** 'gate' = kapı ağzı: oradan GEÇEN herkes rezerve eder.
-   *  'unit' = pompa/şarj yaklaşma koridoru: YALNIZ o üniteye giden (veya oradan ayrılan)
-   *  araç rezerve eder. Koridordan sadece geçen aracı da bağlasaydık koridorlar zincir
-   *  oluşturur, ters yönde ilerleyen iki araç karşılıklı kilitlenirdi. */
-  kind: 'gate' | 'unit'
-}
-
-/** Ünitenin servis noktası (aracın durduğu yer) — bölge bundan türetilir. */
+/** Ünitenin servis noktası (aracın durduğu yer). Şerit uçları BUNDAN türer —
+ *  world.pumpSlots / world.evSlots API'si tek kaynak, elle aynalama yok. */
 export interface UnitPoint {
-  /** 'pump-3' / 'ev-1' — bölge kimliği bundan kurulur, cars.ts aynı kalıbı üretir */
+  /** 'pump-3' / 'ev-1' */
   id: string
   x: number
   y: number
 }
-
-/** Apron seyir şeridinin kapıdan uzaklığı. entryPath (cars.ts) ile yaklaşma bölgesinin
- *  geometrisi AYNI sabiti kullanmalı — ayrışırsa bölge aracın geçmediği yere düşer. */
-export const APRON_LANE_OFF = 1.75
 
 export interface StationGeom {
   station: string
@@ -49,240 +41,212 @@ export interface StationGeom {
   gateOutY: number
   sideSign: number // istasyonun yönü (near -1, far +1)
   dirY: number     // seyir yönü (near +1, far -1)
-  wide: boolean    // geniş kapı alındı mı (kapasite 2)
-  /** bu istasyonun pompa/şarj servis noktaları (yaklaşma bölgeleri bunlardan türer) */
+  wide: boolean    // geniş kapı alındı mı
+  /** bu istasyonun pompa/şarj servis noktaları */
   units?: UnitPoint[]
+  /** MARİNA: şeritler suda kalmalı, tekne boyu araçtan kat kat büyük */
+  water?: boolean
 }
 
-/** Bölge sınırına bu mesafede rezervasyon denenir (araç bölgeye girmeden önce durur). */
-export const RESERVE_LOOKAHEAD = 2.6
+/** ARACIN YARI GENİŞLİĞİ + PAY. Şerit ekseni ile ÜNİTEDE DURAN aracın merkezi arasında
+ *  en az bu kadar mesafe bırakılır; yoksa akan araç duran aracın gövdesine biner.
+ *  1.05 seçildi: yük testinde "iç içe" ölçütü merkez mesafesi < 1.0 olarak sayılıyor. */
+export const UNIT_CLEAR = 1.05
+/** GELEN ve GİDEN omurga arasındaki mesafe. İki akım aynı kolonda olmasın diye. */
+export const LANE_SEP = 1.05
+/** Çıkış omurgasının kapıya en yakın olabileceği derinlik. NEGATİF OLABİLİR: kapı hattı
+ *  (gateX) ile yol kenarı bordürü (world.buildRoadEdge, x=5.02 / karşı yakada aynası)
+ *  arasında ~0.8 birimlik rampa şeridi var ve orası SAHANIN İÇİ. Dar avlularda çıkış
+ *  omurgasını oraya taşımak, iki şeridi ayrık tutmanın tek yolu (bordürü ASLA aşmaz). */
+export const EXIT_DEPTH_MIN = -0.6
+/** Gelen omurganın kapıya en yakın olabileceği derinlik (çok dar avluda taban). */
+export const IN_DEPTH_MIN = 0.5
+/** Gelen omurga avlunun derinliklerine kaçmasın (ünite çok batıdaysa) */
+export const IN_DEPTH_MAX = 2.6
 
-/** Rezervasyon alıp bölgeye bu süre içinde GİRMEYEN araç token'ı bırakır (saniye).
- *  Yaklaşma mesafesi 2.6 birim; normal hızda ~1 sn sürer, 2.5 sn makul pay.
- *  KISA tutulur: kapasite-1 bölgede tıkanmış bir aracın uzun süre yer tutması, kuyruğu
- *  bekletip buharlaşma üretiyordu (yük testinde T3: 8 sn TTL ile buharlaşma 58).
- *  Token geri alınınca araç kuyruğun BAŞINA konur — sırasını çoktan beklemişti. */
-export const RESERVE_TTL = 2.5
+/** Kuyruk slotları: kapıdan içeri ilk slot ve slot aralığı (araç boyu 2.66 + pay). */
+export const QUEUE_BASE = 3.4
+export const QUEUE_STEP = 2.9
+/** MARİNA: süperyat 8.5 birim — tekne kuyruğu araç aralığıyla iç içe girerdi. */
+export const QUEUE_BASE_WATER = 4
+export const QUEUE_STEP_WATER = 9
+export const QUEUE_X_WATER = 6.9
+/** Kuyruk kapının EN FAZLA bu kadar gerisine uzayabilir (avlunun içinde, çitin dibinde).
+ *  Daha uzunu sahayı taşar; oradan sonrası kapasite değil, "giremeyen müşteri"dir. */
+export const QUEUE_TAIL_MAX = 17
 
-export class TrafficGraph {
-  zones: Zone[] = []
-  /** zoneId → içindeki/rezerve etmiş araçlar (ekleme sırası korunur) */
-  private occ = new Map<string, Set<unknown>>()
-  /** REZERVASYON YAŞI: token aldı ama bölgeye HENÜZ GİRMEDİ olan araçlar.
-   *  Araç bölgeye girince kayıt silinir (artık "içeride"dir ve sweep onu çıkışta bırakır). */
-  private pending = new Map<string, Map<unknown, number>>()
-  /** zoneId → FIFO bekleme sırası (rezervasyon alamayanlar) */
-  private waitQ = new Map<string, unknown[]>()
-  /** telemetri: kaç kez rezervasyon reddedildi (bekleme = önlenmiş çakışma) */
+/** GERİYE DÖNÜK: ünite yokken (henüz pompa kurulmamış) kullanılan varsayılan apron ofseti. */
+export const APRON_LANE_OFF = 1.75
+
+export interface Pt { x: number; y: number }
+
+/** Bir istasyonun ÖNCEDEN HESAPLANMIŞ şerit ağı. */
+export interface StationLanes {
+  station: string
+  gateX: number
+  gateInY: number
+  gateOutY: number
+  lane: number
+  sideSign: number
+  dirY: number
+  /** GELEN omurga (kapı → üniteler) x kolonu */
+  xIn: number
+  /** GİDEN omurga (üniteler → çıkış kapısı) x kolonu */
+  xOut: number
+  /** kuyruk slotları — gelen omurga üzerinde SABİT noktalar (araç slota kayar) */
+  queue: Pt[]
+}
+
+export class LaneNetwork {
+  private byStation = new Map<string, StationLanes>()
+  /** hata ayıklama katmanı (?traffic=1) için şerit dikdörtgenleri */
+  zones: { id: string; cx: number; cy: number; w: number; d: number; capacity: number }[] = []
+  /** telemetri: kaç araç şeride yerleşti / kaçı yer bulamadı (kapasite baskısı).
+   *  Eski `granted/denied` adları KORUNDU (traffic-debug.ts arayüzü). */
   stats = { granted: 0, denied: 0 }
 
-  /** Bölgeleri istasyon geometrisinden TÜRET — her istasyon aynı kalıbı alır. */
+  /**
+   * Yerleşimden ŞERİT AĞINI TÜRET. Yalnız yerleşim imzası değişince çağrılır —
+   * kare başına DEĞİL (mobil performans kuralı).
+   */
   rebuild(geoms: StationGeom[]) {
+    this.byStation.clear()
     this.zones = []
     for (const g of geoms) {
-      // KAPASİTE HER ZAMAN 1: kapı ağzı fiziksel olarak TEK SIRA. gateInOff/gateOutOff
-      // deterministik tek şerit verdiği için (geniş kapıda bile) iki aracı birlikte içeri
-      // almak onları aynı şeride sokup kilitliyordu — yük testinde buharlaşma 61 → 0.
-      // Geniş kapının faydası giriş/çıkış AYRIMI, aynı ağızda paralellik değil.
-      const cap = 1
-      // 1) Kapı GİRİŞ ağzı: şerit ↔ kapı arası + kapı derinliği (üç akımın kesiştiği nokta)
-      this.zones.push({
-        id: `gate-in-${g.station}`, kind: 'gate',
-        cx: g.gateX + g.sideSign * 0.6, cy: g.gateInY,
-        w: 3.6, d: 4.6, capacity: cap,
-      })
-      // 2) Kapı ÇIKIŞ ağzı: birleşme bölgesi. Kapasite 2 — çıkış ağzı apron tarafında daha
-      // derin (bir araç şeride katılırken arkadaki kapıda hazır bekleyebilir); 1 verilince
-      // çıkış kuyruğu apron'a taşıyordu.
-      this.zones.push({
-        id: `gate-out-${g.station}`, kind: 'gate',
-        cx: g.gateX + g.sideSign * 0.6, cy: g.gateOutY,
-        w: 3.6, d: 4.6, capacity: 2,
-      })
-    }
-    // 3) POMPA/ŞARJ YAKLAŞMA BÖLGELERİ.
-    // ÖNCE DENENEN VE GERİ ALINAN: apron'un tamamı için TEK kapasite-2 bölge. Ölçüm
-    // (aynı tohum, çarpışma AÇIK): T1 servis 268 → 154, T2 384 → 238. Neden olmadı:
-    // SimCity klonunda node'lar KÜÇÜK ve ÇOK; apron'u tek bölge yapmak tüm istasyon içi
-    // trafiği 2 araca sınırlar — akışı düzenlemek yerine boğar.
-    // DOĞRU UYARLAMA (bu blok): her ünitenin ÖNÜNDEKİ dar koridor ayrı bölge, kapasite 1.
-    // Araç yalnız GİDECEĞİ ünitenin koridorunu rezerve eder (kind='unit' filtresi), diğer
-    // şeritler serbest kalır. Kazanımı: bir üniteden AYRILAN araçla oraya GÖNDERİLEN araç
-    // (sendToSlot pompa boşalır boşalmaz tetikleniyor) aynı dar koridora birlikte girmez.
-    // Kapı bölgeleri ÖNCE eklenir: zoneAt ilk eşleşeni döndürür, çakışmada kapı kazanır.
-    for (const g of geoms) {
-      const units = [...(g.units ?? [])].sort((a, b) => a.y - b.y)
-      const laneX = g.gateX + g.sideSign * APRON_LANE_OFF
-      for (let i = 0; i < units.length; i++) {
-        const u = units[i]
-        // DERİNLİK komşu üniteye taşmasın: oyuncu üniteleri sık dizebiliyor (yük testinde
-        // 1.5 birim aralık). Üst üste binen bölgeler zoneAt'te birbirini gölgeler ve
-        // doluluk defterini tutarsızlaştırır.
-        const gapPrev = i > 0 ? u.y - units[i - 1].y : 99
-        const gapNext = i < units.length - 1 ? units[i + 1].y - u.y : 99
-        const d = Math.max(1.1, Math.min(2.4, Math.min(gapPrev, gapNext) - 0.15))
-        // kapı ağzına denk gelen üniteyi ATLA — o alanı zaten kapı bölgesi yönetiyor
-        // (kapı bölgesi derinliği 4.6 → yarısı 2.3).
-        if (Math.abs(u.y - g.gateInY) < 2.3 + d / 2) continue
-        if (Math.abs(u.y - g.gateOutY) < 2.3 + d / 2) continue
-        // Koridor: seyir şeridinden ünitenin servis noktasına. Pay 1.6 → araç gövdesini
-        // kapsar ama bekleme kuyruğu (kapı+0.8) ve çıkış koridoru (kapı+0.45) DIŞARIDA
-        // kalır; onları kapsasaydı bekleyen araç ünite koridorunu ömür boyu tutardı.
-        this.zones.push({
-          id: `unit-${g.station}-${u.id}`, kind: 'unit',
-          cx: (laneX + u.x) / 2, cy: u.y,
-          w: Math.abs(laneX - u.x) + 1.6, d, capacity: 1,
-        })
+      const units = g.units ?? []
+      // ŞERİT DERİNLİKLERİ ÜNİTELERDEN TÜRER. "Derinlik" = kapıdan istasyonun içine mesafe.
+      // En SIĞ ünite belirleyicidir: omurga ondan UNIT_CLEAR kadar uzakta kalmalı, yoksa
+      // akan araç orada duran aracın üstünden geçer (oyuncunun gördüğü "iç içe" görüntü).
+      let dUnit = Infinity
+      for (const u of units) {
+        const d = g.sideSign < 0 ? (g.gateX - u.x) : (u.x - g.gateX)
+        if (d > 0.4 && d < dUnit) dUnit = d
+      }
+      if (!isFinite(dUnit)) dUnit = APRON_LANE_OFF + UNIT_CLEAR // henüz ünite yok
+      const dIn = Math.min(IN_DEPTH_MAX, Math.max(IN_DEPTH_MIN, dUnit - UNIT_CLEAR))
+      // Çıkış omurgası kapıya daha yakın: çıkan araç zaten kapıya gidiyor, gelen araç
+      // ise avlunun içine. İkisi AYNI YÖNDE akar (near +y, far −y) — kafa kafaya İMKÂNSIZ.
+      const dOut = Math.max(EXIT_DEPTH_MIN, dIn - LANE_SEP)
+      const xIn = g.water ? QUEUE_X_WATER : g.gateX + g.sideSign * dIn
+      const xOut = g.gateX + g.sideSign * dOut
+
+      // ── KUYRUK = GELEN OMURGA ÜZERİNDE SABİT SLOTLAR ──
+      // Ayrı bir "bekleme koridoru" YOK: avlu (kapı ↔ ünite hattı) fiziksel olarak iki
+      // şerit genişliğinde. Üçüncü bir paralel şerit araçları 0.6 birim yan yana dizerdi —
+      // tam da silmeye çalıştığımız iç içe geçme.
+      //
+      // SIRALAMA KRİTİK (ölçüldü): slot 0 = SIRANIN BAŞI ve akış yönünde EN İLERİDEKİ
+      // nokta. Kuyruk oradan kapıya doğru GERİ dizilir. Böylece
+      //   · yeni gelen araç en arkadaki boş slota girer → kimseyi GEÇMEZ,
+      //   · pompaya gönderilen baş araç ileri gider → kimseyi GEÇMEZ,
+      //   · sıra ilerleyince herkes bir ileri kayar → kimseyi GEÇMEZ.
+      // Slot 0 önce, kapıdan SONRA gelen ilk ünitenin 2.6 birim gerisine çakılır: kuyruk
+      // ünitelerin üstüne binmesin, ama boşuna da uzamasın. (Eski dizilim slot 0'ı kapıya
+      // en yakın noktaya koyuyordu; yeni gelen her araç, kendinden önce sıraya girmiş
+      // araçların GÖVDESİNDEN geçerek arkaya gidiyordu — yük testinde en büyük iç içe
+      // kalemi buydu: T8'de 174 çift.)
+      const qn = g.wide ? 10 : 8 // GENİŞ KAPININ YENİ FAYDASI: içeride daha çok araç bekler
+      const base = g.water ? QUEUE_BASE_WATER : QUEUE_BASE
+      const step = g.water ? QUEUE_STEP_WATER : QUEUE_STEP
+      let capa = g.gateInY + g.dirY * base
+      let enYakin = Infinity
+      for (const u of units) {
+        const ileri = (u.y - g.gateInY) * g.dirY // >0 → akış yönünde kapıdan sonra
+        if (ileri > 1.5 && ileri < enYakin) { enYakin = ileri; capa = u.y - g.dirY * (step * 0.9) }
+      }
+      // çapa kapının gerisine düşmesin (araç kapıdan girer, geri geri gidemez)
+      if ((capa - g.gateInY) * g.dirY < 1.5) capa = g.gateInY + g.dirY * 1.5
+      const queue: Pt[] = []
+      for (let i = 0; i < (g.water ? 4 : qn); i++) {
+        const y = capa - g.dirY * i * step
+        // KUYRUK ÇİTİN İÇİNDE KALSIN: kapının en fazla QUEUE_TAIL_MAX gerisine uzar,
+        // sonrası kapasite değildir (yer bulamayan müşteri "giremeyen" olarak sayılır).
+        if ((y - g.gateInY) * g.dirY < -QUEUE_TAIL_MAX) break
+        queue.push({ x: xIn, y })
+      }
+      if (!queue.length) queue.push({ x: xIn, y: g.gateInY + g.dirY * base })
+
+      const L: StationLanes = {
+        station: g.station, gateX: g.gateX, gateInY: g.gateInY, gateOutY: g.gateOutY,
+        lane: g.lane, sideSign: g.sideSign, dirY: g.dirY, xIn, xOut, queue,
+      }
+      this.byStation.set(g.station, L)
+
+      // ---- hata ayıklama dikdörtgenleri (oyunu etkilemez) ----
+      const ys = [g.gateInY, g.gateOutY, ...units.map(u => u.y), ...queue.map(q => q.y)]
+      const y0 = Math.min(...ys) - 2, y1 = Math.max(...ys) + 2
+      this.zones.push({ id: `in-${g.station}`, cx: xIn, cy: (y0 + y1) / 2, w: 0.5, d: y1 - y0, capacity: 1 })
+      this.zones.push({ id: `out-${g.station}`, cx: xOut, cy: (y0 + y1) / 2, w: 0.5, d: y1 - y0, capacity: 1 })
+      for (const u of units) {
+        this.zones.push({ id: `arm-${g.station}-${u.id}`, cx: (xIn + u.x) / 2, cy: u.y,
+          w: Math.abs(xIn - u.x), d: 0.4, capacity: 1 })
       }
     }
-    // artık var olmayan bölgelerin defterini temizle (istasyon kapandı/kapı taşındı)
-    const live = new Set(this.zones.map(z => z.id))
-    for (const id of [...this.occ.keys()]) if (!live.has(id)) this.occ.delete(id)
-    for (const id of [...this.waitQ.keys()]) if (!live.has(id)) this.waitQ.delete(id)
-    for (const id of [...this.pending.keys()]) if (!live.has(id)) this.pending.delete(id)
   }
 
-  private inside(z: Zone, x: number, y: number, pad = 0): boolean {
-    return Math.abs(x - z.cx) <= z.w / 2 + pad && Math.abs(y - z.cy) <= z.d / 2 + pad
+  get(station: string): StationLanes | null { return this.byStation.get(station) ?? null }
+
+  /** kuyruk slotu sayısı (yerleşimden gelir; geniş kapı daha çok slot verir) */
+  queueCount(station: string): number { return this.byStation.get(station)?.queue.length ?? 0 }
+
+  /** kuyruk slotunun DÜNYA konumu */
+  slot(station: string, i: number): Pt | null {
+    const L = this.byStation.get(station)
+    if (!L || !L.queue.length) return null
+    return L.queue[Math.min(i, L.queue.length - 1)]
   }
 
-  /**
-   * Verilen noktadaki bölge (varsa). pad ile "yaklaşma" alanı genişletilebilir.
-   * `mineUnit`: ünite bölgeleri için filtre — null ise hiçbir ünite bölgesi görünmez
-   * (araç oradan yalnızca GEÇİYOR), '*' ise hepsi görünür (araç o koridorda duruyor),
-   * bir kimlik verilirse yalnız o ünite görünür. Bu filtre olmasaydı koridorlar zincir
-   * kurar, ters yönde ilerleyen iki araç karşılıklı kilitlenirdi.
-   */
-  zoneAt(x: number, y: number, pad = 0, mineUnit: string | null = null): Zone | null {
-    for (const z of this.zones) {
-      if (z.kind === 'unit' && mineUnit !== '*' && z.id !== mineUnit) continue
-      if (this.inside(z, x, y, pad)) return z
-    }
-    return null
-  }
-
-  /** Araç bu bölgeyi tutuyor mu */
-  holds(zoneId: string, car: unknown): boolean {
-    return this.occ.get(zoneId)?.has(car) ?? false
+  /** Yoldan kapı ağzına: banket üzerinden yaklaşma (şerit trafiği yanından akar). */
+  private gateApproach(L: StationLanes): Pt[] {
+    return [
+      { x: (L.lane + L.gateX) / 2, y: L.gateInY - L.dirY * 3.4 },
+      { x: L.gateX, y: L.gateInY },
+      { x: L.xIn, y: L.gateInY },
+    ]
   }
 
   /**
-   * Bölgeye girme izni: kapasite varsa VE FIFO sırasında öndeyse verilir.
-   * Zaten tutuyorsa true (yeniden istemek serbest — her karede çağrılabilir).
+   * GİRİŞ ŞERİDİ: yol → kapı → gelen omurga → ünitenin hizası → ünite kolu.
+   * Tek bir akış; ortada karar/müzakere yok.
    */
-  /** Araç bölgenin İÇİNDEYSE token'ı koşulsuz ver (defter tutarlılığı; deadlock üretmez).
-   *  Tahkim GİRİŞTE yapılır — içeride tutmaya çalışmak kilitlenme demektir. */
-  forceAcquire(zoneId: string, car: unknown) {
-    let set = this.occ.get(zoneId)
-    if (!set) { set = new Set(); this.occ.set(zoneId, set) }
-    set.add(car)
-    this.pending.get(zoneId)?.delete(car) // içeride: "bekleyen rezervasyon" değil
-    const q = this.waitQ.get(zoneId)
-    if (q) { const i = q.indexOf(car); if (i >= 0) q.splice(i, 1) }
+  entryPath(station: string, target: Pt, fromRoad = true): Pt[] {
+    const L = this.byStation.get(station)
+    if (!L) return [target]
+    const out: Pt[] = fromRoad ? this.gateApproach(L) : []
+    out.push({ x: L.xIn, y: target.y })  // omurga boyunca ünitenin hizasına
+    out.push({ x: target.x, y: target.y }) // KOL: yalnız bu üniteye ait dik yaklaşma
+    return out
   }
 
-  tryAcquire(zoneId: string, car: unknown): boolean {
-    const z = this.zones.find(x => x.id === zoneId)
-    if (!z) return true // bölge yok (ör. istasyon kapalı) → serbest geç
-    let set = this.occ.get(zoneId)
-    if (!set) { set = new Set(); this.occ.set(zoneId, set) }
-    if (set.has(car)) return true
-    let q = this.waitQ.get(zoneId)
-    if (!q) { q = []; this.waitQ.set(zoneId, q) }
-    if (set.size >= z.capacity) {
-      if (!q.includes(car)) q.push(car) // FIFO sırasına gir
-      this.stats.denied++
-      return false
-    }
-    // kapasite var: sırada BENDEN ÖNCE bekleyen varsa ona yol ver (açlık önleme)
-    const idx = q.indexOf(car)
-    if (q.length > 0 && idx !== 0) {
-      if (idx < 0) q.push(car)
-      this.stats.denied++
-      return false
-    }
-    if (idx === 0) q.shift()
-    set.add(car)
-    // yeni rezervasyon: araç henüz bölge DIŞINDA — sweep bunu TTL boyunca korur
-    let pend = this.pending.get(zoneId)
-    if (!pend) { pend = new Map(); this.pending.set(zoneId, pend) }
-    if (!pend.has(car)) pend.set(car, 0)
-    this.stats.granted++
-    return true
-  }
-
-  /** Aracın tuttuğu TÜM bölgeleri ve sıra kayıtlarını bırak (çıkış/silinme/kurtarma). */
-  release(car: unknown) {
-    for (const set of this.occ.values()) set.delete(car)
-    for (const pend of this.pending.values()) pend.delete(car)
-    for (const q of this.waitQ.values()) {
-      const i = q.indexOf(car)
-      if (i >= 0) q.splice(i, 1)
-    }
-  }
-
-  /** Yalnız belirli bölgeyi bırak (araç bölgeden çıktı). */
-  releaseZone(zoneId: string, car: unknown) {
-    this.occ.get(zoneId)?.delete(car)
-    this.pending.get(zoneId)?.delete(car)
-    const q = this.waitQ.get(zoneId)
-    if (q) { const i = q.indexOf(car); if (i >= 0) q.splice(i, 1) }
+  /** KUYRUK ŞERİDİ: yol → kapı → gelen omurga → i. slot. */
+  queuePath(station: string, i: number, fromRoad = true): Pt[] {
+    const L = this.byStation.get(station)
+    if (!L) return []
+    const s = this.slot(station, i)
+    if (!s) return []
+    const out: Pt[] = fromRoad ? this.gateApproach(L) : []
+    out.push({ x: L.xIn, y: s.y })
+    return out
   }
 
   /**
-   * Her karede çağrılır: rezervasyonu olan ama artık bölge içinde OLMAYAN araçların
-   * token'ını bırakır (bölgeyi geçti → sıradaki girebilir). `pos` araç konumunu verir.
+   * ÇIKIŞ ŞERİDİ: ünite → giden omurga (dik kol) → çıkış kapısı → yola katılma.
+   * Giden omurga gelenden AYRI kolonda: çıkan araç kuyruğun içinden geçmez.
    */
-  sweep(cars: Iterable<unknown>, pos: (car: unknown) => { x: number; y: number }, dt = 0) {
-    const alive = new Set(cars)
-    for (const [zoneId, set] of this.occ) {
-      const z = this.zones.find(x => x.id === zoneId)
-      let pend = this.pending.get(zoneId)
-      for (const car of [...set]) {
-        if (!alive.has(car) || !z) { set.delete(car); pend?.delete(car); continue }
-        const p = pos(car)
-        if (this.inside(z, p.x, p.y, 0.5)) {
-          // araç bölgeye GİRDİ: artık bekleyen rezervasyon değil, gerçek işgalci
-          pend?.delete(car)
-          continue
-        }
-        // Bölge DIŞINDA. İki hal ayrılır — eskiden ayrılmıyordu ve KUSUR buydu:
-        //  a) token'ı olup henüz VARMAMIŞ araç: rezervasyonu KORUNUR. (Eski kod bunu her
-        //     karede siliyordu; araç yeniden istemek zorunda kalıp FIFO'nun SONUNA düşüyordu.
-        //     Yoğunlukta bu açlık demekti: yük testinde 787 verildi / 4550 reddedildi ve
-        //     grafik açıkken buharlaşma grafiksizden KÖTÜ çıkıyordu.)
-        //  b) girip ÇIKMIŞ araç: bölgeyi geçti, token bırakılır (sıradaki girsin).
-        if (!pend) { pend = new Map(); this.pending.set(zoneId, pend) }
-        const age = pend.get(car)
-        if (age === undefined) { set.delete(car); continue } // (b) içeriden çıktı
-        if (age >= RESERVE_TTL) {
-          // (a) rezerve etti ama gelemedi (önü tıkalı) → yeri bırak, AMA sıradaki hakkını koru:
-          // kuyruğun BAŞINA konur. Sona atılsaydı yoğunlukta hiç giremezdi (açlık).
-          set.delete(car); pend.delete(car)
-          let q = this.waitQ.get(zoneId)
-          if (!q) { q = []; this.waitQ.set(zoneId, q) }
-          if (!q.includes(car)) q.unshift(car)
-          continue
-        }
-        pend.set(car, age + dt)
-      }
-      if (pend) for (const car of [...pend.keys()]) if (!set.has(car)) pend.delete(car)
-    }
-    for (const [zoneId, q] of this.waitQ) {
-      this.waitQ.set(zoneId, q.filter(c => alive.has(c)))
-    }
-    for (const [zoneId, pend] of this.pending) {
-      if (!this.occ.has(zoneId)) this.pending.delete(zoneId)
-    }
+  exitPath(station: string, from: Pt): Pt[] {
+    const L = this.byStation.get(station)
+    if (!L) return []
+    return [
+      { x: L.xOut, y: from.y },                       // kol: giden omurgaya çık
+      { x: L.xOut, y: L.gateOutY },                   // omurga boyunca çıkış kapısına
+      { x: L.gateX, y: L.gateOutY },                  // kapı ağzı
+      { x: L.lane, y: L.gateOutY + L.dirY * 4 },      // yola katıl
+      { x: L.lane, y: L.dirY * 44 },                  // ve git
+    ]
   }
 
-  /** doluluk raporu (debug/telemetri) */
+  /** doluluk raporu (yalnız hata ayıklama katmanı okur) */
   snapshot(): { id: string; used: number; capacity: number; queued: number }[] {
-    return this.zones.map(z => ({
-      id: z.id,
-      used: this.occ.get(z.id)?.size ?? 0,
-      capacity: z.capacity,
-      queued: this.waitQ.get(z.id)?.length ?? 0,
-    }))
+    return this.zones.map(z => ({ id: z.id, used: 0, capacity: z.capacity, queued: 0 }))
   }
 }

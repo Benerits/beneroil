@@ -324,79 +324,62 @@ console.log('== 13) Reviewer bulgularının regresyon testleri ==')
   check('7+ günlük sözleşmede 1 kaçırma fesih ETMEZ (adil)', f.contract !== null && f.contract.missedDays === 1)
 }
 
-console.log('== 14) Rezervasyon grafiği (trafik raporu §5) ==')
+console.log('== 14) ŞERİT AĞI (rezervasyon grafiği SİLİNDİ) ==')
 {
-  const { TrafficGraph } = await import('../../src/traffic-graph.ts')
-  const g = new TrafficGraph()
-  const mkGeom = (station, gateX, sideSign, dirY, inY, outY, wide = false) =>
-    ({ station, gateX, lane: sideSign < 0 ? 6.95 : 8.85, gateInY: inY, gateOutY: outY, sideSign, dirY, wide })
-  g.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14), mkGeom('far', 11.6, 1, -1, 8, -8)])
-  check('her istasyon için 2 bölge türetildi (near+far = 4)', g.zones.length === 4)
-  check('bölgeler geom’dan TÜRETİLDİ (far kapı x=11.6 çevresinde)', g.zones.some(z => z.id === 'gate-in-far' && Math.abs(z.cx - 12.2) < 0.01))
-  check('near/far bölgeleri ÇAKIŞMIYOR', !g.zones.some(a => g.zones.some(b => a !== b &&
-    Math.abs(a.cx - b.cx) < (a.w + b.w) / 2 && Math.abs(a.cy - b.cy) < (a.d + b.d) / 2)))
-
-  // kapasite + FIFO
-  const A = { n: 'A' }, B = { n: 'B' }, C = { n: 'C' }
-  check('1. araç girer', g.tryAcquire('gate-in-near', A) === true)
-  check('2. araç REDDEDİLİR (kapasite 1 → çakışma OLUŞMAZ)', g.tryAcquire('gate-in-near', B) === false)
-  check('3. araç da reddedilir ve SIRAYA girer', g.tryAcquire('gate-in-near', C) === false)
-  check('tekrar isteyen tutan araç için serbest', g.tryAcquire('gate-in-near', A) === true)
-  g.release(A)
-  check('FIFO: A çıkınca sıradaki B girer (C değil)', g.tryAcquire('gate-in-near', B) === true && g.tryAcquire('gate-in-near', C) === false)
-  // geniş kapı = kapasite 2
-  const g2 = new TrafficGraph()
-  g2.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14, true)])
-  // Kapı ağzı TEK SIRA (geniş kapıda da): iki aracı birlikte almak aynı şeride sokup
-  // kilitliyordu — yük testi kanıtı (buharlaşma 61 → 0).
-  check('kapı ağzı tek sıra (geniş kapıda da kapasite 1)', g2.tryAcquire('gate-in-near', A) && !g2.tryAcquire('gate-in-near', B))
-  // REZERVASYON ÖMRÜ — buradaki ayrım kritik. Eski sweep, token alıp bölgeye HENÜZ
-  // VARMAMIŞ aracın rezervasyonunu her karede siliyordu; araç yeniden istemek zorunda
-  // kalıp FIFO'nun sonuna düşüyordu. Yoğunlukta bu açlık demekti (yük testinde grafik
-  // AÇIKKEN buharlaşma kapalıdan kötü çıkıyordu: 151 vs 100).
-  const zc = { x: 4.2 - 0.6, y: -14 }  // gate-in-near bölge merkezi (mkGeom sideSign=-1)
-  const far = { x: 40, y: 40 }
-  {
-    // a) token aldı, henüz YOLDA (bölge dışında) → rezervasyon KORUNUR
-    const g3 = new TrafficGraph(); g3.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
-    const D = { n: 'D' }
-    check('yaklaşan araç token alır', g3.tryAcquire('gate-in-near', D) === true)
-    g3.sweep([D], () => far, 0.1)
-    check('YOLDAKİ araç rezervasyonunu KORUR (açlık fixi)', g3.tryAcquire('gate-in-near', { n: 'E' }) === false)
-    // b) TTL dolunca YERİ bırakır (tıkanan araç bölgeyi sonsuza kilitlemesin)
-    for (let i = 0; i < 30; i++) g3.sweep([D], () => far, 0.1) // 3 sn > RESERVE_TTL
-    const z0 = g3.snapshot().find(z => z.id === 'gate-in-near')
-    check('TTL dolunca bölge boşalır (deadlock sigortası)', z0.used === 0)
-    // c) ...ama kuyruğun BAŞINA konur: sırasını beklemişti, sona atılmaz. Bu yüzden
-    //    ARKADAN GELEN onu geçemez — açlığı önleyen asıl kural bu.
-    check('TTL kurbanı kuyrukta sırasını korur', z0.queued === 1)
-    check('arkadan gelen TTL kurbanını GEÇEMEZ', g3.tryAcquire('gate-in-near', { n: 'E2' }) === false)
-    check('TTL kurbanı sıradaki yeri ALIR', g3.tryAcquire('gate-in-near', D) === true)
-  }
-  {
-    // d) bölgeye GİRİP ÇIKAN araç token'ı bırakır (asıl amaç)
-    const g3b = new TrafficGraph(); g3b.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
-    const D2 = { n: 'D2' }
-    g3b.tryAcquire('gate-in-near', D2)
-    g3b.sweep([D2], () => zc, 0.1)   // bölgeye girdi
-    check('içerideyken token DURUR', g3b.tryAcquire('gate-in-near', { n: 'X' }) === false)
-    g3b.sweep([D2], () => far, 0.1)  // bölgeden çıktı
-    check('sweep: bölgeyi GEÇEN araç token’ı bırakır', g3b.tryAcquire('gate-in-near', { n: 'E3' }) === true)
-  }
-  // sweep: sahneden silinen araç bölgeyi kilitlemez
-  const g4 = new TrafficGraph(); g4.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
-  const F = { n: 'F' }; g4.tryAcquire('gate-in-near', F)
-  g4.sweep([], () => ({ x: 0, y: 0 }))
-  check('sweep: yok olan araç bölgeyi kilitlemez', g4.tryAcquire('gate-in-near', { n: 'G' }) === true)
-  // geometri değişince (kapı taşındı) defter temizlenir
-  const g5 = new TrafficGraph(); g5.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14)])
-  const H = { n: 'H' }; g5.tryAcquire('gate-in-near', H)
-  g5.rebuild([mkGeom('near', 4.2, -1, 1, -20, 20)]) // kapı taşındı → aynı id, yeni konum
-  check('kapı taşınınca bölge yeni y’de', g5.zones.find(z => z.id === 'gate-in-near').cy === -20)
-  // N. istasyon bedava: 3. istasyon eklemek ek kod gerektirmez
-  const g6 = new TrafficGraph()
-  g6.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14), mkGeom('far', 11.6, 1, -1, 8, -8), mkGeom('ucuncu', 30, 1, -1, 5, -5)])
-  check('3. istasyon otomatik bölge aldı (yeni istasyon bedava)', g6.zones.filter(z => z.id.endsWith('-ucuncu')).length === 2)
+  // Mimari değişti: bölge/token/FIFO yerine ÖNCEDEN HESAPLANMIŞ AYRIK ŞERİTLER.
+  // Buradaki testler artık "kapasite ve sıra" değil, GEOMETRİK AYRIKLIK doğruluyor —
+  // çünkü yeni mimaride çakışma önlenmez, OLUŞMAZ.
+  const { LaneNetwork, UNIT_CLEAR, LANE_SEP } = await import('../../src/traffic-graph.ts')
+  const g = new LaneNetwork()
+  const mkGeom = (station, gateX, sideSign, dirY, inY, outY, wide = false, units = []) =>
+    ({ station, gateX, lane: sideSign < 0 ? 6.95 : 8.85, gateInY: inY, gateOutY: outY, sideSign, dirY, wide, units })
+  const nearUnits = [{ id: 'pump-0', x: 1.8, y: -2.2 }, { id: 'pump-1', x: 1.8, y: 2.2 }]
+  const farUnits = [{ id: 'pump-0', x: 14.0, y: 2.2 }, { id: 'pump-1', x: 14.0, y: -2.2 }]
+  g.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14, false, nearUnits),
+             mkGeom('far', 11.6, 1, -1, 8, -8, false, farUnits)])
+  const N = g.get('near'), F = g.get('far')
+  check('her istasyon için şerit ağı türetildi', !!N && !!F)
+  check('gelen ve giden omurga AYRI kolonda', Math.abs(N.xIn - N.xOut) >= LANE_SEP - 1e-6,
+    `${N.xIn} vs ${N.xOut}`)
+  check('gelen omurga ünitede DURAN araca değmiyor',
+    nearUnits.every(u => Math.abs(N.xIn - u.x) >= UNIT_CLEAR - 1e-6), `${N.xIn}`)
+  check('far ağı geom’dan TÜRETİLDİ (elle aynalama yok)',
+    Math.abs(Math.abs(F.xIn - F.gateX) - Math.abs(N.xIn - N.gateX)) < 1e-6)
+  // KUYRUK: sıranın BAŞI akış yönünde en ileride, kuyruk kapıya doğru geri diziliyor.
+  const q = N.queue
+  check('kuyruk slotları gelen omurga üzerinde', q.every(s => s.x === N.xIn))
+  check('slot 0 sıranın BAŞI (akış yönünde en ileride)',
+    q.length > 1 && (q[0].y - q[1].y) * N.dirY > 0)
+  check('slotlar araç boyundan geniş aralıklı',
+    q.every((s, i) => i === 0 || Math.abs(s.y - q[i - 1].y) >= 2.8))
+  // GİRİŞ / ÇIKIŞ yolları: giriş gelen omurgadan, çıkış giden omurgadan geçer.
+  const gir = g.entryPath('near', { x: 1.8, y: 2.2 })
+  check('giriş yolu kapıdan geçip gelen omurgaya katılıyor',
+    gir.some(p => p.x === N.gateX) && gir.some(p => p.x === N.xIn))
+  check('giriş yolu ÜNİTE KOLUYLA bitiyor', gir[gir.length - 1].x === 1.8 && gir[gir.length - 1].y === 2.2)
+  const cik = g.exitPath('near', { x: 1.8, y: -2.2 })
+  check('çıkış yolu GİDEN omurgayı kullanıyor (kuyruğun içinden geçmez)',
+    cik[0].x === N.xOut && cik[1].x === N.xOut)
+  check('çıkış yolu çıkış kapısından yola çıkıyor',
+    cik.some(p => p.y === N.gateOutY) && cik[cik.length - 1].x === N.lane)
+  // GENİŞ KAPININ YENİ FAYDASI: daha çok kuyruk slotu (aynı ağızdan iki araç DEĞİL).
+  const g2 = new LaneNetwork()
+  g2.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14, true, nearUnits)])
+  check('geniş kapı daha çok kuyruk slotu verir', g2.get('near').queue.length > q.length)
+  // Yerleşim değişince ağ yeniden türer (kapı taşındı).
+  const g3 = new LaneNetwork()
+  g3.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14, false, nearUnits)])
+  g3.rebuild([mkGeom('near', 4.2, -1, 1, -20, 20, false, nearUnits)])
+  check('kapı taşınınca şerit ağı yeni kapıya oturur', g3.get('near').gateInY === -20)
+  // N. istasyon bedava: 3. istasyon eklemek ek kod gerektirmez.
+  const g4 = new LaneNetwork()
+  g4.rebuild([mkGeom('near', 4.2, -1, 1, -14, 14, false, nearUnits),
+              mkGeom('far', 11.6, 1, -1, 8, -8, false, farUnits),
+              mkGeom('ucuncu', 30, 1, -1, 5, -5, false, [{ id: 'pump-0', x: 32.4, y: 0 }])])
+  check('3. istasyon otomatik şerit aldı (yeni istasyon bedava)', !!g4.get('ucuncu'))
+  // Rezervasyon defteri gerçekten SİLİNDİ (geri gelirse burada yakalanır).
+  check('rezervasyon API’si yok (tryAcquire/sweep/release)',
+    !('tryAcquire' in g) && !('sweep' in g) && !('release' in g))
 }
 
 console.log('== 15) Prestij: İstasyonu Devret (lategame §3b) ==')

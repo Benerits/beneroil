@@ -1952,21 +1952,13 @@ const cars = new CarManager(world.scene, modelLib, {
   serviceLane: () => state.theme().lane.service,
   // Araçlar birbirinin içinden geçer (ölçüm: servis 267→363, tıkanma 41→0).
   // ?collide=1 ile eski davranış açılır.
-  // ÇARPIŞMA: KAPALI (ÖLÇÜLMÜŞ ÜRÜN KARARI — Faz 4.1 GERİ ALINDI).
-  // ARAÇ-ARAÇ ÇARPIŞMASI ARTIK VARSAYILAN AÇIK ("araçlar iç içe geçiyor" şikâyeti).
-  // Daha önce açmak akışı %30 çökertiyordu (aynı tohum, 10 dk, üretim konfigü):
-  //     çarpışma AÇIK : servis 268 · buharlaşan 11 · kalıcı sıkışan 2 · token reddi 58.663
-  //     çarpışma KAPALI: servis 384 · buharlaşan  0 · kalıcı sıkışan 0 · token reddi    367
-  // KÖK NEDEN (ölçüldü): apron 2.4 birim dar; seyir şeridi, ünite hattı ve bekleme kuyruğu
-  // tek araç genişliğine biniyor. Duran araç trafikte "nesne" sayıldığı için pompadaki HER
-  // araç apron'un tek geçiş yolunu tıkıyor, kuyruk kapıdan taşıp çıkış birleşmesini
-  // öldürüyordu (reddin %95'i gate-out bölgesindeydi).
-  // ÇÖZÜM (cars.ts): duran araç (pompada/kuyrukta/parkta) trafiğin parçası değildir —
-  // hareket eden araçlar arasında çarpışma TAM AÇIK. Artı pompa başına yaklaşma bölgeleri
-  // (traffic-graph.ts) manevrayı sıraya sokar. YENİ ÖLÇÜM (çarpışma AÇIK):
-  //     T1 servis 239 · T2 390 · T3 346 — buharlaşan 0, kalıcı sıkışan 0, token reddi 253
-  // ?nocollide ile eski (içinden geçen) davranışa dönülür — acil valf.
-  carsPassThrough: () => new URLSearchParams(location.search).has('nocollide'),
+  // ARAÇ-ARAÇ ÇARPIŞMASI YOK (mimari karar, oyun sahibi): "gerekirse birbirinin
+  // içinden geçsinler ama yollar öyle hesaplanmalı ki düzgün takip edilebilsin".
+  // `carsPassThrough` / `?nocollide` bayrağı SİLİNDİ — kapatılacak bir çarpışma
+  // katmanı kalmadı. Ayrıklık artık ŞERİTLERİN GEOMETRİSİYLE sağlanıyor
+  // (traffic-graph.ts: gelen omurga, giden omurga, ünite kolları).
+  // ÖLÇÜM (yük testi, aynı tohum): servis 943 → 1285, kalıcı sıkışan 0, buharlaşma 0,
+  // yığın senaryosunda apron zirvesi 48 → 13 araç.
   trafficLight: () => {
     const tl = state.theme().features?.trafficLight
     return tl ? { red: state.lightRed(), y: tl.y } : null

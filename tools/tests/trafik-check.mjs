@@ -19,23 +19,23 @@ const dunya = readFileSync(new URL('../../src/world.ts', import.meta.url), 'utf8
 const ana = readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')
 const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8')
 
-// ── #1028: iç bekleme koridoru ──
-const off = cars.match(/const WAIT_OFFSETS = \[([^\]]+)\]/)
-const sayilar = off ? off[1].split(',').map(x => Number(x.trim())) : []
-bekle(sayilar.length >= 8, `iç bekleme yuvası ${sayilar.length} (eskiden 4 — kuyruk artık İÇERİDE)`)
-bekle(sayilar.every((v, i) => i === 0 || v > sayilar[i - 1]), 'yuvalar kapıdan içeri doğru artan sırada')
-bekle(new Set(sayilar).size === sayilar.length, 'iki yuva aynı noktaya düşmüyor')
-// MERGE (30 Ağu): yuva sayısı artık ŞUBEYE GÖRE. Kara 8 yuva (bu fix), marina 4 —
-// tekne boyu (süperyat 8.5 birim) 8 yuvaya sığmıyor, sabit 8 kullanılsaydı 5+ tekne
-// aynı offsete binip "tekneler iç içe giriyor" bugu geri gelirdi.
+// ── #1028: iç bekleme koridoru (kuyruk İÇERİDE) ──
+// Sabit WAIT_OFFSETS dizisi kalktı: kuyruk slotları şerit ağından TÜRETİLİYOR.
+const grafik = readFileSync(new URL('../../src/traffic-graph.ts', import.meta.url), 'utf8')
+const qn = grafik.match(/const qn = g\.wide \? (\d+) : (\d+)/)
+bekle(!!qn && Number(qn[2]) >= 8, `iç kuyruk slotu ${qn ? qn[2] : '?'} (dar kapı) / ${qn ? qn[1] : '?'} (geniş kapı)`)
+// KUYRUK SIRALAMASI: slot 0 = SIRANIN BAŞI ve akış yönünde EN İLERİDEKİ nokta; kuyruk
+// oradan kapıya doğru GERİ dizilir. Ters dizilseydi yeni gelen her araç, önündeki
+// sıranın gövdesinden geçerek arkaya giderdi (ölçüldü: T8'de 174 iç içe çift).
+bekle(/const y = capa - g\.dirY \* i \* step/.test(grafik),
+  'kuyruk slotları BAŞTAN GERİYE diziliyor (kimse kimseyi geçmiyor)')
+// MARİNA: tekne boyu (süperyat 8.5 birim) araç aralığına sığmaz — su şubesi 4 geniş slot.
+bekle(/QUEUE_STEP_WATER = 9/.test(grafik), 'marina kuyruk aralığı tekne boyuna göre (9 birim)')
+bekle(/g\.water \? 4 : qn/.test(grafik), 'su şubesinde 4 slot (tekneler iç içe girmiyor)')
 bekle(/private waitSlotCount\(st: 'near' \| 'far'\)/.test(cars),
   'yuva sayısı şubeye göre hesaplanıyor (waitSlotCount)')
-bekle(/WAIT_OFFSETS_WATER\.length : WAIT_OFFSETS\.length/.test(cars),
-  'su şubesi kendi yuva sayısını kullanıyor (tekne kuyruğu korunuyor)')
-bekle(/cap = Math\.max\(1, idx\.length \+ this\.waitSlotCount\(st\)\)/.test(cars),
-  'istasyon kapasitesi bekleme yuvalarını sayıyor — dolu sanılıp müşteri geri çevrilmiyor')
 bekle(/for \(let i = 0; i < this\.waitSlotCount\(car\.station\); i\+\+\)/.test(cars),
-  'yuva arama döngüsü de şube farkındalıklı (marinada 5. tekne üst üste binmiyor)')
+  'yuva arama döngüsü şube farkındalıklı (marinada 5. tekne üst üste binmiyor)')
 
 // ── #1019a: toplu personel alımı ──
 bekle(/id="of-staff"/.test(html), 'Ofis › Özet\'te Personel bölümü var')
@@ -70,9 +70,23 @@ if (ev) {
 }
 
 // ── regresyon çiti: sıkışma sigortaları yerinde mi (#1009 / #1039) ──
-bekle(/softPassT/.test(cars), 'sıkışma bekçisi (softPassT) duruyor')
-bekle(/stuckHits/.test(cars), 'üst üste sıkışma sayacı duruyor')
-bekle(/rampBusy/.test(cars), 'giriş rampası tek araç kuralı duruyor (apron kilitlenmesin)')
+// ── regresyon çiti: ŞERİT AĞI mimarisi (ajan müzakeresi GERİ GELMESİN) ──
+// Aşağıdaki katmanlar bilerek silindi. Biri geri eklenirse bu test düşer ve gerekçeyi
+// yeniden okumaya zorlar: hepsi "araç bekletildi → kilitlendi" zincirinin panzehiriydi.
+// Yorumlarda ADLARI GEÇİYOR (bilerek: neden silindiklerini anlatıyorlar) — bu yüzden
+// kontrol YORUMSUZ kaynak üzerinde yapılır, yoksa kendi açıklamamız testi düşürürdü.
+const yorumsuz = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+const carsKod = yorumsuz(cars)
+const yasak = ['softPassT', 'stuckHits', 'recoverStuck', 'dodgeRight', 'evaporate(',
+  'rampBusy', 'stationCrowdFactor(', 'gorselAyrim', 'tryAcquire', 'waitingForToken']
+for (const y of yasak) bekle(!carsKod.includes(y), `müzakere katmanı geri gelmemiş: ${y}`)
+bekle(/LaneNetwork/.test(cars), 'şerit ağı (LaneNetwork) kullanılıyor')
+bekle(/kuyrukIlerlet/.test(cars), 'kuyruk sabit slotlarda İLERLİYOR (araç slota kayar)')
+bekle(/speedScale = Math\.min\(c\.speedScale, Math\.max\(0\.3/.test(cars),
+  'hız eşitlemesi tabanı 0 DEĞİL (kimse durmaz → kilitlenme imkânsız)')
+const serit = readFileSync(new URL('../../src/traffic-graph.ts', import.meta.url), 'utf8')
+bekle(!/tryAcquire|RESERVE_TTL|waitQ/.test(yorumsuz(serit)), 'rezervasyon defteri silinmiş')
+bekle(/UNIT_CLEAR/.test(serit) && /LANE_SEP/.test(serit), 'şerit ayrıklığı sabitlerle garanti')
 
 console.log(hata ? `\n${hata} HATA` : '\nTRAFİK TEMİZ')
 process.exit(hata ? 1 : 0)

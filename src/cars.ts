@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
-import { TrafficGraph, StationGeom, UnitPoint, RESERVE_LOOKAHEAD, APRON_LANE_OFF } from './traffic-graph'
+import { LaneNetwork, StationGeom, UnitPoint, Pt } from './traffic-graph'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
@@ -363,44 +363,23 @@ export class Car {
   /** araç-üstü dijital sayaç güncelleme throttle'ı (çok hızlı akmasın) */
   bubbleT = 0
   slotIndex = -1
-  /** rezerve edilen bekleme noktası (yoksa -1) */
+  /** kuyruk slotu (yoksa -1). Slot SABİT bir şerit noktasıdır; sıra ilerleyince araç
+   *  bir öndeki slota KAYAR (anlık ışınlanma değil, akıcı geçiş). */
   waitIndex = -1
-  /** öndeki araca çok yaklaştıysa bu karede bekle (üst üste binme yok) */
-  hold = false
-  holdTime = 0
-  /** öndeki araca yaklaşırken orantılı yavaşlama (1=tam hız) — dur-kalk şok dalgalarını yumuşatır */
+  /**
+   * ARTIK HİÇBİR KOD `true` YAPMAZ — şerit ağında araç durdurulmaz.
+   * Alan yalnız `traffic-debug.ts` arayüzü (CarLike.hold) için duruyor; o dosya bu
+   * görevin dokunma alanı dışında. Geri eklenmemeli: "bekleme" katmanı mimariden çıktı.
+   */
+  readonly hold = false
+  /** ÖNDEKİ ARACA HIZ EŞİTLEME (1 = tam hız). Bu bir MÜZAKERE DEĞİL: araç durmaz,
+   *  yalnız öndekinin hızını kopyalar. Kimse kimseyi beklemediği için kilitlenme üretemez. */
   speedScale = 1
-  /** sağdan-geçiş kaçışı sonrası bekleme (üst üste kaçış eklemesin) */
-  dodgeT = 0
-
-  /** KAFA KAFAYA çözümü: kendi SAĞINA kısa bir kaçış noktası ekler (sağdan geçiş kuralı).
-   *  Katı cisme denk gelirse daha geniş dener; ikisi de doluysa false (eski yol-verme kalır). */
-  dodgeRight(): boolean {
-    const d = this.headingDir()
-    if (!d) return false
-    const rx = d.y, ry = -d.x // sağ vektör (z-yukarı düzlemde)
-    const p = this.group.position
-    for (const k of [1.6, 2.3]) {
-      const px = p.x + d.x * 1.5 + rx * k
-      const py = p.y + d.y * 1.5 + ry * k
-      if (Car.insideSolid(px, py)) continue
-      if (Car.waterMinX != null && px < Car.waterMinX) continue // tekne karaya kaçamaz
-      this.path.unshift(new THREE.Vector3(px, py, 0))
-      this.dodgeT = 3
-      return true
-    }
-    return false
-  }
-  watchT = 0
-  watchPos = new THREE.Vector3()
+  /** AKIŞ ÖLÇÜMÜ: aracın son karedeki hızı (nominal hızın oranı, 0..1). */
+  hizOrani = 1
+  /** duraksama süresi (sn) — hız nominalin %15'inin altındayken birikir.
+   *  Eski adı korundu: traffic-debug.ts `hardStuckT` okuyor. */
   hardStuckT = 0
-  /** rezervasyon bekliyor (kurallı bekleme — sıkışma DEĞİL, buharlaşma sayacı işlemez) */
-  waitingForToken = false
-  /** şeride katılmak için yol verme süresi — uzarsa araç zorla katılır (açlık önleme) */
-  yieldT = 0
-  prevFramePos = new THREE.Vector3(NaN, 0, 0)
-  /** sıkışma kurtarma penceresi: bu süre boyunca hold yok sayılır */
-  overrideT = 0
   private barsOn = false
   wrongFuelHandled = false
   beingServed = false
@@ -728,10 +707,14 @@ export class Car {
   static reaktifKacis = 0
   /** yağ değişimi körüğü gibi BİNA İÇİNE sürüşlerde duvar çarpışmasını kapatır */
   ghostSolid = false
-  /** üst üste sıkışma sayacı — ikinciden sonra kısa süreli araç-araç geçişi açılır */
-  stuckHits = 0
-  /** >0 iken bu araç DİĞER ARAÇLARDAN geçebilir (binalar hariç): kilidi kırma penceresi */
-  softPassT = 0
+  // `stuckHits` / `softPassT` SİLİNDİ: "iki kez aynı yerde takılırsan araçlardan geç"
+  // penceresiydi. Araçlar zaten birbirini engellemiyor (müzakere yok) → takılma yok.
+
+  /** ARAÇ YOL ALIYOR MU (rotası var mı). Hız eşitlemesi yalnız HAREKET EDEN öndeki
+   *  aracı dikkate alır: duran araç yol kenarı dekorudur, onu beklemek yasak. */
+  get moving(): boolean { return this.path.length > 0 }
+  /** akış ölçümü: bu araç şu an "durmuş" sayılıyor mu (olay bazlı sayaç için) */
+  durdu = false
 
   /** public sarmalayıcı — bekleme noktası üretimi katı cisimden kaçmak için kullanır (B5) */
   static isSolidAt(x: number, y: number): boolean { return Car.insideSolid(x, y) }
@@ -744,8 +727,10 @@ export class Car {
   }
 
   update(dt: number) {
-    if (this.dodgeT > 0) this.dodgeT -= dt
-    if (this.path.length > 0 && !this.hold) {
+    // AKIŞ ÖLÇÜMÜ: karenin başındaki konum — sonunda gerçek hız buradan çıkar.
+    const p0x = this.group.position.x, p0y = this.group.position.y
+    const nominal = CAR_SPEED * BOAT_SPEED[this.boat ?? 'yok'] * (this.reversing ? 0.45 : 1)
+    if (this.path.length > 0) {
       const pos = this.group.position
       const target = this.path[0]
       const d = new THREE.Vector3().subVectors(target, pos)
@@ -807,6 +792,16 @@ export class Car {
           this.group.rotation.z += diff * Math.min(1, dt * 8)
         }
       }
+      // AKIŞ DÜZGÜNLÜĞÜ: yol almakta olan araç için gerçek hız / nominal hız.
+      // Oyun sahibinin istediği şey ("akıcılık") burada ÖLÇÜLEBİLİR hale geliyor.
+      const gitti = Math.hypot(this.group.position.x - p0x, this.group.position.y - p0y)
+      this.hizOrani = dt > 0 && nominal > 0 ? Math.min(1, gitti / (nominal * dt)) : 1
+      if (this.hizOrani < 0.15) this.hardStuckT += dt
+      else this.hardStuckT = Math.max(0, this.hardStuckT - dt * 3)
+    } else {
+      // hedefine varmış araç "duraksamış" sayılmaz (pompada bekleyen müşteri akış değil)
+      this.hizOrani = 1
+      this.hardStuckT = 0
     }
 
     if ((this.phase === 'waiting' || this.phase === 'atPump') && !this.beingServed) {
@@ -1030,18 +1025,11 @@ export class Tanker {
   }
 }
 
-// B5: bekleme noktaları artık SABİT DÜNYA KOORDİNATI değil — kapıya göreli üretilir ve
-// katı cisme denk gelirse koridor boyunca kayar (oyuncu oraya bina koyunca araç binanın
-// içinde bekliyordu). Ofsetler kapıdan istasyon içine doğru mesafedir.
-// İÇ BEKLEME KORİDORU — #1028 ("istasyonda alan olmasına rağmen pompa doluysa sıradaki
-// araç istasyonun GİRİŞ ALANINDA bekliyor, içeri gelmiyor"): iç koridorda yalnız 4 yuva
-// vardı. 5. araçtan itibaren tryEnter yer bulamıyor, araç ya kapıda bekliyor ya yoluna
-// gidiyordu — 10 pompalı istasyonda bile kuyruk dışarıda kalıyordu. Yuva sayısı 8'e çıktı;
-// offsetler pompa hattıyla çakışırsa waitSpotAt zaten katı cisimden kaçırıyor.
-const WAIT_OFFSETS = [3.2, 6.0, 8.8, 12.6, 15.4, 18.2, 21.0, 23.8]
-// MARİNA AYRI KALIR: tekne boyu araçtan çok büyük (süperyat 8.5), 8 yuva iç içe girerdi.
-// Su şubesinde 4 geniş yuva korunuyor ("tekneler iç içe giriyor" fixi, 9612597).
-const WAIT_OFFSETS_WATER = [4, 13, 22, 31] // tekne kuyruğu: boy ortalaması + pay
+// KUYRUK SLOTLARI ARTIK BURADA DEĞİL: şerit ağından (traffic-graph.ts) türetiliyor.
+// Eskiden WAIT_OFFSETS sabit dizisi vardı ve bekleme koridoru kapıdan 0.8 birim içerideydi;
+// çıkış koridoru (0.45) ile arası 0.35 birimdi — bekleyen araçla çıkan araç aynı kolonda
+// üst üste biniyordu. Şerit ağı slotları GELEN OMURGA üzerine koyar: tek sıra, çıkışla
+// 1.05 birim ayrık.
 
 /** Eksen hizalı dikdörtgen ile doğru parçası kesişiyor mu (slab yöntemi).
  *  pad: aracın yarı genişliği kadar şişirme — teğet geçişler de engel sayılır. */
@@ -1262,11 +1250,10 @@ export interface CarManagerOpts {
   /** 4 ŞERİTLİ YOL: istasyona girecek araçların kullandığı servis şeridi x'i.
    *  undefined = tek şeritli yol (mevcut davranış). */
   serviceLane?: () => { near: number; far: number } | undefined
-  /** Araçlar birbirinin içinden geçebilir mi (varsayılan: EVET).
-   *  Kapatılırsa eski "hiçbir araç diğerinin içinden geçmez" kuralı geri gelir. */
-  carsPassThrough?: () => boolean
-  /** rezervasyon grafiği açık mı (test A/B + acil valf; verilmezse ?nograph=1 kuralı) */
-  graphEnabled?: () => boolean
+  // `carsPassThrough` ve `graphEnabled` SİLİNDİ (mimari karar). Araç-araç çarpışması
+  // artık HİÇ YOK — oyun sahibi açıkça istedi: "gerekirse birbirinin içinden geçsinler".
+  // Şeritler ayrık olduğu için pratikte zaten binmiyorlar. `graphEnabled` rezervasyon
+  // grafiğinin acil kapatma valfiydi; grafik silindi, valfin kapatacağı bir şey yok.
   /** trafik ışığı durumu (çevre yolu/metropol): kırmızıda ışık hattında kuyruk oluşur */
   trafficLight?: () => { red: boolean; y: number } | null
   /** OTOYOL topolojisi: erken sapma kararı + ramp kapasitesi + zor birleşme */
@@ -1294,18 +1281,6 @@ export interface CarManagerOpts {
   onTurnedAway?: () => void
 }
 
-/** Rezervasyon grafiği açık mı — ?nograph=1 veya NOGRAPH env ile kapatılabilir (A/B ölçümü
- *  ve acil kapatma valfi: bölge listesi boş olunca tüm tryAcquire true döner, eski davranış). */
-const graphOn = (() => {
-  try {
-    if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('nograph')) return false
-  } catch { /* node ortamı */ }
-  // @types/node'a bağımlı olmadan env oku (CI build'inde `process` tipi yok — TS2580)
-  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
-  if (env?.NOGRAPH) return false
-  return true
-})()
-
 export class CarManager {
   cars: Car[] = []
   private nearTimer = 1
@@ -1315,13 +1290,24 @@ export class CarManager {
   // B4: otopark işgali KARARLI KİMLİKLE (Map) — pozisyon indeksi bina taşınınca/yıkılınca
   // kayıyordu ("sadece bir otopark kullanılıyor", "araçlar üst üste biniyor", 38 kayıt)
   private parkOcc = new Map<string, Car>()
-  /** REZERVASYON ÇEKİRDEĞİ (trafik raporu §5): kapı ağzı ve iç koridor çakışma bölgeleri.
-   *  Araç bölgeye girmeden token alır; alamazsa bölge dışında bekler → çakışma OLUŞMAZ. */
-  graph = new TrafficGraph()
+  /** ŞERİT AĞI: yerleşim değişince BİR KEZ hesaplanan ayrık koridorlar.
+   *  Alan adı `graph` KORUNDU (main.ts hata ayıklama bağlantısı) ama içerik artık
+   *  rezervasyon defteri değil, önceden çizilmiş yollar. */
+  graph = new LaneNetwork()
   private graphKey = ''
-  private graphOnLast = true
-  private waitOcc: (Car | null)[] = [null, null, null, null]
-  private waitOccFar: (Car | null)[] = [null, null, null, null]
+  private waitOcc: (Car | null)[] = []
+  private waitOccFar: (Car | null)[] = []
+  /** AKIŞ DÜZGÜNLÜĞÜ TELEMETRİSİ (yeni metrik, oyun sahibinin istediği şey).
+   *  ort = ortalama hız oranı, sapma = varyans, duraklama = "durdu" olayı sayısı. */
+  flowStats = { orneklem: 0, toplam: 0, kareToplam: 0, duraklama: 0, duraklamaKare: 0 }
+  /** akış özeti: ortalama hız oranı + standart sapma (0 = kusursuz akış) */
+  get flow() {
+    const n = Math.max(1, this.flowStats.orneklem)
+    const ort = this.flowStats.toplam / n
+    const varyans = Math.max(0, this.flowStats.kareToplam / n - ort * ort)
+    return { ort, sapma: Math.sqrt(varyans), duraklama: this.flowStats.duraklama,
+      durmaOrani: this.flowStats.duraklamaKare / n }
+  }
 
   // İstasyon tarafı: yakın (varsayılan, x=4.2 kapı + LANE_NEAR servis şeridi). Karşı istasyon
   // için ikinci CarManager farklı gateX/serveLane ile kurulacak — bu parametreleme mevcut
@@ -1349,20 +1335,19 @@ export class CarManager {
       gateInY: this.opts.gateInY(), gateOutY: this.opts.gateOutY(),
     }
   }
-  /** Bekleme noktası: kapıdan içeri WAIT_OFFSETS kadar, iç bekleme koridorunda (B5).
-   *  Katı cisme (oyuncunun koyduğu bina) denk gelirse koridor boyunca kayar. */
+  /** Kuyruk slotu: ŞERİT AĞINDAN gelir (gelen omurga üzerinde sabit nokta).
+   *  Katı cisme (oyuncunun koyduğu bina) denk gelirse şerit boyunca kayar. */
   private waitSpotAt(i: number, st: 'near' | 'far'): THREE.Vector3 {
     const G = this.geom(st)
-    // MARİNA: bekleme yuvası SUDA (ada doğu kıyısı 5.3 + pay) — tekne rıhtım tahtasına çıkmaz.
-    // Aralıklar TEKNE ölçeğinde (Oğuz: "arka arkaya kuyruk"): süperyat 8.5 birim, araba
-    // aralığı (2.8) tekneleri iç içe bindiriyordu → suda 9'ar birim arayla tek sıra.
-    const water = this.opts.isWater?.() && st === 'near'
-    const x = water ? 6.9 : G.gateX + G.sideSign * 0.8
-    const offs = water ? WAIT_OFFSETS_WATER : WAIT_OFFSETS
-    let y = G.gateInY + G.dirY * offs[Math.min(i, offs.length - 1)]
+    const s = this.graph.slot(st, i)
+    const x = s ? s.x : G.gateX + G.sideSign * 0.8
+    let y = s ? s.y : G.gateInY + G.dirY * (3.4 + i * 2.9)
     for (let k = 0; k < 6 && Car.isSolidAt(x, y); k++) y += G.dirY * 1.4
     return new THREE.Vector3(x, y, 0)
   }
+  /** Pt → Vector3 (şerit ağı three.js bilmez, dönüşüm burada) */
+  private v(p: Pt): THREE.Vector3 { return new THREE.Vector3(p.x, p.y, 0) }
+  private vs(ps: Pt[]): THREE.Vector3[] { return ps.map(p => this.v(p)) }
   /** Bu istasyonun pompa/şarj servis noktaları — yaklaşma bölgeleri bunlardan TÜRETİLİR
    *  (elle aynalama yok: ünite taşınınca bölge de taşınır). */
   private unitPoints(st: 'near' | 'far'): UnitPoint[] {
@@ -1377,16 +1362,10 @@ export class CarManager {
     }
     return out
   }
-  /** Aracın KENDİ ünite koridorunun bölge kimliği (yoksa null). Araç yalnız bunu rezerve
-   *  eder; başka ünitelerin koridorundan serbestçe geçer. */
-  private myUnitZone(car: Car): string | null {
-    if (car.slotIndex < 0) return null
-    return `unit-${car.station}-${car.kind === 'ev' ? 'ev' : 'pump'}-${car.slotIndex}`
-  }
   private waitOccFor(st: 'near' | 'far') { return st === 'far' ? this.waitOccFar : this.waitOcc }
-  /** o şubede kaç bekleme yuvası var — su şubesinde tekne boyu yüzünden daha az */
+  /** o şubede kaç kuyruk slotu var — şerit ağından gelir (geniş kapı 10, dar 8, marina 4) */
   private waitSlotCount(st: 'near' | 'far') {
-    return (this.opts.isWater?.() && st === 'near') ? WAIT_OFFSETS_WATER.length : WAIT_OFFSETS.length
+    return this.graph.queueCount(st) || (this.opts.isWater?.() && st === 'near' ? 4 : 8)
   }
   /** pompa/şarj bu istasyona mı ait — konuma göre (yol karşısı = far) */
   // İKİNCİ SİGORTA: slot yoksa (sayım/sahne uyuşmazlığı) çökmek yerine 'near' say.
@@ -1464,25 +1443,25 @@ export class CarManager {
         c.sabirHizi = kuyrukCarpani * (c.patienceFrac < SABIR_KIRMIZI ? 1.4 : 1)
       }
     }
-    // ---- Rezervasyon grafiği: geometri değişince (kapı taşındı / karşı istasyon açıldı)
-    // bölgeler geom()'dan YENİDEN TÜRETİLİR. Aynalama elle yazılmadığı için B1-B6 sınıfı
-    // "near'da doğru, far'da bozuk" hatası imkânsız.
+    // ---- ŞERİT AĞI: yerleşim İMZASI değişince BİR KEZ hesaplanır (kare başına DEĞİL).
+    // Kapı taşındı / pompa kuruldu-döndürüldü / karşı şube açıldı → şeritler geom()'dan
+    // yeniden TÜRETİLİR. Aynalama elle yazılmadığı için "near'da doğru, far'da bozuk"
+    // hata sınıfı imkânsız. İmza aynı kaldığı sürece hiçbir hesap yapılmaz (mobil).
     const stationsNow: StationGeom[] = ['near', 'far']
       .filter(st => st === 'near' || (this.opts.farActive?.() ?? false))
       .map(st => {
         const G = this.geom(st as 'near' | 'far')
         return { station: st, gateX: G.gateX, lane: G.lane, gateInY: G.gateInY, gateOutY: G.gateOutY,
           sideSign: G.sideSign, dirY: G.dirY, wide: this.opts.wideGates(),
-          units: this.unitPoints(st as 'near' | 'far') }
+          units: this.unitPoints(st as 'near' | 'far'),
+          water: (this.opts.isWater?.() ?? false) && st === 'near' }
       })
-    const key = stationsNow.map(g => `${g.station}:${g.gateX}:${g.gateInY}:${g.gateOutY}:${g.wide}`
+    const key = stationsNow.map(g => `${g.station}:${g.gateX}:${g.gateInY}:${g.gateOutY}:${g.wide}:${g.water}`
       + `:${(g.units ?? []).map(u => `${u.id}@${u.x.toFixed(1)},${u.y.toFixed(1)}`).join(',')}`).join('|')
-    const useGraph = this.opts.graphEnabled?.() ?? graphOn
-    if (key !== this.graphKey || this.graphOnLast !== useGraph) {
-      this.graphKey = key; this.graphOnLast = useGraph
-      this.graph.rebuild(useGraph ? stationsNow : [])
+    if (key !== this.graphKey) {
+      this.graphKey = key
+      this.graph.rebuild(stationsNow)
     }
-    this.graph.sweep(this.cars, c => (c as Car).group.position, dt)
 
     // yoldan geçen trafik
     this.nearTimer -= dt
@@ -1523,76 +1502,60 @@ export class CarManager {
       }
     }
 
-    // ---- ARAÇ-ARAÇ ÇARPIŞMASI: KAPALI (ürün kararı) ----
-    // Eskiden hiçbir araç diğerinin içinden geçemezdi; kuyruklar birbirini kilitleyip
-    // tıkanma ve "müşteri buharlaşması" üretiyordu. Oyuncu geri bildirimlerinin en
-    // büyük kümesi buydu. Araçlar artık birbirinin içinden geçebiliyor — izometrik
-    // görünümde ve bu hızda çakışma neredeyse fark edilmiyor, buna karşılık kilitlenme
-    // İMKÂNSIZ hâle geliyor.
-    // Bina/pompa çarpışması AYNEN duruyor (Car.solids): araç yapıların içinden geçmez.
-    // `passThrough` kapatılırsa eski davranış geri gelir (yük testi ikisini kıyaslıyor).
-    const passThrough = this.opts.carsPassThrough?.() ?? true
-    const blockers = new Map<Car, Car>()
-    for (const c of this.cars) { c.hold = false; c.speedScale = 1 }
-    if (!passThrough) {
-    // 3.3 UNIFORM GRID: eskiden her araç HER araca bakıyordu (O(n²)) ve iç döngüde kare
-    // başına yüzlerce THREE.Vector3 ayrılıyordu → GC baskısı, mobilde ısınma (#113/#117/#511).
+    // ══════════════════════════════════════════════════════════════════════════════
+    // AKIŞ KATMANI — MÜZAKERE YOK (mimari karar: önceden hesaplanmış şerit ağı)
+    //
+    // SİLİNEN KATMANLAR ve NEDEN ARTIK GEREKSİZLER (lütfen GERİ EKLEMEYİN):
+    //  · Araç-araç çarpışma taraması + `hold`: şeritler GEOMETRİK OLARAK AYRIK. İki araç
+    //    aynı noktada olmasın diye müzakere etmiyorlar; zaten aynı noktaya gelmiyorlar.
+    //    Nadir çakışma, akıcılık için ödenen ucuz bedel (oyun sahibinin açık kararı).
+    //  · `dodgeRight` (sağdan kaçış) + kafa-kafaya tahkimi: kafa kafaya karşılaşma artık
+    //    İMKÂNSIZ — gelen omurgada herkes kapıdan uzaklaşır, giden omurgada herkes çıkışa
+    //    yaklaşır. Zıt yönlü iki araç aynı kolonda bulunamaz.
+    //  · Zincir döngü kırıcı (A→B→C→A): döngü ancak BEKLEYEN araçlarla kurulur. Kimse
+    //    beklemediği için döngü kurulamaz.
+    //  · Yol verme (`yieldT`) + "nazik şerit": çıkış ağzı kendi kolonunda ve şeride
+    //    katılma noktası giriş kuyruğundan uzakta; beklemeye gerek kalmadı.
+    //  · Rezervasyon/token kapısı: bölge kapasitesi kavramı yok — şerit zaten tek sıra.
+    //  · Kurtarma merdiveni (`watchT`/`stuckHits`/`softPassT`/`overrideT`/`recoverStuck`):
+    //    hepsi "araç bekletildi ve kilitlendi" durumunun panzehiriydi. Kaynak yok.
+    //  · `evaporate`: sıkışanı SESSİZCE siliyordu (oyuncu görmüyor, biz sayamıyorduk).
+    //    Sıkışma üretecek mekanizma kalmadı; sigortaya da gerek yok.
+    //  · `stationCrowdFactor` (kalabalık freni): kapasiteyi artık kuyruk slotu sayısı
+    //    belirliyor. Yer yoksa müşteri KARAR NOKTASINDA yoluna devam eder (onTurnedAway),
+    //    avluda birikmez. Frenin işi kilitlenmeyi önlemekti — kilitlenme kalmadı.
+    //  · `gorselAyrim`: duran araç trafik hesabından çıkarıldığı için gerekmişti; şeritler
+    //    ayrık olduğundan yamalayacak bir üst üste binme kalmadı (ölçüldü, bkz. rapor).
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    // TEK İSTİSNA — HIZ EŞİTLEME (müzakere DEĞİL): aynı şeritte öndeki HAREKET EDEN araca
+    // yaklaşan araç onun hızını KOPYALAR. Taban hız 0 değil 0.3'tür; yani kimse kimseyi
+    // beklemez, sadece yavaşlar → kilitlenme matematiksel olarak üretilemez.
+    for (const c of this.cars) c.speedScale = 1
     this.rebuildCarGrid()
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked' || c.phase === 'waiting') continue
-      // KİLİT KIRMA PENCERESİ: iki kez üst üste aynı yerde takılan araç kısa süre diğer
-      // araçlardan geçer. Binalar (Car.solids) hâlâ katı — yalnız araç-araç kilidi açılır.
-      if (c.softPassT > 0) continue
       const dir = c.headingDir()
       if (!dir) continue
       const cp = c.group.position
-      let nearest: Car | null = null, nearestF = Infinity
-      // MARİNA (Oğuz: "tekneler iç içe giriyor"): mesafeler tekne BOYUYLA ölçeklenir —
-      // jetski araba gibi, süperyat 8.5 birim; takip/durma aralığı ikilinin boy ortalaması.
       const lenC = c.boat ? BOAT_LEN[c.boat] : 0
       for (const o of this.neighbors(cp.x, cp.y, c.boat ? 3 : 1)) {
-        if (o === c || o.phase === 'gone') continue
-        // DURAN ARAÇ TRAFİĞİN PARÇASI DEĞİL (ölçümle bulunan asıl kilit — aşağıda).
-        // Bu döngü zaten pompadaki/kuyruktaki/parktaki aracı ÖZNE olarak atlıyordu
-        // (üstteki `continue`), ama NESNE olarak saymaya devam ediyordu: yani duran araç
-        // kimseye yol vermiyor, herkesin yolunu kesiyordu. Asimetri, apron geometrisiyle
-        // birleşince istasyonu kilitliyor: seyir şeridi (kapı ∓1.75) ünite hattının
-        // (kapı ∓2.4) 0.65 birim yanından geçer, bekleme kuyruğu da (kapı ∓0.8) aynı
-        // 2.4 birimlik apron'a sığar — üç "şerit" bir araç genişliğine biniyor. Sonuç:
-        // servis alan HER araç apron'un tek geçiş yolunu tıkıyor, kuyruk kapıdan taşıp
-        // çıkış birleşmesini öldürüyordu. ÖLÇÜM (T2, çarpışma AÇIK): bu satır olmadan
-        // servis 326 · buharlaşma 25 · gate-out reddi 36.785; bu satırla servis 388 ·
-        // buharlaşma 0 · red 260.
-        // Kural: HAREKET EDEN araçlar arasında çarpışma TAM AÇIK. Duran araç yol kenarı
-        // engelidir; yanından sıyrılınır. Oyuncunun şikâyet ettiği "araçlar birbirinin
-        // içinden geçiyor" görüntüsü akan trafikte olan şeydi, o artık yok.
-        // DURAN ARAÇ TRAFİĞİN PARÇASI DEĞİL — hold vermez, hız da düşürmez.
-        // (Yavaşlatma DENENDİ ve ölçümle reddedildi: araçlar duran aracın önünde
-        //  birikip çakışmayı 1.7 → 3.4 çift/kare'ye çıkardı, servis 239 → 216'ya düştü.
-        //  Görsel çakışma aşağıdaki gorselAyrim() ile, akışa dokunmadan çözülüyor.)
-        if (o.phase === 'atPump' || o.phase === 'parked' || o.phase === 'waiting') continue
-        // (eski `parked && (toPark|leaving)` istisnası artık bu kuralın içinde eridi)
+        if (o === c || o.phase === 'gone' || !o.moving) continue
+        // DURAN araç yol kenarı dekorudur: onu takip etmek "bekleme" olurdu.
         const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
         const forward = dx * dir.x + dy * dir.y
         const lenO = o.boat ? BOAT_LEN[o.boat] : 0
-        const sep = (lenC || lenO) ? (lenC + lenO) / 2 + 1.6 : 0
-        const fwdMax = sep ? sep * 1.5 : 3.6
-        const latMax = sep ? 1.9 : 1.25
-        const holdAt = sep || 1.5
-        if (forward < 0.4 || forward > fwdMax) continue
+        // minimum takip mesafesi: gövde boyu + pay (marinada tekne boyuyla ölçeklenir)
+        const sep = (lenC || lenO) ? (lenC + lenO) / 2 + 1.4 : 2.6
+        if (forward < 0.2 || forward > sep * 1.6) continue
         const lx = dx - dir.x * forward, ly = dy - dir.y * forward
-        if (lx * lx + ly * ly < latMax * latMax) {
-          if (forward < holdAt) { if (forward < nearestF) { nearestF = forward; nearest = o } }
-          else c.speedScale = Math.min(c.speedScale, 0.3 + 0.7 * ((forward - holdAt) / (fwdMax - holdAt)))
-        }
+        if (lx * lx + ly * ly > 1.21) continue // başka şeritte → hiç ilgilenmez
+        c.speedScale = Math.min(c.speedScale, Math.max(0.3, forward / sep))
       }
-      if (nearest) { c.hold = true; blockers.set(c, nearest) }
     }
-    } // /if (!passThrough)
-    // Engel (yaya vb.) kontrolü çarpışma modundan BAĞIMSIZ: araçlar araçtan geçebilir
-    // ama sahnedeki engellere yine takılır.
+    // Sahnedeki fiziksel engeller (tanker vb.) YAVAŞLATIR ama DURDURMAZ.
     for (const c of this.cars) {
-      if (c.hold || c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked') continue
+      if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked') continue
       const dir = c.headingDir()
       if (!dir) continue
       for (const ob of this.opts.extraObstacles()) {
@@ -1600,174 +1563,28 @@ export class CarManager {
         const forward = dx * dir.x + dy * dir.y
         if (forward < 0.2 || forward > 3.8) continue
         const lx = dx - dir.x * forward, ly = dy - dir.y * forward
-        if (lx * lx + ly * ly < 2.25) { c.hold = true; break }
+        if (lx * lx + ly * ly < 2.25) { c.speedScale = Math.min(c.speedScale, 0.35); break }
       }
-    }
-    // trafik kuralı: şeride çıkacak araç yaklaşan trafiğe YOL VERİR ve
-    // öndeki araç takip mesafesi kadar (4.5 birim) açılmadan yola atlamaz
-    // YAKAYA GÖRE genelleştirildi (B2): eski hali yalnız near sabitleriyle çalışıyordu —
-    // karşı istasyondan çıkan araç akan karşı-şerit trafiğine KÖR dalıyor, kapı ağzı kilitleniyordu.
-    for (const c of this.cars) {
-      if (c.hold || c.phase !== 'leaving') continue
-      const G = this.geom(c.station)
-      const p = c.group.position
-      // birleşme bölgesi: kapı ile şerit arası (her iki yaka için simetrik)
-      const lo = Math.min(G.gateX, G.lane) - 0.3 + 0.55
-      const hi = Math.max(G.gateX, G.lane) + 0.3 - 0.55
-      if (p.x <= lo || p.x >= hi) continue
-      const laneBusy = this.cars.some(o => {
-        if (o === c || o.lane !== c.station) return false // yalnız KENDİ şeridinin trafiği
-        const oy = o.group.position.y
-        // arkadan yaklaşan akan trafik — seyir yönüne göre (near +y, far −y)
-        const behind = G.dirY > 0 ? (oy > p.y - 12 && oy < p.y + 1.5) : (oy < p.y + 12 && oy > p.y - 1.5)
-        if (o.phase === 'transit' && !o.hold && behind) return true
-        // az önce şeride katılmış öndeki araç yeterince açılmadıysa bekle
-        const merged = G.sideSign < 0 ? o.group.position.x > G.lane - 1.75 : o.group.position.x < G.lane + 1.75
-        const ahead = G.dirY > 0 ? (oy > p.y - 1 && oy < p.y + 6) : (oy < p.y + 1 && oy > p.y - 6)
-        if (o.phase === 'leaving' && merged && ahead) return true
-        return false
-      })
-      if (laneBusy) {
-        c.yieldT += dt
-        // 3.5 sn'den fazla yol veremediyse ZORLA katıl (yoğun trafikte çıkış ağzı tıkanıp
-        // araçlar buharlaşıyordu). OTOYOLDA birleşme daha zor: süre mergeHard katı —
-        // hızlı akışa katılmak için gerçek boşluk beklenir (rapor §6.4 kural 3).
-        const hardMul = this.opts.highway?.()?.mergeHard ?? 1
-        if (c.yieldT < 3.5 * hardMul) { c.hold = true; c.waitingForToken = true }
-      } else c.yieldT = 0
     }
 
-    // karşılıklı kilitlenme çözümü — BİLİMSEL AYRIM:
-    // 1) KAFA KAFAYA (yönler zıt): "yol ver" işe yaramaz — salınıp tekrar kilitlenirler.
-    //    Gerçek trafik kuralı uygulanır: biri SAĞA kısa kaçış noktası ekler (sağdan geçiş),
-    //    diğeri yavaşça yoluna devam eder → akış çözülür, iç içe girme olmaz.
-    // 2) DİK/YAN karşılaşma: eski davranış — biri yol verir (o.hold=false).
-    for (const [c, o] of blockers) {
-      if (blockers.get(o) !== c || !c.hold || !o.hold) continue
-      const dc = c.headingDir(); const dd = o.headingDir()
-      if (dc && dd && dc.dot(dd) < -0.5) {
-        if (c.dodgeT <= 0 && c.dodgeRight()) { c.hold = false; continue }
-        if (o.dodgeT <= 0 && o.dodgeRight()) { o.hold = false; continue }
-      }
-      o.hold = false
-    }
-    // zincir döngüleri (A→B→C→A): döngüdeki EN UZUN bekleyen tek araç serbest kalır.
-    // İkisi birden değil — çift taraflı kaçış çarpışması bug'ının panzehiri.
-    const resolved = new Set<Car>()
-    for (const c of this.cars) {
-      if (!c.hold || resolved.has(c)) continue
-      const chainIdx = new Map<Car, number>()
-      const chain: Car[] = []
-      let cur: Car | undefined = c
-      while (cur && !chainIdx.has(cur) && chain.length < 10) {
-        chainIdx.set(cur, chain.length)
-        chain.push(cur)
-        cur = blockers.get(cur)
-      }
-      if (cur && chainIdx.has(cur)) {
-        const cycle = chain.slice(chainIdx.get(cur)!)
-        let winner = cycle[0]
-        for (const x of cycle) if (x.holdTime > winner.holdTime) winner = x
-        winner.hold = false
-        winner.overrideT = Math.max(winner.overrideT, 1.0)
-        for (const x of cycle) resolved.add(x)
-      }
-    }
-    // ---- TRAFİK IŞIĞI KUYRUĞU (çevre yolu/metropol): kırmızıda araçlar ışık hattında durur.
-    // Mekanik karşılığı entryChance ×boost (state); buradaki yalnız GÖRSEL/fiziksel kuyruk.
+    // ---- TRAFİK IŞIĞI (çevre yolu/metropol): kırmızıda yol trafiği YAVAŞLAR.
+    // Eskiden `hold = true` ile TAM DURUYORDU ve arkasını kilitliyordu. Tempo göstergesi
+    // olarak yavaşlama yeterli — trafik burada mekanik değil, dekor.
     const tl = this.opts.trafficLight?.()
     if (tl && tl.red) {
       for (const c of this.cars) {
-        if (c.phase !== 'transit' || c.hold) continue
-        const p = c.group.position
+        if (c.phase !== 'transit') continue
         const dirY = c.lane === 'far' ? -1 : 1
-        const dist = (tl.y - p.y) * dirY // >0 → ışık hattı ileride
-        if (dist > 0 && dist < 3.2) { c.hold = true; c.waitingForToken = true } // kurallı bekleme
+        const dist = (tl.y - c.group.position.y) * dirY
+        if (dist > 0 && dist < 3.2) c.speedScale = Math.min(c.speedScale, 0.22)
       }
     }
 
-    // ---- NAZİK ŞERİT: çıkışa boşluk açma ----
-    for (const c of this.cars) {
-      if (c.phase !== 'transit' || c.hold) continue
-      const G = this.geom(c.station)
-      const dy = (G.gateOutY - c.group.position.y) * G.dirY // >0 → çıkış ağzı İLERİDE
-      if (dy <= 0 || dy > 16) continue
-      const hardMul2 = this.opts.highway?.()?.mergeHard ?? 1
-      const waitThresh = 0.7 / hardMul2 // birleşme zorsa DAHA ERKEN yol aç (otoyol: ~0.3 sn)
-      const waiting = this.cars.some(o => o !== c && o.phase === 'leaving' && o.station === c.station && o.yieldT > waitThresh)
-      if (waiting) c.speedScale = Math.min(c.speedScale, hardMul2 > 1.5 ? 0.34 : 0.5)
-    }
-
-    // ---- REZERVASYON KAPISI (trafik raporu §5): çakışma bölgesine (kapı ağzı / iç koridor)
-    // girmeden ÖNCE token alınır. Alamayan araç bölge DIŞINDA bekler → kapı ağzında üç
-    // akımın (giriş kuyruğu × çıkış × şerit trafiği) kilitlenmesi baştan oluşmaz.
-    for (const c of this.cars) {
-      c.waitingForToken = false
-      // DURAN araç bölge TUTMAZ: pompada/otoparkta bekleyen araç kapı ağzını kilitlemesin.
-      // (Oyuncu pompayı kapının önüne taşıyabiliyor; bölge dikdörtgeni çakışınca pompadaki
-      //  araç kapıyı sonsuza dek dolu gösteriyor, çıkanlar birikip buharlaşıyordu — yük
-      //  testinde T1'de 95 buharlaşma. Fiziksel engel zaten Car.solids ile ayrı yönetiliyor.)
-      if (c.phase === 'gone' || c.phase === 'parked' || c.phase === 'atPump') { this.graph.release(c); continue }
-      const p = c.group.position
-      // ÜNİTE KORİDORU FİLTRESİ: araç yalnız KENDİ ünitesinin koridorunu rezerve eder.
-      // Ayrılan araç (`leaving`) slotIndex'ini bıraktığı için '*' ile içinde DURDUĞU
-      // koridoru tutar — böylece pompa boşalır boşalmaz gönderilen sıradaki araç, hâlâ
-      // manevra yapan aracın üstüne sürmez. İleriye bakarken '*' KULLANILMAZ: geçilen
-      // koridorlar zincirlenir ve ters yönlü iki araç karşılıklı kilitlenirdi.
-      const mine = c.phase === 'leaving' ? '*' : this.myUnitZone(c)
-      const here = this.graph.zoneAt(p.x, p.y, 0, mine)
-      if (here) {
-        // bölge İÇİNDEYSE token şart (girmişse zaten var; kurtarma/ışınma ile içeri düşmüşse alır)
-        // bölge İÇİNDE: token'ı koşulsuz al, BEKLETME. Tahkim girişte yapıldı; içeride
-        // tutmak deadlock üretir (araç geri çekilemez → sıkışır → buharlaşır).
-        this.graph.forceAcquire(here.id, c)
-        continue
-      }
-      if (c.hold) continue // zaten duruyor (kuyruğu şişirmeden bekler)
-      // ilerideki bölgeye yaklaşıyor muyuz? (hareket yönünde RESERVE_LOOKAHEAD kadar bak)
-      const dir = c.headingDir()
-      if (!dir) continue
-      const aheadMine = c.phase === 'leaving' ? null : mine
-      const ahead = this.graph.zoneAt(p.x + dir.x * 1.2, p.y + dir.y * 1.2, 0, aheadMine)
-        ?? this.graph.zoneAt(p.x + dir.x * RESERVE_LOOKAHEAD, p.y + dir.y * RESERVE_LOOKAHEAD, 0, aheadMine)
-      if (!ahead) continue
-      // hold olsa da sırayı koru: token alamayan araç KURALLI BEKLEME olarak işaretlenir
-      if (!this.graph.tryAcquire(ahead.id, c)) { c.hold = true; c.waitingForToken = true }
-    }
-
-    // uzun süre sıkışan araç kendini kurtarır (gridlock sigortası):
-    // 5 sn beklerse 1.4 sn'lik gerçek bir kurtulma penceresi açılır
-    for (const c of this.cars) {
-      if (c.overrideT > 0) {
-        c.overrideT -= dt
-        c.hold = false
-        // kaçarken bile başka aracın gövdesine GİRME — bindirme bug'ının kökü buydu
-        const dir = c.headingDir()
-        if (dir) {
-          for (const o of this.cars) {
-            if (o === c || o.phase === 'gone') continue
-            const rel = new THREE.Vector3().subVectors(o.group.position, c.group.position)
-            rel.z = 0
-            const fwd = rel.dot(dir)
-            if (fwd > 0.1 && fwd < 1.1 && rel.addScaledVector(dir, -fwd).length() < 0.95) {
-              c.hold = true
-              break
-            }
-          }
-        }
-        continue
-      }
-      if (c.hold) {
-        c.holdTime += dt
-        if (c.holdTime > 2.5) {
-          c.holdTime = 0
-          c.overrideT = 1.6
-          c.hold = false
-        }
-      } else {
-        c.holdTime = 0
-      }
-    }
+    // ---- KUYRUK İLERLEMESİ: slotlar SABİT, araç bir öndeki slota KAYAR ----
+    // Oyun sahibi: "Araç slota kayar, sırası gelince bir sonraki slota kayar. Kuyruk
+    // ilerlemesi anlık değil, akıcı." Ön slot boşalınca araç oraya AKAR (ışınlanmaz).
+    this.kuyrukIlerlet('near')
+    if (this.opts.farActive?.()) this.kuyrukIlerlet('far')
 
     // giriş kararı — yakın şeritte y>-26'da, karşı şeritte (araç güneye gider) y<+26'da.
     // OTOYOL (rapor §6.4): karar çok daha ERKEN verilir (tesisten decisionDist birim önce)
@@ -1824,56 +1641,27 @@ export class CarManager {
         car.stayT -= dt
         if (car.stayT <= 0) this.leaveTruckPark(car)
       }
-      // SIKIŞMA BEKÇİSİ. Oyuncu raporu (12 şikayet): "araçlar pompaya takılıp kalıyor",
-      // "her yerde sıkışıyor". Eşik 6 sn'ydi — oyuncu çoktan görüp şikâyet ediyordu; ayrıca
-      // 'transit' fazı hiç kapsanmıyordu, yolda tıkanan araç ancak buharlaşarak temizleniyordu.
-      // Artık 2.2 sn'de müdahale var ve transit dahil; tekrarlayan sıkışmada araç kısa süre
-      // hayalet olup (yalnız araç-araç) kilidi kırıyor — kimse 6 saniye çakılı kalmıyor.
-      if (car.phase === 'driving' || car.phase === 'toPark' || car.phase === 'leaving'
-          || car.phase === 'transit') {
-        car.watchT += dt
-        if (car.watchT >= 2.2) {
-          if (car.group.position.distanceTo(car.watchPos) < 0.3) {
-            car.stuckHits++
-            this.recoverStuck(car)
-            // ikinci kez aynı yerde takıldıysa: 1.2 sn araç-araç geçişine izin ver.
-            // Bina/pompa çarpışması (Car.solids) AÇIK kalır — yapıların içinden geçilmez.
-            if (car.stuckHits >= 2) car.softPassT = Math.max(car.softPassT, 1.2)
-          } else { car.stuckHits = 0 }
-          car.watchPos.copy(car.group.position)
-          car.watchT = 0
-        }
-      } else {
-        car.watchT = 0
-        car.stuckHits = 0
-        car.watchPos.copy(car.group.position)
-      }
-      if (car.softPassT > 0) car.softPassT = Math.max(0, car.softPassT - dt)
+      // SIKIŞMA BEKÇİSİ VE BUHARLAŞMA SİGORTASI SİLİNDİ.
+      // NEDEN ARTIK GEREKSİZ: ikisi de "araç bekletildi → kilitlendi" zincirinin
+      // panzehiriydi. Şerit ağında araç hiç durdurulmuyor (taban hız 0.3), şeritler
+      // ayrık ve kafa kafaya karşılaşma imkânsız → kilitlenecek bir durum üretilemiyor.
+      // `evaporate` özellikle zararlıydı: sıkışan müşteriyi SESSİZCE siliyordu, oyuncu
+      // kaybı görmüyor, biz de sayamıyorduk. Artık her müşteri ya servis edilir, ya
+      // sabrı biter (görünür kayıp), ya da karar noktasında yoluna devam eder.
       car.update(dt)
-      // NİHAİ SİGORTA: hareket etmesi gereken araç 18 sn boyunca yerinden oynayamadıysa
-      // sessizce sahneden çekilir — trafik ne olursa olsun kalıcı kilitlenemez.
+      // AKIŞ DÜZGÜNLÜĞÜ ÖRNEKLEMESİ (yeni metrik): yalnız YOL ALMASI gereken araçlar.
       const movingPhase = car.phase === 'transit' || car.phase === 'driving'
         || car.phase === 'leaving' || car.phase === 'toPark'
-      if (movingPhase) {
-        const d2 = isNaN(car.prevFramePos.x) ? 1 : car.group.position.distanceToSquared(car.prevFramePos)
-        // REZERVASYON BEKLEMESİ SIKIŞMA DEĞİL: token sırasında duran araç buharlaşmaz.
-        // Diğer kurallı beklemelerde (öndeki araç, yol verme) sayaç 4× YAVAŞ birikir —
-        // kuyruk buharlaşmaz ama gerçek deadlock hâlâ temizlenir (sigorta korunur).
-        // Kademeli sigorta: kurallı bekleme (token/yol verme) sayacı 10× yavaş işler →
-        // kuyruk buharlaşmaz ama GERÇEK deadlock ~90 sn sonra yine temizlenir.
-        if (d2 < 0.0006) car.hardStuckT += car.waitingForToken ? dt * 0.1 : car.hold ? dt * 0.25 : dt
-        else car.hardStuckT = Math.max(0, car.hardStuckT - dt * 3)
-        // giriş rampasında/manevrada tıkanan araç yolu tıkamasın: hızlı çekilir; genelde 9 sn.
-        // Eşik DERİNLİK cinsinden (3.2 fixi): eski x>2.5 near sabiti karşı yakada HEP doğruydu —
-        // karşı istasyondaki her sıkışan araç 3.5 sn'de buharlaşıyordu (sessiz müşteri kaybı).
-        const Ge = this.geom(car.station)
-        const depth = Ge.sideSign < 0 ? (Ge.gateX - car.group.position.x) : (car.group.position.x - Ge.gateX)
-        const atEntry = car.phase === 'driving' && car.slotIndex < 0 && depth > -1.3
-        if (car.hardStuckT > (atEntry ? 3.5 : 9)) this.evaporate(car)
-      } else {
-        car.hardStuckT = 0
-      }
-      car.prevFramePos.copy(car.group.position)
+      if (movingPhase && car.moving) {
+        const f = this.flowStats
+        f.orneklem++
+        f.toplam += car.hizOrani
+        f.kareToplam += car.hizOrani * car.hizOrani
+        if (car.hizOrani < 0.15) {
+          f.duraklamaKare++
+          if (!car.durdu) { f.duraklama++; car.durdu = true }
+        } else car.durdu = false
+      } else car.durdu = false
       if ((car.phase === 'waiting' || car.phase === 'atPump') && car.patience <= 0 && !car.beingServed) {
         car.showFeedback('😡')
         this.releaseCar(car)
@@ -1881,9 +1669,13 @@ export class CarManager {
       }
     }
 
-    // GÖRSEL AYRIM: hareket bittikten sonra üst üste binen gövdeleri ayır.
-    // Akışa dokunmaz (hold/hız/rezervasyon değişmez) — yalnız konum düzeltir.
-    this.gorselAyrim(dt)
+    // GÖRSEL AYRIM (gorselAyrim) SİLİNDİ — ÖLÇÜLDÜ, gereksiz.
+    // Görevi "duran araç trafikten çıkarıldığı için üst üste binen gövdeleri itmek"ti.
+    // Yük testinde iç içe geçme AKIŞ / YERLEŞİM diye ayrıştırıldı: akış kaynaklı kalem
+    // şerit ayrıklığıyla zaten 0.04–0.23 çift/kare'ye indi (eşik 0.3). Geriye kalan
+    // kalem, iki DURAN aracın komşu ünitelerde yan yana olmasıdır — gorselAyrim onu
+    // zaten düzeltmiyordu (atPump/atPump çiftini bilerek atlıyordu, nozül hizası bozulmasın
+    // diye). Yani yama, kalan sorunun panzehiri değildi; kaynağı yok olunca kendisi de gitti.
 
     this.cars = this.cars.filter(c => {
       if (c.phase === 'gone') return false
@@ -1905,41 +1697,23 @@ export class CarManager {
   private onLost(car: Car) { this.opts.onCarLost(car) }
 
 
-  /** GÖRSEL AYRIM (oyuncu ekran görüntüsü: kuyrukta 15 araç iç içe).
-   *  Duran araçlar akışı kesmesin diye çarpışma hesabından çıkarıldı; bu doğruydu ama
-   *  gövdelerin üst üste binmesine yol açtı. Burada AKIŞA HİÇ DOKUNMADAN (hold yok,
-   *  hız yok, rezervasyon yok) yalnız konum düzeltiliyor.
-   *  Uniform grid'i yeniden kullanır — O(n²) değil. */
-  private gorselAyrim(dt: number) {
-    // ÖLÇÜM HATASI DÜZELTİLDİ: eşik 1.38'di ama ARAÇ GÖVDESİ 2.66 birim uzunluğunda
-    // (front 1.34 + rear 1.32). Yani eşik aracın YARISI kadardı — üst üste binmeyi hiç
-    // yakalamıyordu, oyuncu 20 araçlık yığın gönderdi. İki gövdenin ayrık durması için
-    // merkez mesafesi ~2.6 olmalı; kuyruk aralığı 2.8 olduğu için 2.15'te tutuyoruz
-    // (kuyruğu bozmadan gövde çakışmasını yakalayan en büyük değer).
-    const AYRIM = 2.15
-    // Mesafe büyüdüğü için kuvvet DÜŞÜRÜLDÜ: aynı kuvvetle araçlar birbirini fırlatıp
-    // kuyruğu dağıtıyordu. Yumuşak itme + büyük eşik = gövdeler ayrık, akış bozulmuyor.
-    const KUVVET = Math.min(1, dt * 2.2)
-    for (const c of this.cars) {
-      if (c.phase === 'gone' || c.phase === 'transit') continue
-      const cp = c.group.position
-      for (const o of this.neighbors(cp.x, cp.y, 1)) {
-        if (o === c || o.phase === 'gone' || o.phase === 'transit') continue
-        const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
-        const d2 = dx * dx + dy * dy
-        if (d2 >= AYRIM * AYRIM || d2 < 1e-6) continue
-        const d = Math.sqrt(d2)
-        const itme = (AYRIM - d) * 0.5 * KUVVET
-        const nx = dx / d, ny = dy / d
-        // Pompadaki araç YERİNDE kalmalı (nozül hizası bozulmasın); onun yerine
-        // karşısındaki iki kat itilir. Diğer hâllerde ikisi de eşit pay alır.
-        const cSabit = c.phase === 'atPump', oSabit = o.phase === 'atPump'
-        if (cSabit && oSabit) continue
-        const cPay = cSabit ? 0 : (oSabit ? 2 : 1)
-        const oPay = oSabit ? 0 : (cSabit ? 2 : 1)
-        cp.x -= nx * itme * cPay; cp.y -= ny * itme * cPay
-        o.group.position.x += nx * itme * oPay; o.group.position.y += ny * itme * oPay
-      }
+  /**
+   * KUYRUK İLERLEMESİ — slotlar sabit, araç bir öndeki slota KAYAR.
+   * Kuyruk şeridi GELEN OMURGA üzerindedir (tek sıra): ön slot boşalınca arkadaki araç
+   * oraya akar. Bu bir müzakere değil, deterministik bir konveyör — beklemek yok, sıra var.
+   */
+  private kuyrukIlerlet(st: 'near' | 'far') {
+    const occ = this.waitOccFor(st)
+    const n = this.waitSlotCount(st)
+    for (let i = 1; i < n; i++) {
+      const car = occ[i]
+      if (!car || car.phase === 'gone' || car.slotIndex >= 0) continue
+      if (occ[i - 1]) continue           // ön slot dolu → sıra ilerlemez
+      occ[i] = null
+      occ[i - 1] = car
+      car.waitIndex = i - 1
+      // AKICI GEÇİŞ: ışınlanmaz, yeni slota sürer (faz 'waiting' kalır, sabır işlemeye devam)
+      car.setPath(temizRota(car, [this.waitSpotAt(i - 1, st)]), () => { car.phase = 'waiting' })
     }
   }
 
@@ -1950,31 +1724,11 @@ export class CarManager {
     car.oncelikli = true
   }
 
-  /**
-   * İstasyon kalabalıkken yanaşma olasılığını düşüren çarpan (0.05..1).
-   * Boş pompa/bekleme yeri (EV için şarj yuvası) ve HÂLÂ yaklaşmakta olan
-   * niyetli araçlar hesaba katılır — böylece dolu istasyona akın olup
-   * apron/rampa kilitlenmez, ortalık rahatlar.
-   */
-  private stationCrowdFactor(isEv: boolean, st: 'near' | 'far'): number {
-    let cap, used
-    if (isEv) {
-      const idx = Array.from({ length: this.opts.evCount() }, (_, i) => i).filter(i => this.evStation(i) === st)
-      cap = Math.max(1, idx.length)
-      used = idx.filter(i => this.evOcc[i]).length
-    } else {
-      const idx = Array.from({ length: this.opts.pumpCount() }, (_, i) => i).filter(i => this.pumpStation(i) === st)
-      cap = Math.max(1, idx.length + this.waitSlotCount(st))
-      used = idx.filter(i => this.pumpOcc[i]).length + this.waitOccFor(st).filter(Boolean).length
-    }
-    const kind = isEv ? 'ev' : 'fuel'
-    const approaching = this.cars.filter(c => c.station === st &&
-      c.wantsEnter && c.kind === kind && c.slotIndex < 0 && c.waitIndex < 0
-      && (c.phase === 'transit' || c.phase === 'driving')).length
-    const free = cap - used - approaching
-    if (free <= 0) return 0.05 // doluysa neredeyse kimse yanaşmaz, yoluna devam
-    return Math.max(0.05, Math.min(1, free / cap))
-  }
+  // `stationCrowdFactor` SİLİNDİ (kalabalık freni). NEDEN ARTIK GEREKSİZ: görevi
+  // "dolu istasyona akın olup apron kilitlenmesin" idi — yani bir KİLİTLENME önlemiydi.
+  // Şerit ağında kilitlenme üretilemiyor; kapasite baskısı kuyruk slotu sayısıyla
+  // (ve otoyolda yavaşlama şeridiyle) doğal olarak modelleniyor: yer yoksa müşteri
+  // karar noktasında yoluna devam eder (onTurnedAway), avluda yığılmaz.
 
   /** MARİNA: gelen teknenin türünü segment paylarına göre seç (rapor §6.5.4).
    *  Kara şubelerinde `boats()` boş döner → hiç tekne doğmaz, davranış değişmez. */
@@ -2026,20 +1780,13 @@ export class CarManager {
     const svc = this.opts.serviceLane?.()
     if (lane === 'near') {
       car.station = 'near'
-      // OTOYOL: sürücü tesisi 40+ birim öncesinden görüp karar verir — doluluğu BİLEMEZ.
-      // Bu yüzden kalabalık frenini yumuşat; asıl kısıt YAVAŞLAMA ŞERİDİ kapasitesidir
-      // (dolu ise araç karar noktasında otobana döner = kaçan müşteri, rapor §6.4 kural 2).
-      const crowd = this.stationCrowdFactor(isEv, 'near')
-      // GİREMEYEN MÜŞTERİ (Faz 2.3): kapasite dolu olduğu için içeri hiç giremeyen sürücü,
-      // "bekleyip sıkılan"dan AYRI bir sorundur — biri hız, diğeri kapasite sorunudur.
-      // Tek zar atışı kullanılıyor: aynı sürücü, kapasite boş olsaydı girecek miydi?
-      const temelSans = this.opts.entryChance()
-      const zar = Math.random()
-      car.wantsEnter = zar < temelSans * (this.opts.highway?.() ? Math.max(0.75, crowd) : crowd)
-      // VIP yoldan geçip gitmez: nadir olduğu için kalabalık frenine takılırsa oyuncu
-      // teklifi hiç görmez. Girer, ama sabrı kısa olduğu için baskı yine gerçek.
+      // KALABALIK FRENİ YOK (silindi): sürücü zaten istasyonun doluluğunu yoldan
+      // BİLEMEZ. Niyet saf zardır; kapasite kararı kapıda verilir (tryEnter yer bulamazsa
+      // onTurnedAway ile "giremeyen müşteri" sayılır). Fren yalnız kilitlenmeyi
+      // önlemek için vardı ve arz eğrisini de sessizce kısıyordu.
+      car.wantsEnter = Math.random() < this.opts.entryChance()
+      // VIP yoldan geçip gitmez: nadir olduğu için oyuncu teklifi hiç görmezdi.
       if (car.vip) car.wantsEnter = true
-      if (!car.wantsEnter && crowd <= 0.05 && zar < temelSans) this.opts.onTurnedAway?.()
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
       // SU ŞUBESİ: transit de SERVİS şeridini kullanır (Oğuz: "yanaşma yerinden
       // tekneler dümdüz geçmesin") — LANE_NEAR (6.95) iskelenin dibinden geçiyordu.
@@ -2054,11 +1801,7 @@ export class CarManager {
       // (Eski hali tipe bakmıyordu: yalnız şarj olan karşı istasyona benzinli araçlar girip
       //  bekleme noktasında sonsuza dek kalıyor, sabır bitince itibar yakıyordu.)
       if (this.opts.farActive?.() && this.stationHasEquipmentFor(isEv ? 'ev' : 'fuel', 'far')) {
-        const crowdFar = this.stationCrowdFactor(isEv, 'far')
-        const temelSansFar = this.opts.entryChance()
-        const zarFar = Math.random()
-        car.wantsEnter = zarFar < temelSansFar * crowdFar
-        if (!car.wantsEnter && crowdFar <= 0.05 && zarFar < temelSansFar) this.opts.onTurnedAway?.()
+        car.wantsEnter = Math.random() < this.opts.entryChance()
         car.wantsTruckPark = car.isTruck && Math.random() < 0.4 // B6: karşı yakada da tır parkı
       }
       const lx = this.opts.waterOnly?.() && svc ? svc.far
@@ -2070,36 +1813,23 @@ export class CarManager {
     this.cars.push(car)
   }
 
-  /** geniş kapıda araçlar iki koldan geçer: her çağrıda ±1.2 dönüşümlü ofset */
-  // Kapı offset'i artık DETERMİNİST (eskiden araç başına ±1.2 FLIP ediyordu → ardışık
-  // araçlar kapının iki yarısını çapraz kullanıp kafa kafaya kilitleniyordu).
-  // Giriş/çıkış ayrı kapılar + ayrık iç koridorlar (1.75 / 0.45) → tek sıra düzgün akış.
-  private gateInOff(): number {
-    return this.opts.wideGates() ? -1.2 : 0 // giriş HEP güney yarı (sabit şerit)
-  }
-  private gateOutOff(): number {
-    return this.opts.wideGates() ? 1.2 : 0 // çıkış HEP kuzey yarı (sabit şerit)
+  // KAPI YARIM-ŞERİT OFSETLERİ (gateInOff/gateOutOff) SİLİNDİ. Geniş kapının işi
+  // "aynı ağızdan iki araç" değil, GİRİŞ/ÇIKIŞ AYRIMIYDI; o ayrım artık şerit ağının
+  // temeli. Geniş kapının yeni ve ölçülebilir faydası: içeride 8 yerine 10 kuyruk slotu.
+
+  /** GİRİŞ ŞERİDİ (önceden hesaplanmış): yol → kapı → gelen omurga → ünite kolu.
+   *  Ham nokta listesi döner; engel temizliği çağrı yerinde temizRota() ile yapılır. */
+  private entryPath(p: THREE.Vector3, st: 'near' | 'far' = 'near', fromRoad = true): THREE.Vector3[] {
+    return this.vs(this.graph.entryPath(st, { x: p.x, y: p.y }, fromRoad))
   }
 
-  /** rampadan girip hedef noktaya giden yol */
-
-  private entryPath(p: THREE.Vector3, st: 'near' | 'far' = 'near'): THREE.Vector3[] {
-    const G = this.geom(st)
-    const apronY = G.gateInY
-    const off = this.gateInOff()
-    const ham = [
-      // kapı kuyruğu BANKETTE bekler (şerit ile kapı arası) — şerit ortasında duran
-      // giriş adayı arkasındaki tüm transit trafiği kilitliyordu ("yolda araçlar
-      // sıkışıyor, istasyon boş görünüyor" şikâyeti). Şerit trafiği yanından akar.
-      new THREE.Vector3((G.lane + G.gateX) / 2, apronY - G.dirY * 3.5 + off, 0),
-      new THREE.Vector3(G.gateX, apronY + off, 0),
-      new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, p.y - G.dirY * 2.5, 0),
-      p.clone(),
-    ]
-    // HAM rota döner: temizlik artık ÇAĞRI YERİNDE temizRota(car, ...) ile yapılıyor —
-    // böylece aracın MEVCUT konumundan ilk waypoint'e giden bacak da taranır ve sonuç
-    // önbelleğe girer (eskiden burada temizlenip önbelleksiz kalıyordu).
-    return ham
+  /** KUYRUK ŞERİDİ: yol → kapı → gelen omurga → i. sabit slot. */
+  private queuePath(i: number, st: 'near' | 'far', fromRoad = true): THREE.Vector3[] {
+    const raw = this.graph.queuePath(st, i, fromRoad)
+    if (!raw.length) return [this.waitSpotAt(i, st)]
+    const out = this.vs(raw)
+    out[out.length - 1] = this.waitSpotAt(i, st) // katı cisim kaçışı slot noktasında yapılır
+    return out
   }
 
   /** tıra boş tır parkı yeri bul ve gönder; başarılıysa true */
@@ -2162,11 +1892,8 @@ export class CarManager {
     car.truckSlot = -1
     car.phase = 'leaving'
     const out: THREE.Vector3[] = []
-    const GL = this.geom(car.station) // B6: çıkış da yakaya göre aynalanır
     if (car.truckStagePos) out.push(car.truckStagePos.clone()) // önce ileri çık
-    out.push(new THREE.Vector3(GL.gateX, GL.gateOutY, 0))
-    out.push(new THREE.Vector3(GL.lane, GL.gateOutY + GL.dirY * 4, 0))
-    out.push(new THREE.Vector3(GL.lane, GL.dirY * 44, 0))
+    out.push(...this.cikisRotasi(car)) // sonra ÇIKIŞ ŞERİDİ (yakaya göre şerit ağından)
     car.truckStagePos = null
     car.setPath(temizRota(car, out)) // tır parkından ÇIKIŞ da engel-farkında
   }
@@ -2181,44 +1908,20 @@ export class CarManager {
    *  araçlar eski kapı koordinatına sürüp çite çakılıyor, buharlaşıyordu.)
    *  Tüm eşikler DERİNLİK (kapıdan istasyon içine mesafe) cinsinden — yaka bağımsız. */
   rerouteForGates() {
+    // ŞERİT AĞI YENİDEN HESAPLANDI (update() imzayı görür): araçları YENİ şeritlere bindir.
     for (const c of this.cars) {
       const G = this.geom(c.station)
       const p = c.group.position
       // depth: kapıdan istasyonun içine doğru mesafe. Negatif = hâlâ yol tarafında.
       const depth = G.sideSign < 0 ? (G.gateX - p.x) : (p.x - G.gateX)
-      if (c.phase === 'driving' && depth < -1.3) {
-        // henüz yolda: baştan tam giriş rotası
-        if (c.slotIndex >= 0) {
-          const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
-          // yeniden rotalamada da ENGEL-FARKINDA: kapı taşınınca yeni rota bir binanın
-          // üstünden geçebilir; eskiden burada hiç temizlik yoktu
-          c.setPath(temizRota(c, this.entryPath(slot, c.station)), () => this.arriveAtSlot(c))
-        } else if (c.waitIndex >= 0) {
-          c.setPath(temizRota(c, [
-            new THREE.Vector3(G.lane, G.gateInY - G.dirY * 3.5, 0),
-            new THREE.Vector3(G.gateX, G.gateInY, 0),
-            this.waitSpotAt(c.waitIndex, c.station),
-          ]), () => { c.phase = 'waiting' })
-        }
-      } else if (c.phase === 'driving') {
-        // apron içindekiler: kalan rotayı mevcut konumdan kur (eski kapı waypoint'i atılır)
-        if (c.slotIndex >= 0) {
-          const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
-          c.setPath(temizRota(c, [
-            new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0),
-            slot.clone(),
-          ]), () => this.arriveAtSlot(c))
-        } else if (c.waitIndex >= 0) {
-          c.setPath(temizRota(c, [this.waitSpotAt(c.waitIndex, c.station)]), () => { c.phase = 'waiting' })
-        }
+      const yolda = depth < -1.3
+      if (c.phase === 'driving' && c.slotIndex >= 0) {
+        const slot = c.kind === 'ev' ? this.opts.evSlot(c.slotIndex) : this.opts.pumpSlot(c.slotIndex)
+        c.setPath(temizRota(c, this.entryPath(slot, c.station, yolda)), () => this.arriveAtSlot(c))
+      } else if (c.phase === 'driving' && c.waitIndex >= 0) {
+        c.setPath(temizRota(c, this.queuePath(c.waitIndex, c.station, yolda)), () => { c.phase = 'waiting' })
       } else if (c.phase === 'leaving' && depth > -1.3) {
-        // henüz yola çıkmamış çıkan araç: yeni çıkışa yönlendir
-        const outY = G.gateOutY
-        c.setPath(temizRota(c, [
-          new THREE.Vector3(G.gateX, outY, 0),
-          new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
-          new THREE.Vector3(G.lane, G.dirY * 44, 0),
-        ]))
+        c.setPath(temizRota(c, this.cikisRotasi(c)))
       }
     }
   }
@@ -2226,17 +1929,11 @@ export class CarManager {
   private tryEnter(car: Car) {
     if (this.opts.entryChance() <= 0) return // istasyon kapalı: kimse girmez
     if (car.wantsTruckPark && car.truckSlot < 0 && this.sendTruckToPark(car)) return
-    // giriş rampasında (kapı ile pompalar arası) zaten manevra yapan araç varsa BEKLE —
-    // aynı anda tek araç girer, apron'da yığılma/kilitlenme olmaz (oyuncu şikayeti fixi)
+    // `rampBusy` ("aynı anda tek araç girer") SİLİNDİ. Bir BEKLETME kuralıydı: apron
+    // yığılmasını önlemek için girişi seri hale getiriyordu. Şerit ağında giriş şeridi
+    // zaten tek sıra ve ünite kolları ayrık — araçlar peş peşe akabilir.
     const G = this.geom(car.station)
     const gy = G.gateInY
-    // aynı istasyonun giriş rampasında (kapı↔pompa arası) manevra yapan araç varsa BEKLE (apron yığılması olmasın)
-    const rA = G.gateX + G.sideSign * 2.1, rB = G.gateX - G.sideSign * 1.0
-    const rampLo = Math.min(rA, rB), rampHi = Math.max(rA, rB)
-    const rampBusy = this.cars.some(o => o !== car && o.station === car.station && o.phase === 'driving'
-      && o.group.position.x > rampLo && o.group.position.x < rampHi
-      && Math.abs(o.group.position.y - gy) < 6)
-    if (rampBusy) { car.converted = false; return } // rampa boşalınca sonraki karelerde TEKRAR dener (müşteri kaçmaz)
     if (car.kind === 'ev') {
       // giriş kapısına EN YAKIN boş şarj: herkes 0. slota hunilenmesin, koridor yolculuğu kısalsın
       let slot = -1; let bestD = Infinity
@@ -2257,6 +1954,11 @@ export class CarManager {
       car.showBars()
       return
     }
+    // KUYRUK VARSA SIRAYA GİR (tek sıra kuralı): kuyruk gelen omurganın ÜZERİNDE.
+    // Bekleyeni geçip boş pompaya dalmak, aracı kuyruğun gövdelerinin içinden geçirirdi.
+    // Sıradaki araç zaten aynı karede boş pompaya gönderiliyor (aşağıdaki sendToSlot
+    // döngüsü) — yani bu kural akışı YAVAŞLATMAZ, yalnız şeridi tek sıra tutar.
+    const kuyruktaVar = this.waitOccFor(car.station).some(Boolean)
     // yakıt müşterisi — giriş kapısına EN YAKIN boş pompa (tek koridora hunilenme dağılır)
     let slot = -1; let bestD = Infinity
     for (let i = 0; i < this.opts.pumpCount(); i++) {
@@ -2265,12 +1967,13 @@ export class CarManager {
       const d = Math.abs(this.opts.pumpSlot(i).y - gy)
       if (d < bestD) { bestD = d; slot = i }
     }
-    if (slot >= 0) {
+    if (slot >= 0 && !kuyruktaVar) {
       this.pumpOcc[slot] = car
       car.slotIndex = slot
       car.phase = 'driving'
       car.setPath(temizRota(car, this.entryPath(this.opts.pumpSlot(slot), car.station)), () => this.arriveAtSlot(car))
       car.showBars()
+      this.graph.stats.granted++
       return
     }
     // emniyet: bu istasyonda HİÇ pompa yoksa (hepsi karşıda/başka tip) bekleme noktası alma —
@@ -2286,16 +1989,17 @@ export class CarManager {
       car.phase = 'driving'
       // BEKLEME NOKTASINA gidiş de temizlenir: iç bekleme koridoru pompa hattının
       // yanından geçer, oyuncu oraya bina koyduysa rota gövdenin üstünden geçiyordu.
-      car.setPath(temizRota(car, [
-        new THREE.Vector3(G.lane, gy - G.dirY * 3.5, 0),
-        new THREE.Vector3(G.gateX, gy, 0),
-        this.waitSpotAt(wi, car.station),
-      ]), () => {
+      car.setPath(temizRota(car, this.queuePath(wi, car.station)), () => {
         car.phase = 'waiting'
       })
       car.showBars()
+      this.graph.stats.granted++
+      return
     }
-    // yer yoksa araba yoluna devam eder (kaçan müşteri)
+    // KUYRUK DOLU: müşteri içeri HİÇ giremedi. Eski mimaride kalabalık freni bunu yolda
+    // önlüyordu; artık karar kapıda veriliyor ve GÖRÜNÜR bir kayıp olarak sayılıyor.
+    this.graph.stats.denied++
+    this.opts.onTurnedAway?.()
   }
 
   private arriveAtSlot(car: Car) {
@@ -2311,29 +2015,18 @@ export class CarManager {
     // ziyade BAŞTAN pathi ona göre çizse"). Araç yuvaya oturduğu anda çıkışı hazırdır;
     // uğurlanınca hesap yapmadan yola koyulur. Damga (yerleşim sürümü + konum) tutmazsa
     // releaseCar tazeler — bina taşınmışsa bayat rota kullanılmaz.
-    car.cikisYolu = temizRota(car, this.cikisRotasi(car, car.group.position.y))
+    car.cikisYolu = temizRota(car, this.cikisRotasi(car))
     car.cikisImza = this.cikisImzasi(car)
     if (car.vip) this.opts.onVip?.(car)
     this.opts.onCarReady(car)
   }
 
-  /** ÇIKIŞ ROTASI tek kaynaktan: hem varışta önden hesaplanır hem uğurlamada kullanılır. */
-  private cikisRotasi(car: Car, y: number): THREE.Vector3[] {
-    const G = this.geom(car.station)
-    const outY = G.gateOutY
-    const off = this.gateOutOff()
-    // Çıkış koridoruna KAPI YAKININDA katıl (maks 7 birim önce) — kendi hizasından DEĞİL.
-    // Eski hali (y±3): uzak pompadan çıkan araç önce kapı kolonuna (giriş hizasına) sürüyor,
-    // sonra çit dibinden tüm istasyonu boydan geçiyordu — giriş ağzıyla çakışma + saçma manevra.
-    const preY = G.dirY > 0
-      ? Math.max(Math.min(y + 3, outY - 1.8), outY - 7)
-      : Math.min(Math.max(y - 3, outY + 1.8), outY + 7)
-    return [
-      new THREE.Vector3(G.gateX + G.sideSign * 0.45, preY, 0),
-      new THREE.Vector3(G.gateX, outY + off, 0),
-      new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
-      new THREE.Vector3(G.lane, G.dirY * 44, 0),
-    ]
+  /** ÇIKIŞ ŞERİDİ tek kaynaktan: hem varışta önden hesaplanır hem uğurlamada kullanılır.
+   *  Şerit ağından gelir — GİDEN OMURGA gelen omurgadan ayrı kolonda olduğu için çıkan
+   *  araç kuyruğun ve giren araçların içinden geçmez. */
+  private cikisRotasi(car: Car): THREE.Vector3[] {
+    const p = car.group.position
+    return this.vs(this.graph.exitPath(car.station, { x: p.x, y: p.y }))
   }
 
   /** hazır çıkış rotasının geçerlilik damgası: yerleşim sürümü + aracın konumu (0.1 ızgara) */
@@ -2351,14 +2044,10 @@ export class CarManager {
     car.slotIndex = slot
     car.phase = 'driving'
     const p = this.opts.pumpSlot(slot)
-    const G = this.geom(car.station)
-    // KUYRUK → POMPA: ölçümde en kirli rotalardan biri (dar kapı senaryosunda çağrıların
-    // %86'sı engelden geçiyordu). Bekleme noktası pompa hattının yanında olduğu için
-    // apron şeridine çıkarken KOMŞU pompa gövdelerini biçiyordu.
-    car.setPath(temizRota(car, [
-      new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, p.y - G.dirY * 2.5, 0),
-      p,
-    ]), () => this.arriveAtSlot(car))
+    // KUYRUK -> POMPA: araç zaten GELEN OMURGA üzerindedir (kuyruk slotu orada). Rota
+    // omurga boyunca ünitenin hizasına, sonra ünite koluna girer — önceden hesaplanmış,
+    // her seferinde AYNI. Yol tarafı bacağı yok (fromRoad=false).
+    car.setPath(temizRota(car, this.entryPath(p, car.station, false)), () => this.arriveAtSlot(car))
   }
 
   /** servis bitti, tesis kullanacak → otoparka çek. Otopark yok/dolu ise false. */
@@ -2461,72 +2150,15 @@ export class CarManager {
   /** hata ayıklama katmanı (?traffic=1) için salt-okuma erişimi */
   get graphRef() { return this.graph }
 
-  /** son çare: aracı sahneden sil, tuttuğu her yeri boşalt — hiçbir şey sonsuza dek tıkalı kalamaz */
-  private evaporate(car: Car) {
-    this.graph.release(car) // rezervasyonları bırak — bölge sonsuza dek kilitli kalmasın
-    this.evapStats.total++
-    if (car.station === 'far') this.evapStats.far++
-    else this.evapStats.near++
-    if (car.waitIndex >= 0) { this.waitOccFor(car.station)[car.waitIndex] = null; car.waitIndex = -1 }
-    if (car.truckSlot >= 0) { this.truckOcc[car.truckSlot] = null; car.truckSlot = -1 }
-    if (car.parkId) { this.parkOcc.delete(car.parkId); car.parkId = null }
-    if (car.slotIndex >= 0) {
-      if (car.kind === 'ev') this.evOcc[car.slotIndex] = null
-      else this.pumpOcc[car.slotIndex] = null
-      car.slotIndex = -1
-    }
-    car.hideBubble()
-    car.dispose(this.scene)
-  }
-
-  /** 6 sn kıpırdayamayan aracı ayır, katıdan çıkar, rotasını tazele */
-  private recoverStuck(car: Car) {
-    // üst üste binmiş araçları ayır
-    for (const o of this.cars) {
-      if (o === car || o.phase === 'gone') continue
-      const d = car.group.position.distanceTo(o.group.position)
-      if (d < 1.1) {
-        const away = new THREE.Vector3().subVectors(car.group.position, o.group.position)
-        away.z = 0
-        if (away.lengthSq() < 1e-4) away.set(0.6, 0.6, 0)
-        away.normalize()
-        car.group.position.addScaledVector(away, 1.25 - d / 2)
-      }
-    }
-    // katı cisme gömüldüyse en yakın kenardan dışarı it (körük aracı hariç — bilerek içeride)
-    if (car.ghostSolid) { car.holdTime = 0; car.overrideT = 0; return }
-    for (const s of Car.solids) {
-      const dx = car.group.position.x - s.cx
-      const dy = car.group.position.y - s.cy
-      const px = s.w / 2 + 0.5 - Math.abs(dx)
-      const py = s.d / 2 + 0.5 - Math.abs(dy)
-      if (px > 0 && py > 0) {
-        if (px < py) car.group.position.x += Math.sign(dx || 1) * px
-        else car.group.position.y += Math.sign(dy || 1) * py
-      }
-    }
-    car.holdTime = 0
-    car.overrideT = 0
-    // hedefe göre temiz rota — "temiz" artık gerçekten ENGEL-FARKINDA. Kurtarma anında
-    // aynı kirli rotayı tekrar vermek aracı aynı köşeye geri sokuyordu (sonsuz döngü).
-    if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind !== 'ev') {
-      const slot = this.opts.pumpSlot(car.slotIndex)
-      const G = this.geom(car.station)
-      car.setPath(temizRota(car, [new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()]), () => this.arriveAtSlot(car))
-    } else if (car.phase === 'driving' && car.slotIndex >= 0 && car.kind === 'ev') {
-      const slot = this.opts.evSlot(car.slotIndex)
-      const G = this.geom(car.station)
-      car.setPath(temizRota(car, [new THREE.Vector3(G.gateX + G.sideSign * APRON_LANE_OFF, slot.y - G.dirY * 2.5, 0), slot.clone()]), () => this.arriveAtSlot(car))
-    } else if (car.phase === 'toPark' && car.truckSlot >= 0) {
-      this.leaveTruckPark(car)
-    } else if (car.phase !== 'atPump' && car.phase !== 'parked' && car.phase !== 'waiting') {
-      this.releaseCar(car)
-    }
-  }
+  // `evaporate` SİLİNDİ. Kalıcı sıkışmayı üretecek mekanizma (bekleme/rezervasyon/
+  // yol verme) kalmadığı için son-çare silme sigortasına da gerek yok. evapStats
+  // TELEMETRİ olarak duruyor ve HER ZAMAN 0 kalmalı: 0'dan farklıysa biri sessiz
+  // müşteri silmeyi geri getirmiş demektir.
+  //
+  // `recoverStuck` SİLİNDİ. Görevi "2.2 sn kıpırdayamayan aracı ayır, katıdan çıkar,
+  // rotasını tazele" idi — hepsi bekleme kaynaklı kilitlenmenin sonucuydu.
 
   releaseCar(car: Car) {
-    // çıkış rotası yeni bölgelerden geçecek: eski token'ları bırak (giriş ağzı serbest kalsın)
-    this.graph.release(car)
     if (car.waitIndex >= 0) {
       this.waitOccFor(car.station)[car.waitIndex] = null
       car.waitIndex = -1
@@ -2543,17 +2175,10 @@ export class CarManager {
     car.filling = false
     car.hideBubble()
     car.hideBars()
-    const G = this.geom(car.station)
-    const outY = G.gateOutY
-    const off = this.gateOutOff()
-    if (fromPark) { // otopark yalnız yakın istasyonda var — kendi stage'inden çıkar (sabit şerit yok)
+    if (fromPark) { // otoparktan çıkış: kendi stage'inden çıkar, sonra ÇIKIŞ ŞERİDİNE katılır
       const out: THREE.Vector3[] = []
       if (car.parkStage) { out.push(car.parkStage.clone()); car.parkStage = null }
-      out.push(
-        new THREE.Vector3(G.gateX, outY + off, 0),
-        new THREE.Vector3(G.lane, outY + G.dirY * 4, 0),
-        new THREE.Vector3(G.lane, G.dirY * 44, 0),
-      )
+      out.push(...this.cikisRotasi(car).slice(1)) // ilk nokta aracın kendi y'si — stage yeter
       car.setPath(temizRota(car, out))
       car.cikisYolu = null
       return
@@ -2563,6 +2188,6 @@ export class CarManager {
     // "önce pompaya gelip sonra çıkış yolu arıyor" dediği duraksama ortadan kalkar.
     const hazir = car.cikisYolu && car.cikisImza === this.cikisImzasi(car) ? car.cikisYolu : null
     car.cikisYolu = null
-    car.setPath(hazir ?? temizRota(car, this.cikisRotasi(car, car.group.position.y)))
+    car.setPath(hazir ?? temizRota(car, this.cikisRotasi(car)))
   }
 }
