@@ -371,14 +371,50 @@ export function parcelKey(c: number, r: number) { return `${c},${r}` }
  * Az iş yapan çıplak istasyonda taban fiyat, dolu istasyonda katlanır.
  */
 export function parcelCost(c: number, _r: number, s?: GameState) {
-  const base = c === 0 ? 6000 : (c === 1 || c === 3) ? 9000 : 14000
+  const base = parcelBaseCost(c)
   if (!s) return base
   const mult = Math.min(1 + 0.12 * s.developmentScore(), 2) // gelişmişlik zammı en fazla 2 katına çıkarır
   // METROPOL (§6.6): şehirde arsa pahalı. Kasabada çarpan yok → mevcut denge korunur.
   const land = s.theme().features?.land?.priceMult ?? 1
   return Math.round(base * mult * land / 100) * 100
 }
+/**
+ * ARSA GERİ SATIŞ BEDELİ — TABAN bedelin yarısı (gelişmişlik/şube zammı iade EDİLMEZ).
+ *
+ * #1200 (mehmet.acar@sardismarkets.me "arsadan vazgeçince para geri gelmedi, kredi
+ * yandı"): oyunda arsayı geri satmanın HİÇBİR yolu yoktu — `ownedParcels` yalnızca
+ * büyüyen bir kümeydi. Her bina %50 iadeyle yıkılabiliyorken arsa ölü sermayeydi;
+ * arsa için kredi çeken oyuncu taksitle baş başa kalıyordu.
+ *
+ * NEDEN DİNAMİK FİYAT DEĞİL TABAN: sunucu (server/index.js buildingValue) parseli
+ * 5.000 ₺, betonu 2.000 ₺ sayıyor. İade dinamik `parcelCost`tan (₺28.000'e kadar
+ * çıkabiliyor) hesaplansaydı satış sunucu gözünde SERVET ARTIŞI olurdu ve meşru
+ * oyuncu anti-cheat kırpmasına takılırdı. Taban yarısı en fazla 7.000 + 1.250 =
+ * ₺8.250; sunucunun düşürdüğü değer 7.000 → fark ₺1.250, jeton kovasının (₺260.000)
+ * yanında görünmez. Satış hiçbir zaman "para basma" gibi görünmez.
+ */
+export function parcelBaseCost(c: number): number {
+  return c === 0 ? 6000 : (c === 1 || c === 3) ? 9000 : 14000
+}
 /** komşuluk: aynı blokta yan yana/alt alta; 0↔3 yol karşısı sayılır */
+/** Parsel kümesi istasyon parselinden (0,1) komşuluk zinciriyle erişilebilir mi.
+ *  Arsa SATIŞINDA kullanılır: satış, geride ulaşılamaz "ada" arsa bırakmamalı. */
+export function parcelsConnected(keys: Set<string>): boolean {
+  const start = parcelKey(0, 1)
+  if (keys.size === 0) return true
+  if (!keys.has(start)) return false
+  const gorulen = new Set<string>([start])
+  const kuyruk = [start]
+  while (kuyruk.length) {
+    const [c1, r1] = kuyruk.pop()!.split(',').map(Number)
+    for (const k of keys) {
+      if (gorulen.has(k)) continue
+      const [c2, r2] = k.split(',').map(Number)
+      if (parcelsAdjacent(c1, r1, c2, r2)) { gorulen.add(k); kuyruk.push(k) }
+    }
+  }
+  return gorulen.size === keys.size
+}
 export function parcelsAdjacent(c1: number, r1: number, c2: number, r2: number): boolean {
   if (r1 === r2) {
     const sameBlock = (c1 < 3) === (c2 < 3)
@@ -465,6 +501,37 @@ export class GameState {
 
   /** yakıt türü başına ayrı yer altı tankı */
   tanks: Record<FuelType, number> = { benzin: 250, dizel: 150, lpg: 100 }
+  /**
+   * GÜN GİDER DEFTERİ (runtime — kayda GİRMEZ, gün dönüşünde sıfırlanır).
+   *
+   * NEDEN VAR (#74 #330 #983 #1140 #1220 "kasadan para eriyor / geriye sayıyor"):
+   * gün dönüşünde kasadan yovmiye, OPEX, kira, ruhsat, reklam, kredi taksiti, ihale
+   * cezası ve banka kâr payı çıkıyordu ama oyuncu bunların TOPLAMINI hiçbir yerde
+   * göremiyordu — her kalem ayrı, uçucu bir toast'tı. Üstelik "Gün bitti — kâr ₺X"
+   * raporu bu giderlerden ÖNCE hesaplanıyordu, yani raporlanan kâr gerçek kasa
+   * değişimine hiç eşit değildi. Oyuncu haklı olarak "para eriyor" diyordu.
+   *
+   * Artık kasadan çıkan her gün-sonu kalemi `spend()` üzerinden geçer ve burada
+   * birikir; toplam, kasadaki gerçek düşüşle BİREBİR eşittir (bkz. test:para).
+   */
+  dayCosts: { kind: string; amount: number }[] = []
+  /**
+   * Kasadan gider düş + deftere yaz. Döndürülen tutar kasadaki GERÇEK düşüştür.
+   * Kasa eksiye inmez (eskiden yovmiye kasayı negatife itebiliyordu; negatif kasa
+   * sipariş bütçe-fit'ini de bozuyordu).
+   */
+  spend(kind: string, amount: number): number {
+    const amt = Math.max(0, Math.round(amount))
+    if (amt <= 0) return 0
+    const before = this.money
+    this.money = Math.max(0, this.money - amt)
+    const paid = Math.round(before - this.money)
+    if (paid > 0) this.dayCosts.push({ kind, amount: paid })
+    return paid
+  }
+  /** Gün gider dökümünün toplamı — gün raporunda gösterilir */
+  dayCostTotal(): number { return this.dayCosts.reduce((a, c) => a + c.amount, 0) }
+
   /** yakıt türü başına ayrı sipariş/tanker takibi */
   loan: Loan = { active: false, principal: 0, monthly: 0, remaining: 0, overdue: 0, collateral: [], rate: LOAN_RATE }
   partner: Partner = { active: false, remaining: 0, share: PARTNER_SHARE } // banka ortaklığı (teminatsız temerrüt)
@@ -769,6 +836,39 @@ export class GameState {
     return lim !== null && this.ownedParcels.size >= lim
   }
   isPaved(c: number, r: number) { return this.pavedParcels.has(parcelKey(c, r)) }
+
+  /** Bu parselin geri satış bedeli (arsa + varsa beton). 0 = satılamaz. */
+  parcelRefund(c: number, r: number): number {
+    const key = parcelKey(c, r)
+    if (key === parcelKey(0, 1)) return 0            // istasyon kolonu: kritik altyapı, satılmaz
+    if (!this.ownedParcels.has(key)) return 0
+    const beton = this.pavedParcels.has(key) ? PAVE_COST : 0
+    // SUNUCU TAVANI: server/index.js buildingValue() parseli 5.000 ₺, betonu 2.000 ₺
+    // sayar. İade bunun üstüne çıkarsa satış sunucunun gözünde SERVET ARTIŞI olur ve
+    // meşru oyuncu jeton kovasını boşuna harcar / kırpmaya yaklaşır. En pahalı parselde
+    // (₺14.000 taban) yarı iade 8.250'ye çıkıyordu; tavan onu 7.000'de kesiyor.
+    const sunucuDegeri = 5000 + (beton ? 2000 : 0)
+    return Math.min(sunucuDegeri, Math.round((parcelBaseCost(c) + beton) * SELL_REFUND))
+  }
+  /**
+   * Arsayı geri sat (#1200). ÜSTÜNDE YAPI OLMAMALI — bu kontrol çağıran tarafta
+   * (main.ts yerleşim tablosu) yapılır, state yerleşimi bilmez.
+   * Döner: iade tutarı; satılamıyorsa null (kasaya dokunulmaz).
+   */
+  sellParcel(c: number, r: number): { refund: number } | null {
+    const key = parcelKey(c, r)
+    const refund = this.parcelRefund(c, r)
+    if (refund <= 0) return null
+    // KOMŞULUK BÜTÜNLÜĞÜ: satılan parsel diğerlerinin istasyona bağını koparmamalı,
+    // yoksa oyuncu ulaşılamaz ada arsalarla kalır (yeni arsa alımı bitişiklik ister).
+    const kalan = new Set(this.ownedParcels)
+    kalan.delete(key)
+    if (!parcelsConnected(kalan)) return null
+    this.ownedParcels.delete(key)
+    this.pavedParcels.delete(key)
+    this.money += refund
+    return { refund }
+  }
   /** eski kilitler bu getter'ları kullanır: sahip + zemin döşeli sayılır */
   get landSouth() { return this.pavedParcels.has(parcelKey(0, 0)) }
   get landNorth() { return this.pavedParcels.has(parcelKey(0, 2)) }
@@ -1772,6 +1872,40 @@ export class GameState {
     }
     return out
   }
+  /**
+   * ŞİRKET GENELİ yakıt stoğu (L): aktif şubenin tankı + pasif şube anlık görüntüleri.
+   * Sözleşme şirket kalemi, tank şube kalemi olduğu için ihale hesabı bunu kullanır.
+   */
+  companyFuel(f: FuelType): number {
+    let v = Math.max(0, Number(this.tanks[f]) || 0)
+    for (const [loc, sn] of Object.entries(this.locSnapshots)) {
+      if (loc === this.activeLoc) continue // aktif şube snapshot'ta durmaz ama çift sayıma karşı emniyet
+      const n = Number(sn?.tanks?.[f])
+      if (isFinite(n) && n > 0) v += n
+    }
+    return v
+  }
+  /**
+   * Şirket stoğundan litre çek: ÖNCE aktif şube (oyuncunun gördüğü tank), sonra pasif
+   * şubeler. Gerçekten çekilen litreyi döndürür (stok yetmezse daha az olabilir).
+   */
+  drawCompanyFuel(f: FuelType, liters: number): number {
+    let kalan = Math.max(0, liters)
+    if (kalan <= 0) return 0
+    let cekilen = 0
+    const aktif = Math.min(kalan, Math.max(0, Number(this.tanks[f]) || 0))
+    if (aktif > 0) { this.tanks[f] -= aktif; cekilen += aktif; kalan -= aktif }
+    for (const [loc, sn] of Object.entries(this.locSnapshots)) {
+      if (kalan <= 0) break
+      if (loc === this.activeLoc || !sn?.tanks) continue
+      const stok = Math.max(0, Number(sn.tanks[f]) || 0)
+      const al = Math.min(kalan, stok)
+      if (al <= 0) continue
+      sn.tanks[f] = stok - al
+      cekilen += al; kalan -= al
+    }
+    return cekilen
+  }
   /** sözleşme taahhüdüne teslim ekle — TÜM satış yolları (aktif, pompacı, offline) buradan geçer */
   addContractDelivery(f: FuelType, liters: number) {
     if (this.contract && this.contract.fuel === f && liters > 0) this.contract.deliveredToday += liters
@@ -1788,7 +1922,7 @@ export class GameState {
     const c = this.contract
     if (!c) return null
     const fee = Math.min(this.money, c.penalty * 2)
-    this.money -= fee
+    this.spend(t('İhale cayma bedeli'), fee)
     this.addRep(-0.2)
     this.contract = null
     return { fee }
@@ -1800,14 +1934,20 @@ export class GameState {
     if (!c) return { kind: 'none', amount: 0, name: '' }
     // FİLO SİGORTASI (E2E kanıtı: yoğun istasyonda filo araçları kapıdan dönebiliyor
     // ve taahhüt fiziksel trafikle ASLA garanti edilemiyor): gün sonunda eksik kalan
-    // litre, TANKTA YAKIT OLDUĞU SÜRECE depodan toplu filo alımıyla tamamlanır.
-    // Ceza yalnız gerçek ihmalde (tank yetersiz) yazılır — "boşa zarar" imkânsız.
+    // litre, DEPODA YAKIT OLDUĞU SÜRECE toplu filo alımıyla tamamlanır.
+    //
+    // #615 (tembelligent@gmail.com "yeterli dizel varken sözleşme başarısız sayılıp
+    // günlük ceza kesiyor") — İKİ kök neden vardı, ikisi de burada:
+    //  (a) HEP YA DA HİÇ: şart `tanks >= short` idi. 500 L eksikken tankta 480 L varsa
+    //      HİÇBİR ŞEY teslim edilmiyor, tam ceza yazılıyordu. Artık ne varsa çekilir
+    //      (kısmi teslim), böylece %95 toleransı gerçekten işe yarar.
+    //  (b) ŞUBE KÖRLÜĞÜ: sözleşme ŞİRKET kalemidir (SAVE_FIELDS) ama `tanks` ŞUBE
+    //      kalemidir (LocSnapshot.tanks). Oyuncu kasabada 5.000 L dizelle otururken
+    //      otoyol şubesindeyse gün dönüşü yalnız otoyolun kuru tankına bakıyor ve
+    //      "dizelin var ama yok" diyip ceza kesiyordu. Artık şirket geneli çekilir.
     {
       const short = Math.max(0, c.dailyLiters - c.deliveredToday)
-      if (short > 0 && this.tanks[c.fuel] >= short) {
-        this.tanks[c.fuel] -= short
-        c.deliveredToday += short
-      }
+      if (short > 0) c.deliveredToday += this.drawCompanyFuel(c.fuel, short)
     }
     // TOLERANS (oyuncu raporu: "depom yeterli, yine ceza"): yuvarlamalar (₺→L çevrimi,
     // filo payları) taahhüdü 2-5 litre eksik bırakabiliyordu — %95 doluluk TAM sayılır.
@@ -1823,9 +1963,12 @@ export class GameState {
       if (this.salesLog.length > 370) this.salesLog.shift()
     } else {
       // eksik teslim: teslim edilen kadar ödeme + gün cezası
+      // Ceza AYRI kalem olarak gider defterine yazılır (#615 oyuncusu cezayı hiç
+      // görmüyordu: "kasa geriye sayıyor" dediği kalemlerden biri buydu).
       const paid = Math.round(delivered * c.pricePerL * this.prestigeMult())
       amount = paid - c.penalty
-      this.money = Math.max(0, this.money + amount)
+      this.money += paid
+      this.spend(t('İhale cezası'), c.penalty)
       if (paid > 0) {
         this.stats.revenue += paid
         this.salesLog.push({ day: this.day, rev: paid })
@@ -2291,6 +2434,31 @@ export class GameState {
     const pol = this.managerPolicy
     let collected = 0
     if (pol.collect) for (const id of Object.keys(this.pendingCash)) collected += this.collectPending(id)
+    let fixed = 0
+    // ── REAKTÖR BAKIMI — TURUN EN BAŞINDA, `fixBroken` TALİMATINDAN BAĞIMSIZ ──
+    // #1239 (ftheatral@gmail.com "Sv.3 müdür reaktöre bakım yapmıyor"). Üç kök neden:
+    //  (a) TALİMAT KARIŞIKLIĞI: bakım `pol.fixBroken` (ARIZA TAMİRİ) bayrağına bağlıydı.
+    //      Oyuncu tamir otomasyonunu kapatınca reaktör bakımı da sessizce duruyordu —
+    //      oysa mağaza satırı "Sv.3 müdür bakımı üstlenir" diye SÖZ VERİYOR (vaat ihlali).
+    //  (b) BÜTÇE SIRASI: bakım turun EN SONUNDAYDI. Müdür önce yakıt siparişi verip
+    //      sonra pompaları tamir ediyor, kasa ₺1.500'ün altına inince reaktör o turu
+    //      atlıyordu — ölçüldü: ₺2.000 kasa + 2 arızalı pompa → yıpranma %90'dan %94'e
+    //      ÇIKIYOR. Felaket riski taşıyan kalem (patlarsa kasanın YARISI gider) her
+    //      zaman ₺4'lük litreden ve ₺800'lük pompadan ÖNCE gelmeli.
+    //  (c) EŞİK: 0.50, "Reaktör bakım istiyor!" uyarısıyla aynı noktaydı. 0.40'a çekildi
+    //      → müdürlü istasyonda yıpranma tehlike bandına (0.70+) hiç girmiyor.
+    if (this.managerLevel >= 3 && this.hasSMR && this.smrWear >= 0.4) {
+      if (this.money >= 1500) {
+        this.money -= 1500
+        this.smrWear = 0
+        this.maintCare = Math.min(1, this.maintCare + 0.1)
+        fixed++
+      } else if (this.smrWear >= 0.7) {
+        // Sessiz kalma: Sv.3 garantisi patlamayı engelliyor ama oyuncu reaktörün neden
+        // bakımsız kaldığını BİLMELİ, yoksa yine "müdür iş yapmıyor" diye okunur.
+        this.events.push(t('Müdür reaktör bakımını yapamadı — kasada ₺1.500 yok!'))
+      }
+    }
     // YAKIT SİPARİŞİ (Oğuz: "müdür yakıt siparişini versin") — Sv.1'den itibaren:
     // tank %20'nin altına düşen her yakıt için sipariş verir (bütçe elveriyorsa)
     let ordered = 0
@@ -2321,7 +2489,16 @@ export class GameState {
     if (this.managerLevel >= 2 && pol.cleanSolar && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
       this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
     }
-    let fixed = 0
+    // URANYUM SİPARİŞİ (iki ayrı oyuncu raporu: "müdür uranyum sipariş etmiyor").
+    // Bu da `fixBroken`'dan ÇIKARILDI: kendi talimatı (buyUranium) var, arıza tamiriyle
+    // ilgisi yok. Eskiden tamir kapalıyken uranyum siparişi de duruyordu.
+    if (this.managerLevel >= 3 && pol.buyUranium && this.hasSMR && this.uranium <= 20
+        && !this.uraniumPending && this.money >= URANIUM_COST) {
+      this.money -= URANIUM_COST
+      this.uraniumPending = true
+      this.uraniumEta = URANIUM_ETA
+      ordered++
+    }
     if (this.managerLevel >= 3 && pol.fixBroken) {
       for (const i of [...this.brokenPumps]) {
         if (this.money < 800) break
@@ -2330,20 +2507,6 @@ export class GameState {
       for (const i of [...this.brokenChargers]) {
         if (this.money < 1000) break
         this.money -= 1000; this.brokenChargers.delete(i); fixed++
-      }
-      // REAKTÖR BAKIMI (oyuncu: "Sv.3 müdürüm varken reaktör patladı") — müdür pompa
-      // tamir edip reaktöre bakmıyordu. %50 yıpranmada bakımı öder, patlama yaşanmaz.
-      if (this.hasSMR && this.smrWear >= 0.5 && this.money >= 1500) {
-        this.money -= 1500; this.smrWear = 0; fixed++
-      }
-      // URANYUM SİPARİŞİ (iki ayrı oyuncu raporu: "müdür uranyum sipariş etmiyor").
-      // Reaktör yakıtsız kalınca üretim duruyordu; müdür pompayı tamir edip reaktörü
-      // yakıtsız bırakmak tutarsızdı. Kritik seviyede kendisi sipariş verir.
-      if (pol.buyUranium && this.hasSMR && this.uranium <= 20 && !this.uraniumPending && this.money >= URANIUM_COST) {
-        this.money -= URANIUM_COST
-        this.uraniumPending = true
-        this.uraniumEta = URANIUM_ETA
-        ordered++
       }
     }
     return (collected > 0 || cleaned || fixed > 0 || ordered > 0) ? { collected, cleaned, fixed, ordered } : null
@@ -2393,7 +2556,8 @@ export class GameState {
     l.overdue += 1
     // 0,5₺ tolerans: küsuratlı kasa görünür bakiye yeterken taksidi düşürmüyordu
     while (l.overdue > 0 && l.remaining > 0 && this.money >= l.monthly - 0.5) {
-      this.money = Math.max(0, this.money - l.monthly); l.remaining -= 1; l.overdue -= 1
+      // taksit gider defterine yazılır: "kasadan para eriyor" şikâyetinin en sessiz kalemi
+      this.spend(t('Kredi taksiti'), l.monthly); l.remaining -= 1; l.overdue -= 1
     }
     // BİTEN KREDİ TAMAMEN SİLİNİR: eskiden yalnız `active=false` yapılıyordu; principal/
     // monthly/teminat listesi kayıtta kalıyordu. Canlıda 140 hesapta "kapalı ama teminat
@@ -2414,7 +2578,7 @@ export class GameState {
   applyPartnerCut(dayProfit: number): { kind: 'ended' | 'cut'; amount: number } | null {
     if (!this.partner.active) return null
     const cut = Math.min(this.partner.remaining, Math.max(0, Math.round(dayProfit * this.partner.share)))
-    if (cut > 0) { this.money -= cut; this.partner.remaining -= cut }
+    if (cut > 0) { this.spend(t('Banka ortağı kâr payı'), cut); this.partner.remaining -= cut }
     if (this.partner.remaining <= 0) { this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }; return { kind: 'ended', amount: cut } }
     return { kind: 'cut', amount: cut }
   }
@@ -2424,6 +2588,27 @@ export class GameState {
     this.money = Math.max(0, this.money - this.partner.remaining)
     this.partner = { active: false, remaining: 0, share: PARTNER_SHARE }
     return true
+  }
+
+  /**
+   * ŞARJ TAHSİLATI — teslim edilen kWh'in bedelini kasaya yazar (TEK doğru kaynak).
+   *
+   * #740 "şarjdaki müşteri uğurlanınca para bırakmıyor": elektrik bataryadan araca
+   * AKTIĞI ANDA depodan düşülüyordu ama ödeme yalnız şarj TAMAMEN bitince yapılıyordu.
+   * Araç yarıda uğurlanınca (ui.onDismiss) teslim edilmiş kWh bedava gidiyordu —
+   * oyuncu hem elektriği hem parayı kaybediyordu. Artık iki yol da (tamamlanan şarj ve
+   * yarıda uğurlama) buradan geçer: akan her kWh mutlaka faturalanır.
+   */
+  settleCharge(kwh: number, far = false): number {
+    const net = Math.max(0, Number(kwh) || 0)
+    const amt = Math.round(net * this.elecPrice)
+    if (amt <= 0) return 0
+    this.money += amt
+    this.stats.kwh += net
+    this.stats.revenue += amt
+    this.dailyRevenue += amt
+    this.addSideRevenue(far, amt)
+    return amt
   }
 
   /** tesis geliri: doğrudan kasaya + günlük ciroya işlenir */
@@ -2778,7 +2963,7 @@ export function getShopItems(s: GameState): ShopRow[] {
   const pcMin = parcelCost(0, 0, s), pcMax = parcelCost(2, 0, s)
   row('land', 'i-land', t('Arsa Satın Al ({0}/18)', s.ownedParcels.size),
     `₺${pcMin.toLocaleString('tr-TR')}–${pcMax.toLocaleString('tr-TR')}`,
-    t('Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — yakın arsalar ucuz, uzak/karşı arsalar pahalı; istasyon geliştikçe artar. Seçince o parselin gerçek fiyatı görünür.'),
+    t('Bitişik parsele tıkla (yol karşısına da geçebilirsin). Konuma göre fiyat değişir — yakın arsalar ucuz, uzak/karşı arsalar pahalı; istasyon geliştikçe artar. VAZGEÇERSEN: bu araçla KENDİ boş arsana dokun, yatırımının yarısı iade edilir.'),
     s.ownedParcels.size >= 18 ? null : pcMin, null)
   row('pave', 'i-pave', t('Zemin Betonu'), t('arsa başı'),
     t('Çimen arsana beton döşe (yapı kurmak için şart, güneş paneli hariç)'),
@@ -3130,6 +3315,10 @@ const SAVE_FIELDS = [
   'promo',
   // ödüllü reklam günlük hakları (ADDITIVE; eski kayıtta yok → 0'dan başlar)
   'adSeriUsed', 'adVipUsed',
+  // GÜN GİDER DÖKÜMÜ (ADDITIVE): "kasadan para eriyor" sorusu çoğu zaman oyun yeniden
+  // AÇILDIKTAN sonra soruluyor. Döküm kaydedilmezse Ofis paneli boş kalır ve soru
+  // yine cevapsız. Yalnız GÖSTERİM verisi — hiçbir para hesabına girmez.
+  'dayCosts',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -3249,6 +3438,16 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
     }
   }
   if (data.pendingCash && typeof data.pendingCash === 'object') s.pendingCash = { ...(data.pendingCash as Record<string, number>) }
+  // GÜN GİDER DÖKÜMÜ (ADDITIVE, salt GÖSTERİM): kurcalanmış/bozuk kayıt paneli
+  // çökertmesin diye biçim zorlanır. Eski kayıtta alan yok → boş dizi kalır.
+  s.dayCosts = Array.isArray(data.dayCosts)
+    ? (data.dayCosts as unknown[]).slice(0, 24).flatMap(x => {
+        const o = x as { kind?: unknown; amount?: unknown }
+        const n = Math.round(Number(o?.amount))
+        if (!o || typeof o.kind !== 'string' || !isFinite(n) || n <= 0) return []
+        return [{ kind: o.kind.slice(0, 48), amount: Math.min(50_000_000, n) }]
+      })
+    : []
   // aktif sözleşme: alanlar doğrulanır (bozuk/eski kayıt sözleşmeyi düşürür, oyun kilitlenmez)
   const ct = data.contract as Contract | null | undefined
   if (ct && typeof ct === 'object' && FUELS.includes(ct.fuel as FuelType)
@@ -3353,13 +3552,33 @@ export function doMaintenance(s: GameState, id: string): boolean {
   return true
 }
 
-/** Satın alma dener; başarılıysa true. Görsel güncellemeleri çağıran taraf yapar. */
+/**
+ * Satın alma dener; başarılıysa true. Görsel güncellemeleri çağıran taraf yapar.
+ *
+ * FAIL-CLOSED (#723, İspanyolca rapor: tesisi "descartar" edince HEM para HEM tesis
+ * gidiyor). Eski akış parayı EN BAŞTA düşüyor, sonra `applyPurchase` içindeki
+ * `default: return false` ile geri dönebiliyordu — kasadan para çıkmış, karşılığında
+ * HİÇBİR ŞEY kurulmamış oluyordu. (Reaktör satırında `s.money += item.cost` diye elle
+ * yazılmış bir yama vardı; yani sorun biliniyordu ama yalnız o satır için kapatılmıştı.)
+ * Artık önce etki uygulanır, para SADECE etki uygulandıysa düşer.
+ */
 export function buyItem(s: GameState, id: string): boolean {
   const item = getShopItems(s).find(r => r.id === id)
   if (!item || item.status !== 'buy' || item.cost === null || s.money < item.cost) return false
+  if (!applyPurchase(s, id)) return false
   s.money -= item.cost
+  return true
+}
+
+/** Satın almanın state etkisi (para HARİÇ). false = uygulanamadı → kasaya dokunulmaz. */
+function applyPurchase(s: GameState, id: string): boolean {
   // yakıt başına ek tank (dinamik id — switch'e girmeden ele alınır)
-  if (id.startsWith('tankadd-')) { s.tankCounts[id.slice('tankadd-'.length) as FuelType]++; return true }
+  if (id.startsWith('tankadd-')) {
+    const f = id.slice('tankadd-'.length) as FuelType
+    if (!FUELS.includes(f)) return false
+    s.tankCounts[f]++
+    return true
+  }
   // MARİNA: bağlama yeri (dinamik id) ve tesisler
   if (id.startsWith('berth_')) { const k = id.slice('berth_'.length); s.berths[k] = (s.berths[k] ?? 0) + 1; return true }
   if (id in MARINA_FACILITIES) { if (!s.marinaFacs.includes(id)) s.marinaFacs.push(id); return true }
@@ -3388,7 +3607,7 @@ export function buyItem(s: GameState, id: string): boolean {
     case 'solar': s.solarCount++; break
     case 'dieselgen': s.hasDiesel = true; break
     case 'smr':
-      if (s.smrWreck) { s.money += item.cost; return false } // para ÖNCE düşüldü — iade et (satır notu zaten kilitler, bu çift emniyet)
+      if (s.smrWreck) return false // enkaz temizlenmeden reaktör kurulamaz (para düşmedi)
       s.hasSMR = true; s.uranium = 100; break
     case 'wash': s.hasWash = true; break
     case 'oil': s.hasOil = true; break
@@ -3413,18 +3632,33 @@ export const SELL_REFUND = 0.5 // yıkımda yatırımın yarısı geri döner
 /** Bir binanın satılıp satılamayacağını ve iade tutarını döndürür (mutasyon yapmaz).
  *  Pompa/şarj/sayılabilir tesislerde yalnızca EN SON eklenen örnek satılabilir —
  *  böylece indeks boşluğu / yeniden numaralandırma gerekmez. null = satılamaz. */
+/**
+ * POMPA/ŞARJ ÜNİTE ID'Sİ — İKİ AYRI BİÇİM aynı üniteyi gösteriyordu ve buluşmuyorlardı:
+ *   · sahne/bina kartı  : 'pump-3'    'charger-1'   (world.buildings id'leri)
+ *   · teminat listesi   : 'pump#3'    'charger#1'   (eligibleCollateral)
+ * sellInfo yalnız '#' biçimini tanıdığı için `sellInfo(state,'pump-3')` HEP null
+ * dönüyordu → bina kartında pompa/şarj için "Yık — iade" düğmesi HİÇ çıkmıyordu
+ * (oyuncu ünitesini geri satıp parasını alamıyordu), haciz yolunda da 'charger#1'
+ * sahnedeki 'charger-1' ile eşleşmediği için görsel enkaz kalıyordu.
+ * Artık iki biçim de kabul ediliyor.
+ */
+export function unitIndex(id: string, kind: 'pump' | 'charger'): number | null {
+  const m = new RegExp(`^${kind}[#-](\\d+)$`).exec(id)
+  return m ? Number(m[1]) : null
+}
+
 export function sellInfo(s: GameState, id: string): { refund: number } | null {
   const base = id.split('#')[0]
   const inst = id.includes('#') ? Number(id.split('#')[1]) : 0
   const half = (c: number) => Math.round(c * SELL_REFUND)
-  if (base === 'pump') {
-    const i = Number(id.slice(5))
-    if (s.pumps <= 1 || i !== s.pumps - 1) return null // en az 1 pompa kalmalı, sadece sonuncu
+  const pi = unitIndex(id, 'pump')
+  if (pi !== null) {
+    if (s.pumps <= 1 || pi !== s.pumps - 1) return null // en az 1 pompa kalmalı, sadece sonuncu
     return { refund: half(PUMP_COSTS[s.pumps - 1]) }
   }
-  if (base === 'charger') {
-    const i = Number(id.slice(8))
-    if (s.evChargers <= 0 || i !== s.evChargers - 1) return null
+  const ci = unitIndex(id, 'charger')
+  if (ci !== null) {
+    if (s.evChargers <= 0 || ci !== s.evChargers - 1) return null
     return { refund: half(EV_COSTS[s.evChargers - 1]) }
   }
   switch (base) {
@@ -3466,8 +3700,8 @@ export function applySell(s: GameState, id: string): number | null {
   if (!info) return null
   const base = id.split('#')[0]
   s.money += info.refund
-  if (base === 'pump') { const i = s.pumps - 1; s.pumps--; s.brokenPumps.delete(i); s.autoPumps.delete(i) }
-  else if (base === 'charger') { const i = s.evChargers - 1; s.evChargers--; s.brokenChargers.delete(i); s.autoChargers.delete(i) }
+  if (unitIndex(id, 'pump') !== null) { const i = s.pumps - 1; s.pumps--; s.brokenPumps.delete(i); s.autoPumps.delete(i) }
+  else if (unitIndex(id, 'charger') !== null) { const i = s.evChargers - 1; s.evChargers--; s.brokenChargers.delete(i); s.autoChargers.delete(i) }
   else switch (base) {
     case 'market': s.marketLevel = 0; break
     case 'market2': s.market2Level = 0; break

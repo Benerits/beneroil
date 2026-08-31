@@ -13,6 +13,7 @@ import {
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements, SUPPLIERS,
   dailyQuests, claimDailyQuests, careerGoals,
   POMPACI_HIRE, EV_ATTENDANT_HIRE, POMPACI_WAGE, EV_ATTENDANT_WAGE, PARTNER_SHARE, ADVANCE_RATE, LOAN_RATE, sellInfo, applySell,
+  unitIndex,
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
   // ŞUBE ÇİFTLEME: kopya şubeler (otoyol-2 vb.) — tema/sahne TABAN id'den, ekonomi
   // türetilmiş temadan gelir (bkz. state.ts themeFor / BRANCH_COPIES).
@@ -1138,6 +1139,14 @@ function openOfficePanel() {
     + row(t('İşletme Sermayesi (stok)'), `₺${tl(wc)}`)
     + row(t('Kasa'), `₺${tl(state.money)}`)
     + row(t('Günlük gider (yovmiye+OPEX+reklam)'), `₺${tl(state.dailyWages() + state.dailyOpex() + state.marketingBudget)}`, 'bad')
+    // DÜN GERÇEKTE NE KESİLDİ (#74 #330 #983 #1140 #1220 "kasadan para eriyor"):
+    // yukarıdaki satır bir TAHMİNDİR (ruhsat, kredi taksiti, ihale cezası, banka payı
+    // yok). Aşağısı son gün dönüşünde kasadan çıkan GERÇEK kalemlerdir — oyuncunun
+    // "para nereye gitti?" sorusunun tek dürüst cevabı.
+    + (state.dayCosts.length
+        ? row(t('Gün gideri dökümü (gerçekleşen)'), `₺${tl(state.dayCostTotal())}`, 'bad')
+          + state.dayCosts.map(c => row(`· ${c.kind}`, `₺${tl(c.amount)}`, 'bad')).join('')
+        : '')
 
   // 1a) PERSONEL — TOPLU İŞE ALIM (#1019 "toplu olarak sarjcı ve pompacı tutabilsek")
   // Tek tek her pompanın kartını açıp tıklamak 10 pompalı istasyonda 10 ayrı işlemdi.
@@ -2051,12 +2060,20 @@ document.getElementById('bank-body')?.addEventListener('click', e => {
 function removeBuildingVisual(id: string) {
   golgeTazele()
   const base = id.split('#')[0]
-  if (base === 'pump') cars.evictSlot('fuel', Number(id.slice(5)))
-  else if (base === 'charger') cars.evictSlot('ev', Number(id.slice(8)))
+  // ÜNİTE ID BİÇİMİ: sahne 'pump-3' / 'charger-1' kullanır, teminat listesi 'pump#3' /
+  // 'charger#1'. Haciz teminat biçimini gönderdiği için removeBuildingGroup sahnede
+  // hiçbir şey bulamıyor ve haczedilen şarj ünitesi ekranda TIKLANAMAZ enkaz olarak
+  // kalıyordu (state sayacı düşmüş, görsel duruyor). İki biçim de sahne id'sine çevrilir.
+  const pi = unitIndex(id, 'pump')
+  const ci = unitIndex(id, 'charger')
+  if (pi !== null) cars.evictSlot('fuel', pi)
+  else if (ci !== null) cars.evictSlot('ev', ci)
   const countable = COUNTABLE[base]?.()
-  const target = (countable !== undefined)
-    ? (countable === 0 ? base : `${base}#${countable}`)
-    : id
+  const target = pi !== null ? `pump-${pi}`
+    : ci !== null ? `charger-${ci}`
+    : (countable !== undefined)
+      ? (countable === 0 ? base : `${base}#${countable}`)
+      : id
   world.removeBuildingGroup(target)
   delete placedPos[target]
   delete placedRot[target]
@@ -2990,9 +3007,22 @@ ui.onDismiss = car => {
     return
   }
   if (car.phase !== 'atPump' || car.filling || car.filled > 0) return
+  // #740 (oyuncu: "şarjdaki müşteri uğurlanınca para bırakmıyor").
+  // KÖK NEDEN: yukarıdaki kapı YAKIT alanlarına bakıyor (`filling`/`filled`). Şarjdaki
+  // araçta bunlar hep 0/false olduğu için ELEKTRİKLİ araç bu kapıdan geçip parasız
+  // gönderiliyordu — oysa kWh bataryadan araca AKARKEN depodan çoktan düşülmüştü
+  // (tickEvCharging). Yani oyuncu hem elektriği hem de bedelini kaybediyordu.
+  // Artık teslim edilen kWh her hâlükârda faturalanır; yalnız TALEBİ karşılanmamış
+  // müşteri itibar cezası doğurur.
+  const teslim = car.kind === 'ev' ? Math.max(0, car.chargedKwh || 0) : 0
+  if (teslim > 0.05) {
+    car.charging = false
+    const paid = state.settleCharge(teslim, car.station === 'far')
+    ui.toast(t('{0} kWh teslim edilmişti — +₺{1} tahsil edildi.', teslim.toFixed(1), paid.toLocaleString('tr-TR')), 'good')
+  }
   state.addRep(-0.1)
   car.showFeedback('😐')
-  ui.toast('Müşteri kibarca gönderildi.', '')
+  if (teslim <= 0.05) ui.toast('Müşteri kibarca gönderildi.', '')
   cars.releaseCar(car)
   if (ui.activeCar === car) autoSelect(nextServableCar())
 }
@@ -3056,15 +3086,11 @@ function tickEvCharging(dt: number) {
     c.setCounter(`${Math.floor(c.chargedKwh)}/${c.demandKwh} kWh`)
     if (c.chargedKwh >= c.demandKwh - 0.001) {
       c.charging = false
-      const revenue = Math.round(c.demandKwh * state.elecPrice)
-      state.money += revenue
+      // TAHSİLAT TEK KAPIDAN (state.settleCharge): tamamlanan şarj ile yarıda uğurlanan
+      // araç aynı yoldan geçsin — #740'ta ikisi ayrıydı ve biri hiç ödeme yapmıyordu.
+      // (Yaka bazlı ciro ayrımı #317 de artık o tek kapının içinde.)
+      const revenue = state.settleCharge(c.demandKwh, c.station === 'far')
       state.stats.served++
-      state.stats.kwh += c.demandKwh
-      state.stats.revenue += revenue
-    state.dailyRevenue += revenue
-      // Oyuncu raporu: "muhasebede karşı istasyon 0" — EV geliri yaka sayacına
-      // hiç yazılmıyordu; karşı yakada yalnız şarj olan kurulumda pay hep 0 kalıyordu.
-      state.addSideRevenue(c.station === 'far', revenue)
       let score = 4.5
       if (c.patienceFrac < 0.4) score -= 1.5
       ui.toast(t('{0} kWh şarj tamamlandı: +₺{1}', c.demandKwh, revenue), 'good')
@@ -4074,6 +4100,86 @@ function footprintGrid(w: number, d: number): THREE.LineSegments {
     new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }))
 }
 let zoneMode: { kind: 'land' | 'pave'; ghost: THREE.Mesh; c: number; r: number; valid: boolean } | null = null
+
+/**
+ * ARSA GERİ SATIŞI (#1200 mehmet.acar@sardismarkets.me "arsadan vazgeçince para geri
+ * gelmedi, kredi yandı"). Oyunda arsayı geri satmanın HİÇBİR yolu yoktu: her bina %50
+ * iadeyle yıkılabiliyorken arsa ölü sermayeydi, arsa için kredi çeken oyuncu taksitle
+ * baş başa kalıyordu. Giriş noktası mevcut "Arsa Satın Al" aracı: aracı açıp KENDİ
+ * arsana dokununca satış onayı çıkar (eskiden yalnız "Bu arsa zaten senin." derdi).
+ */
+/** Parselin sınırları içinde herhangi bir yapı var mı (varsa arsa satılamaz) */
+function parselDoluMu(c: number, r: number): boolean {
+  const [x0, x1] = PARCEL_COLS[c]
+  const [y0, y1] = PARCEL_ROWS[r]
+  const icinde = (x: number, y: number) => x > x0 && x < x1 && y > y0 && y < y1
+  for (const p of placedRects) if (icinde(p.cx, p.cy)) return true
+  // placedRects'te olmayan yapılar (varsayılan konumda duran pompa/ofis/tank) sahneden
+  for (const b of world.buildings) {
+    const g = b.group as THREE.Object3D
+    if (g && icinde(g.position.x, g.position.y)) return true
+  }
+  for (let i = 0; i < state.pumps; i++) { const s = world.pumpSlots[i]; if (s && icinde(s.x, s.y)) return true }
+  for (let i = 0; i < state.evChargers; i++) { const s = world.evSlots[i]; if (s && icinde(s.x, s.y)) return true }
+  return false
+}
+
+/** Basit onay kutusu (ui.ts'e dokunmadan) — geri alınamaz para işlemleri için */
+function onayKutusu(baslik: string, detay: string, onayLabel: string, onay: () => void) {
+  const o = document.createElement('div')
+  o.style.cssText = 'position:fixed;inset:0;z-index:99996;background:#0d1420cc;display:flex;align-items:center;justify-content:center;padding:22px;font-family:var(--font,system-ui)'
+  o.innerHTML =
+    `<div style="background:linear-gradient(180deg,#fdfaf2,#f1ebdb);border:2px solid #e0d4bd;border-bottom-width:7px;border-radius:20px;padding:20px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(10,14,20,.5)">`
+    + `<div style="font-size:18px;font-weight:800;color:#1e2a36;margin-bottom:6px"></div>`
+    + `<div style="font-size:13px;font-weight:700;color:#7a6152;margin-bottom:14px"></div>`
+    + `<div style="display:flex;gap:8px">`
+    + `<button id="onay-hayir" style="flex:1;padding:11px;border-radius:12px;border:2px solid #b9ae98;border-bottom-width:4px;background:#efe8d8;color:#3d4b58;font-weight:800;font-size:14px;cursor:pointer"></button>`
+    + `<button id="onay-evet" style="flex:1;padding:11px;border-radius:12px;border:2px solid #1f8049;border-bottom-width:4px;background:linear-gradient(180deg,#37c97e,#2fa05a);color:#fff;font-weight:800;font-size:14px;cursor:pointer"></button>`
+    + `</div></div>`
+  const kutu = o.firstElementChild as HTMLElement
+  ;(kutu.children[0] as HTMLElement).textContent = baslik
+  ;(kutu.children[1] as HTMLElement).textContent = detay
+  const kapat = () => o.remove()
+  document.body.appendChild(o)
+  const hayir = o.querySelector('#onay-hayir') as HTMLElement
+  const evet = o.querySelector('#onay-evet') as HTMLElement
+  hayir.textContent = t('Vazgeç')
+  evet.textContent = onayLabel
+  hayir.addEventListener('click', kapat)
+  evet.addEventListener('click', () => { kapat(); onay() })
+  o.addEventListener('click', e => { if (e.target === o) kapat() })
+}
+
+/** Sahip olunan boş arsayı geri sat — onaylı */
+function arsaSatSor(c: number, r: number) {
+  const refund = state.parcelRefund(c, r)
+  if (refund <= 0) { ui.toast(t('Bu arsa satılamaz (istasyonun kurulu olduğu parsel).'), 'bad'); return }
+  if (parselDoluMu(c, r)) {
+    ui.toast(t('Arsanın üstünde yapı var — önce yapıyı yık ya da taşı, sonra arsayı satabilirsin.'), 'bad')
+    return
+  }
+  const betonlu = state.isPaved(c, r)
+  onayKutusu(
+    t('Arsayı geri sat?'),
+    betonlu
+      ? t('Arsa + zemin betonu elden çıkar, kasana +₺{0} girer. Yatırımın yarısı iade edilir.', refund.toLocaleString('tr-TR'))
+      : t('Arsa elden çıkar, kasana +₺{0} girer. Yatırımın yarısı iade edilir.', refund.toLocaleString('tr-TR')),
+    t('Sat +₺{0}', refund.toLocaleString('tr-TR')),
+    () => {
+      const res = state.sellParcel(c, r)
+      if (!res) { ui.toast(t('Bu arsa satılamaz — kalan arsaların istasyonla bağlantısı kopar.'), 'bad'); return }
+      cancelPlacement()
+      audio.cash()
+      ui.toast(t('Arsa satıldı — kasana +₺{0} girdi. Sahne tazeleniyor…', res.refund.toLocaleString('tr-TR')), 'good', true)
+      persist()
+      // SAHNE: kazık/ip ve beton world.ts'te sökülebilir bir şey değil (geri alma yok).
+      // Şube geçişiyle AYNI kalıp: kayıt buluta yazıldıktan sonra sayfayı yenile —
+      // yenilemede parsel çimene döner. Yenileme kaydı beklemeden yapılmaz, yoksa
+      // oyuncu parayı kaybeder (sunucuda eski bakiye kalır).
+      const push = auth.loggedIn() ? auth.pushSave(savePayload()).catch(() => null) : Promise.resolve(null)
+      Promise.race([push, new Promise(r2 => setTimeout(r2, 6000))]).finally(() => location.reload())
+    })
+}
 
 function parcelAt(x: number, y: number): [number, number] | null {
   for (let c = 0; c < PARCEL_COLS.length; c++) for (let r = 0; r < PARCEL_ROWS.length; r++) {
@@ -5986,8 +6092,16 @@ function updateZoneAt(x: number, y: number) {
     const across = (c >= 3 ? t(' · yol karşısı') : '')
       + (lim !== null ? t(' · {0}/{1} parsel', String(state.ownedParcels.size), String(lim)) : '')
     zw.style.display = 'flex'
-    zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ''}`
-    zc.style.color = zoneMode.valid ? 'var(--green-dark)' : 'var(--red)'
+    // #1200: kendi arsanın üstündeyken etiket SATIŞ bedelini gösterir — oyuncu geri
+    // satış diye bir şeyin var olduğunu ancak burada görebilir.
+    const satis = zoneMode.kind === 'land' && state.owns(c, r) ? state.parcelRefund(c, r) : 0
+    if (satis > 0) {
+      zc.textContent = t('Arsan — dokun ve geri sat: +₺{0}', satis.toLocaleString('tr-TR'))
+      zc.style.color = 'var(--green-dark)'
+    } else {
+      zc.textContent = `${zoneMode.kind === 'land' ? t('Arsa') : t('Beton')}: ₺${cost.toLocaleString('tr-TR')}${across}${zoneMode.valid ? ' ✓' : ''}`
+      zc.style.color = zoneMode.valid ? 'var(--green-dark)' : 'var(--red)'
+    }
   }
 }
 
@@ -6069,6 +6183,9 @@ window.addEventListener('pointerup', e => {
       else if (zoneMode.kind === 'land') {
         const { c, r } = zoneMode
         const cost = parcelCost(c, r, state)
+        // #1200: KENDİ arsana dokunmak artık "zaten senin" çıkmaz sokağı değil, GERİ SATIŞ
+        // kapısıdır. Arsanın tek çıkış yolu buydu; yoksa alınan arsa ölü sermaye kalıyordu.
+        if (c >= 0 && state.owns(c, r) && state.parcelRefund(c, r) > 0) { arsaSatSor(c, r); return }
         ui.toast(c < 0 ? t('Bir parsele tıkla.')
           : state.owns(c, r) ? 'Bu arsa zaten senin.'
           : !state.parcelAdjacentToOwned(c, r) ? t('Bitişik değil — önce aradaki arsayı almalısın.')
@@ -6308,8 +6425,14 @@ function frame() {
         ui.toast(t('{0} günlük ilerlemen sadece bu cihazda! Kaydol: buluta taşınır + ₺2.500 bonus + günlük seri bonusu.', state.day - 1), 'bad', true)
       }
     }
-    const profit = Math.round(state.money - state.dayStartMoney)
-    ui.toast(t('Gün {0} bitti — {1}: ₺{2}', state.day - 1, profit >= 0 ? t('kâr') : t('zarar'), Math.abs(profit).toLocaleString('tr-TR')), profit >= 0 ? 'good' : 'bad')
+    // NOT: gider defteri (state.dayCosts) burada SIFIRLANMAZ — gün İÇİNDE ödenen
+    // kalemler de (ör. ihale cayma bedeli) o günün raporunda görünsün diye defter
+    // rapor yazıldıktan SONRA temizlenir (aşağıda, dayStartMoney ile birlikte).
+    // `brut` = gün İÇİNDE (işletmeden) kazanılan; gün-sonu giderleri henüz düşülmedi.
+    // Banka ortağının payı ve reklam bütçesi tarihsel olarak bu sayıya bakar — denge
+    // değişmesin diye onlara BRÜT verilmeye devam ediyor. Oyuncuya gösterilen rapor
+    // ise aşağıda NET (gerçek kasa değişimi) üzerinden yazılır.
+    const brut = Math.round(state.money - state.dayStartMoney)
     // KAÇIRDIKLARIN (Faz 3.3): kaybı gün sonunda TEK acı sayıya topla — kâr raporunun
     // hemen ardından gelir, ertesi güne motivasyon üretir. Kayıp yoksa hiç gösterilmez
     // (mükemmel günü cezalandırmaz, tersine sessizliğiyle ödüllendirir).
@@ -6322,13 +6445,15 @@ function frame() {
     state.adVipUsed = 0
     // B6 (analiz): İLK GÜN raporu = duygusal kontrol noktası — misafire kayıp-anı
     // hatırlatması (oturumda tek gate: 10k gate'i zaten çıktıysa tekrarlama)
-    if (!auth.loggedIn() && state.day === 2 && profit > 0 && !firstTenGateShown && !guestGateShown) {
+    if (!auth.loggedIn() && state.day === 2 && brut > 0 && !firstTenGateShown && !guestGateShown) {
       firstTenGateShown = true
-      showAuthGate(t('İlk günün kapandı: ₺{0} kâr! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus.', profit.toLocaleString('tr-TR')))
+      showAuthGate(t('İlk günün kapandı: ₺{0} kâr! Bu ilerleme sadece bu cihazda — kaydol: buluta taşınır, üstüne ₺2.500 bonus.', brut.toLocaleString('tr-TR')))
     }
     // günlük yovmiye (pompacı + şarjcı) — recurring gider
-    const wages = state.dailyWages()
-    if (wages > 0) { state.money -= wages; state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift(); ui.toast(t('Günlük yovmiye ödendi: -₺{0}', wages.toLocaleString('tr-TR')), '') }
+    // spend(): kasa eksiye inmez ve kalem gider defterine yazılır. Muhasebe (wagesPaid,
+    // wageLog) artık GERÇEKTEN ödenen tutarı işler — kasa yetmezse eksik ödeme yazılıyordu.
+    const wages = state.spend(t('Yovmiye'), state.dailyWages())
+    if (wages > 0) { state.wagesPaid += wages; state.wageLog.push({ day: state.day, amount: wages }); if (state.wageLog.length > 40) state.wageLog.shift() }
     // B2B sözleşme günü: taahhüt kapanışı, gelir/ceza, tamamlama primi
     const cres = state.processContractDay()
     if (cres.kind === 'ok') ui.toast(t('{0}: günlük taahhüt teslim edildi (+₺{1})', cres.name, cres.amount.toLocaleString('tr-TR')), 'good', true)
@@ -6348,7 +6473,7 @@ function frame() {
     if (state.day >= state.licenseDueDay) {
       const fee = state.licenseFee()
       if (state.money >= fee) {
-        state.money -= fee
+        state.spend(t('İşletme ruhsatı'), fee)
         state.licenseDueDay = state.day + 30
         ui.toast(t('İşletme ruhsatı yenilendi: -₺{0} (30 gün geçerli)', fee.toLocaleString('tr-TR')), '')
       } else {
@@ -6360,16 +6485,12 @@ function frame() {
     // İşletme gideri (OPEX): amortisman + emlak vergisi — geç oyunda birikimi düzleştiren sink.
     // 10 günlük rampayla devreye girer (enflasyon şoku yok); erken oyunda ~₺10, hissedilmez.
     const opex = state.dailyOpex()
-    if (opex > 0) {
-      state.money = Math.max(0, state.money - opex)
-      ui.toast(t('İşletme gideri (bakım+vergi): -₺{0}', opex.toLocaleString('tr-TR')), '')
-    }
+    if (opex > 0) state.spend(t('İşletme gideri (bakım+vergi+kira)'), opex)
     // Reklam bütçesi tahsilatı: para yetmiyorsa o günün kampanyası kısılır (bütçe korunur)
     if (state.marketingBudget > 0) {
-      const spend = Math.min(state.marketingBudget, Math.max(0, Math.floor(state.money))) // floor: kesirli kasada eksiye taşma yok (reviewer bulgusu)
-      if (spend > 0) state.money -= spend
+      const istenen = Math.min(state.marketingBudget, Math.max(0, Math.floor(state.money))) // floor: kesirli kasada eksiye taşma yok (reviewer bulgusu)
+      const spend = state.spend(t('Reklam kampanyası'), istenen)
       if (spend < state.marketingBudget) ui.toast(t('Reklam bütçesine para yetmedi — kampanya bugün kısık.'), 'bad')
-      else ui.toast(t('Reklam kampanyası yayında: -₺{0} (trafik ×{1})', spend.toLocaleString('tr-TR'), state.trafficPull().toFixed(2)), '')
     }
     // ---- AI RAKİP (Katman 4d): günlük tepki ----
     const rivalMsg = state.rivalDayTurn()
@@ -6478,25 +6599,43 @@ function frame() {
         state.startPartnership(); ui.toast(t('Borç ödenemedi — banka istasyona %{0} ORTAK oldu, kâr payından tahsil edilecek!', Math.round(PARTNER_SHARE * 100)), 'bad')
       }
     }
-    // banka ortaklığı aktifse günlük kârdan payını al
-    const pc = state.applyPartnerCut(profit)
+    // banka ortaklığı aktifse günlük kârdan payını al (BRÜT üzerinden — denge korunur)
+    const pc = state.applyPartnerCut(brut)
     if (pc?.kind === 'ended') ui.toast(t('Banka payını tamamladı — ortaklık bitti, istasyon tamamen senin!'), 'good')
-    else if (pc?.kind === 'cut' && pc.amount > 0) ui.toast(t('Banka ortağı kâr payı aldı: -₺{0}', pc.amount.toLocaleString('tr-TR')), '')
     if (document.getElementById('bankwrap')?.classList.contains('show')) renderBank()
+
+    // ── GÜN RAPORU: ÖNCE GİDER DÖKÜMÜ, SONRA GERÇEK KÂR ──
+    // #74 #330 #983 #1140 #1220 "kasadan para eriyor / geriye sayıyor": eski rapor
+    // "Gün X bitti — kâr ₺Y" derken Y'yi giderlerden ÖNCE hesaplıyordu ve her gider
+    // ayrı, uçucu bir toast'tı. Oyuncu ekranda ₺Y kâr görüp kasada ₺Y-Z buluyordu —
+    // sayı tutmadığı için "para eriyor" demesi tamamen haklıydı. Artık:
+    //   1) tek dökümde HANGİ kalem NE kadar (yapışkan → mesaj kutusunda kalır),
+    //   2) raporlanan kâr = kasadaki GERÇEK değişim (net), uydurma sayı yok.
+    const gider = state.dayCostTotal()
+    if (gider > 0) {
+      ui.toast(t('Gün gideri -₺{0} → {1}', gider.toLocaleString('tr-TR'),
+        state.dayCosts.map(c => `${c.kind} ₺${c.amount.toLocaleString('tr-TR')}`).join(' · ')), 'bad', true)
+    }
+    const net = Math.round(state.money - state.dayStartMoney)
+    ui.toast(t('Gün {0} bitti — {1}: ₺{2}', state.day - 1, net >= 0 ? t('kâr') : t('zarar'),
+      Math.abs(net).toLocaleString('tr-TR')), net >= 0 ? 'good' : 'bad')
+
     // dönemsel muhasebe: biten günün satış cirosunu kaydet
     const dayRev = Math.max(0, Math.round(state.stats.revenue - state.dayStartRevenue))
     // ADDITIVE: kâr + yaka dağılımı da kaydedilir; eski kayıtlarda bu alanlar yok, okuyucu ?? ile karşılar
-    state.salesLog.push({ day: state.day, rev: dayRev, profit: Math.round(profit),
+    // profit artık NET (giderler düşülmüş) — ofis grafiği de kasadaki gerçekle örtüşsün
+    state.salesLog.push({ day: state.day, rev: dayRev, profit: net,
       near: Math.round(state.sideDaily.near), far: Math.round(state.sideDaily.far) })
     if (state.salesLog.length > 370) state.salesLog.shift()
     state.sideDaily = { near: 0, far: 0 }
     state.dayStartRevenue = state.stats.revenue
     state.dayStartMoney = state.money
     state.facDaily = {}
+    state.dayCosts = []   // defter kapandı: yeni gün sıfırdan biriksin
     // gün sonu: policy interstitial'a izin veriyorsa forced reklam; vermiyorsa opt-in "günü 2x" fırsatı sun
     if (!isFullMode && !isPromoMode) {
-      if (mayShowInterstitial(state.day, profit >= 0)) interstitial('gun-sonu', { day: state.day, won: profit >= 0 })
-      else offerDoubleProfit(profit)
+      if (mayShowInterstitial(state.day, net >= 0)) interstitial('gun-sonu', { day: state.day, won: net >= 0 })
+      else offerDoubleProfit(net)
     }
     persist()
   }

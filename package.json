@@ -62,7 +62,8 @@
     "test:devir": "tsx tools/tests/devir-check.mjs",
     "test:ogretici": "node tools/tests/ogretici-check.mjs",
     "test:harita": "tsx tools/tests/harita-check.mjs",
-    "test:rehber": "tsx tools/tests/rehber-check.mjs"
+    "test:rehber": "tsx tools/tests/rehber-check.mjs",
+    "test:para": "tsx tools/tests/para-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",
