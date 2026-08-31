@@ -18,6 +18,9 @@ import {
   // türetilmiş temadan gelir (bkz. state.ts themeFor / BRANCH_COPIES).
   ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor, SUPPLY_LINE_QUOTA,
 } from './state'
+// ŞUBE AĞI HARİTASI: yatırım tahtası (Ofis › Şubeler + HUD şube menüsünden açılır).
+// Saf DOM modülü — state okur, aksiyonu buradaki MEVCUT akışlara geri çağırır.
+import { haritaKur, haritaAc, haritaCiz, haritaAcikMi } from './harita'
 import { loadModels, loadStatics, loadCharacters, fitCharacter } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
 import { isNativePlatform, isInstantGames, isLightMode, asset } from './platform'
@@ -739,6 +742,9 @@ function subeMenusunuCiz() {
       + `<svg class="ic"><use href="#i-map"/></svg>`
       + `<span class="lm-tx">${th?.name ?? id}<span class="lm-sub">${alt}</span></span></button>`
   }).join('')
+    // ŞUBE AĞI HARİTASI: bu menü "hangi şubedeyim"i çözüyor, harita "sıradaki para nereye"yi.
+    + `<button data-qloc="__harita"><svg class="ic"><use href="#i-map"/></svg>`
+      + `<span class="lm-tx">${t('Şube ağı haritası')}<span class="lm-sub">${t('bedeller, kişilikler, ortak hatlar')}</span></span></button>`
     // ŞUBE ÇİFTLEME: tavan 5 değil ALL_LOCS (5 taban + 4 kopya) — "yeni şube aç" bağlantısı
     // hepsi açılana kadar görünür kalır.
     + (state.unlockedLocs.length < ALL_LOCS.length
@@ -779,8 +785,16 @@ document.getElementById('locmenu')?.addEventListener('click', e => {
   if (!b) return
   const id = b.dataset.qloc!
   document.getElementById('locmenu')?.classList.remove('show')
+  if (id === '__harita') { haritaAc(); return }
   if (id === '__ofis') { openSection('office'); document.querySelector<HTMLButtonElement>('#oftabs .tab[data-oftab="buyume"]')?.click(); return }
   subeyeGec(id as LocId)
+})
+// ŞUBE AĞI HARİTASI — iki giriş noktası: Ofis › Şubeler'in başındaki buton ve HUD şube menüsü.
+// Aksiyonlar MEVCUT akışa bağlı: açma → subeAcIslemi (state.unlockLoc), geçiş → subeyeGec.
+haritaKur({ state, onAc: id => subeAcIslemi(id), onGit: id => subeyeGec(id) })
+document.getElementById('of-map')?.addEventListener('click', () => {
+  document.getElementById('officewrap')?.classList.remove('show') // ofis sheet'i kapat (banka kalıbı)
+  haritaAc()
 })
 document.addEventListener('click', () => document.getElementById('locmenu')?.classList.remove('show'))
 for (const elx of document.querySelectorAll<HTMLElement>('#navbar .navbtn, #sheettabs .stab')) {
@@ -1481,18 +1495,24 @@ document.getElementById('of-locations')?.addEventListener('click', e => {
     openOfficePanel(); persist()
     return
   }
-  if (un) {
-    const id = un.dataset.unlockloc as LocId
-    if (!state.unlockLoc(id)) { ui.toast(t('Şube açma şartları sağlanmıyor.'), 'bad'); return }
-    ui.toast(t('{0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.', themeFor(id).name), 'good', true)
-    // KOPYA ŞUBE: oyuncu "aynısını ikinci kez aldım" sanmasın — kısıtı AÇILIŞ ANINDA söyle.
-    if (isCopyLoc(id)) ui.toast(BRANCH_COPIES[id].note, '', true)
-    audio.achieve(); openOfficePanel(); persist()
-    return
-  }
+  if (un) { subeAcIslemi(un.dataset.unlockloc as LocId); return }
   if (!go) return
   subeyeGec(go.dataset.goloc as LocId, go)
 })
+
+/**
+ * ŞUBE AÇMA — TEK YOL. Ofis › Şubeler listesi de Şube Ağı Haritası da buraya girer.
+ * Harita ikinci bir ekonomi yolu AÇMAZ: aynı state.unlockLoc(), aynı bedel, aynı
+ * toast'lar, aynı kayıt. Haritanın yaptığı tek şey kararı GÖRÜNÜR kılmak.
+ */
+function subeAcIslemi(id: LocId) {
+  if (!state.unlockLoc(id)) { ui.toast(t('Şube açma şartları sağlanmıyor.'), 'bad'); return }
+  ui.toast(t('{0} şubesi açıldı! Şubeler bölümünden geçiş yapabilirsin.', themeFor(id).name), 'good', true)
+  // KOPYA ŞUBE: oyuncu "aynısını ikinci kez aldım" sanmasın — kısıtı AÇILIŞ ANINDA söyle.
+  if (isCopyLoc(id)) ui.toast(BRANCH_COPIES[id].note, '', true)
+  audio.achieve(); openOfficePanel(); persist()
+  if (haritaAcikMi()) haritaCiz()   // harita açıkken açıldıysa tahta anında tazelensin
+}
 
 /** Şube geçişi — hem Ofis › Şubeler butonları hem HUD hızlı geçiş menüsü buradan geçer
  *  (#1038 "anasayfada mapler arasında hızlı geçiş olsa süper olur"). */
@@ -1501,6 +1521,7 @@ function subeyeGec(id: LocId, go?: HTMLButtonElement) {
   // (kit inişinde 12 sn) sürebiliyor; bu pencerede ikinci tıklama switchLoc'u
   // "zaten o şubedesin" durumuna düşürüp yanlış hata gösteriyordu.
   if (locSwitching) { ui.toast(t('Sahne yükleniyor — birkaç saniye…'), '', true); return }
+  document.getElementById('mapwrap')?.classList.remove('show') // harita üstünde kalmasın
   // Şube değişimi: mevcut şubenin ekipmanı + YERLEŞİMİ saklanır, hedefin yüklenir.
   // Para/gün/itibar/prestij/kredi ŞİRKETTE kalır (tek kasa — rapor §3a kararı).
   const next = state.switchLoc(id, { placedPos, placedRot, placedRects })
@@ -6037,6 +6058,8 @@ function frame() {
     else if (cres.kind === 'fail') ui.toast(t('{0} sözleşmesi ihlalden feshedildi — prim yok.', cres.name), 'bad', true)
     // panel açıkken gün döndüyse tazele: teklif id'leri güne bağlı, eski butonlar ölü kalırdı
     if (document.getElementById('officewrap')?.classList.contains('show')) openOfficePanel()
+    // Harita da güne bağlı: tedarik kotası gün dönüşünde sıfırlanır, bedeller/netler değişir
+    if (haritaAcikMi()) haritaCiz()
     // RUHSAT & DENETİM (Katman 2b): 30 günde bir, varlıkla ölçekli. Ödenmezse itibar cezası
     // — ritim + tehdit. Parası olan otomatik öder (mikro-yönetim yaratmaz).
     if (state.day >= state.licenseDueDay) {
