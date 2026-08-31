@@ -74,7 +74,7 @@ window.FBInstant = {
 };
 `
 
-const browser = await chromium.launch()
+const browser = await chromium.launch({ channel: 'chrome' })
 const page = await browser.newPage({ viewport: { width: 414, height: 896 }, isMobile: true })
 const errors = []
 const failed = []

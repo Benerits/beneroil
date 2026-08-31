@@ -14,7 +14,7 @@ const server = createServer(async (req,res)=>{
 })
 await new Promise(r=>server.listen(0,r))
 const base = `http://localhost:${server.address().port}`
-const b = await chromium.launch(); const page = await b.newPage({viewport:{width:414,height:896}})
+const b = await chromium.launch({ channel: 'chrome' }); const page = await b.newPage({viewport:{width:414,height:896}})
 const errs=[], bad=[]
 page.on('pageerror', e=>errs.push(e.message))
 page.on('console', m=>{ if(m.type()==='error' && !/Failed to load resource/.test(m.text())) errs.push(m.text()) })
