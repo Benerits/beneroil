@@ -3315,6 +3315,22 @@ let pendingPush: number | null = null // throttle penceresinde bekleyen garanti 
 // Offline pompacı satışı sabitleri (applyOfflineEarnings + tank-düşük bildirimi aynı oranı kullanır)
 const OFFLINE_FUELS = ['benzin', 'dizel', 'lpg'] as const
 const OFFLINE_LPS = 0.3 // pompacı başına L/sn (~aktif temponun yarısı)
+/**
+ * OFFLINE GÜVENLİK BÜTÇESİ — SUNUCU ANTİ-HİLE İLE SENKRON.
+ *
+ * server/index.js jeton kovası: `burstCap = ALLOW_BURST(260.000) + pasif şube × 240.000`.
+ * Bir sayfa açılışında offline yollarla kasaya YAZILAN toplam bu kovanın altında kalmalı;
+ * aşarsa sunucu MEŞRU parayı kırpar (auditCheat 'clamp') ve oyuncu "param gitti" der —
+ * bu repoda tam bu tipte yanlış alarmlar (hasTruckPark2 vakası) yaşandı.
+ *
+ * ÖLÇÜLDÜ: müdür simülasyonu OLMADAN da tepe senaryo kovaya dayanıyordu
+ * (applyOfflineEarnings ≤150k + offline yakıt satışı ~92k + idle 4k ≈ 246k). Bu yüzden
+ * müdürün offline toplaması SERBEST bırakılamaz; bütçenin ARTAKALANI kadar toplar.
+ * ₺60.000'lik pay bilerek bırakıldı (tek şubeli, kovası yarı dolu oyuncu için de güvenli).
+ */
+const OFFLINE_BUDGET = 200_000
+/** bu sayfa oturumunda offline yollarla kasaya yazılan toplam ₺ (bütçe sayacı) */
+let offlineYazilan = 0
 
 /** Oyuncu yokken (oyun kapalı VEYA sekme arka planda) geçen süreyi pasif kazanca çevirir:
  *  kumbaralı tesisler + idle tesis geliri + pompacı yakıt satışı. Açılıştaki offline raporla
@@ -3325,26 +3341,16 @@ function applyAwayEarnings(offSecRaw: number): number {
   const offSec = Math.min(offSecRaw, 7200) // en fazla 2 saatlik birikim
   if (offSec <= 90) return 0
   let total = 0
-  // kumbaralı tesisler (topla-hook'u): tır parkı, self yıkama, oto yıkama, hava-su
-  const gains: [string, string, number][] = []
-  if (state.hasTruckPark) gains.push(['truckpark', t('Tır parkı'), 125 / 45])
-  if (state.hasTruckPark2) gains.push(['truckpark2', t('Karşı tır parkı'), 125 / 45])
-  if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
-  if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
-  if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
-  for (const [id, name, rate] of gains) {
-    const amt = Math.round(rate * offSec)
-    state.addPending(id, amt, name)
-    total += Math.min(amt, 600)
-  }
   // per-müşteri tesisler: küçük düz idle gelir, doğrudan kasaya (topla-cap'li, ilerlemeyi bozmaz)
+  // SIRA NEDEN ÖNCE: müdürün offline toplama BÜTÇESİ (OFFLINE_BUDGET) idle + yakıt
+  // satışının ÜSTÜNE biner; artakalanı bilmek için bu iki kalem önce işlenir.
   let idleCash = 0
   if (state.marketLevel > 0) idleCash += 0.8 * state.marketLevel * offSec
   if (state.hasCoffee) idleCash += 0.6 * offSec
   if (state.hasRestaurant) idleCash += 1.2 * offSec
   if (state.hasOil) idleCash += 0.9 * offSec
   idleCash = Math.min(Math.round(idleCash), 4000) // idle tavanı
-  if (idleCash > 0) { state.money += idleCash; total += idleCash }
+  if (idleCash > 0) { state.money += idleCash; total += idleCash; offlineYazilan += idleCash }
   // POMPACILI pompalar offline YAKIT SATAR: tank gerçekten azalır, satış kasaya girer.
   const attended = [...state.autoPumps].filter(i => !state.brokenPumps.has(i)).length // bozuk pompadaki pompacı satamaz
   if (attended > 0) {
@@ -3362,14 +3368,36 @@ function applyAwayEarnings(offSecRaw: number): number {
       fuelCash = Math.round(fuelCash)
       state.money += fuelCash
       total += fuelCash
+      offlineYazilan += fuelCash
       ui.toast(t('Pompacıların sen yokken ~{0}L yakıt sattı (+₺{1}) — tank seviyelerine göz at!',
         Math.round(toSell).toLocaleString('tr-TR'), fuelCash.toLocaleString('tr-TR')), 'good', true)
     }
   }
+  // KUMBARALI TESİSLER (topla-hook'u): tır parkı, self yıkama, oto yıkama, hava-su.
+  // MÜDÜRÜ OLAN ve `collect` talimatı açık oyuncuda müdür turları offline'da da atar
+  // (state.offlineManagerRun) — müdürün ONLINE'da zaten yaptığı işin offline karşılığı,
+  // bonus değil. Müdürsüz / collect:false oyuncuda kod yolu BİREBİR eskisi gibidir.
+  const gains: [string, string, number][] = []
+  if (state.hasTruckPark) gains.push(['truckpark', t('Tır parkı'), 125 / 45])
+  if (state.hasTruckPark2) gains.push(['truckpark2', t('Karşı tır parkı'), 125 / 45])
+  if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
+  if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
+  if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
+  const mudur = state.offlineManagerRun(gains, offSec, Math.max(0, OFFLINE_BUDGET - offlineYazilan))
+  if (mudur.collected > 0) {
+    offlineYazilan += mudur.collected
+    total += mudur.collected
+  } else {
+    // eski gösterim: kumbarada oyuncuyu bekleyen yaklaşık tutar (tesis başına ₺600 tavanlı)
+    for (const [, , rate] of gains) total += Math.min(Math.round(rate * offSec), 600)
+  }
   if (total > 0) {
-    ui.toast(t('Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!', total.toLocaleString('tr-TR')), 'good', true)
+    ui.toast(mudur.collected > 0
+      ? t('Sen yokken tesislerin çalıştı: ~₺{0} — müdürün kumbaraları topladı.', total.toLocaleString('tr-TR'))
+      : t('Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!', total.toLocaleString('tr-TR')), 'good', true)
     audio.cash()
   }
+  if (mudur.collected > 0) mudurOfflineBildir(mudur.collected)
   return total
 }
 
@@ -3639,6 +3667,7 @@ function applyOfflineEarnings(gecenSn?: number) {
   const income = Math.min(150_000, Math.round(ratePerSec * capped * 0.4)) // %40 offline verim
   if (income < 50) return
   state.money += income
+  offlineYazilan += income // müdürün offline toplama bütçesi bu tutarın ÜSTÜNE biner
   showOfflineModal(income, elapsedSec, 0)
 }
 
@@ -3669,8 +3698,29 @@ function showSteamPoll() {
   o.querySelector('#sp-skip')?.addEventListener('click', () => answer('skip'))
 }
 
+/** AÇIK offline modalının iç kutusu (varsa) — müdür satırı buraya eklenir.
+ *  Neden gerekli: applyOfflineEarnings modalı açılışta ERKEN gösterir, müdürün offline
+ *  turları ise applyAwayEarnings içinde DAHA SONRA işlenir. Referans olmadan oyuncu
+ *  "müdür ne yaptı" bilgisini hiç görmezdi. */
+let offlineModalKutu: HTMLElement | null = null
+
+/** MÜDÜRÜN OFFLINE TOPLAMASINI OYUNCUYA SÖYLE: modal hâlâ açıksa içine satır ekler,
+ *  değilse (misafir/kapanmış modal) toast'la bildirir. Sessiz kalmak yasak — oyuncu
+ *  parayı görür ama nereden geldiğini bilmezse yine "müdür iş yapmıyor" diye okur. */
+function mudurOfflineBildir(amount: number) {
+  const metin = t('Müdürün yokken kumbaraları topladı: +₺{0}', amount.toLocaleString('tr-TR'))
+  if (offlineModalKutu && offlineModalKutu.isConnected) {
+    const satir = document.createElement('div')
+    satir.style.cssText = 'font-size:12.5px;font-weight:750;color:#2f6b45;background:#e4f2e5;border-radius:12px;padding:9px 11px;margin-bottom:14px;line-height:1.45'
+    satir.textContent = '🧑‍💼 ' + metin
+    offlineModalKutu.querySelector('#off-ok')?.before(satir)
+  } else {
+    ui.toast(metin, 'good', true)
+  }
+}
+
 /** "Tekrar hoş geldin — yokken istasyonun kazandı" modalı (oyunun krem/kırmızı dili) */
-function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
+function showOfflineModal(income: number, elapsedSec: number, soldL = 0, managerCash = 0) {
   const h = Math.floor(elapsedSec / 3600), m = Math.floor((elapsedSec % 3600) / 60)
   const dur = h > 0 ? `${h} sa ${m} dk` : `${m} dk`
   const o = document.createElement('div')
@@ -3687,10 +3737,18 @@ function showOfflineModal(income: number, elapsedSec: number, soldL = 0) {
           + t('{0} L yakıt satıldı — tank seviyelerine göz at.', soldL.toLocaleString('tr-TR'))
           + `</div>`
         : '')
+    // MÜDÜR SATIRI: modal müdür toplamasından SONRA açılırsa doğrudan basılır; ÖNCE
+    // açıldıysa mudurOfflineBildir() aynı satırı sonradan #off-ok'un önüne ekler.
+    + (managerCash > 0
+        ? `<div style="font-size:12.5px;font-weight:750;color:#2f6b45;background:#e4f2e5;border-radius:12px;padding:9px 11px;margin-bottom:14px;line-height:1.45">🧑‍💼 `
+          + t('Müdürün yokken kumbaraları topladı: +₺{0}', managerCash.toLocaleString('tr-TR'))
+          + `</div>`
+        : '')
     + `<button id="off-ok" style="width:100%;padding:12px;border-radius:14px;border:2px solid #b03535;border-bottom-width:4px;background:linear-gradient(180deg,#e05656,#d64545);color:#fff;font-weight:800;font-size:16px;cursor:pointer">Devam et</button>`
     + `</div>`
   document.body.appendChild(o)
-  const close = () => o.remove()
+  offlineModalKutu = o.firstElementChild as HTMLElement | null
+  const close = () => { offlineModalKutu = null; o.remove() }
   o.querySelector('#off-ok')?.addEventListener('click', close)
   o.addEventListener('click', e => { if (e.target === o) close() })
 }

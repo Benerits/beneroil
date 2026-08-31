@@ -981,6 +981,8 @@ const EN: Record<string, string> = {
   'Tabanca seçildi ✓ Şimdi <b>tutar gir</b> ya da <b>FULLE</b> bas, sonra <b>BAŞLAT</b>.': 'Nozzle selected ✓ Now <b>enter an amount</b> or hit <b>FILL UP</b>, then <b>START</b>.',
   'İlk satışın! İpucu: <b>cam temizle</b> = daha çok bahşiş. Büyümek için <b>mağazadan</b> pompa/tesis al, <b>ofisten</b> fiyatı ayarla.': 'Your first sale! Tip: <b>clean windows</b> = bigger tips. To grow, buy pumps/facilities from the <b>shop</b> and set prices from the <b>office</b>.',
   'Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!': 'Your facilities worked while you were away: earned ~₺{0} — collect the piggy banks!',
+  'Sen yokken tesislerin çalıştı: ~₺{0} — müdürün kumbaraları topladı.': 'Your facilities worked while you were away: ~₺{0} — your manager emptied the piggy banks.',
+  'Müdürün yokken kumbaraları topladı: +₺{0}': 'Your manager emptied the piggy banks while you were away: +₺{0}',
   'Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir': 'Move mode: arrow buttons or tap · ⟳ rotate · ✓ place',
   'Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir': 'Place mode: arrow buttons or tap · ⟳ rotate · ✓ place',
   'Buluta bağlanılamadı': "Couldn't connect to the cloud", 'Yenile': 'Refresh',
@@ -2621,6 +2623,10 @@ const FR: Record<string, string> = {
     'Ta première vente ! Astuce : <b>nettoyer les vitres</b> = plus de pourboires. Pour grandir, achète pompes et installations dans la <b>boutique</b> et règle tes prix depuis le <b>bureau</b>.',
   'Sen yokken tesislerin çalıştı: ~₺{0} kazandın — kumbaraları topla!':
     'Tes installations ont tourné pendant ton absence : ~₺{0} gagnés — vide les tirelires !',
+  'Sen yokken tesislerin çalıştı: ~₺{0} — müdürün kumbaraları topladı.':
+    'Tes installations ont tourné pendant ton absence : ~₺{0} — ton gérant a vidé les tirelires.',
+  'Müdürün yokken kumbaraları topladı: +₺{0}':
+    'Ton gérant a vidé les tirelires pendant ton absence : +₺{0}',
   'Taşıma modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir': 'Mode déplacement : flèches ou toucher · ⟳ pivoter · ✓ placer',
   'Yerleştirme modu: yön butonları ya da dokun · ⟳ döndür · ✓ yerleştir':
     'Mode placement : flèches ou toucher · ⟳ pivoter · ✓ placer',
