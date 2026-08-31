@@ -1345,6 +1345,73 @@ const EN: Record<string, string> = {
     'RISK: miss the installment 2 days in a row and {0} go to the bank — GONE FOR GOOD.',
   'Teminat seç — ödeyemezsen seçtiğin binalar bankaya geçer.':
     'Pick collateral — if you can’t pay, the buildings you pick go to the bank.',
+
+  // --- ORTA OYUN REHBERİ: marka yıldızı & şube yolu (HUD rozeti + bilgi kutusu + bildirim) ---
+  'MARKA': 'BRAND',
+  'HAZIR': 'READY',
+  'Marka Yıldızı': 'Brand Star',
+  '→ {0} şubesi açılır': '→ unlocks the {0} branch',
+  '→ gelir çarpanın ve müşteri akışın kalıcı büyür':
+    '→ your income multiplier and customer flow grow permanently',
+  'ŞİMDİ AÇABİLİRSİN: {0}': 'YOU CAN OPEN IT NOW: {0}',
+  'Sıradaki şube: {0} — {1} yıldız daha': 'Next branch: {0} — {1} more star(s)',
+  'Sıradaki şube: {0} — ₺{1} daha biriktir': 'Next branch: {0} — save ₺{1} more',
+  'Tüm şubeler açık — marka yıldızı biriktirmeye devam et.':
+    'All branches are open — keep collecting brand stars.',
+  '{0}★ · SIRADAKİ YILDIZ HAZIR {1}': '{0}★ · NEXT STAR IS READY {1}',
+  '{0}★ · sıradaki yıldız kredin kapanana kadar bekliyor':
+    '{0}★ · your next star waits until your loan is closed',
+  '{0}★ · sıradaki yıldız ortaklığın bitene kadar bekliyor':
+    '{0}★ · your next star waits until your partnership ends',
+  '{0}★ · sıradaki yıldıza ₺{1} kaldı {2}': '{0}★ · ₺{1} to go for the next star {2}',
+  'Arsan doldu diye tıkanmazsın: eşik ŞİRKETİN TAMAMINA bakar — {0} şubene kurduğun ekipman da bu çubuğu doldurur.':
+    'A full lot doesn’t block you: the threshold looks at your WHOLE COMPANY — equipment you build at {0} fills this bar too.',
+  'Arsan doldu diye tıkanmazsın: eşik ŞİRKETİN TAMAMINA bakar. Tavanı yükseltmenin yolu yeni şube açmak.':
+    'A full lot doesn’t block you: the threshold looks at your WHOLE COMPANY. To raise the ceiling, open a new branch.',
+  'Marka yıldızı KALICI güçtür: her yıldız gelir çarpanını, müşteri akışını ve devir sonrası kuruluş sermayeni büyütür. Yıldızlar hiç kaybolmaz.':
+    'Brand stars are PERMANENT power: each one grows your income multiplier, your customer flow and the seed capital you get after a handover. Stars are never lost.',
+  'ŞU AN {0}. yıldızı alabilirsin. {1}': 'You can claim star {0} RIGHT NOW. {1}',
+  'Nereden: Ofis › Şubeler › Marka & Devir → “İstasyonu Devret”.':
+    'Where: Office › Branches › Brand & Handover → “Hand Over the Station”.',
+  'Sıradaki yıldız BEKLİYOR: açık kredin var. Kredi kapanmadan istasyon devredilemez.':
+    'Your next star is ON HOLD: you have an open loan. The station can’t be handed over until it’s closed.',
+  'Sıradaki yıldız BEKLİYOR: aktif ortaklığın var. Ortaklık bitmeden istasyon devredilemez.':
+    'Your next star is ON HOLD: you have an active partnership. The station can’t be handed over until it ends.',
+  '{0}. yıldıza kalan: ₺{1} kurulu ekipman (₺{2} / ₺{3}, %{4}). {5}':
+    'To reach star {0}: ₺{1} more in installed equipment (₺{2} / ₺{3}, {4}%). {5}',
+  'Eşik ŞİRKETİN TAMAMINA bakar: başka şubene kurduğun ekipman da bu çubuğu doldurur. Arsan doldu diye tıkanmazsın.':
+    'The threshold looks at your WHOLE COMPANY: equipment built at another branch fills this bar too. A full lot never blocks you.',
+  'ŞİMDİ AÇABİLECEĞİN ŞUBE: {0}. Ofis › Şubeler’den aç.':
+    'BRANCH YOU CAN OPEN NOW: {0}. Open it from Office › Branches.',
+  'Sıradaki şube: {0} — {1} yıldız daha gerekiyor.': 'Next branch: {0} — {1} more star(s) needed.',
+  'Sıradaki şube: {0} — ₺{1} daha biriktir.': 'Next branch: {0} — save ₺{1} more.',
+  '{0}. MARKA YILDIZI HAZIR: istasyonu devredebilirsin. {1} Ofis › Şubeler › Marka & Devir.':
+    'BRAND STAR {0} IS READY: you can hand over the station. {1} Office › Branches › Brand & Handover.',
+  'YENİ ŞUBE AÇABİLİRSİN: {0} · ₺{1}. Ofis › Şubeler’den aç — ikinci istasyon ikinci gelir demek.':
+    'YOU CAN OPEN A NEW BRANCH: {0} · ₺{1}. Open it from Office › Branches — a second station means a second income.',
+  'Ya da {0} şubesini aç: ₺{1} daha gerekiyor.': 'Or open the {0} branch: ₺{1} more needed.',
+  'Arsan doldu diye tıkanmadın: yıldız eşiği ŞİRKETİN TAMAMINA bakar — {0} şubene kurduğun ekipman da sayar (₺{1} kaldı).':
+    'A full lot hasn’t blocked you: the star threshold looks at your WHOLE COMPANY — equipment you build at {0} counts too (₺{1} to go).',
+  'Arsan doldu diye tıkanmadın: yıldız eşiği ŞİRKETİN TAMAMINA bakar (₺{0} kaldı). Tavanı yükseltmenin yolu yeni şube açmak.':
+    'A full lot hasn’t blocked you: the star threshold looks at your WHOLE COMPANY (₺{0} to go). To raise the ceiling, open a new branch.',
+  'Sıradaki marka yıldızına ₺{0} kaldı ({1}). {2}': '₺{0} to go for your next brand star ({1}). {2}',
+
+  // --- Baştan Başla (oyunu sıfırlama) ---
+  'Baştan Başla': 'Start Over',
+  'EMİN MİSİN? Silmek için tekrar bas': 'ARE YOU SURE? Press again to delete',
+  'Kayıt siliniyor — oyun baştan başlıyor…': 'Deleting save — starting the game over…',
+  'Bu işlem GERİ ALINAMAZ: istasyonun, paran, günün, marka yıldızların ve şubelerin silinir. Onaylamak için düğmeye 8 saniye içinde tekrar bas.':
+    'This CANNOT BE UNDONE: your station, money, day, brand stars and branches will be deleted. Press the button again within 8 seconds to confirm.',
+  'İstasyonun, paran, günün, marka yıldızların ve şubelerin SİLİNİR — 1. günden sıfır kasayla başlarsın. Hesabın ve satın aldıkların durur. Bu bir devir DEĞİLDİR: hiçbir ödül taşınmaz.':
+    'Your station, money, day, brand stars and branches are DELETED — you start on day 1 with an empty till. Your account and purchases stay. This is NOT a handover: nothing carries over.',
+
+  // --- Sistem ön-uyarıları: ruhsat/denetim, ihale cezası, kredi ---
+  'Gün {0}: işletme ruhsatın yenilenecek (~₺{1}, 30 günde bir). Kasanda para varsa otomatik ödenir; yetmezse denetim itibarını düşürür.':
+    'Day {0}: your operating licence renews (~₺{1}, every 30 days). It’s paid automatically if you have the cash; if not, the inspection drops your reputation.',
+  'İhale teklifleri açıldı. Sözleşme bir GÜNLÜK TAAHHÜTTÜR: teslim edemediğin her gün ceza kesilir. Tankında taahhüdün 2 katını tutarsan gün sonunda otomatik tamamlanır ve ceza yemezsin.':
+    'Tender offers are open. A contract is a DAILY COMMITMENT: every day you fall short costs you a penalty. Keep twice the committed volume in your tank and it tops up automatically at day’s end — no penalty.',
+  'Kredi TEMİNATLIDIR: taksit gecikirse rehin verdiğin binalara haciz gelir. Ayrıca kredi açıkken istasyonu DEVREDEMEZSİN — marka yıldızı yolun kredi kapanana kadar durur.':
+    'Loans are SECURED: miss an installment and the buildings you pledged get seized. Also, you CANNOT hand over the station while a loan is open — your brand-star path stops until it’s repaid.',
 }
 
 // TR metin → FR karşılığı. Anahtar seti EN ile BİREBİR aynı olmalı; yeni bir TR
@@ -2931,6 +2998,75 @@ const FR: Record<string, string> = {
     'RISQUE : deux mensualités manquées d’affilée et {0} passent à la banque — SANS RETOUR.',
   'Teminat seç — ödeyemezsen seçtiğin binalar bankaya geçer.':
     'Choisis des garanties — si tu ne peux pas payer, les bâtiments choisis passent à la banque.',
+
+  // --- ORTA OYUN REHBERİ: marka yıldızı & şube yolu (HUD rozeti + bilgi kutusu + bildirim) ---
+  'MARKA': 'MARQUE',
+  'HAZIR': 'PRÊT',
+  'Marka Yıldızı': 'Étoile de marque',
+  '→ {0} şubesi açılır': '→ débloque la succursale {0}',
+  '→ gelir çarpanın ve müşteri akışın kalıcı büyür':
+    '→ ton multiplicateur de revenus et ton flux de clients augmentent définitivement',
+  'ŞİMDİ AÇABİLİRSİN: {0}': 'TU PEUX L’OUVRIR MAINTENANT : {0}',
+  'Sıradaki şube: {0} — {1} yıldız daha': 'Prochaine succursale : {0} — encore {1} étoile(s)',
+  'Sıradaki şube: {0} — ₺{1} daha biriktir': 'Prochaine succursale : {0} — économise encore ₺{1}',
+  'Tüm şubeler açık — marka yıldızı biriktirmeye devam et.':
+    'Toutes les succursales sont ouvertes — continue à collectionner les étoiles de marque.',
+  '{0}★ · SIRADAKİ YILDIZ HAZIR {1}': '{0}★ · PROCHAINE ÉTOILE PRÊTE {1}',
+  '{0}★ · sıradaki yıldız kredin kapanana kadar bekliyor':
+    '{0}★ · ta prochaine étoile attend le remboursement de ton prêt',
+  '{0}★ · sıradaki yıldız ortaklığın bitene kadar bekliyor':
+    '{0}★ · ta prochaine étoile attend la fin de ton partenariat',
+  '{0}★ · sıradaki yıldıza ₺{1} kaldı {2}': '{0}★ · encore ₺{1} pour la prochaine étoile {2}',
+  'Arsan doldu diye tıkanmazsın: eşik ŞİRKETİN TAMAMINA bakar — {0} şubene kurduğun ekipman da bu çubuğu doldurur.':
+    'Un terrain plein ne te bloque pas : le seuil regarde TOUTE TON ENTREPRISE — l’équipement que tu construis à {0} remplit aussi cette barre.',
+  'Arsan doldu diye tıkanmazsın: eşik ŞİRKETİN TAMAMINA bakar. Tavanı yükseltmenin yolu yeni şube açmak.':
+    'Un terrain plein ne te bloque pas : le seuil regarde TOUTE TON ENTREPRISE. Pour relever le plafond, ouvre une nouvelle succursale.',
+  'Marka yıldızı KALICI güçtür: her yıldız gelir çarpanını, müşteri akışını ve devir sonrası kuruluş sermayeni büyütür. Yıldızlar hiç kaybolmaz.':
+    'Les étoiles de marque sont un pouvoir PERMANENT : chacune augmente ton multiplicateur de revenus, ton flux de clients et le capital de départ reçu après une cession. Les étoiles ne se perdent jamais.',
+  'ŞU AN {0}. yıldızı alabilirsin. {1}': 'Tu peux obtenir l’étoile {0} MAINTENANT. {1}',
+  'Nereden: Ofis › Şubeler › Marka & Devir → “İstasyonu Devret”.':
+    'Où : Bureau › Succursales › Marque et cession → « Céder la station ».',
+  'Sıradaki yıldız BEKLİYOR: açık kredin var. Kredi kapanmadan istasyon devredilemez.':
+    'Ta prochaine étoile est EN ATTENTE : tu as un prêt en cours. Impossible de céder la station avant de l’avoir remboursé.',
+  'Sıradaki yıldız BEKLİYOR: aktif ortaklığın var. Ortaklık bitmeden istasyon devredilemez.':
+    'Ta prochaine étoile est EN ATTENTE : tu as un partenariat actif. Impossible de céder la station avant sa fin.',
+  '{0}. yıldıza kalan: ₺{1} kurulu ekipman (₺{2} / ₺{3}, %{4}). {5}':
+    'Pour l’étoile {0} : encore ₺{1} d’équipement installé (₺{2} / ₺{3}, {4} %). {5}',
+  'Eşik ŞİRKETİN TAMAMINA bakar: başka şubene kurduğun ekipman da bu çubuğu doldurur. Arsan doldu diye tıkanmazsın.':
+    'Le seuil regarde TOUTE TON ENTREPRISE : l’équipement construit dans une autre succursale remplit aussi cette barre. Un terrain plein ne te bloque jamais.',
+  'ŞİMDİ AÇABİLECEĞİN ŞUBE: {0}. Ofis › Şubeler’den aç.':
+    'SUCCURSALE OUVRABLE MAINTENANT : {0}. Ouvre-la depuis Bureau › Succursales.',
+  'Sıradaki şube: {0} — {1} yıldız daha gerekiyor.':
+    'Prochaine succursale : {0} — il faut encore {1} étoile(s).',
+  'Sıradaki şube: {0} — ₺{1} daha biriktir.': 'Prochaine succursale : {0} — économise encore ₺{1}.',
+  '{0}. MARKA YILDIZI HAZIR: istasyonu devredebilirsin. {1} Ofis › Şubeler › Marka & Devir.':
+    'ÉTOILE DE MARQUE {0} PRÊTE : tu peux céder la station. {1} Bureau › Succursales › Marque et cession.',
+  'YENİ ŞUBE AÇABİLİRSİN: {0} · ₺{1}. Ofis › Şubeler’den aç — ikinci istasyon ikinci gelir demek.':
+    'TU PEUX OUVRIR UNE NOUVELLE SUCCURSALE : {0} · ₺{1}. Ouvre-la depuis Bureau › Succursales — une deuxième station, c’est un deuxième revenu.',
+  'Ya da {0} şubesini aç: ₺{1} daha gerekiyor.': 'Ou ouvre la succursale {0} : il manque ₺{1}.',
+  'Arsan doldu diye tıkanmadın: yıldız eşiği ŞİRKETİN TAMAMINA bakar — {0} şubene kurduğun ekipman da sayar (₺{1} kaldı).':
+    'Un terrain plein ne t’a pas bloqué : le seuil d’étoile regarde TOUTE TON ENTREPRISE — l’équipement construit à {0} compte aussi (encore ₺{1}).',
+  'Arsan doldu diye tıkanmadın: yıldız eşiği ŞİRKETİN TAMAMINA bakar (₺{0} kaldı). Tavanı yükseltmenin yolu yeni şube açmak.':
+    'Un terrain plein ne t’a pas bloqué : le seuil d’étoile regarde TOUTE TON ENTREPRISE (encore ₺{0}). Pour relever le plafond, ouvre une nouvelle succursale.',
+  'Sıradaki marka yıldızına ₺{0} kaldı ({1}). {2}':
+    'Encore ₺{0} pour ta prochaine étoile de marque ({1}). {2}',
+
+  // --- Baştan Başla (oyunu sıfırlama) ---
+  'Baştan Başla': 'Recommencer',
+  'EMİN MİSİN? Silmek için tekrar bas': 'CONFIRMES-TU ? Appuie encore pour effacer',
+  'Kayıt siliniyor — oyun baştan başlıyor…': 'Suppression de la sauvegarde — la partie recommence…',
+  'Bu işlem GERİ ALINAMAZ: istasyonun, paran, günün, marka yıldızların ve şubelerin silinir. Onaylamak için düğmeye 8 saniye içinde tekrar bas.':
+    'Cette action est IRRÉVERSIBLE : ta station, ton argent, ton jour, tes étoiles de marque et tes succursales seront effacés. Appuie de nouveau sur le bouton dans les 8 secondes pour confirmer.',
+  'İstasyonun, paran, günün, marka yıldızların ve şubelerin SİLİNİR — 1. günden sıfır kasayla başlarsın. Hesabın ve satın aldıkların durur. Bu bir devir DEĞİLDİR: hiçbir ödül taşınmaz.':
+    'Ta station, ton argent, ton jour, tes étoiles de marque et tes succursales sont EFFACÉS — tu repars au jour 1 avec une caisse vide. Ton compte et tes achats restent. Ce n’est PAS une cession : rien n’est conservé.',
+
+  // --- Sistem ön-uyarıları: ruhsat/denetim, ihale cezası, kredi ---
+  'Gün {0}: işletme ruhsatın yenilenecek (~₺{1}, 30 günde bir). Kasanda para varsa otomatik ödenir; yetmezse denetim itibarını düşürür.':
+    'Jour {0} : ta licence d’exploitation se renouvelle (~₺{1}, tous les 30 jours). Elle est payée automatiquement si tu as l’argent ; sinon, l’inspection fait chuter ta réputation.',
+  'İhale teklifleri açıldı. Sözleşme bir GÜNLÜK TAAHHÜTTÜR: teslim edemediğin her gün ceza kesilir. Tankında taahhüdün 2 katını tutarsan gün sonunda otomatik tamamlanır ve ceza yemezsin.':
+    'Les appels d’offres sont ouverts. Un contrat est un ENGAGEMENT QUOTIDIEN : chaque jour non livré entraîne une pénalité. Garde le double du volume engagé dans ta cuve et le complément se fait automatiquement en fin de journée — sans pénalité.',
+  'Kredi TEMİNATLIDIR: taksit gecikirse rehin verdiğin binalara haciz gelir. Ayrıca kredi açıkken istasyonu DEVREDEMEZSİN — marka yıldızı yolun kredi kapanana kadar durur.':
+    'Un prêt est GARANTI : une mensualité en retard et les bâtiments mis en gage sont saisis. De plus, tu ne peux PAS céder la station tant qu’un prêt est en cours — ta progression en étoiles de marque s’arrête jusqu’au remboursement.',
 }
 
 /** Aktif dilin sözlüğü. TR kaynak dil olduğu için sözlüğü yoktur (anahtarın kendisi metindir). */

@@ -59,7 +59,8 @@
     "test:rota": "tsx tools/tests/rota-check.mjs",
     "test:aci": "tsx tools/tests/aci-check.mjs",
     "test:devir": "tsx tools/tests/devir-check.mjs",
-    "test:ogretici": "node tools/tests/ogretici-check.mjs"
+    "test:ogretici": "node tools/tests/ogretici-check.mjs",
+    "test:rehber": "tsx tools/tests/rehber-check.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

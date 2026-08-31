@@ -413,6 +413,35 @@ export const URANIUM_ETA = 20 // saniye
 // sipariş ediyor (managerTick), yani reaktör "sürekli yakıt bekleyen" tesis olmaktan çıktı.
 const URANIUM_DRAIN_PER_S = 100 / 720
 
+/** ORTA OYUN REHBERİ — bir şube satırı (bkz. GameState.rehber()). */
+export type RehberSube = {
+  id: LocId; name: string
+  /** açmak için gereken marka yıldızı / nakit */
+  stars: number; cash: number
+  /** oyuncuya kalan: kaç yıldız, kaç ₺ */
+  starsLeft: number; cashLeft: number
+  /** şu an açılabilir mi; değilse canUnlockLoc gerekçesi ('yildiz' | 'para' | 'taban') */
+  ok: boolean; reason: string
+}
+/** ORTA OYUN REHBERİ — marka yıldızı ve şube yolunun tek gerçek kaynağı. */
+export type Rehber = {
+  stars: number
+  /** şirket geneli kurulu ekipman / sıradaki yıldız eşiği / aradaki fark */
+  equip: number; threshold: number; remaining: number; pct: number
+  ready: boolean
+  /** devri bekleten borç (varsa): kredi veya ortaklık kapatılmalı */
+  engel: 'kredi' | 'ortak' | null
+  /** eşik şube sayısı tavanına dayandı mı (tavanı yükseltmenin tek yolu yeni şube) */
+  tavanda: boolean
+  /** #653 teşhisi: oyuncu "yer kalmadı" hissindeyken çıkış yolu gösterilmeli */
+  yerDoldu: boolean
+  /** hâlâ ekipman alabilecek AÇIK şubeler — eşiği besleyen gerçek çıkış yolu */
+  bosSube: LocId[]
+  acilabilir: RehberSube[]
+  hedef: RehberSube | null
+  yildizAcar: RehberSube[]
+}
+
 export class GameState {
   money = START_MONEY
   reputation = 3.0
@@ -1548,6 +1577,73 @@ export class GameState {
       flowNow: this.prestigeFlow(), flowAfter: GameState.prestigeFlowFor(starsAfter),
       crewNow: { manager: this.managerLevel, staff: this.staffLevel },
       crewAfter: { manager: Math.max(this.managerLevel, crew.manager), staff: Math.max(this.staffLevel, crew.staff) },
+    }
+  }
+
+  // ──────────────────── ORTA OYUN REHBERİ (marka yıldızı & şube yolu) ────────────────────
+  //
+  // NEDEN: açık geri bildirimde "öğrenilebilirlik" sanılan kayıtların en büyük kümesi ilk
+  // dakikalar DEĞİL, ORTA OYUN: "6. yıldız için yer kalmadı, nasıl ilerleyeceğimi bilmiyorum"
+  // (#653), "yeni şube nasıl açılır" (#1003/#1144/#1174/#1257/#1258), "yapacak bir şey
+  // kalmadı" (#1264 — oysa şube sistemi orada duruyor, oyuncu göremiyor).
+  //
+  // Bilgi ZATEN vardı ama Ofis › Şubeler panelinin İÇİNDE gömülüydü: oyuncunun onu bulmak
+  // için ARAMASI gerekiyordu. Bu fonksiyon o bilgiyi TEK KAYNAKTAN türetir; HUD rozeti,
+  // bilgi kutusu, proaktif bildirim ve ofis paneli aynı sayıları okur — üç ayrı yerde üç
+  // farklı hesap yapıp birbirini tutmayan metinler çıkmasın diye.
+  //
+  // TAMAMEN TÜRETİLMİŞ: hiçbir yeni kayıt alanı yoktur, save şeması değişmez.
+
+  /** Rehberin gördüğü şube satırı: hangi şube, kaç yıldıza, kaça, ne kadarı kaldı.
+   *  ok = şu an açılabilir; reason = canUnlockLoc gerekçesi ('yildiz'|'para'|'taban'). */
+  private rehberSube(id: LocId): RehberSube {
+    const c = this.canUnlockLoc(id)
+    return {
+      id, name: themeFor(id).name, stars: c.stars, cash: c.cash,
+      starsLeft: Math.max(0, c.stars - this.brandStars),
+      cashLeft: Math.max(0, c.cash - this.money),
+      ok: c.ok, reason: c.reason,
+    }
+  }
+  /**
+   * "Yıldızım kaç, sıradaki yıldız için ne gerekiyor, o yıldız neyi açacak, yeni şube
+   * nerede ve kaça" sorularının TEK cevabı. Arayüz katmanı bunu okuyup gösterir.
+   */
+  rehber(): Rehber {
+    const equip = this.companyEquipmentValue()
+    const threshold = this.handoverThreshold()
+    const remaining = Math.max(0, threshold - equip)
+    // Kopya şube satırı yalnız TABANI açıkken anlamlıdır (canUnlockLoc 'taban' der);
+    // rehber "ulaşılabilir sıradaki adım" gösterdiği için o satırları listeden düşürür.
+    const kilitli = ALL_LOCS
+      .filter(id => !this.unlockedLocs.includes(id))
+      .map(id => this.rehberSube(id))
+      .filter(s => s.reason !== 'taban')
+    const acilabilir = kilitli.filter(s => s.ok)
+    // HEDEF ŞUBE = yıldız olarak en yakın olan; yıldız eşitse ucuz olan. Oyuncuya tek bir
+    // "sıradaki durak" göstermek, dokuz kilitli satırı birden göstermekten anlaşılırdır.
+    const hedef = [...kilitli].sort((a, b) => a.starsLeft - b.starsLeft || a.cash - b.cash)[0] ?? null
+    // BİR SONRAKİ YILDIZIN AÇACAKLARI: devir düğmesine basmanın SOMUT karşılığı.
+    const yildizAcar = kilitli.filter(s => s.stars === this.brandStars + 1)
+    const engel = this.loan.active ? 'kredi' : this.partner.active ? 'ortak' : null
+    const ready = this.canHandover()
+    // #653 "YER KALMADI" TEŞHİSİ.
+    // Eşik ŞUBE SAYISINA bağlı bir tavanda (BRANCH_EQUIP_CAP × şube) duruyorsa ve oyuncu
+    // yıldız yetmediği için yeni şube de açamıyorsa, oyuncu "arsam doldu, tıkandım" hissine
+    // girer. Gerçekte tıkalı DEĞİLDİR: eşik ŞİRKET GENELİ ekipmana bakar — pasif şubeye
+    // kurulan ekipman da sayar (companyEquipmentValue). Çıkış yolu budur ve oyuncu bunu
+    // hiçbir yerde görmüyordu. Bayrak, arayüzün o çıkışı yazması içindir.
+    const tavanda = this.handoverAtCap()
+    const bosSube = this.unlockedLocs.filter(id => id !== this.activeLoc
+      && Math.max(0, Math.round(Number(this.locSnapshots[id]?.equipVal) || 0)) < BRANCH_EQUIP_CAP)
+    const yerDoldu = !ready && !engel && tavanda && remaining > 0 && acilabilir.length === 0
+    return {
+      stars: this.brandStars, equip, threshold, remaining,
+      pct: Math.max(0, Math.min(100, Math.round(equip / Math.max(1, threshold) * 100))),
+      ready, engel, tavanda, yerDoldu,
+      // ÇIKIŞ YOLU: donatılacak yer kalan AÇIK şubeler (buraya ekipman kurmak eşiği besler)
+      bosSube,
+      acilabilir, hedef, yildizAcar,
     }
   }
   /** DEVRET: ekipman gider, ARSA/BETON ve marka yıldızları KALIR, kasaya devir bedeli girer. */

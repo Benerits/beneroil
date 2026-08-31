@@ -13,4 +13,6 @@ public/promo-stations.json
 .ogretici-1.png
 .ogretici-2.png
 .ogretici-3.png
+# orta oyun rehberi testinin ekran görüntüleri (tools/tests/rehber-check.mjs)
+.rehber-*.png
 .claude/worktrees/
