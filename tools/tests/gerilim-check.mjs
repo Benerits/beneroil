@@ -71,17 +71,19 @@ bekle(/combo\(seri: number\)/.test(audio), 'seri kademesinde ses var')
 bekle(/Kaçırdığın müşteri/.test(main), 'gün sonu raporunda kayıp satırı var')
 bekle(/state\.dayLostCount = 0/.test(main), 'günlük kayıp sayacı gün dönüşünde sıfırlanıyor')
 
-// ── Faz 4: fizik — ÇARPIŞMA SONUNDA KALICI OLARAK AÇILDI ──
-// Yolculuk: (1) Faz 4.1'de açtım → yük testi üretim konfigüyle ölçünce servis 384→268,
-// 11 buharlaşma, 2 kalıcı sıkışan çıktı, GERİ ALDIM. (2) Apron'a tek bölge rezervasyonu
-// denedim → daha kötü (T1 268→154), onu da geri aldım. (3) Gerçek kök neden ölçümle
-// bulundu: apron dar ve çarpışma döngüsü DURAN aracı nesne olarak sayıyordu; pompadaki
-// araç apron'un tek geçiş yolunu tıkıyor, kuyruk kapıdan taşıp çıkışı öldürüyordu.
-// Duran araç artık yol kenarı engeli — hareket edenler arasında çarpışma TAM AÇIK.
-// Ölçüm (çarpışma açık): servis 390 · buharlaşma 0 · kalıcı sıkışan 0 · token reddi 253
-// (eskiden 58.663). ?nocollide acil valf olarak duruyor.
-bekle(/carsPassThrough: \(\) => new URLSearchParams\(location\.search\)\.has\('nocollide'\)/.test(main),
-  'çarpışma VARSAYILAN AÇIK (?nocollide acil valf)')
+// ── Faz 4: fizik — ÇARPIŞMA KAVRAMI ARTIK YOK (mimari değişti) ──
+// Yolculuk: (1) çarpışmayı varsayılan açtım → servis 384→268, geri aldım. (2) apron'a
+// tek bölge rezervasyonu → daha kötü, geri aldım. (3) duran araç kuralı + görsel ayrım
+// → iç içe %60 azaldı ama oyuncu HÂLÂ 20 araçlık yığın gönderdi. (4) MİMARİ DEĞİŞTİ:
+// ajan müzakeresi (rezervasyon/hold/dodge/kurtarma/evaporate) tamamen SİLİNDİ, yerine
+// yerleşim değişince bir kez hesaplanan AYRIK ŞERİT AĞI geldi. Araçlar şeride girip
+// akıyor; kafa kafaya çarpışma geometrik olarak imkânsız (gelen omurgada herkes kapıdan
+// ıraksar, gidende herkes çıkışa yakınsar). Ölçüm: toplam servis 943 → 1285 (+%36),
+// yığın senaryosunda apron zirvesi 48 → 13 araç, iç içe 12.3 → 0.56 çift/kare.
+// Bu yüzden `carsPassThrough` seçeneği de silindi — çarpışma diye bir katman kalmadı.
+bekle(!/carsPassThrough:/.test(main), 'çarpışma seçeneği KODDAN kalktı (yorumlarda tarihçesi kalabilir)')
+bekle(/LaneNetwork|serit|şerit/i.test(readFileSync(new URL('../../src/traffic-graph.ts', import.meta.url), 'utf8')),
+  'şerit ağı mimarisi yürürlükte')
 
 console.log('\n── SAVE UYUMLULUĞU ──')
 bekle(/'dayLostCount', 'dayLostMoney'/.test(state), 'yeni günlük sayaçlar SAVE_FIELDS\'ta')
