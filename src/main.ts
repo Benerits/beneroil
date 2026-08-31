@@ -2253,10 +2253,11 @@ const cars = new CarManager(world.scene, modelLib, {
     if (state.combo >= 3) {
       const mult = state.comboMult()
       ui.toast(t('Seri koptu! ×{0} çarpanı gitti.', mult.toFixed(2)), 'bad')
-      if (state.adSeriHak > 0 && rewardedReady() && adBtn.style.display === 'none') {
+      // teklife bağlı durum SADECE teklif gerçekten ekrana geldiyse kurulur
+      // (showAdOffer kendi içinde rewardedReady() kapısından geçiriyor)
+      if (state.adSeriHak > 0 && adBtn.style.display === 'none' && showAdOffer('seri', mult)) {
         seriYedek = state.combo
         teklifT = 8
-        showAdOffer('seri', mult)
       }
     }
     state.combo = 0
@@ -2272,10 +2273,9 @@ const cars = new CarManager(world.scene, modelLib, {
   onVip: car => {
     ui.toast(t('VIP MÜŞTERİ geldi — büyük sipariş, KISA sabır!'), 'good', true)
     audio.promo()
-    if (state.adVipHak > 0 && rewardedReady() && adBtn.style.display === 'none') {
+    if (state.adVipHak > 0 && adBtn.style.display === 'none' && showAdOffer('vip', car.demandAmount)) {
       vipAday = car
       teklifT = 12                     // teklif kısa ömürlü: kriz anı geçince anlamsızlaşır
-      showAdOffer('vip', car.demandAmount)
     }
   },
   onTurnedAway: () => {
@@ -3073,10 +3073,12 @@ function tickEvCharging(dt: number) {
     if (!c.charging) continue
     if (c.phase !== 'atPump') { c.charging = false; continue }
     if (c.slotIndex >= 0 && state.brokenChargers.has(c.slotIndex)) {
+      const bozukSarj = c.slotIndex   // releaseCar slotu boşaltıyor → önce yakala
       c.charging = false
       ui.toast(t('Şarj ünitesi arızalandı — şarj durdu, tamir gerekli.'), 'bad')
       notifyIfHidden(t('Şarj ünitesi arızalandı — tamir gerekli!'), 'ariza-sarj')
       cars.releaseCar(c)
+      teklifUcretsizTamir('charger', bozukSarj)
       continue
     }
     const need = c.demandKwh - c.chargedKwh
@@ -5952,29 +5954,102 @@ const adBtn = document.getElementById('adbtn') as HTMLButtonElement
 const adBtnLabel = adBtn.querySelector('span') as HTMLSpanElement
 let adCooldown = 120 // ilk fırsat: 2. dakika (baştan değil, biraz ilerleyince)
 // fırsat-temelli ödüllü reklam teklifi (tycoon tarzı): müşteri patlaması VEYA gün kârını 2x
-let adOffer: { kind: 'rush' | 'double' | 'vip' | 'seri'; profit: number } = { kind: 'rush', profit: 0 }
+type AdUnit = { kind: 'pump' | 'charger'; i: number }
+type AdOffer = {
+  kind: 'rush' | 'double' | 'vip' | 'seri' | 'yakit' | 'tamir'
+  profit: number
+  fuel?: FuelType   // 'yakit': hangi tanka teslimat yapılacak
+  unit?: AdUnit     // 'tamir': hangi ünite onarılacak
+}
+let adOffer: AdOffer = { kind: 'rush', profit: 0 }
 // MOBİL GELİR REKLAMDAN: teklifler oyunun KRİZ anlarına bağlı (VIP kaçmak üzere,
-// seri kırıldı). İkisi de OPT-IN ve günlük sınırlı — nadir olan değerli görünür.
+// seri kırıldı, tank boşaldı, pompa patladı). Hepsi OPT-IN ve günlük sınırlı —
+// nadir olan değerli görünür.
 let vipAday: Car | null = null       // ekranda teklifi bekleyen VIP
 let seriYedek = 0                    // kırılan seri, reklam izlenirse geri verilir
 let teklifT = 0                      // teklifin ekranda kalma süresi (sn)
 let doubleOfferT = 0 // 2x teklifi ekranda kalma süresi
 
-function showAdOffer(kind: 'rush' | 'double' | 'vip' | 'seri', profit = 0) {
-  adOffer = { kind, profit }
+/** teklif edilen ünite HÂLÂ bozuk mu — oyuncu kendi parasıyla tamir ettiyse teklif ölür */
+function uniteBozukMu(u: AdUnit): boolean {
+  return u.kind === 'pump' ? state.brokenPumps.has(u.i) : state.brokenChargers.has(u.i)
+}
+
+/**
+ * Teklifi ekrana koyar. TEK KAPI: reklam altyapısı yoksa VEYA rewarded reklam
+ * HENÜZ YÜKLENMEDİYSE buton HİÇ çıkmaz.
+ *
+ * Eskiden yalnız kriz çağrıları (VIP/seri) rewardedReady() kontrol ediyordu; 'rush' ve
+ * 'double' etmiyordu → reklam hazır değilken buton görünüyor, oyuncu basıyor ve HİÇBİR
+ * ŞEY olmuyordu ("reklam izle diyorum, açılmıyor"). Artık kontrol burada, tek yerde.
+ *
+ * Dönüş: teklif gerçekten gösterildiyse true. Çağıranlar teklife bağlı durumu
+ * (vipAday, seriYedek, teklifT) SADECE true dönerse kurmalı — yoksa hayalet teklif kalır.
+ */
+function showAdOffer(kind: AdOffer['kind'], profit = 0, ek: { fuel?: FuelType; unit?: AdUnit } = {}): boolean {
+  if (!adsEnabled() || !rewardedReady() || isFullMode || isPromoMode) return false
+  adOffer = { kind, profit, ...ek }
   adBtnLabel.textContent =
       kind === 'double' ? t('Reklam İzle: Günü 2x Yap (+₺{0})', profit.toLocaleString('tr-TR'))
     : kind === 'vip' ? t('Reklam İzle: VIP\'yi Elde Tut (₺{0})', profit.toLocaleString('tr-TR'))
     : kind === 'seri' ? t('Reklam İzle: Seriyi Koru (×{0})', profit.toFixed(2))
+    : kind === 'yakit' ? t('Reklam İzle: Acil {0} Teslimatı ({1} L)', t(FUEL_LABEL[ek.fuel ?? 'benzin']), GameState.AD_YAKIT_LITRE)
+    : kind === 'tamir' ? t('Reklam İzle: Ücretsiz Tamir')
     : t('Reklam İzle: Müşteri Patlaması')
   adBtn.style.display = 'flex'
+  return true
+}
+
+/**
+ * ACİL YAKIT TESLİMATI TEKLİFİ — tetik: dolum sırasında tank boşaldı.
+ * Kriz gerçek: müşteri yarım servisle gidiyor ve normal sipariş 1 GÜN sürüyor.
+ * Tank zaten tepedeyse (ölü teklif) hiç sorulmaz.
+ */
+function teklifAcilYakit(f: FuelType) {
+  if (state.adYakitHak <= 0 || adBtn.style.display !== 'none') return
+  if (state.tanks[f] >= state.fuelCapacity(f)) return
+  if (showAdOffer('yakit', 0, { fuel: f })) teklifT = 20   // 20 sn: an geçerse teklif iner
+}
+
+/**
+ * ÜCRETSİZ TAMİR TEKLİFİ — tetik: dolum/şarj sırasında ünite arızalandı.
+ * Kriz gerçek: kuyruk bekliyor, tamir hem para hem zaman istiyor.
+ */
+function teklifUcretsizTamir(kind: 'pump' | 'charger', i: number) {
+  if (state.adTamirHak <= 0 || adBtn.style.display !== 'none' || i < 0) return
+  if (!uniteBozukMu({ kind, i })) return
+  if (showAdOffer('tamir', 0, { unit: { kind, i } })) teklifT = 18
 }
 adBtn.addEventListener('click', () => {
   adBtn.disabled = true
   const offer = adOffer
-  rewarded(offer.kind === 'double' ? 'gun-2x' : offer.kind === 'vip' ? 'vip' : offer.kind === 'seri' ? 'seri' : 'musteri-patlamasi',
+  rewarded(offer.kind === 'double' ? 'gun-2x' : offer.kind === 'vip' ? 'vip' : offer.kind === 'seri' ? 'seri'
+    : offer.kind === 'yakit' ? 'acil-yakit' : offer.kind === 'tamir' ? 'ucretsiz-tamir' : 'musteri-patlamasi',
     () => {
-      if (offer.kind === 'vip') {
+      if (offer.kind === 'yakit') {
+        // ACİL YAKIT TESLİMATI — NAKİT DEĞİL MAL. Sipariş 1 gün sürerken tanka anında
+        // 300 L girer; kasaya kuruş girmez, satmak yine oyuncunun işi (ÖDÜL = FIRSAT).
+        // Kapasite aşımı state tarafında kırpılır (dolu tanka fayda yok, hak da yanmaz).
+        const f = offer.fuel ?? 'benzin'
+        const gelen = state.adYakitTeslim(f)
+        if (gelen > 0) {
+          ui.toast(t('Acil teslimat geldi: {0} tankına +{1} L — satışa devam!', t(FUEL_LABEL[f]), Math.round(gelen)), 'good')
+        } else {
+          ui.toast(t('Tank zaten dolu — teslimata gerek kalmadı, hakkın duruyor.'), '')
+        }
+      } else if (offer.kind === 'tamir') {
+        // ÜCRETSİZ TAMİR — gideri baştan engeller, para İADE ETMEZ. Oyuncu bu arada
+        // kendi parasıyla tamir ettiyse state fail-closed davranır: hak harcanmaz.
+        const u = offer.unit
+        if (u && state.adTamirYap(u.kind, u.i)) {
+          ui.toast(u.kind === 'pump'
+            ? t('Pompa #{0} ücretsiz onarıldı — hemen servise hazır!', u.i + 1)
+            : t('Şarj #{0} ücretsiz onarıldı — hemen servise hazır!', u.i + 1), 'good')
+          if (selectedBuilding) refreshBuildingCard()   // bakım listesindeki tamir satırı anında düşsün
+        } else {
+          ui.toast(t('Ünite zaten onarılmış — hakkın duruyor.'), '')
+        }
+      } else if (offer.kind === 'vip') {
         // ÖDÜL = FIRSAT, nakit değil: sabır tazelenir + kuyrukta öne geçer. Ekonomiyi
         // şişirmediği için denge bozulmaz; oyuncu parayı yine SERVİS EDEREK kazanır.
         if (vipAday && vipAday.phase !== 'gone') {
@@ -6006,25 +6081,33 @@ adBtn.addEventListener('click', () => {
       if (adOffer.kind === 'vip') vipAday = null
       if (adOffer.kind === 'seri') seriYedek = 0
       if (adOffer.kind === 'rush') adCooldown = watched ? 420 : 90 // izlediyse 7 dk, vazgeçtiyse 1.5 dk sonra tekrar
+      // yakıt/tamir teklifleri de tek seferlik: aynı kriz için ikinci kez sorulmaz
+      if (adOffer.kind === 'yakit' || adOffer.kind === 'tamir') adCooldown = Math.max(adCooldown, 45)
     })
 })
 /** gün sonu 2x-kâr fırsatı (kârlı gün + reklam varsa) — kısa süre görünür */
 function offerDoubleProfit(profit: number) {
-  if (!adsEnabled() || isFullMode || isPromoMode || profit <= 0) return
-  showAdOffer('double', profit)
-  doubleOfferT = 22 // 22 sn içinde izlemezsen kaçar
+  if (profit <= 0) return
+  // reklam hazır değilse showAdOffer false döner → sayaç da başlamaz (hayalet teklif yok)
+  if (showAdOffer('double', profit)) doubleOfferT = 22 // 22 sn içinde izlemezsen kaçar
 }
 
 function tickAdOffer(dt: number) {
   if (!adsEnabled() || isFullMode || isPromoMode) return
-  // KRİZ TEKLİFLERİ SÜRELİ (VIP / seri): an geçince teklif anlamını yitirir, ısrar edilmez.
-  // VIP zaten sahneden çıktıysa teklif de anında iner.
+  // KRİZ TEKLİFLERİ SÜRELİ (VIP / seri / yakıt / tamir): an geçince teklif anlamını
+  // yitirir, ısrar edilmez. Kriz kendiliğinden çözüldüyse teklif ANINDA iner.
   if (teklifT > 0) {
     teklifT -= dt
     const vipGitti = adOffer.kind === 'vip' && (!vipAday || vipAday.phase === 'gone')
-    if (teklifT <= 0 || vipGitti) {
+    // TAMİR: oyuncu bu arada üniteyi KENDİ parasıyla onardıysa teklif hemen kalkar —
+    // yoksa reklam izletip çalışan üniteye "tamir ödülü" vermiş oluruz (bedava hak yakımı).
+    const tamirBitti = adOffer.kind === 'tamir' && (!adOffer.unit || !uniteBozukMu(adOffer.unit))
+    // YAKIT: tank bu arada (sipariş/başka yoldan) tepeye kadar dolduysa teslimatın
+    // anlamı kalmaz — 0 L ödül vaat eden buton ekranda durmasın.
+    const tankDoldu = adOffer.kind === 'yakit' && (!adOffer.fuel || state.tanks[adOffer.fuel] >= state.fuelCapacity(adOffer.fuel))
+    if (teklifT <= 0 || vipGitti || tamirBitti || tankDoldu) {
       teklifT = 0
-      if (adOffer.kind === 'vip' || adOffer.kind === 'seri') {
+      if (adOffer.kind === 'vip' || adOffer.kind === 'seri' || adOffer.kind === 'yakit' || adOffer.kind === 'tamir') {
         adBtn.style.display = 'none'
         vipAday = null; seriYedek = 0
         adCooldown = Math.max(adCooldown, 45)   // kriz sonrası hemen 'rush' teklifi çıkmasın
@@ -6443,6 +6526,8 @@ function frame() {
     state.dayLostMoney = 0
     state.adSeriUsed = 0      // ödüllü reklam hakları her gün tazelenir
     state.adVipUsed = 0
+    state.adYakitUsed = 0
+    state.adTamirUsed = 0
     // B6 (analiz): İLK GÜN raporu = duygusal kontrol noktası — misafire kayıp-anı
     // hatırlatması (oturumda tek gate: 10k gate'i zaten çıktıysa tekrarlama)
     if (!auth.loggedIn() && state.day === 2 && brut > 0 && !firstTenGateShown && !guestGateShown) {
@@ -6761,14 +6846,18 @@ function frame() {
     if (c.phase === 'atPump' && c.kind === 'fuel') c.beingServed = c.filling || !!c.nozzle
     if (!(c.filling && c.kind === 'fuel' && c.phase === 'atPump' && c.nozzle && !c.wrongFuelHandled)) continue
     if (c.slotIndex >= 0 && state.brokenPumps.has(c.slotIndex)) {
+      const bozukPompa = c.slotIndex   // finishSale slotu boşaltıyor → önce yakala
       ui.toast(t('Pompa arızalandı — dolum yarıda kaldı, tamir gerekli.'), 'bad')
       notifyIfHidden(t('Pompa arızalandı — tamir gerekli!'), 'ariza-pompa')
       finishSale(c)
+      teklifUcretsizTamir('pump', bozukPompa)
       continue
     }
     if (state.tanks[c.nozzle] <= 0) {
+      const bosYakit = c.nozzle        // finishSale tabancayı bırakıyor → önce yakala
       ui.toast(t('{0} tankı boş kaldı! Satış yarım kaldı — sipariş ver.', t(FUEL_LABEL[c.nozzle])), 'bad')
       finishSale(c)
+      teklifAcilYakit(bosYakit)
       continue
     }
     // personel eğitimi hızlandırır, EKİPMAN YIPRANMASI yavaşlatır (Katman 2b)

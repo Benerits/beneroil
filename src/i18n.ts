@@ -1383,6 +1383,17 @@ const EN: Record<string, string> = {
   'Reklam İzle: Seriyi Koru (×{0})': 'Watch Ad: Keep the Streak (×{0})',
   'Kaçırdığın müşteri: {0} → ₺{1}': 'Customers you lost: {0} → ₺{1}',
 
+  // --- Ödüllü reklam: acil yakıt teslimatı + ücretsiz tamir ---
+  'Reklam İzle: Acil {0} Teslimatı ({1} L)': 'Watch Ad: Emergency {0} Delivery ({1} L)',
+  'Reklam İzle: Ücretsiz Tamir': 'Watch Ad: Free Repair',
+  'Acil teslimat geldi: {0} tankına +{1} L — satışa devam!':
+    'Emergency delivery arrived: +{1} L into the {0} tank — keep selling!',
+  'Tank zaten dolu — teslimata gerek kalmadı, hakkın duruyor.':
+    'The tank is already full — no delivery needed, your reward is still available.',
+  'Pompa #{0} ücretsiz onarıldı — hemen servise hazır!': 'Pump #{0} repaired for free — back in service!',
+  'Şarj #{0} ücretsiz onarıldı — hemen servise hazır!': 'Charger #{0} repaired for free — back in service!',
+  'Ünite zaten onarılmış — hakkın duruyor.': 'The unit is already repaired — your reward is still available.',
+
   // --- Marina: kulüp üyelik aidatı ---
   'Kulüp aidatı: {0} üye → +₺{1}': 'Club dues: {0} members → +₺{1}',
 
@@ -3118,6 +3129,17 @@ const FR: Record<string, string> = {
   "Reklam İzle: VIP'yi Elde Tut (₺{0})": 'Regarder une pub : garder le VIP (₺{0})',
   'Reklam İzle: Seriyi Koru (×{0})': 'Regarder une pub : garder la série (×{0})',
   'Kaçırdığın müşteri: {0} → ₺{1}': 'Clients perdus : {0} → ₺{1}',
+
+  // --- Ödüllü reklam: acil yakıt teslimatı + ücretsiz tamir ---
+  'Reklam İzle: Acil {0} Teslimatı ({1} L)': 'Regarder une pub : livraison {0} d’urgence ({1} L)',
+  'Reklam İzle: Ücretsiz Tamir': 'Regarder une pub : réparation gratuite',
+  'Acil teslimat geldi: {0} tankına +{1} L — satışa devam!':
+    'Livraison d’urgence arrivée : +{1} L dans la cuve {0} — continue à vendre !',
+  'Tank zaten dolu — teslimata gerek kalmadı, hakkın duruyor.':
+    'La cuve est déjà pleine — livraison inutile, ta récompense reste disponible.',
+  'Pompa #{0} ücretsiz onarıldı — hemen servise hazır!': 'Pompe #{0} réparée gratuitement — de nouveau en service !',
+  'Şarj #{0} ücretsiz onarıldı — hemen servise hazır!': 'Borne #{0} réparée gratuitement — de nouveau en service !',
+  'Ünite zaten onarılmış — hakkın duruyor.': 'L’unité est déjà réparée — ta récompense reste disponible.',
 
   // --- Marina: kulüp üyelik aidatı ---
   'Kulüp aidatı: {0} üye → +₺{1}': 'Cotisations du club : {0} membres → +₺{1}',

@@ -727,10 +727,53 @@ export class GameState {
   // sınırlı: nadir olan değerli görünür, sınırsız kurtarma mekaniği de anlamsızlaştırır.
   adSeriUsed = 0        // "seriyi kurtar" — günde en fazla 2
   adVipUsed = 0         // "VIP'yi elde tut" — günde en fazla 2
+  adYakitUsed = 0       // "acil yakıt teslimatı" — günde en fazla 2
+  adTamirUsed = 0       // "ücretsiz tamir" — günde en fazla 2
   static readonly AD_SERI_LIMIT = 2
   static readonly AD_VIP_LIMIT = 2
+  static readonly AD_YAKIT_LIMIT = 2
+  static readonly AD_TAMIR_LIMIT = 2
+  /** acil teslimatın litresi — NAKİT DEĞİL MAL: satmak yine oyuncunun işi */
+  static readonly AD_YAKIT_LITRE = 300
   get adSeriHak() { return Math.max(0, GameState.AD_SERI_LIMIT - this.adSeriUsed) }
   get adVipHak() { return Math.max(0, GameState.AD_VIP_LIMIT - this.adVipUsed) }
+  get adYakitHak() { return Math.max(0, GameState.AD_YAKIT_LIMIT - this.adYakitUsed) }
+  get adTamirHak() { return Math.max(0, GameState.AD_TAMIR_LIMIT - this.adTamirUsed) }
+
+  /**
+   * ACİL YAKIT TESLİMATI (ödüllü reklam ödülü). Tanka ANINDA yakıt koyar ama
+   * KAPASİTEYİ ASLA AŞMAZ — sunucu da kaydı fuelCapacity'ye kırpıyor (server/index.js
+   * ~727), aşan litre zaten sessizce buharlaşırdı.
+   *
+   * ÖDÜL = FIRSAT: kasaya tek kuruş girmez, yalnızca sipariş beklemeden satış yapma
+   * şansı verilir. Ekonomi şişmez.
+   *
+   * FAIL-CLOSED: hak yoksa VEYA tank zaten doluysa hiçbir şey harcanmaz (0 döner) —
+   * boşa yanan bir hak oyuncuya "reklam izledim, hiçbir şey olmadı" dedirtir.
+   */
+  adYakitTeslim(f: FuelType): number {
+    if (this.adYakitHak <= 0) return 0
+    const ekle = Math.max(0, Math.min(GameState.AD_YAKIT_LITRE, this.fuelCapacity(f) - this.tanks[f]))
+    if (ekle <= 0) return 0
+    this.tanks[f] += ekle
+    this.adYakitUsed++
+    return ekle
+  }
+
+  /**
+   * ÜCRETSİZ TAMİR (ödüllü reklam ödülü): bozuk üniteyi parasız onarır.
+   * FAIL-CLOSED: hak yoksa veya ünite ARTIK BOZUK DEĞİLSE (oyuncu bu arada kendi
+   * parasıyla tamir ettiyse) hak harcanmaz, false döner. Para İADESİ DE YOKTUR —
+   * ödül nakde çevrilemez, yalnızca gideri baştan engeller.
+   */
+  adTamirYap(kind: 'pump' | 'charger', i: number): boolean {
+    if (this.adTamirHak <= 0) return false
+    const bozuk = kind === 'pump' ? this.brokenPumps : this.brokenChargers
+    if (!bozuk.has(i)) return false
+    bozuk.delete(i)
+    this.adTamirUsed++
+    return true
+  }
 
   /** seri çarpanı: 3 servis → ×1.1, 6 → ×1.25, 10+ → ×1.5 */
   comboMult(): number {
@@ -3313,8 +3356,9 @@ const SAVE_FIELDS = [
   // ÖDÜLLÜ REKLAM ÖDÜLÜ KAYDA GİRER: "refresh atınca müşteri patlaması kayboluyor"
   // şikâyeti — izlenen reklamın karşılığı yenilemede yanmamalı.
   'promo',
-  // ödüllü reklam günlük hakları (ADDITIVE; eski kayıtta yok → 0'dan başlar)
-  'adSeriUsed', 'adVipUsed',
+  // ödüllü reklam günlük hakları (ADDITIVE; eski kayıtta yok → 0'dan başlar).
+  // BU SATIRI UNUTMA: hak sayacı kaydedilmezse F5 ile sınırsız ödül alınır.
+  'adSeriUsed', 'adVipUsed', 'adYakitUsed', 'adTamirUsed',
   // GÜN GİDER DÖKÜMÜ (ADDITIVE): "kasadan para eriyor" sorusu çoğu zaman oyun yeniden
   // AÇILDIKTAN sonra soruluyor. Döküm kaydedilmezse Ofis paneli boş kalır ve soru
   // yine cevapsız. Yalnız GÖSTERİM verisi — hiçbir para hesabına girmez.
