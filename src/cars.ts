@@ -1911,8 +1911,15 @@ export class CarManager {
    *  hız yok, rezervasyon yok) yalnız konum düzeltiliyor.
    *  Uniform grid'i yeniden kullanır — O(n²) değil. */
   private gorselAyrim(dt: number) {
-    const AYRIM = 1.38            // ölçümle seçildi: 1.55 salınım yaptı, 1.15 etkisizdi
-    const KUVVET = Math.min(1, dt * 5.5) // ölçümle seçildi: dt*9 akışı bozdu, dt*3.5 etkisizdi
+    // ÖLÇÜM HATASI DÜZELTİLDİ: eşik 1.38'di ama ARAÇ GÖVDESİ 2.66 birim uzunluğunda
+    // (front 1.34 + rear 1.32). Yani eşik aracın YARISI kadardı — üst üste binmeyi hiç
+    // yakalamıyordu, oyuncu 20 araçlık yığın gönderdi. İki gövdenin ayrık durması için
+    // merkez mesafesi ~2.6 olmalı; kuyruk aralığı 2.8 olduğu için 2.15'te tutuyoruz
+    // (kuyruğu bozmadan gövde çakışmasını yakalayan en büyük değer).
+    const AYRIM = 2.15
+    // Mesafe büyüdüğü için kuvvet DÜŞÜRÜLDÜ: aynı kuvvetle araçlar birbirini fırlatıp
+    // kuyruğu dağıtıyordu. Yumuşak itme + büyük eşik = gövdeler ayrık, akış bozulmuyor.
+    const KUVVET = Math.min(1, dt * 2.2)
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'transit') continue
       const cp = c.group.position
