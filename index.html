@@ -492,9 +492,10 @@
     /* ORTA OYUN REHBERİ — Şubeler panelinin tepe şeridi: yıldız · kalan · ne açılacak.
        Detay kartları aşağıda duruyor; bu şerit oyuncunun ARAMADAN görmesi gereken tek
        cümleyi en üste alır (bkz. main.ts rehberSeridi). */
+    /* Vurgu alt kenarda (bkz. .hnote): oyunun tabela derinliği dili, sol renkli ray değil. */
     .rh-strip { background: var(--paper-2); border: 1.5px solid var(--edge);
-                border-left: 4px solid var(--gold-ink);
-                border-radius: 13px; padding: 11px 13px; margin: 2px 0 10px; }
+                border-bottom: 4px solid var(--gold-ink);
+                border-radius: 13px; padding: 11px 13px 10px; margin: 2px 0 10px; }
     .rh-main { font-size: 13.5px; font-weight: 850; color: var(--ink); line-height: 1.4; }
     .rh-num { font-size: 11.5px; font-weight: 750; color: var(--muted);
               font-variant-numeric: tabular-nums; }
@@ -1663,9 +1664,14 @@ Sorun / Öneri Bildir
     .hnum.good { color: var(--green-ink); } .hnum.bad { color: var(--red-ink); }
     .hprog { font-size: 11px; font-weight: 700; color: var(--muted); }
     .pz-fill.hot { background: linear-gradient(90deg, var(--orange), var(--red)); }
+    /* NOT KARTI — vurgu SOL RAYDA değil ALT KENARDA. Sol renkli şerit + yuvarlak kart
+       oyunun hiçbir yerinde kullanılmıyor; oyunun imzası tam çerçeve + kalın alt kenar
+       ("tabela derinliği": butonlar border-bottom-width:4px, modal 7px). Sol ray hem
+       yabancı duruyordu hem de jenerik şablon havası veriyordu. */
     .hnote { font-size: 11.5px; font-weight: 700; color: var(--ink); background: var(--paper-2);
-             border-left: 3px solid var(--orange); border-radius: 10px; padding: 7px 9px; margin-top: 9px; line-height: 1.4; }
-    .hnote-line { border-left-color: var(--red); }
+             border: 1.5px solid var(--edge); border-bottom: 3px solid var(--orange);
+             border-radius: 10px; padding: 7px 9px 6px; margin-top: 9px; line-height: 1.4; }
+    .hnote-line { border-bottom-color: var(--red); }
     .hact { width: 100%; justify-content: center; margin-top: 10px; }
     .hline { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%; text-align: left;
              background: none; border: 0; border-top: 1px solid var(--line); border-radius: 9px;
