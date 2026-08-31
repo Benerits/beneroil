@@ -298,9 +298,13 @@ const SENARYOLAR = {
             hasRestaurant: true, hasTruckPark: true, solarCount: 3,
             unlockedLocs: ['kasaba', 'cevreyolu', 'otoyol'], activeLoc: 'kasaba',
             tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
-    isinma: 5000,   // trafik otursun: hook karesinde istasyon DOLU görünsün, boş beton değil
+    // ISINMA 22 sn: araçların pompaya VARMASI gerekiyor, sadece yola çıkması değil.
+    // Ölçüldü: 18 sn'de 4, 28 sn'de 6 araç pompada. Kısa ısınmada hook karesi boş
+    // beton gösteriyordu. (Asıl sebep ayrıca düzeltildi: vitrin modunda kayıt kapısı
+    // trafiği tamamen kapatıyordu — bkz. donusumKapisiKapali, tools/tests/vitrin-check.)
+    isinma: 22000,
     async oyna(p) {
-      // ── HOOK (0 → 2,4 sn): kalabalık istasyon + tek iddia ──
+      // ── HOOK (0 → 2,4 sn): DOLU istasyon + tek iddia ──
       await p.evaluate(() => {
         const d = window.__dbg
         // ?full=1 vitrin state'i şubeleri/yıldızı kurmuyor; harita PANELİ 3B sahneye
@@ -310,7 +314,15 @@ const SENARYOLAR = {
           d.state.unlockedLocs = ['kasaba', 'cevreyolu', 'otoyol']
           d.state.brandStars = 6
         }
-        d.cine?.setCam?.(-3.4, 6.0, 2.2)
+        // GENİŞ KURULUŞ PLANI: zoom 2.2 en dar uçlardandı ve kadraja bina köşeleri,
+        // konteyner, reaktör kulesi giriyordu — "benzin istasyonu" bile demiyordu.
+        d.cine?.setCam?.(0, 4, 1.25)
+        // HOOK'TA DA NEGATİF TOAST ÇIKABİLİR ("müşteri sıkıldı gitti") — çekimde kimse
+        // servis yapmıyor. Reklamda oyunun kendi kötü haberini göstermeyelim; toast'lar
+        // baştan kapalı, mesajı overlay yazısı taşıyor.
+        const s0 = document.createElement('style')
+        s0.textContent = '#toasts{display:none !important}'
+        document.head.appendChild(s0)
         window.__vo.yaz('GÜNCELLEME', 'Tek istasyonla\nbaşladın.', '')
       })
       await bekle(p, 2400)
@@ -322,6 +334,17 @@ const SENARYOLAR = {
       // ── 4,0 → 7,0: HARİTA EKRANDA (videonun asıl vaadi, erken gelsin) ──
       await p.evaluate(() => {
         window.__vo.sil()
+        // MÜŞTERİ KARTI + TOAST'LAR HARİTA BEAT'LERİNDE İNSİN.
+        //  · Kart hook'ta duruyor (oynanış kanıtı) ama haritanın üstüne binince alt
+        //    yazının alanını kirletiyor. Tek seferlik style ataması YETMİYOR: ui.sync()
+        //    her karede kartı yeniden gösteriyor ve ezyor — bu yüzden !important kural.
+        //  · Toast'lar kapatılıyor çünkü çekimde kimse müşteriye servis yapmıyor ve
+        //    "Müşteri beklemekten sıkıldı ve gitti!" gibi NEGATİF mesajlar çıkıyor.
+        //    Reklam videosunda oyunun kendi kötü haberini göstermek istemeyiz.
+        const s = document.createElement('style')
+        s.id = 'vo-harita-temizlik'
+        s.textContent = '#panel{display:none !important}#infocard{display:none !important}#toasts{display:none !important}'
+        document.head.appendChild(s)
         document.getElementById('locbtn')?.click()
         document.querySelector('#locmenu button[data-qloc="__harita"]')?.click()
       })
