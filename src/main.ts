@@ -692,6 +692,9 @@ const CHIP_BILGI: Record<string, () => { baslik: string; metin: string }> = {
   batarya: () => ({ baslik: t('Batarya'), metin: t('Depolanan elektrik (kWh). Şarj üniteleri buradan besleniyor. Güneş paneli gündüz doldurur, jeneratör dizelden üretir, şebeke sürekli akıtır.') }),
   seri: () => ({ baslik: t('Giriş Serisi'), metin: t('Üst üste kaç gün girdiğin. Seri uzadıkça günlük giriş bonusu büyür (₺500\'den ₺2.000\'e kadar). Bir gün atlarsan sıfırlanır.') }),
   isik: () => ({ baslik: t('Işık'), metin: t('Gece aydınlatman. Sokak lambası ve tabela seviyesi arttıkça gece müşteri akışı ve itibar artar.') }),
+  // ORTA OYUN REHBERİ: "yıldızım kaç, sıradaki için ne gerek, o yıldız neyi açar, şube
+  // nerede ve kaça" — dördünün de cevabı tek dokunuşta (bkz. rehberBilgiMetni).
+  marka: () => ({ baslik: t('Marka Yıldızı'), metin: rehberBilgiMetni() }),
 }
 {
   const kutu = document.getElementById('chipinfo')
@@ -711,6 +714,190 @@ const CHIP_BILGI: Record<string, () => { baslik: string; metin: string }> = {
     kutu.style.top = `${Math.min(r.bottom + 8, window.innerHeight - k.height - 8)}px`
   })
 }
+// ═══════════════ ORTA OYUN REHBERİ — MARKA YILDIZI & ŞUBE YOLU ═══════════════
+//
+// KÖK NEDEN (açık geri bildirim taraması): "öğrenilebilirlik" sanılan kayıtların en
+// büyük kümesi ilk dakikalar DEĞİL, orta oyun. 7 kayıt doğrudan "marka yıldızı / yeni
+// şube nasıl açılır" diye soruyor (#1003 #1144 #1174 #1257 #1258 #653 #1264). #1264
+// "yapacak bir şey kalmadı" diyor — oysa şube sistemi orada duruyor, oyuncu GÖREMİYOR.
+//
+// Bilgi eksik değildi, GÖRÜNÜR değildi: Ofis › Şubeler panelinin içinde, oyuncunun
+// aramayı bilmesi gereken bir yerde duruyordu. Üç katman ekliyoruz, hepsi state.rehber()
+// diye TEK kaynaktan okuyor (üç ayrı hesap = birbirini tutmayan üç metin):
+//   1) HUD rozeti      — yıldız + sıradaki yıldıza yüzde, her an ekranda
+//   2) Bilgi kutusu    — rozete dokununca: kaç kaldı, hangi şube açılacak, nereye gidilir
+//   3) Proaktif toast  — oyuncu TIKANDIĞI anda kendiliğinden gelir, araması gerekmez
+//
+// Yeni sistem icat edilmedi: HUD bilgi kutuları (data-bilgi) ve toast zaten vardı.
+const trY = (n: number) => Math.round(n).toLocaleString('tr-TR')
+
+/** Rehberin şube satırını insan cümlesine çevirir: "Otoyol · 6★ · ₺2.000.000" */
+function rehberSubeMetni(s: { name: string; stars: number; cash: number }): string {
+  return `${s.name} · ${s.stars}★ · ₺${trY(s.cash)}`
+}
+/** Sıradaki yıldızın SOMUT karşılığı: "→ Otoyol şubesi açılır." */
+function rehberYildizOdulu(r: ReturnType<GameState['rehber']>): string {
+  const s = r.yildizAcar.length
+    ? t('→ {0} şubesi açılır', r.yildizAcar.map(x => x.name).join(', '))
+    : t('→ gelir çarpanın ve müşteri akışın kalıcı büyür')
+  // Nokta kodda ekleniyor: bu parça hem cümle SONUNDA (HUD şeridi) hem cümle ORTASINDA
+  // (bilgi kutusu, bildirim) kullanılıyor. Noktasız hâlinde iki cümle birbirine
+  // yapışıyordu ("…kalıcı büyür Eşik ŞİRKETİN TAMAMINA bakar") — ekran görüntüsünde görüldü.
+  return s + '.'
+}
+
+/**
+ * ŞUBELER PANELİNİN TEPE ŞERİDİ — tek bakışta yol haritası:
+ *   "3★ · sıradaki yıldıza ₺420.000 kaldı → Otoyol şubesi açılır"
+ * Panelin altında zaten detaylı kartlar var; bu şerit oyuncunun aramadan görmesi
+ * gereken TEK cümleyi en üste alır ve sıradaki EYLEMİ adıyla söyler.
+ */
+function rehberSeridi(): string {
+  const r = state.rehber()
+  const hedefSat = r.acilabilir.length
+    ? `<div class="rh-do good">${t('ŞİMDİ AÇABİLİRSİN: {0}', r.acilabilir.map(rehberSubeMetni).join(' · '))}</div>`
+    : r.hedef
+      ? `<div class="rh-do">${r.hedef.starsLeft > 0
+          ? t('Sıradaki şube: {0} — {1} yıldız daha', rehberSubeMetni(r.hedef), String(r.hedef.starsLeft))
+          : t('Sıradaki şube: {0} — ₺{1} daha biriktir', rehberSubeMetni(r.hedef), trY(r.hedef.cashLeft))}</div>`
+      : `<div class="rh-do">${t('Tüm şubeler açık — marka yıldızı biriktirmeye devam et.')}</div>`
+  // ANA SATIR: yıldız · sıradaki yıldıza kalan · o yıldızın ne açacağı
+  const ana = r.ready
+    ? t('{0}★ · SIRADAKİ YILDIZ HAZIR {1}', String(r.stars), rehberYildizOdulu(r))
+    : r.engel
+      ? (r.engel === 'kredi'
+          ? t('{0}★ · sıradaki yıldız kredin kapanana kadar bekliyor', String(r.stars))
+          : t('{0}★ · sıradaki yıldız ortaklığın bitene kadar bekliyor', String(r.stars)))
+      : t('{0}★ · sıradaki yıldıza ₺{1} kaldı {2}', String(r.stars), trY(r.remaining), rehberYildizOdulu(r))
+  // #653 ÇIKIŞ YOLU: "yer kalmadı" hissindeki oyuncuya, arsası dolsa bile yolun açık
+  // olduğunu ve nereden ilerleyeceğini yazar. Ölçüm: tek şubeye ₺1,96M kurulabiliyor,
+  // eşik ise şube başına ₺1,5M — yol matematiksel olarak hiç tıkanmıyor.
+  const cikis = r.yerDoldu
+    ? `<div class="rh-out">${r.bosSube.length
+        ? t('Arsan doldu diye tıkanmazsın: eşik ŞİRKETİN TAMAMINA bakar — {0} şubene kurduğun ekipman da bu çubuğu doldurur.', r.bosSube.map(id => themeFor(id).name).join(', '))
+        : t('Arsan doldu diye tıkanmazsın: eşik ŞİRKETİN TAMAMINA bakar. Tavanı yükseltmenin yolu yeni şube açmak.')}</div>`
+    : ''
+  return `<div class="rh-strip"><div class="rh-main">${ana}</div>`
+    + `<div class="pz-bar" style="margin:6px 0 5px"><div class="pz-fill" style="width:${r.ready ? 100 : r.pct}%"></div></div>`
+    + `<div class="rh-num">₺${trY(r.equip)} / ₺${trY(r.threshold)} · %${r.pct}</div>`
+    + hedefSat + cikis + `</div>`
+}
+
+/** HUD marka rozeti: yıldız sayısı + sıradaki yıldıza kalan yüzde. */
+function markaRozetiniTazele() {
+  const chip = document.getElementById('markachip')
+  if (!chip) return
+  const r = state.rehber()
+  // NE ZAMAN GÖRÜNÜR: marka yıldızı ORTA OYUNUN konusu. 1. günün oyuncusunda HUD'ı
+  // kalabalıklaştırmak yerine sistem anlam kazanınca açılır — yıldızı varsa, eşiğin
+  // dörtte birine geldiyse ya da zaten ikinci şubesi varsa.
+  const gorunur = r.stars > 0 || r.pct >= 25 || state.unlockedLocs.length > 1
+  const disp = gorunur ? 'flex' : 'none'
+  if (chip.style.display !== disp) chip.style.display = disp
+  if (!gorunur) return
+  const st = document.getElementById('hud-marka-st')
+  const pct = document.getElementById('hud-marka-pct')
+  const fill = document.getElementById('hud-marka-fill')
+  const stTx = `${r.stars}★`
+  // DEVİR HAZIRSA yüzde değil "HAZIR" yazar: %100 gördüğü hâlde ne yapacağını bilmeyen
+  // oyuncu tam da bu raporun konusu (#653). Rozet eylemi söyler.
+  const pctTx = r.ready ? t('HAZIR') : `%${r.pct}`
+  if (st && st.textContent !== stTx) st.textContent = stTx
+  if (pct && pct.textContent !== pctTx) pct.textContent = pctTx
+  if (fill) fill.style.width = `${r.ready ? 100 : r.pct}%`
+  chip.classList.toggle('marka-hazir', r.ready)
+}
+
+/** Rozete dokununca çıkan bilgi kutusunun gövdesi — dört sorunun da cevabı. */
+function rehberBilgiMetni(): string {
+  const r = state.rehber()
+  const sat: string[] = []
+  sat.push(t('Marka yıldızı KALICI güçtür: her yıldız gelir çarpanını, müşteri akışını ve devir sonrası kuruluş sermayeni büyütür. Yıldızlar hiç kaybolmaz.'))
+  if (r.ready) {
+    sat.push(t('ŞU AN {0}. yıldızı alabilirsin. {1}', String(r.stars + 1), rehberYildizOdulu(r)))
+    sat.push(t('Nereden: Ofis › Şubeler › Marka & Devir → “İstasyonu Devret”.'))
+  } else if (r.engel) {
+    sat.push(r.engel === 'kredi'
+      ? t('Sıradaki yıldız BEKLİYOR: açık kredin var. Kredi kapanmadan istasyon devredilemez.')
+      : t('Sıradaki yıldız BEKLİYOR: aktif ortaklığın var. Ortaklık bitmeden istasyon devredilemez.'))
+  } else {
+    sat.push(t('{0}. yıldıza kalan: ₺{1} kurulu ekipman (₺{2} / ₺{3}, %{4}). {5}',
+      String(r.stars + 1), trY(r.remaining), trY(r.equip), trY(r.threshold), String(r.pct), rehberYildizOdulu(r)))
+    // ÇIKIŞ YOLU (#653 "yer kalmadı"): eşik ŞİRKET GENELİ ekipmana bakar. Arsası dolan
+    // oyuncu tıkanmaz — başka şubesine kurduğu ekipman da bu barı doldurur.
+    sat.push(t('Eşik ŞİRKETİN TAMAMINA bakar: başka şubene kurduğun ekipman da bu çubuğu doldurur. Arsan doldu diye tıkanmazsın.'))
+  }
+  if (r.acilabilir.length) {
+    sat.push(t('ŞİMDİ AÇABİLECEĞİN ŞUBE: {0}. Ofis › Şubeler’den aç.',
+      r.acilabilir.map(rehberSubeMetni).join(' · ')))
+  } else if (r.hedef) {
+    sat.push(r.hedef.starsLeft > 0
+      ? t('Sıradaki şube: {0} — {1} yıldız daha gerekiyor.', rehberSubeMetni(r.hedef), String(r.hedef.starsLeft))
+      : t('Sıradaki şube: {0} — ₺{1} daha biriktir.', rehberSubeMetni(r.hedef), trY(r.hedef.cashLeft)))
+  } else {
+    sat.push(t('Tüm şubeler açık — marka yıldızı biriktirmeye devam et.'))
+  }
+  return sat.join(' ')
+}
+
+// ---- PROAKTİF BİLDİRİM: oyuncu TIKANDIĞI anda haber gelir, araması gerekmez ----
+// Durum localStorage'da tutulur (öğreticiyle aynı desen) — oyun KAYDINA yazılmaz, yani
+// save şeması ve sunucu doğrulaması etkilenmez. Her kilometre taşı BİR KEZ duyurulur:
+// tekrar eden toast bilgi değil gürültüdür.
+const REHBER_KEY = 'benzinlik-rehber'
+function rehberGorulen(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(REHBER_KEY) || '[]') as string[]) } catch { return new Set() }
+}
+function rehberDuyur(anahtar: string, mesaj: string, kind: 'good' | 'bad' | '' = 'good'): boolean {
+  // Vitrin/promo modu SESSİZ olmalı (pazarlama ekran görüntüsü toast'la kirlenmesin).
+  // Guard tek noktada: her çağrı yerine ayrı ayrı koymak birini unutmaya davetiye.
+  if (isFullMode || isPromoMode) return false
+  const g = rehberGorulen()
+  if (g.has(anahtar)) return false
+  g.add(anahtar)
+  // son 60 kilometre taşı yeter (liste sonsuz büyümesin)
+  try { localStorage.setItem(REHBER_KEY, JSON.stringify([...g].slice(-60))) } catch { /* kota */ }
+  ui.toast(mesaj, kind, true) // yapışkan: mesaj kutusuna düşsün, oyuncu sonra tekrar okusun
+  return true
+}
+/**
+ * Rehber nabzı — birkaç saniyede bir bakar, DURUM DEĞİŞTİYSE tek bir toast atar.
+ * Sıralama önemlidir: en eyleme dönük olan önce (aynı karede iki toast atmayız).
+ */
+let rehberT = 3 // saniye: rozet/bildirim nabzı (frame içinden sürülür)
+function rehberNabiz() {
+  if (isFullMode || isPromoMode || state.day < 2) return
+  const r = state.rehber()
+  // 1) DEVRE HAZIR — yıldızın kendisi burada kazanılıyor, en yüksek öncelik
+  if (r.ready && rehberDuyur(`hazir:${r.stars}`,
+    t('{0}. MARKA YILDIZI HAZIR: istasyonu devredebilirsin. {1} Ofis › Şubeler › Marka & Devir.',
+      String(r.stars + 1), rehberYildizOdulu(r)))) return
+  // 2) ŞUBE ALINABİLİR HÂLE GELDİ — "yeni şube nasıl açılır" sorusunun cevabı, sorulmadan
+  for (const s of r.acilabilir) {
+    if (rehberDuyur(`sube:${s.id}:${r.stars}`,
+      t('YENİ ŞUBE AÇABİLİRSİN: {0} · ₺{1}. Ofis › Şubeler’den aç — ikinci istasyon ikinci gelir demek.',
+        s.name, trY(s.cash)))) return
+  }
+  // 3) YER KALMADI HİSSİ (#653): eşik şube tavanında, yeni şube de alınamıyor. Oyuncu
+  //    tıkandığını sanır. ÖLÇÜLDÜ (bkz. rehber-check): yol matematiksel olarak HİÇ
+  //    tıkanmaz — tek şubeye kurulabilen tavan ₺1.96M, eşik ise şube başına ₺1.5M.
+  //    Yani eksik olan yer değil, BİLGİ: eşik şirketin tamamına bakar ve pasif şubeye
+  //    kurulan ekipman da sayar. İki somut çıkışı da adıyla yazıyoruz.
+  if (r.yerDoldu) {
+    const bos = r.bosSube.map(id => themeFor(id).name).join(', ')
+    const hedefTx = r.hedef && r.hedef.starsLeft === 0
+      ? ' ' + t('Ya da {0} şubesini aç: ₺{1} daha gerekiyor.', r.hedef.name, trY(r.hedef.cashLeft))
+      : ''
+    if (rehberDuyur(`yer:${r.stars}`, (bos
+      ? t('Arsan doldu diye tıkanmadın: yıldız eşiği ŞİRKETİN TAMAMINA bakar — {0} şubene kurduğun ekipman da sayar (₺{1} kaldı).', bos, trY(r.remaining))
+      : t('Arsan doldu diye tıkanmadın: yıldız eşiği ŞİRKETİN TAMAMINA bakar (₺{0} kaldı). Tavanı yükseltmenin yolu yeni şube açmak.', trY(r.remaining))
+      ) + hedefTx, '')) return
+  }
+  // 4) EŞİĞE YAKLAŞTIN — hedefi görünür tutar ("son düzlük" bilgisi kararı hızlandırır)
+  if (!r.ready && !r.engel && r.pct >= 80 && rehberDuyur(`yakin:${r.stars}`,
+    t('Sıradaki marka yıldızına ₺{0} kaldı ({1}). {2}', trY(r.remaining), `%${r.pct}`, rehberYildizOdulu(r)), '')) return
+}
+
 // TEDARİKÇİ SEÇİMİ (#1067 "akaryakıt alımı için birkaç farklı marka satıcı olabilir"):
 // gerçek marka adı kullanılmıyor (ticari marka) — kurgusal üç dağıtımcı, hız/fiyat takası.
 document.getElementById('supplierrow')?.addEventListener('click', e => {
@@ -1114,7 +1301,10 @@ function openOfficePanel() {
         return ai !== bi ? ai - bi : (isCopyLoc(a) ? 1 : 0) - (isCopyLoc(b) ? 1 : 0)
       })
     const vaultTotal = state.branchVaultTotal()
-    let head = ''
+    // YOL HARİTASI EN ÜSTTE: yıldız · kalan · o yıldızın açacağı şube. Aşağıdaki kartlar
+    // detayı zaten veriyordu ama oyuncu detayı okumadan önce YÖNÜ görmeli (#1264
+    // "yapacak bir şey kalmadı" — oysa yol buradaydı, sadece görünmüyordu).
+    let head = rehberSeridi()
     // ---- MÜDÜR (Oğuz: "müdür tutmayı ofise koyalım") — bu şubenin müdürü buradan ----
     {
       const mL = state.managerLevel
@@ -1151,7 +1341,11 @@ function openOfficePanel() {
       }
     }
     if (vaultTotal > 0) {
-      head = `<div class="prow"><span class="pl"><b>${t('Şube kasalarında bekleyen')}</b></span>`
+      // ESKİ HATA: burası `head =` idi ve ÜSTÜNDEKİ MÜDÜR BLOĞUNU siliyordu — yani
+      // şube kasalarında para biriktiği anda "Müdür Tut" düğmesi ve müdür talimatları
+      // panelden kayboluyordu. Tam da "şubemden para gelmiyor" diyen oyuncunun müdür
+      // tutması gereken an. `+=` olmalı; artık yol haritası şeridi de üstte duruyor.
+      head += `<div class="prow"><span class="pl"><b>${t('Şube kasalarında bekleyen')}</b></span>`
         + `<span class="pc">₺${tl(Math.round(vaultTotal))}</span>`
         + `<button class="btn sbuy good" id="of-collect-vaults">${t('Hepsini Topla')}</button></div>`
     }
@@ -3118,6 +3312,10 @@ let cloudBlocked = false
 // gerçek ilerlemesi DEĞİLDİR (ör. gate'te login olup reload bekleyen taze sayfa) →
 // hiçbir yazma yapılmaz. Bu bayrak olmadan pagehide/autosave hesabı gün-1'e düşürüyordu.
 let cloudSynced = false
+// "BAŞTAN BAŞLA" SÜRERKEN HER KAYIT YOLU SUSAR. Kritik: location.reload() `pagehide`
+// tetikler, o da flushSaveNow() → auth.saveGuest() çağırır — yani yeni sildiğimiz misafir
+// kaydı reload'un TAM İÇİNDE geri yazılırdı ve sıfırlama hiç olmamış gibi görünürdü.
+let sifirlaniyor = false
 
 function savePayload() {
   return { s: serializeState(state), placedPos, placedRot, placedRects, at: Date.now() }
@@ -3303,7 +3501,9 @@ function maybeGuestGate() {
 }
 
 function persist() {
-  if (isFullMode || isPromoMode || cloudBlocked) return
+  // SIFIRLAMA YARIŞI: "Baştan Başla" kaydı sildikten sonra sayfa yenilenene kadar
+  // geçen ~yarım saniyede otomatik kayıt tetiklenirse silinen kaydı geri yazardı.
+  if (isFullMode || isPromoMode || cloudBlocked || sifirlaniyor) return
   if (!auth.loggedIn()) { // MİSAFİR: ilerlemeyi YERELDE tut; gün-5'te kayıt gate'i aç
     auth.saveGuest(savePayload())
     maybeGuestGate()
@@ -4593,7 +4793,7 @@ for (const key of Object.keys(localStorage)) {
 //  • baseUpdatedAt: çoklu-cihaz 409 guard'ı (eski sekme yeniyi ezemesin)
 let lastFlush = 0
 function flushSaveNow() {
-  if (isFullMode || isPromoMode || cloudBlocked || auth.isKicked()) return
+  if (isFullMode || isPromoMode || cloudBlocked || auth.isKicked() || sifirlaniyor) return
   if (!auth.loggedIn()) { auth.saveGuest(savePayload()); return } // misafir: yerel senkron flush
   if (!cloudSynced) return
   if (Date.now() - lastFlush < 2_000) return // hide/show flap'inde sunucu limitine (2/3sn) takılma
@@ -4820,6 +5020,93 @@ document.getElementById('set-tutorial')?.addEventListener('click', () => {
   ui.toast(state.day <= 1
     ? t('Öğretici yeniden başladı — sıradaki müşteride ilk ipucu gelecek.')
     : t('Öğretici sıfırlandı — ipuçları yeni bir istasyonun 1. gününde gösterilir.'), 'good', true)
+})
+
+// ═══════════════════════ BAŞTAN BAŞLA (oyunu sıfırlama) ═══════════════════════
+//
+// 6 açık geri bildirim doğrudan "oyunu nasıl sıfırlarım" diye soruyor (#77 #210 #228
+// #251 #305 #1195). Düğme ASLINDA VARDI — ama iki kusurluydu:
+//   1) BULUNAMIYORDU: "Oyun kaydı otomatik tutulur (her 5 sn)" başlığının altındaydı.
+//   2) MİSAFİRDE ÇALIŞMIYORDU: eski akış yalnız auth.pushSave(null) çağırıyordu; giriş
+//      yapmamış oyuncunun kaydı localStorage'daki 'benzinlik-guest' anahtarında durur ve
+//      hiç silinmezdi → sayfa yenilenince aynı istasyon geri geliyordu. Sıfırlamak
+//      isteyen oyuncuların çoğunluğu hesapsız oyuncudur; yani düğme tam da onlarda ölüydü.
+//
+// Sunucu tarafında MEŞRU sıfırlama yolu pushSave(null)'dır (server/index.js: save=NULL →
+// sonraki push firstSave sayılır, anti-cheat serbest bırakır). Kendi yolumuzu icat
+// etmiyoruz. DEVİRLE (prestige) KARIŞTIRILMAZ: devir ödüllüdür, yıldızları korur; bu
+// işlem hiçbir şey taşımaz.
+let sifirlaArmedAt = 0
+let sifirlaTimer: ReturnType<typeof setTimeout> | null = null
+const SIFIRLA_PENCERE = 8000 // ms: ikinci onay için süre (kaza ile üst üste basılmasın)
+function sifirlaDugmesiniTazele() {
+  const b = document.getElementById('set-restart')
+  if (!b) return
+  const armed = Date.now() - sifirlaArmedAt < SIFIRLA_PENCERE
+  b.textContent = armed ? t('EMİN MİSİN? Silmek için tekrar bas') : t('Baştan Başla')
+  b.classList.toggle('warn', armed)
+}
+async function oyunuSifirla() {
+  sifirlaniyor = true
+  ui.toast(t('Kayıt siliniyor — oyun baştan başlıyor…'), '', true)
+  // 1) BULUT: meşru sıfırlama yolu (server/index.js yorumları) — save=NULL
+  if (auth.loggedIn()) await auth.pushSave(null).catch(() => { /* çevrimdışı: yerel silme yine de olsun */ })
+  // 2) YEREL: misafir kaydı + sahne ipucu. Bunlar silinmezse reload eski istasyonu geri kurar.
+  auth.clearGuest()
+  try {
+    localStorage.removeItem(LOC_HINT_KEY)   // sahne varsayılan şubeyle (kasaba) kurulsun
+    localStorage.removeItem(DEVIR_RAPOR_KEY) // önceki devrin raporu yeni oyuna taşmasın
+    localStorage.removeItem(REHBER_KEY)      // rehber kilometre taşları yeniden duyurulsun
+    localStorage.removeItem(TUT_KEY)         // baştan başlayan oyuncu ilk ipuçlarını yine görsün
+    localStorage.removeItem(TUT_ESKI_KEY)
+  } catch { /* kota/gizli sekme */ }
+  // 3) Otomatik kayıt bu sıfırlamanın ÜSTÜNE yazmasın diye yeniden yükle (kalıcı hâl sunucuda NULL)
+  location.reload()
+}
+document.getElementById('set-restart')?.addEventListener('click', () => {
+  // ÇİFT ONAY: ilk basış düğmeyi "kurar", ikincisi siler. Kayıp listesi düğmenin hemen
+  // üstünde zaten yazılı (#restart-what) — oyuncu neyi kaybettiğini okumadan basamaz.
+  if (Date.now() - sifirlaArmedAt >= SIFIRLA_PENCERE) {
+    sifirlaArmedAt = Date.now()
+    sifirlaDugmesiniTazele()
+    ui.toast(t('Bu işlem GERİ ALINAMAZ: istasyonun, paran, günün, marka yıldızların ve şubelerin silinir. Onaylamak için düğmeye 8 saniye içinde tekrar bas.'), 'bad', true)
+    if (sifirlaTimer) clearTimeout(sifirlaTimer)
+    sifirlaTimer = setTimeout(sifirlaDugmesiniTazele, SIFIRLA_PENCERE + 50) // süre dolunca kendini geri alır
+    return
+  }
+  sifirlaArmedAt = 0
+  if (sifirlaTimer) { clearTimeout(sifirlaTimer); sifirlaTimer = null }
+  sifirlaDugmesiniTazele()
+  void oyunuSifirla()
+})
+
+// ═══════════ SİSTEM ÖN-UYARILARI: "aniden gelen" sistemler önce haber verir ═══════════
+//
+// 4 açık kayıt (#453 #819 #1217 #1208) ruhsat/denetim, sözleşme cezası ve kredi gibi
+// sistemlerin NE İŞE YARADIĞINI ve NE ZAMAN DEVREYE GİRDİĞİNİ soruyor. Bu sistemler
+// oyuncuya ilk kez KESİNTİ olarak görünüyor — sebebini sonradan anlıyor.
+//
+// Yeni sistem kurulmadı: mevcut toast (yapışkan → mesaj kutusuna düşer) ve rehberDuyur'un
+// tek-seferlik kilometre taşı defteri kullanıldı. Her uyarı bir kez, ilk devreye
+// girmeden ÖNCE, tek cümlede.
+function sistemOnUyarilari() {
+  if (isFullMode || isPromoMode) return
+  // RUHSAT & DENETİM — 30 günde bir kesilir. 3 gün önceden haber verilir ki oyuncu
+  // kasasında parayı bulundursun (parası varsa otomatik ödenir, yoksa itibar cezası).
+  if (state.day >= state.licenseDueDay - 3 && state.day < state.licenseDueDay) {
+    rehberDuyur('sistem:ruhsat', t('Gün {0}: işletme ruhsatın yenilenecek (~₺{1}, 30 günde bir). Kasanda para varsa otomatik ödenir; yetmezse denetim itibarını düşürür.',
+      String(state.licenseDueDay), trY(state.licenseFee())), '')
+  }
+  // SÖZLEŞME CEZASI — ilk ihale teklifi görününce, İMZALAMADAN önce.
+  if (!state.contract && state.contractOffers().length > 0) {
+    rehberDuyur('sistem:sozlesme', t('İhale teklifleri açıldı. Sözleşme bir GÜNLÜK TAAHHÜTTÜR: teslim edemediğin her gün ceza kesilir. Tankında taahhüdün 2 katını tutarsan gün sonunda otomatik tamamlanır ve ceza yemezsin.'), '')
+  }
+}
+
+// KREDİ — banka ilk kez açıldığında, para almadan ÖNCE. Kredi yıldız yolunu da
+// duraklatır (canHandover borçsuzluk ister); oyuncu bunu ödeme gecikince öğreniyordu.
+document.getElementById('of-bank')?.addEventListener('click', () => {
+  rehberDuyur('sistem:kredi', t('Kredi TEMİNATLIDIR: taksit gecikirse rehin verdiğin binalara haciz gelir. Ayrıca kredi açıkken istasyonu DEVREDEMEZSİN — marka yıldızı yolun kredi kapanana kadar durur.'), '')
 })
 
 // oyun içi canlı t("OYUNDA") sayacı — 60 sn'de bir tazelenir (sosyal kanıt)
@@ -6052,6 +6339,10 @@ function frame() {
     if (document.getElementById('officewrap')?.classList.contains('show')) openOfficePanel()
     // Harita da güne bağlı: tedarik kotası gün dönüşünde sıfırlanır, bedeller/netler değişir
     if (haritaAcikMi()) haritaCiz()
+    // SİSTEM ÖN-UYARILARI: ruhsat/denetim ve ihale cezası ilk kez devreye girmeden ÖNCE
+    // tek cümleyle haber verilir (#453 #819 #1217 #1208). Gün dönümü doğru an: eşikler
+    // güne bağlı ve toast gün sonu kalabalığında kaybolmaz (yapışkan → mesaj kutusunda).
+    sistemOnUyarilari()
     // RUHSAT & DENETİM (Katman 2b): 30 günde bir, varlıkla ölçekli. Ödenmezse itibar cezası
     // — ritim + tehdit. Parası olan otomatik öder (mikro-yönetim yaratmaz).
     if (state.day >= state.licenseDueDay) {
@@ -6467,6 +6758,11 @@ function frame() {
   syncHoses()
   updateCamera()
   ui.update(state, dt)
+  // ORTA OYUN REHBERİ: rozet + proaktif bildirim. Her karede değil 2 sn'de bir bakılır —
+  // rehber() şube anlık görüntülerini gezdiği için ucuz değil, HUD için de o kadar taze
+  // olması yeterli. (ui.ts'e dokunulmuyor: rozet buradan sürülüyor.)
+  rehberT -= dt
+  if (rehberT <= 0) { rehberT = 2; markaRozetiniTazele(); rehberNabiz() }
   if (trafficDbg) trafficDbg.update({
     zones: cars.graphRef.zones,
     snapshot: () => cars.graphRef.snapshot(),

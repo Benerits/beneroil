@@ -53,6 +53,9 @@
       --green-ink: #1d7c45;
       --orange-ink: #bd6a1e;
       --blue-ink: #2f6fed;
+      /* MARKA YILDIZI mürekkebi. Eskiden #d9a521 üç ayrı yere elle yazılmıştı; marka
+         yıldızı artık HUD'da da göründüğü için tek token oldu (koyu temada açılır). */
+      --gold-ink: #a8791a;
       --good-soft: #eef7f1;      /* olumlu bildirim zemini */
       --bad-soft: #fbeeee;       /* olumsuz bildirim zemini */
       --fab-ink: #8a7c62;        /* mobil FAB plakalarının mürekkebi */
@@ -99,6 +102,7 @@
         --green-ink: #5fd08e;
         --orange-ink: #f0aa63;
         --blue-ink: #8fb4f8;
+        --gold-ink: #f0cc63;
         --good-soft: #1e3327;
         --bad-soft: #3a2225;
         --fab-ink: #c9b4b1;
@@ -125,6 +129,7 @@
       --green-ink: #5fd08e;
       --orange-ink: #f0aa63;
       --blue-ink: #8fb4f8;
+      --gold-ink: #f0cc63;
       --good-soft: #1e3327;
       --bad-soft: #3a2225;
       --fab-ink: #c9b4b1;
@@ -483,12 +488,29 @@
     .acc-plabel { font-weight: 800; color: var(--ink); }
     /* anonim sıralama: kendi satırın vurgulanır, kimsenin adı gösterilmez (KVKK) */
     .lb-me { font-weight: 900; color: var(--green-ink); }
-    .lb-star { color: #d9a521; letter-spacing: -.05em; }
+    .lb-star { color: var(--gold-ink); letter-spacing: -.05em; }
+    /* ORTA OYUN REHBERİ — Şubeler panelinin tepe şeridi: yıldız · kalan · ne açılacak.
+       Detay kartları aşağıda duruyor; bu şerit oyuncunun ARAMADAN görmesi gereken tek
+       cümleyi en üste alır (bkz. main.ts rehberSeridi). */
+    .rh-strip { background: var(--paper-2); border: 1.5px solid var(--edge);
+                border-left: 4px solid var(--gold-ink);
+                border-radius: 13px; padding: 11px 13px; margin: 2px 0 10px; }
+    .rh-main { font-size: 13.5px; font-weight: 850; color: var(--ink); line-height: 1.4; }
+    .rh-num { font-size: 11.5px; font-weight: 750; color: var(--muted);
+              font-variant-numeric: tabular-nums; }
+    .rh-do { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-top: 7px;
+             padding-top: 7px; border-top: 1px solid var(--line); }
+    .rh-do.good { color: var(--green-ink); }
+    /* #653 çıkış yolu: "yer kalmadı" hissindeki oyuncuya yolun açık olduğunu söyler */
+    .rh-out { font-size: 11.5px; font-weight: 700; line-height: 1.5;
+              color: var(--orange-ink); margin-top: 6px; }
+    /* HUD marka rozeti: devir hazır olduğunda dikkat çeker (yalnız kenarlık — gürültü yok) */
+    #markachip.marka-hazir { border-color: var(--gold-ink); }
     /* marka yıldızı kartı: ne verir · nasıl kazanılır · ne kadar kaldı */
     .pz-card { background: var(--paper-2); border: 1.5px solid var(--edge);
                border-radius: 13px; padding: 12px 13px; margin: 4px 0 8px; }
     .pz-top { display: flex; align-items: baseline; gap: 9px; }
-    .pz-stars { font-size: 19px; color: #d9a521; letter-spacing: -.04em; line-height: 1; }
+    .pz-stars { font-size: 19px; color: var(--gold-ink); letter-spacing: -.04em; line-height: 1; }
     .pz-count { font-size: 12.5px; font-weight: 800; color: var(--ink); }
     .pz-what { font-size: 12px; font-weight: 650; line-height: 1.5; color: var(--muted); margin-top: 7px; }
     .pz-now { font-size: 13px; font-weight: 750; color: var(--ink); margin-top: 8px; }
@@ -507,7 +529,7 @@
                     color: var(--muted); margin-top: 6px; }
     .pz-prog-num { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
     .pz-bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin: 5px 0 4px; }
-    .pz-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #e8c256, #d9a521); transition: width .35s ease; }
+    .pz-fill { height: 100%; border-radius: 99px; background: var(--gold-ink); transition: width .35s ease; }
     /* ofis: alt başlık + açıklama satırı (7 günlük grafik, yaka dağılımı) */
     .acc-sub { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
                color: var(--muted); margin: 12px 0 5px; }
@@ -833,6 +855,10 @@
     </div>
     <div class="chip" id="onlinechip" style="min-width:72px; display:none"><span class="cl" data-i18n="OYUNDA">OYUNDA</span><span class="cv"><svg class="ic"><use href="#i-user"/></svg> <span id="hud-online">0</span></span></div>
     <div class="chip" id="repchip" data-bilgi="itibar" style="min-width:74px"><span class="cl" data-i18n="İTİBAR">İTİBAR</span><span class="cv"><svg class="ic"><use href="#i-star"/></svg> <span id="rep">3.0</span></span></div>
+    <!-- ORTA OYUN REHBERİ: marka yıldızı ve sıradaki yıldıza kalan yol HUD'da DURUR.
+         Bilgi Ofis › Şubeler panelinin içinde gömülüydü; oyuncunun onu bulmak için
+         ARAMASI gerekiyordu ("yeni şube nasıl açılır", "yapacak bir şey kalmadı"). -->
+    <div class="chip" id="markachip" data-bilgi="marka" style="min-width:118px; display:none"><span class="cl" data-i18n="MARKA">MARKA</span><span class="cv"><span id="hud-marka-st" style="color:var(--gold-ink); font-weight:850">0★</span> <div class="bar"><div id="hud-marka-fill" style="background:var(--gold-ink)"></div></div> <span id="hud-marka-pct">0%</span></span></div>
     <div class="chip" id="questchip" style="min-width:104px; cursor:pointer" title="Günlük görevler"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
     <div class="spacer"></div>
     <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Reklam İzle: Müşteri Patlaması">Reklam İzle: Müşteri Patlaması</span></button>
@@ -1252,10 +1278,23 @@
             <button id="logoutbtn" class="btn" style="flex:1; justify-content:center; display:none" data-i18n="Çıkış">Çıkış</button>
           </div>
         </div>
-        <label style="margin-top:12px" data-i18n="Oyun kaydı otomatik tutulur (her 5 sn)">Oyun kaydı otomatik tutulur (her 5 sn)</label>
+        <!-- Bu satır eskiden <label> (bölüm başlığı) idi ve altındaki tek içerik sıfırlama
+             düğmesiydi. Düğme kendi başlığına taşınınca başlık BOŞ kaldı; artık hesap
+             bölümünün açıklama satırı olarak duruyor. -->
+        <div class="sd" style="margin:8px 6px 0" data-i18n="Oyun kaydı otomatik tutulur (her 5 sn)">Oyun kaydı otomatik tutulur (her 5 sn)</div>
+        <!-- BAŞTAN BAŞLA — 6 açık geri bildirim ("oyunu nasıl sıfırlarım": #77 #210 #228
+             #251 #305 #1195). Düğme vardı ama "Oyun kaydı otomatik tutulur" başlığının
+             altında duruyordu ve tek confirm()'e bağlıydı: arayan bulamıyor, bulan da ne
+             kaybedeceğini bilmiyordu. Artık kendi başlığı, kayıp listesi ve ÇİFT onayı var.
+             DEVİRLE KARIŞTIRILMAMALI: devir ödüllüdür (yıldız kalır), bu değildir. -->
+        <label style="margin-top:12px" data-i18n="Baştan Başla">Baştan Başla</label>
+        <div class="sd" style="margin-bottom:6px" id="restart-what" data-i18n="İstasyonun, paran, günün, marka yıldızların ve şubelerin SİLİNİR — 1. günden sıfır kasayla başlarsın. Hesabın ve satın aldıkların durur. Bu bir devir DEĞİLDİR: hiçbir ödül taşınmaz.">İstasyonun, paran, günün, marka yıldızların ve şubelerin SİLİNİR — 1. günden sıfır kasayla başlarsın. Hesabın ve satın aldıkların durur. Bu bir devir DEĞİLDİR: hiçbir ödül taşınmaz.</div>
         <div class="row">
-          <button id="resetbtn" class="btn danger" style="flex:1; justify-content:center" data-i18n="Kaydı Sil ve Baştan Başla">Kaydı Sil ve Baştan Başla</button>
+          <button id="set-restart" class="btn danger" style="flex:1; justify-content:center" data-i18n="Baştan Başla">Baştan Başla</button>
         </div>
+        <!-- ui.ts'in eski tek-onaylı dinleyicisi hâlâ #resetbtn arıyor (el() null'da patlar).
+             Düğme DOM'da kalır ama gizlidir: tek gerçek yol yukarıdaki çift onaylı akış. -->
+        <button id="resetbtn" style="display:none" aria-hidden="true" tabindex="-1"></button>
         <label style="margin-top:12px" data-i18n="Hesap">Hesap</label>
         <div class="sd" style="margin-bottom:6px" data-i18n="Hesabını ve tüm verilerini kalıcı olarak siler — geri alınamaz.">Hesabını ve tüm verilerini kalıcı olarak siler — geri alınamaz.</div>
         <div class="row">
@@ -1454,7 +1493,13 @@ Sorun / Öneri Bildir
       font-size:12.5px; font-weight:700; line-height:1.5; color:var(--ink) }
     #chipinfo.show { display:block }
     #chipinfo b { display:block; font-size:13px; margin-bottom:3px; color:var(--red-ink) }
-    .chip[data-bilgi] { cursor:pointer }
+    /* HUD BİLGİ KUTUSU TIKLANAMAZLIK FİXİ (gerçek tarayıcıda ölçüldü):
+       .hud kapsayıcısı `pointer-events:none` (sahne HUD'ın boşluklarından döndürülebilsin)
+       ve yalnız `.hud button` bunu geri açıyordu. Bilgi rozetleri ise <div class="chip">
+       — yani HİÇBİR data-bilgi rozeti gerçek fare/dokunuşla tıklanamıyordu; kutu sadece
+       dispatchEvent ile açılıyordu (mevcut test öyle ölçtüğü için hata görünmemişti).
+       Tıklanabilir olan rozetin kendisi pointer-events'i geri almalı. */
+    .chip[data-bilgi] { cursor:pointer; pointer-events:auto }
 
     /* ÖĞRETİCİ İPUCU KONUMU: masaüstünde HUD iki sıra yüksekliğinde (göstergeler + eylem
        butonları). Kutu top:12px'te dururken KASA/BENZİN göstergelerini örtüyordu — oysa
