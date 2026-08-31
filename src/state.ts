@@ -605,6 +605,11 @@ export class GameState {
    *  save silinme travması tazeyken reset kelimesi kullanılmaz (rapor uyarısı). ADDITIVE. */
   brandStars = 0
   handoverCount = 0 // kaç kez devredildi (ADDITIVE)
+  /** #1250 ONARIM İŞARETİ (ADDITIVE): devir eskiden pompacıyı KOŞULSUZ siliyordu ve
+   *  müşteri kaynaklı kumbaralar (market/kahve/restoran/yıkama/yağ/hava-su) bir daha
+   *  hiç dolmuyordu. Onarım TEK SEFER uygulanır; sonra oyuncu pompacısını kendi
+   *  kovabilsin diye bir daha asla tekrarlanmaz. Eski kayıtta alan yok → false. */
+  devirKadroOnarildi = false
   /** MÜDÜR seviyesi 0-3 (0 = yok). Kumbara toplama → bakım → tamir otomasyonu. ADDITIVE */
   managerLevel = 0
   /** PERSONEL eğitimi seviyesi 1-4: dolum hızı, bahşiş şansı, yanlış yakıt riski. ADDITIVE */
@@ -1849,7 +1854,28 @@ export class GameState {
     for (const f of FUELS) this.orders[f] = { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
     this.uraniumPending = false; this.uraniumEta = 0
     this.dayStartMoney = this.money + cash + seed // gün sonu raporu uydurma sayı göstermesin
+    // ── #1250 "devrettikten sonra tır parkı ve self yıkama HARİCİ hiçbir kumbara birikmiyor" ──
+    // KÖK NEDEN, ÖLÇÜLDÜ (tarayıcı probu, müdür KAPALI, aynı istasyon, 3'er dk):
+    //     tesis        pompacı VAR   pompacı YOK
+    //     market          ₺740/dk        ₺0/dk
+    //     restoran        ₺559/dk        ₺0/dk
+    //     oto yıkama      ₺237/dk        ₺0/dk
+    //     kahveci         ₺206/dk        ₺0/dk
+    //     hava-su          ₺17/dk        ₺0/dk
+    //     tır parkı       ₺276/dk      ₺204/dk   ←
+    //     otel            ₺339/dk      ₺291/dk   ←  PASİF: pompacıya bağlı DEĞİL
+    //     self yıkama      ₺58/dk       ₺64/dk   ←
+    // Tır parkı/self yıkama/otel kumbarası tick() zamanlayıcısından dolar; DİĞER HEPSİ
+    // aracın pompada SERVİS EDİLMESİNİ bekler (concludeService → facilityVisits /
+    // vehicleServices). Pompacı yoksa araçlar servis edilmez → o kumbaralar ASLA dolmaz.
+    // Devir burada autoPumps'ı KOŞULSUZ siliyordu, yani oyuncunun otomasyonu sessizce
+    // gidiyordu — üstelik devir raporu "Devraldığın kadro: Müdür Sv.1 · Personel Sv.1"
+    // yazıp TERSİNİ söylüyordu. Oyuncu kadro devraldığını sanıp bekliyor, kimse gelmiyor.
+    // ÇÖZÜM (miras, BAĞIŞ DEĞİL): pompacısı olan oyuncu, ayakta kalan TEK pompada
+    // pompacısını korur. Hiç pompacısı yoksa yine hiç almaz — denge değişmez.
+    const kadroVardi = this.autoPumps.size > 0 || this.autoChargers.size > 0
     this.autoPumps.clear(); this.autoChargers.clear()
+    if (kadroVardi && this.pumps > 0) this.autoPumps.add(0)
     this.pendingCash = {}
     this.contract = null
     this.marketingBudget = 0
@@ -3369,7 +3395,7 @@ const SAVE_FIELDS = [
   'solarDirt', 'smrWear', 'smrWreck', 'uranium', 'uraniumPending', 'uraniumEta', 'day', 'dayStartMoney', 'dayStartRevenue', 'closed',
   'lastLoginDate', 'loginStreak', 'dailyDate', 'dailyServed', 'dailyDone',
   'dailyRevenue', 'dailyLiters', 'dailyCollected', 'dailyPerfect', 'dailyClaimed', 'maintCare', 'wideGates', 'loan', 'partner',
-  'wagesPaid', 'fuelSpent', 'noAds', 'steamPoll', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
+  'wagesPaid', 'fuelSpent', 'noAds', 'steamPoll', 'marketingBudget', 'opexStart', 'contractsDone', 'contractsFailed', 'brandStars', 'handoverCount', 'devirKadroOnarildi', 'managerLevel', 'staffLevel', 'insurance', 'licenseDueDay', 'decorLevel', 'wear', 'lampCount', 'firstBranchGift',
   'marinaFacs', 'berths', 'winterSlots', 'marinaViolations', 'logbookOk', 'logbookBad', 'rival', 'rivalPush',
   // tersane (ADDITIVE): kabul edilmiş işler + sayaçlar. Teklifler kayda girmez (gün içi).
   'refitJobs', 'refitDone', 'refitEarned',
@@ -3604,6 +3630,33 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       grabPromo: typeof p2.grabPromo === 'boolean' ? p2.grabPromo : v.grabPromo,
     }
   }
+  s.devirKadroOnarildi = !!s.devirKadroOnarildi
+  devirKadroOnar(s)
+}
+
+/** #1250 ONARIMI — devir yapmış MEVCUT kayıtlar kendiliğinden düzelsin.
+ *
+ *  Eski devir kodu `autoPumps`/`autoChargers`'ı koşulsuz siliyordu. Ölçüldü (müdür
+ *  kapalı, aynı istasyon, 3'er dk): pompacı yokken market/restoran/kahve/oto yıkama/
+ *  yağ/hava-su kumbaraları ₺0/dk'da SABİT kalıyor (araç servis edilmediği için
+ *  concludeService hiç çalışmıyor), tır parkı ₺204/dk · otel ₺291/dk · self yıkama
+ *  ₺64/dk ile PASİF olarak dolmaya devam ediyor. Oyuncunun tarif ettiği seçicilik
+ *  birebir bu. Devir raporu ise "Devraldığın kadro" yazıp tersini söylüyordu.
+ *
+ *  İMZA DAR TUTULDU — yalnız bu hatanın bıraktığı duruma dokunulur:
+ *    devretmiş (brandStars>0) + devrin verdiği müdür duruyor (managerLevel>0)
+ *    + istasyonda TEK BİR pompacı/şarjcı bile yok + pompa var.
+ *  TEK SEFER: bayrak yazıldıktan sonra oyuncu pompacısını kovarsa geri alınmaz.
+ *  Kasadan para ALINMAZ (kayıp otomasyon geri veriliyor, yeni satın alma değil);
+ *  günlük yovmiye normal işler, yani denge tarafında bedeli ödenmeye devam eder. */
+export function devirKadroOnar(s: GameState): boolean {
+  if (s.devirKadroOnarildi) return false
+  if (s.brandStars <= 0 || s.managerLevel <= 0) return false
+  if (s.pumps <= 0 || s.autoPumps.size > 0 || s.autoChargers.size > 0) return false
+  s.devirKadroOnarildi = true
+  s.autoPumps.add(0)
+  s.events.push(t('Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.'))
+  return true
 }
 
 export function doMaintenance(s: GameState, id: string): boolean {

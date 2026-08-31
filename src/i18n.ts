@@ -1318,6 +1318,9 @@ const EN: Record<string, string> = {
     'These are PERMANENT — your new station starts from here, not from zero.',
   'Kasana geçti': 'Credited to your cash',
   'Devraldığın kadro': 'Crew you inherited',
+  '· pompacı': '· pump attendant',
+  'Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.':
+    'The pump attendant you lost in the handover has been rehired — with nobody on the pump, your shop, cafe, restaurant, car wash and oil change boxes were never filling up.',
   'Müdürün kumbaraları senin için otomatik topluyor — kumbaralar dolu görünmüyorsa sebebi bu, para doğrudan kasana giriyor. Ofis → Müdür\'den kapatabilirsin.':
     'Your manager empties the collection boxes for you — that is why they never look full; the money goes straight to your till. You can turn this off in Office → Manager.',
   'Yeni turu başlat': 'Start the new run',
@@ -3074,6 +3077,9 @@ const FR: Record<string, string> = {
     'Tout cela est PERMANENT — ta nouvelle station part d’ici, pas de zéro.',
   'Kasana geçti': 'Versé dans ta caisse',
   'Devraldığın kadro': 'Équipe héritée',
+  '· pompacı': '· pompiste',
+  'Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.':
+    'Le pompiste perdu lors de la cession a été réembauché — sans personne à la pompe, les tirelires de ta supérette, ton café, ton restaurant, ton lavage auto et ta vidange ne se remplissaient jamais.',
   'Müdürün kumbaraları senin için otomatik topluyor — kumbaralar dolu görünmüyorsa sebebi bu, para doğrudan kasana giriyor. Ofis → Müdür\'den kapatabilirsin.':
     'Votre gérant vide les tirelires à votre place — c\'est pourquoi elles ne semblent jamais pleines ; l\'argent va directement en caisse. Désactivable dans Bureau → Gérant.',
   'Yeni turu başlat': 'Lancer le nouveau tour',

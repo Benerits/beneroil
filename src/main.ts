@@ -1812,7 +1812,7 @@ document.getElementById('of-prestige')?.addEventListener('click', e => {
     localStorage.setItem(DEVIR_RAPOR_KEY, JSON.stringify({
       stars: res.stars, cash: res.cash, seed: res.seed,
       mult: state.prestigeMult(), flow: state.prestigeFlow(),
-      manager: state.managerLevel, staff: state.staffLevel,
+      manager: state.managerLevel, staff: state.staffLevel, pompaci: state.autoPumps.size,
     }))
   } catch { /* kota dolu olabilir — rapor kritik değil */ }
   ui.toast(t('İstasyon devredildi! Kasa: ₺{0} · {1}. Marka Yıldızı kazandın (gelir ×{2})',
@@ -3714,7 +3714,7 @@ const KENDI_TEMIZLEYEN = new Set(['tank', 'sign', 'widegate', 'pump', 'evcharger
  *  NEDEN: devir sayfayı yeniliyor; oyuncu boş bir arsaya düşüp "ne oldu?" diyordu.
  *  Kalıcı kazançları (sermaye, çarpan, akış, kadro) SAYIYLA gösterip döngüyü kapatıyoruz. */
 function maybeShowDevirModal() {
-  let r: { stars?: number; cash?: number; seed?: number; mult?: number; flow?: number; manager?: number; staff?: number } | null = null
+  let r: { stars?: number; cash?: number; seed?: number; mult?: number; flow?: number; manager?: number; staff?: number; pompaci?: number } | null = null
   try {
     const raw = localStorage.getItem(DEVIR_RAPOR_KEY)
     localStorage.removeItem(DEVIR_RAPOR_KEY) // tek sefer: bozuk veri de olsa bir daha denenmez
@@ -3740,6 +3740,11 @@ function maybeShowDevirModal() {
     + (num(r.manager) > 0 || num(r.staff, 1) > 1
         ? sat(t('Devraldığın kadro'), `${t('Müdür Sv.{0}', String(Math.round(num(r.manager))))} · ${t('Personel Sv.{0}', String(Math.round(num(r.staff, 1))))}`)
         : '')
+    // #1250: "Devraldığın kadro" satırı POMPACIYI ATLIYORDU ve devir de pompacıyı
+    // siliyordu → oyuncu kadro devraldığını sanıp bekliyor, pompada kimse olmadığı için
+    // araçlar servis edilmiyor ve MÜŞTERİ KAYNAKLI tüm kumbaralar ₺0'da kalıyordu.
+    // Pompacı artık gerçekten devrolduğu için raporda da SAYIYLA yazılır.
+    + (num(r.pompaci) > 0 ? sat(t('· pompacı'), `${Math.round(num(r.pompaci))}`) : '')
     + `</div>`
     // #1250 "devirden sonra kumbaralar birikmiyor": devir SESSİZCE müdür veriyor ve
     // müdürün varsayılan politikası kumbaraları toplamak. Para kaybolmuyor, doğrudan
