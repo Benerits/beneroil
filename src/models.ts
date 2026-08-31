@@ -102,6 +102,9 @@ export interface StaticLib {
   lamp: THREE.Group | null
   planter: THREE.Group | null
   // ENERJİ PARÇALARI (Kenney city-kit-industrial v2 — kendi paletiyle industrial2'de).
+  // solarPanel = TEK panel (solar-panel-landscape, 0,71×0,26×0,40). '-group'
+  // varyantları hazır öbek: yan yana koyunca kalabalık ve kaba duruyordu. Tek
+  // panelle seyrek dizilim kurmak hem zarif hem "santral" okunuyor.
   // Pakette hazır NÜKLEER REAKTÖR YOK; reaktör bu parçalardan kuruluyor
   // (tank = muhafaza binası, baca = kule), buhar animasyonu korunuyor.
   solarPanel: THREE.Group | null
@@ -137,7 +140,7 @@ export async function loadStatics(): Promise<StaticLib | null> {
       load('suburban/tree-small'),
       load('roads/light-curved'),
       load('suburban/planter'),
-      loadInd('industrial2/solar-panel-portrait-group'),
+      loadInd('industrial2/solar-panel-landscape'),
       loadInd('industrial2/windmill'),
       loadInd('industrial2/detail-tank-large'),
       loadInd('industrial/chimney-large'),

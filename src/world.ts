@@ -2645,17 +2645,22 @@ export class World {
   buildSolar(side: 'north' | 'south', pos?: THREE.Vector2, regId = 'solar') {
     const g = new THREE.Group()
     if (this.statics?.solarPanel) {
-      // ÖLÇEK: ilk sürümde 4,2 birimlik iki dizi vardı ve paneller kaba duruyordu
-      // (oyuncu: "çok büyük kalmış, küçültelim zarif dursun"). Artık daha küçük
-      // dizi (2,6) ama ÜÇ sıra: ayak izi aynı kalıyor, tesis "santral" gibi
-      // okunuyor, tek tek paneller ise ince duruyor.
-      for (let i = 0; i < 3; i++) {
-        const m = fitModel(this.statics.solarPanel, 2.6)
-        m.position.set(0, -2.3 + i * 2.3, 0)
+      // SEYREK DİZİLİM (oyuncu: "çok kalabalık, seyreltip kaba görünüşten sıyır").
+      // Önce hazır '-group' öbeği kullanılıyordu: her öbek zaten bir sürü panel
+      // içeriyor, üç tanesi yan yana gelince tarla gibi tıkanıyordu.
+      // Artık TEK panel (alçak profilli landscape) × 2 sıra × 3 sütun, aralarında
+      // çim görünecek kadar boşluk. Ayak izi (5×7) değişmedi.
+      // ÖLÇÜ İKİ KEZ AYARLANDI: önce grup modeli (kalabalık), sonra tek panel 1,45
+      // (bu sefer uzaktan görünmez oldu). 1,9 aradaki nokta: yakında ince ve eğik
+      // duruyor, oyun mesafesinden "santral" olarak okunuyor.
+      const SIRA = 2, SUTUN = 3, PANEL = 1.9, ARA_X = 2.3, ARA_Y = 2.7
+      for (let r = 0; r < SIRA; r++) for (let c = 0; c < SUTUN; c++) {
+        const m = fitModel(this.statics.solarPanel, PANEL)
+        m.position.set((r - (SIRA - 1) / 2) * ARA_X, (c - (SUTUN - 1) / 2) * ARA_Y, 0)
         g.add(m)
       }
-      // inverter kabini (kit parçası yok — küçük kutu yeterli, ölçek uyumlu)
-      box(0.5, 0.4, 0.4, 0x59616b, 1.7, 2.9, 0.2, g)
+      // inverter kabini — panellerin ölçeğine göre küçük tutuldu
+      box(0.45, 0.35, 0.4, 0x59616b, 2.1, 2.9, 0.2, g)
     } else {
       for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1),
