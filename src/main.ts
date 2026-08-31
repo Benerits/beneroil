@@ -5048,6 +5048,11 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
   // TEST KANCALARI (yalnız ?full=1): otomatik doğrulama bina kartı akışını sürebilsin
   get ui() { return ui },
   sec(id: string) { selectedBuilding = id; world.setSelected(id); refreshBuildingCard() },
+  /** ŞUBE GEÇİŞİ (tanıtım videosu + E2E): oyunun kendi yolundan geçer, sahneyi
+   *  yeniden kurar. Harita düğümleri SVG olduğu için dışarıdan tıklanamıyordu. */
+  sube(id: string) { subeyeGec(id as LocId) },
+  /** Şube kilidini video/test için açar — mağaza akışını atlamaz, state.unlockLoc kullanır. */
+  subeAc(id: string) { return state.unlockLoc(id as LocId) },
   // YERLEŞİM KANCASI (yalnız ?full=1): hayalet ile GERÇEK yerleşim aynı noktaya mı düşüyor?
   // tools/tests/yerlesim-check.mjs bunu sayıyla ölçer (hayalet gövdesi ↔ sahnedeki gövde).
   place: {

@@ -285,12 +285,18 @@ const SENARYOLAR = {
 
   // 6) ŞUBE AĞI HARİTASI — GÜNCELLEME DUYURUSU (major update, erişim odaklı).
   //
-  //    SÜRE 14 sn, HOOK ilk 2,4 sn'de. Gerekçe bu dosyanın başındaki ölçüm:
-  //    ortalama izleme 12,8 sn. 20 sn'lik kurguda haritanın açıldığı ana izleyicinin
-  //    çoğu ulaşmıyor — o yüzden harita 4. saniyede EKRANDA olmalı, sonda değil.
+  //    SÜRE 14 sn. Kurgu bu dosyanın başındaki kendi ölçümümüze dayanıyor: ortalama
+  //    izleme 12,8 sn. İlk kurguda 4 saniye istasyonda "hazırlık" yapılıyordu ve
+  //    monotondu — asıl yeni şey olan harita geç geliyordu.
   //
-  //    Sessiz izlenir varsayılır (Twitter otomatik oynatma sessizdir): her beat'in
-  //    mesajı yazıyla taşınır, sesle değil.
+  //    ŞİMDİ: SOĞUK AÇILIŞ doğrudan haritayla (alışılmadık görüntü = durdurucu),
+  //    ardından 0,8 sn'lik SERT KESMELERLE şube şube gezinti. Her kesmede sağ panel
+  //    gerçekten değişiyor (.hn[data-hloc] düğümüne tıklanıyor), yani hareket sahte
+  //    değil — oyunun kendi ekranı.
+  //
+  //    NEDEN CANLI ŞUBE GEÇİŞİ YOK: subeyeGec() push-confirmed RELOAD ile bitiyor,
+  //    vitrin state'i sıfırlanıp hep kasabaya düşüyor; ?full=1 ayrıca `beneloil-loc`
+  //    ipucunu yok sayıyor. Ölçüldü (4 şube, 20 sn timeout, activeLoc hep 'kasaba').
   harita: {
     ad: '06-sube-agi-haritasi',
     save: { money: 8_400_000, day: 140, reputation: 4.9, pumps: 8, evChargers: 4,
@@ -298,71 +304,78 @@ const SENARYOLAR = {
             hasRestaurant: true, hasTruckPark: true, solarCount: 3,
             unlockedLocs: ['kasaba', 'cevreyolu', 'otoyol'], activeLoc: 'kasaba',
             tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
-    // ISINMA 22 sn: araçların pompaya VARMASI gerekiyor, sadece yola çıkması değil.
-    // Ölçüldü: 18 sn'de 4, 28 sn'de 6 araç pompada. Kısa ısınmada hook karesi boş
-    // beton gösteriyordu. (Asıl sebep ayrıca düzeltildi: vitrin modunda kayıt kapısı
-    // trafiği tamamen kapatıyordu — bkz. donusumKapisiKapali, tools/tests/vitrin-check.)
-    isinma: 22000,
+    isinma: 22000,   // araçların pompaya VARMASI için (18 sn'de 4, 28 sn'de 6 araç)
     async oyna(p) {
-      // ── HOOK (0 → 2,4 sn): DOLU istasyon + tek iddia ──
+      // ── 0,0 → 1,4: SOĞUK AÇILIŞ — perde açılır açılmaz HARİTA ──
       await p.evaluate(() => {
         const d = window.__dbg
-        // ?full=1 vitrin state'i şubeleri/yıldızı kurmuyor; harita PANELİ 3B sahneye
-        // dokunmadığı için bu alanları doğrudan dayatmak güvenli (runner yalnız
-        // kasa/gün/itibar dayatıyor, bkz. oyunuAc notu).
         if (d?.state) {
           d.state.unlockedLocs = ['kasaba', 'cevreyolu', 'otoyol']
           d.state.brandStars = 6
         }
-        // GENİŞ KURULUŞ PLANI: zoom 2.2 en dar uçlardandı ve kadraja bina köşeleri,
-        // konteyner, reaktör kulesi giriyordu — "benzin istasyonu" bile demiyordu.
-        d.cine?.setCam?.(0, 4, 1.25)
-        // HOOK'TA DA NEGATİF TOAST ÇIKABİLİR ("müşteri sıkıldı gitti") — çekimde kimse
-        // servis yapmıyor. Reklamda oyunun kendi kötü haberini göstermeyelim; toast'lar
-        // baştan kapalı, mesajı overlay yazısı taşıyor.
-        const s0 = document.createElement('style')
-        s0.textContent = '#toasts{display:none !important}'
-        document.head.appendChild(s0)
-        window.__vo.yaz('GÜNCELLEME', 'Tek istasyonla\nbaşladın.', '')
-      })
-      await bekle(p, 2400)
-
-      // ── 2,4 → 4,0: vaat ──
-      await p.evaluate(() => window.__vo.yaz('GÜNCELLEME', 'Tek istasyonla\nbaşladın.', 'Şimdi bir AĞ kur.'))
-      await bekle(p, 1600)
-
-      // ── 4,0 → 7,0: HARİTA EKRANDA (videonun asıl vaadi, erken gelsin) ──
-      await p.evaluate(() => {
-        window.__vo.sil()
-        // MÜŞTERİ KARTI + TOAST'LAR HARİTA BEAT'LERİNDE İNSİN.
-        //  · Kart hook'ta duruyor (oynanış kanıtı) ama haritanın üstüne binince alt
-        //    yazının alanını kirletiyor. Tek seferlik style ataması YETMİYOR: ui.sync()
-        //    her karede kartı yeniden gösteriyor ve ezyor — bu yüzden !important kural.
-        //  · Toast'lar kapatılıyor çünkü çekimde kimse müşteriye servis yapmıyor ve
-        //    "Müşteri beklemekten sıkıldı ve gitti!" gibi NEGATİF mesajlar çıkıyor.
-        //    Reklam videosunda oyunun kendi kötü haberini göstermek istemeyiz.
+        // Toast + müşteri paneli kapalı: çekimde kimse servis yapmadığı için
+        // "Müşteri beklemekten sıkıldı ve gitti!" gibi NEGATİF mesajlar çıkıyordu.
         const s = document.createElement('style')
-        s.id = 'vo-harita-temizlik'
         s.textContent = '#panel{display:none !important}#infocard{display:none !important}#toasts{display:none !important}'
         document.head.appendChild(s)
         document.getElementById('locbtn')?.click()
         document.querySelector('#locmenu button[data-qloc="__harita"]')?.click()
       })
+      await bekle(p, 500)
+      await p.evaluate(() => window.__vo.yazAlt('9 ŞUBE', ''))
       await bekle(p, 900)
-      await p.evaluate(() => window.__vo.yazAlt('9 şube · tek harita', ''))
-      await bekle(p, 2100)
 
-      // ── 7,0 → 9,6: her şube farklı ekonomi (kilit + yıldız eşiği) ──
-      await p.evaluate(() => window.__vo.yazAlt('Her şubenin kendi ekonomisi', 'kira · trafik · arsa'))
-      await bekle(p, 2600)
+      // ── 1,4 → 6,2: SERT KESMELER — şube şube, her kesmede panel değişir ──
+      const duraklar = await p.evaluate(() =>
+        [...document.querySelectorAll('#mapwrap .hn[data-hloc]')]
+          .map(n => n.getAttribute('data-hloc')).filter(Boolean).slice(0, 6))
+      for (const id of duraklar) {
+        // ETİKET PANELDEN OKUNUR, SVG DÜĞÜMÜNDEN DEĞİL: düğümün textContent'i
+        // isim + yıldız + not metnini iç içe veriyor ve ilk kelime anlamsız bir
+        // glif olarak basılıyordu. Panel başlığı tek doğru kaynak.
+        await p.evaluate(x => {
+          document.querySelector(`#mapwrap .hn[data-hloc="${x}"]`)
+            ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        }, id)
+        await bekle(p, 120)
+        // İSİM DÜĞÜMÜN KENDİ <text>'İNDEN: haritada oyuncunun GÖRDÜĞÜ yazı bu.
+        // (Panel başlığını seçmeyi denedim, seçici tutmadı ve etiket boş kaldı;
+        //  düğümün textContent'ini bütün almak da yıldız/not metnini karıştırıp
+        //  anlamsız bir glif basıyordu.)
+        const ad = await p.evaluate(x => {
+          const n = document.querySelector(`#mapwrap .hn[data-hloc="${x}"]`)
+          const t = [...(n?.querySelectorAll('text') ?? [])]
+            .map(e => (e.textContent || '').trim())
+            .find(v => v && !/^[₺%\d★·.,]+$/.test(v))
+          return t || ''
+        }, id)
+        await p.evaluate(a => window.__vo.yazAlt(a ? a.toLocaleUpperCase('tr') : '', ''), ad)
+        await bekle(p, 680)
+      }
 
-      // ── 9,6 → 12,0: ortak tedarik hattı (yeni sistemin en az bilinen yanı) ──
-      await p.evaluate(() => window.__vo.yazAlt('Komşu şubeler tedarik hattı paylaşır', ''))
+      // ── 6,2 → 8,6: OYUN GERÇEK — harita kapanır, dolu istasyon ──
+      await p.evaluate(() => {
+        document.getElementById('mapwrap')?.classList.remove('show')
+        window.__dbg.cine?.setCam?.(0, 4, 1.25)
+        window.__vo.yaz('', 'Her şubenin\nkendi ekonomisi', 'kira · trafik · arsa')
+      })
       await bekle(p, 2400)
 
-      // ── 12,0 → 14,0: kapanış ──
-      await p.evaluate(() => { window.__vo.sil(); window.__vo.yaz('BENELOIL', 'Şube Ağı', 'beneloil.com') })
-      await bekle(p, 2000)
+      // ── 8,6 → 11,0: haritaya dönüş — ortak tedarik hattı ──
+      await p.evaluate(() => {
+        window.__vo.sil()
+        document.getElementById('locbtn')?.click()
+        document.querySelector('#locmenu button[data-qloc="__harita"]')?.click()
+      })
+      await bekle(p, 600)
+      await p.evaluate(() => window.__vo.yazAlt('Komşu şubeler tedarik hattı paylaşır', ''))
+      await bekle(p, 1800)
+
+      // ── 11,0 → 14,0: kapanış ──
+      await p.evaluate(() => { window.__vo.sil() })
+      await bekle(p, 300)
+      await p.evaluate(() => window.__vo.yaz('BENELOIL', 'Şube Ağı', 'beneloil.com'))
+      await bekle(p, 2700)
     },
   },
 }
