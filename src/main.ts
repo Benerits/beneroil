@@ -18,6 +18,7 @@ import {
   // ŞUBE ÇİFTLEME: kopya şubeler (otoyol-2 vb.) — tema/sahne TABAN id'den, ekonomi
   // türetilmiş temadan gelir (bkz. state.ts themeFor / BRANCH_COPIES).
   ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor, SUPPLY_LINE_QUOTA,
+  SAYAC_KUMBARA_MAX,
 } from './state'
 // ŞUBE AĞI HARİTASI: yatırım tahtası (Ofis › Şubeler + HUD şube menüsünden açılır).
 // Saf DOM modülü — state okur, aksiyonu buradaki MEVCUT akışlara geri çağırır.
@@ -2460,9 +2461,13 @@ function vehicleServices(car: Car): number {
     ui.toast(t('Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
   if (car.wantsAir && state.hasAirWater && anyOnSide('airwater')) {
-    // adet çarpanı: çok üniteli istasyonda aynı anda birden çok araç kullanır (pendingCap'in
-    // min(6) ölçeğiyle aynı tavan) — "2. üniteyi almanın anlamı yok" şikâyetinin fixi
-    const m = Math.round(10 + Math.random() * 10) * Math.min(6, state.airWaterCount)
+    // adet çarpanı: çok üniteli istasyonda aynı anda birden çok araç kullanır.
+    // TAVAN KUMBARA ÖLÇEĞİNE BAĞLI (sabit 6 DEĞİL): kumbara tavanı ünite sayısıyla
+    // büyüyecek şekilde düzeltilince buradaki sabit 6 geride kaldı ve yorumun iddia
+    // ettiği "aynı tavan" hizası bozuldu — kumbara 12 üniteye kadar ölçeklenirken
+    // gelir 6'da duruyordu, yani 7. hava-su ünitesi tam parasına satılıp ₺0 kazandırıyordu.
+    // İkisi tek sabitten türetiliyor ki bir daha sessizce ayrışmasınlar.
+    const m = Math.round(10 + Math.random() * 10) * Math.min(SAYAC_KUMBARA_MAX, state.airWaterCount)
     state.addPending('airwater', m, 'Hava-su'); d += 0.1
   }
   return d
@@ -6704,6 +6709,15 @@ function frame() {
     const net = Math.round(state.money - state.dayStartMoney)
     ui.toast(t('Gün {0} bitti — {1}: ₺{2}', state.day - 1, net >= 0 ? t('kâr') : t('zarar'),
       Math.abs(net).toLocaleString('tr-TR')), net >= 0 ? 'good' : 'bad')
+    // TOPLANMAMIŞ KUMBARA AYRICA SÖYLENİYOR: rapordaki kâr KASADAKİ değişim demek, yani
+    // tesis kumbaralarında bekleyen para ona dahil değil. Oyuncu tesislerin kazandığını
+    // görüp raporda bulamayınca "para kayboluyor" diyordu — kayıp yok, para henüz
+    // toplanmamıştı. Rakam yalnız bekleyen para varken çıkar; tıklamaya davet eder.
+    const kumbara = Math.round(Object.values(state.facTotal).reduce((a, v) => a + v, 0))
+    if (kumbara > 0) {
+      ui.toast(t('Kumbaralarda ₺{0} toplanmayı bekliyor — bu tutar günün kârına DAHİL DEĞİL, topladığında kasaya girer.',
+        kumbara.toLocaleString('tr-TR')), 'good', true)
+    }
 
     // dönemsel muhasebe: biten günün satış cirosunu kaydet
     const dayRev = Math.max(0, Math.round(state.stats.revenue - state.dayStartRevenue))

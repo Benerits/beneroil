@@ -891,14 +891,20 @@ const EN: Record<string, string> = {
   'Ek {0} Tankı ({1}/{2})': 'Extra {0} Tank ({1}/{2})',
   'Yalnızca {0} deposunu {1}L büyütür — yer kaplamaz, daha seyrek sipariş.': 'Grows only your {0} storage by {1}L — no extra space, fewer orders.',
   'Hava-Su Ünitesi': 'Air & Water Unit', 'Hava-Su Ünitesi ({0})': 'Air & Water Unit ({0})',
-  'Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)':
-    'Tire air & water — cheap but draws customers (unlimited)',
+  'Lastik havası ve su — ucuz ama müşteri çeker (gelir {0} üniteye kadar büyür)':
+    'Tire air & water — cheap but draws customers (income grows up to {0} units)',
+  'Lastik havası ve su — gelir tavanına ulaştın ({0} ünite), yeni ünite kazanç eklemez.':
+    'Tire air & water — you have hit the income ceiling ({0} units); another unit adds no earnings.',
   'Otopark': 'Parking Lot', 'Otopark ({0})': 'Parking Lot ({0})', '+4 araç': '+4 cars',
   'Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)':
     'Striped lot — customers park and use facilities (unlimited)',
   'Sokak Lambası': 'Street Lamp', 'Sokak Lambası ({0})': 'Street Lamp ({0})', '+itibar': '+reputation',
-  'Gece aydınlatması — istasyon güvenli görünür (sınırsız kurulur, taşınır, satılır)':
-    'Night lighting — the station looks safe after dark (unlimited, movable, sellable)',
+  'Gece aydınlatması — istasyon güvenli görünür ({0} lambaya kadar +itibar, taşınır, satılır)':
+    'Night lighting — the station looks safe after dark (+reputation up to {0} lamps, movable, sellable)',
+  'Gece aydınlatması — itibar katkısı {0} lambada doldu; fazlası yalnız görsel. Taşınır, satılır.':
+    'Night lighting — the reputation bonus maxes out at {0} lamps; extras are purely visual. Movable, sellable.',
+  'Kumbaralarda ₺{0} toplanmayı bekliyor — bu tutar günün kârına DAHİL DEĞİL, topladığında kasaya girer.':
+    '₺{0} is waiting in the collection boxes — this is NOT included in today\'s profit; it reaches your till when you collect it.',
   'Market': 'Market', 'Market Sv.2': 'Market Lv.2', 'Market Sv.{0}': 'Market Lv.{0}',
   'Müşteriler ekstra alışveriş yapar': 'Customers shop extra',
   'Müşteriler ekstra alışveriş yapar. Yerinde yükselir (aynı yer), gelir seviyeyle artar.':
@@ -2475,8 +2481,10 @@ const FR: Record<string, string> = {
     'Agrandit uniquement ton stock de {0} de {1} L — sans prendre de place, moins de commandes.',
   'Hava-Su Ünitesi': 'Unité Air & Eau',
   'Hava-Su Ünitesi ({0})': 'Unité Air & Eau ({0})',
-  'Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)':
-    'Air pour les pneus & eau — pas cher, mais ça attire les clients (illimité)',
+  'Lastik havası ve su — ucuz ama müşteri çeker (gelir {0} üniteye kadar büyür)':
+    'Air pour les pneus & eau — pas cher, mais ça attire les clients (revenus croissants jusqu\'à {0} unités)',
+  'Lastik havası ve su — gelir tavanına ulaştın ({0} ünite), yeni ünite kazanç eklemez.':
+    'Air pour les pneus & eau — plafond de revenus atteint ({0} unités) ; une unité de plus ne rapporte rien.',
   'Otopark': 'Parking',
   'Otopark ({0})': 'Parking ({0})',
   '+4 araç': '+4 voitures',
@@ -2485,8 +2493,12 @@ const FR: Record<string, string> = {
   'Sokak Lambası': 'Lampadaire',
   'Sokak Lambası ({0})': 'Lampadaire ({0})',
   '+itibar': '+réputation',
-  'Gece aydınlatması — istasyon güvenli görünür (sınırsız kurulur, taşınır, satılır)':
-    'Éclairage nocturne — la station paraît sûre la nuit (illimité, déplaçable, revendable)',
+  'Gece aydınlatması — istasyon güvenli görünür ({0} lambaya kadar +itibar, taşınır, satılır)':
+    'Éclairage nocturne — la station paraît sûre la nuit (+réputation jusqu\'à {0} lampadaires, déplaçable, revendable)',
+  'Gece aydınlatması — itibar katkısı {0} lambada doldu; fazlası yalnız görsel. Taşınır, satılır.':
+    'Éclairage nocturne — le bonus de réputation plafonne à {0} lampadaires ; au-delà, c\'est purement décoratif. Déplaçable, revendable.',
+  'Kumbaralarda ₺{0} toplanmayı bekliyor — bu tutar günün kârına DAHİL DEĞİL, topladığında kasaya girer.':
+    '₺{0} attendent dans les tirelires — ce montant n\'est PAS compté dans le bénéfice du jour ; il entre en caisse à la collecte.',
   'Market': 'Boutique',
   'Market Sv.2': 'Boutique niv.2',
   'Market Sv.{0}': 'Boutique niv.{0}',

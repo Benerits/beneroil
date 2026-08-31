@@ -322,6 +322,14 @@ export const EV_ATTENDANT_HIRE = 1000 // elektrikli şarjcı (pompacı muadili) 
 export const INSURANCE_DAILY = 0.0004      // varlık değerinin binde 0.4'ü / gün
 export const LICENSE_PERIOD = 30           // ruhsat yenileme aralığı (oyun günü)
 export const LAMP_COST = 2_500 // sokak lambası (dekoratif; gece görünürlük + küçük itibar)
+/** LAMBA İTİBAR KATKISI — lamba başına +itibar ve toplam tavanı. Tavan kasıtlı: itibar
+ *  sıkı dengeleniyor, sınırsız lambayla şişirilmesi gerilim mekaniğini bitirir. Ama tavan
+ *  MAĞAZADA YAZMIYORDU: satır "sınırsız kurulur, +itibar" derken katkı 8. lambada
+ *  doluyordu, 9. lamba ₺2.500'e sıfır getiri demekti. Sabitler tek yerde ki mağaza metni
+ *  ile formül bir daha ayrışmasın (LAMP_REP_MAX_COUNT metinde geçen sayıdır). */
+export const LAMP_REP_PER = 0.04
+export const LAMP_REP_CAP = 0.30
+export const LAMP_REP_MAX_COUNT = Math.ceil(LAMP_REP_CAP / LAMP_REP_PER)  // = 8
 /** SAYAÇLI TESİS KUMBARA ÖLÇEĞİ — self yıkama / hava-su / otopark kumbara tavanı kaç
  *  üniteye kadar doğrusal büyür. Gelir adetle SINIRSIZ arttığı için tavan da büyümeli;
  *  bu sayı gelir kısıtı değil SUİSTİMAL FRENİDİR (kurcalanmış save'de kumbara şişmesin).
@@ -2243,7 +2251,11 @@ export class GameState {
   /** RUHSAT bedeli (30 günde bir, varlıkla ölçekli) */
   licenseFee(): number { return Math.round(8_000 + (this.equipmentValue() + this.landValue()) * 0.004) }
   /** dekorasyonun itibar katkısı */
-  decorRep(): number { return 0.15 * this.decorLevel + Math.min(0.30, 0.04 * this.lampCount) }
+  // İTİBAR TAVANI KASITLI: itibar sıkı dengelenen bir istatistik, lambayla sınırsız
+  // şişirilmesi gerilim mekaniğini bitirir. Tavanı KALDIRMIYORUZ — tavanın var olduğunu
+  // MAĞAZADA SÖYLÜYORUZ (bkz. getShopItems 'lamp' satırı). Sabit tek yerde durur ki
+  // metin ile formül ayrışmasın: LAMP_REP_PER × LAMP_REP_MAX_COUNT = LAMP_REP_CAP.
+  decorRep(): number { return 0.15 * this.decorLevel + Math.min(LAMP_REP_CAP, LAMP_REP_PER * this.lampCount) }
 
   // ---- AI RAKİP İSTASYON (Katman 4d) ----
   /** Rakip bu şubede olabilir mi? Kasabada ASLA (müdavim/itibar kimliği bozulmasın),
@@ -3033,10 +3045,21 @@ export function getShopItems(s: GameState): ShopRow[] {
         t('Yalnızca {0} deposunu {1}L büyütür — yer kaplamaz, daha seyrek sipariş.', FUEL_LABEL[f], TANK_CAPACITY[s.tankLevel]),
         TANK_ADD_COSTS[s.tankCounts[f]], null)
   }
+  // TAVANLAR AÇIK YAZILIYOR: bu iki satır "sınırsız kurulur" diyordu ama ikisi de
+  // tavanlıydı — hava-suda gelir, lambada itibar belli bir adetten sonra hiç artmıyordu.
+  // Oyuncu tam parayı ödeyip karşılığında sıfır alıyordu; mağaza metni bunu söylemediği
+  // için hata da fark edilmiyordu. Kurulum hâlâ serbest, ama getirinin nerede durduğu
+  // artık satırın üstünde yazıyor (kilidin/tavanın NEDENİ her zaman görünsün ilkesi).
   row('airwater', 'i-air', s.airWaterCount ? t('Hava-Su Ünitesi ({0})', s.airWaterCount) : t('Hava-Su Ünitesi'), '+₺10-20',
-    t('Lastik havası ve su — ucuz ama müşteri çeker (sınırsız kurulur)'), AIRWATER_COST, null)
+    s.airWaterCount >= SAYAC_KUMBARA_MAX
+      ? t('Lastik havası ve su — gelir tavanına ulaştın ({0} ünite), yeni ünite kazanç eklemez.', SAYAC_KUMBARA_MAX)
+      : t('Lastik havası ve su — ucuz ama müşteri çeker (gelir {0} üniteye kadar büyür)', SAYAC_KUMBARA_MAX),
+    AIRWATER_COST, null)
   row('lamp', 'i-star', s.lampCount ? t('Sokak Lambası ({0})', s.lampCount) : t('Sokak Lambası'), t('+itibar'),
-    t('Gece aydınlatması — istasyon güvenli görünür (sınırsız kurulur, taşınır, satılır)'), LAMP_COST, null)
+    s.lampCount >= LAMP_REP_MAX_COUNT
+      ? t('Gece aydınlatması — itibar katkısı {0} lambada doldu; fazlası yalnız görsel. Taşınır, satılır.', LAMP_REP_MAX_COUNT)
+      : t('Gece aydınlatması — istasyon güvenli görünür ({0} lambaya kadar +itibar, taşınır, satılır)', LAMP_REP_MAX_COUNT),
+    LAMP_COST, null)
   row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
     t('Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)'), PARKING_COST, null)
 
