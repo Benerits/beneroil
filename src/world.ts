@@ -1019,8 +1019,14 @@ export class World {
     orchard(-56, 16, 2, 4)
     bales(-38, -25.5, 4)
     bales(52, -20, 3)
-    pond(-36, -30 + 60, 4) // kuzeybatı gölet (y=30)
-    pond(30, -30, 3.2)
+    // GÖLET YERLEŞİMİ — ölçüldü, iki çakışma vardı:
+    //  · (30,-30) gölet, (34,-34) tarlasının ÇİTİNİN İÇİNDE kalıyordu (oyuncu bildirdi).
+    //    Kaldırıldı: o köşede zaten tarla var, gölete gerek yok.
+    //  · (-36,30) gölet, (-42,30) bağıyla kesişiyordu (bu henüz görülmemişti).
+    //    Kaldırılmadı, bağın dışına taşındı — yoksa haritada hiç gölet kalmıyordu.
+    // Dekor kutuları: tarla w×d, bağ ~(satır×2,2)×(sütun×1,2), gölet 2(r+0,5) çapında
+    // ve y'de 0,72 basık. Yeni yer eklerken bu kutular kesişmemeli.
+    pond(-28, 30, 4)
   }
 
   /** oyuncu fiyat değiştirince tabela güncellenir */
