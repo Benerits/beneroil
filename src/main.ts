@@ -3831,6 +3831,167 @@ function rebuildFromState() {
     if (!id.startsWith('charger-') && !id.startsWith('pump-')) world.rotateBuilding(id, rot)
   world.setClosed(state.closed)
   konumlariSabitle()
+  binaOnarimi()
+}
+
+/** onarım bildirimi oturumda bir kez (her yeniden kurulumda tekrar etmesin) */
+let onarimBildirildi = false
+
+/**
+ * BİNA ONARIMI (fail-closed) — sayaç ↔ sahne tutmuyorsa yapı GERİ GETİRİLİR, asla
+ * silinmez; üst üste binmiş nüshalar ayrılır. Sağlam kayıtta ikisi de 0 döner
+ * (ölçüm: yeniden kurulum mevcut konumların hiçbirini oynatmıyor).
+ */
+function binaOnarimi() {
+  const onarilan = eksikYapilariGeriGetir()
+  if (onarilan) konumlariSabitle()   // geri gelen yapıların konumu da sabitlensin
+  const ayrilan = ustUsteBinenleriAyir()
+  if ((onarilan + ayrilan) <= 0) return
+  if (!onarimBildirildi) {
+    onarimBildirildi = true
+    ui.toast(t('Kayıtta kaybolmuş {0} tesis bulundu ve istasyona geri kondu — hiçbir şey silinmedi.',
+      String(onarilan + ayrilan)), 'good', true)
+  }
+  Car.solids = hardRects()
+  persist()   // onarım kalıcı olsun (yoksa her açılışta tekrar gerekir)
+}
+
+/**
+ * SAYAÇ ↔ SAHNE MUTABAKATI (fail-closed) — "parasını verdiğim tesis ortadan kayboldu".
+ *
+ * Sayaç/bayrak KAYITTA duruyor ama sahnede karşılığı yoksa (bozuk kayıt, yarıda kalmış
+ * yeniden kurulum, eski istemcinin bıraktığı boşluk) yapı yeniden kurulur. Tersi ASLA
+ * yapılmaz: sahnede olup sayaçta olmayan bir yapı silinmez — emin olunamayan durumda
+ * bina yerinde bırakılır.
+ */
+function beklenenYapiIdleri(): string[] {
+  const out: string[] = []
+  const say = (n: number, base: string) => { for (let i = 0; i < n; i++) out.push(i === 0 ? base : `${base}#${i}`) }
+  if (state.marketLevel > 0) out.push('market')
+  if (state.market2Level > 0) out.push('market2')
+  if (state.toiletLevel > 0) out.push('toilet')
+  if (state.toilet2Level > 0) out.push('toilet2')
+  if (state.batteryLevel > 0) out.push('battery')
+  if (state.hasWash) out.push('wash')
+  if (state.hasWash2) out.push('wash2')
+  if (state.hasOil) out.push('oil')
+  if (state.hasOil2) out.push('oil2')
+  if (state.hasCoffee) out.push('coffee')
+  if (state.hasCoffee2) out.push('coffee2')
+  if (state.hasRestaurant) out.push('restaurant')
+  if (state.hasRestaurant2) out.push('restaurant2')
+  if (state.hasTruckPark) out.push('truckpark')
+  if (state.hasTruckPark2) out.push('truckpark2')
+  if (state.hasHotel) out.push('hotel')
+  if (state.hasDiesel) out.push('dieselgen')
+  if (state.hasSMR) out.push('smr')
+  say(state.solarCount, 'solar')
+  say(state.airWaterCount, 'airwater')
+  say(state.lampCount, 'lamp')
+  say(state.selfWashCount, 'selfwash')
+  say(state.parkingCount, 'parking')
+  return out
+}
+function eksikYapilariGeriGetir(): number {
+  const varOlan = new Set(world.buildings.map(b => b.id))
+  let geri = 0
+  for (const id of beklenenYapiIdleri()) {
+    if (varOlan.has(id)) continue
+    const p = placedPos[id]
+    buildVisual(id, p ? new THREE.Vector2(p[0], p[1]) : undefined)
+    if (world.buildings.some(b => b.id === id)) geri++
+  }
+  return geri
+}
+
+/**
+ * ÜST ÜSTE BİNEN TESİSLERİ AYIR (fail-closed) — #1239 "market ve bazı tesisler yeni arsa
+ * alınca ortadan kayboluyor", #812 "karşı yakaya self yıkama parası gitti, ünite hiç gelmedi".
+ *
+ * ÖLÇÜM (tarayıcı probu, ?full=1, konumsuz kayıt): rebuildFromState sayılabilir tesislerin
+ * HER örneğini world.buildX'in AYNI varsayılan noktasına kuruyordu —
+ *   selfwash×4 → (-10.5,-6.5) · solar×3 → (-4,-20) · parking×3 · lamp×3 · airwater×3
+ * yani 16 ünitenin 11'i gövde gövdeye binip GÖRÜNMEZ oluyordu. Hemen ardından
+ * konumlariSabitle() bu AYNI koordinatı placedPos'a yazıp persist ediyordu → kayıp KALICI.
+ *
+ * Fix: örnek asla silinmez; çakışan örnek sahipli (gerekiyorsa betonlu) en yakın BOŞ
+ * noktaya taşınır. Boş nokta bulunamazsa yapı OLDUĞU YERDE bırakılır — şüphede yıkma yok.
+ */
+function ustUsteBinenleriAyir(): number {
+  // sahnedeki her yapının o anki dikdörtgeni (kayıtlı açıyla)
+  const rectOf = (id: string, cx: number, cy: number): Rect | null => {
+    const f = footprintOf(id)
+    if (!f) return null
+    const odd = (placedRot[id] ?? 0) % 2 === 1
+    return { cx, cy, w: odd ? f.d : f.w, d: odd ? f.w : f.d }
+  }
+  type Yerlesik = { id: string; rect: Rect }
+  const yerlesik: Yerlesik[] = []
+  const tasinabilir: { id: string; rect: Rect; grass: boolean }[] = []
+  for (const b of world.buildings) {
+    const g = b.group as THREE.Object3D | undefined
+    if (!b.id || !g || !isFinite(g.position.x) || !isFinite(g.position.y)) continue
+    const p = placedPos[b.id]
+    const r = rectOf(b.id, p ? p[0] : g.position.x, p ? p[1] : g.position.y)
+    if (!r) continue
+    // YALNIZ sayılabilir tesislerin '#N' nüshaları taşınır: çakışmanın ölçülen tek kaynağı
+    // bu (taban örnek varsayılan yerinde durur, nüshalar onun üstüne yığılır). Tabela/kapı/
+    // ofis/tank gibi kendi yerleşim kuralı olanlara DOKUNULMAZ.
+    if (b.id.includes('#') && COUNTABLE[b.id.split('#')[0]]) {
+      tasinabilir.push({ id: b.id, rect: r, grass: !!footprintOf(b.id)?.grass })
+    } else yerlesik.push({ id: b.id, rect: r })
+  }
+  // indeks sırası: 'x#1' önce, 'x#9' sonra — onarım her açılışta AYNI sonucu versin
+  tasinabilir.sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }))
+
+  // TETİK DAR TUTULUR: yalnız BAŞKA BİR BİNANIN gövdesine binmek taşımayı başlatır.
+  // Rezerv/şerit çakışması taşıma sebebi DEĞİLDİR — oyuncunun bilerek koyduğu yapı,
+  // sonradan eklenen bir rezerv yüzünden yerinden oynatılmamalı.
+  const binayaBiniyor = (eff: Rect, skipId: string) =>
+    yerlesik.some(y => y.id !== skipId && overlaps(eff, y.rect))
+
+  let ayrilan = 0
+  for (const u of tasinabilir) {
+    if (!binayaBiniyor(u.rect, u.id)) { yerlesik.push({ id: u.id, rect: u.rect }); continue }
+    // en yakın boş nokta: kare halkalar hâlinde dışa doğru tara (deterministik).
+    // Aday hem YERLEŞİM kuralını (sahiplik/beton/rezerv/kayıtlı dikdörtgen) hem de
+    // SAHNEDEKİ diğer gövdeleri geçmeli — kayıtta dikdörtgeni olmayan yapılar da var.
+    let hedef: [number, number] | null = null
+    // sabit rezervler ünite başına BİR kez hesaplanır (tarama binlerce aday deniyor)
+    const engeller = fixedObstacles(u.id)
+    const uygun = (eff: Rect, grassOk: boolean) => {
+      for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
+        if (!landOk(eff.cx + sx * (eff.w / 2 - 0.2), eff.cy + sy * (eff.d / 2 - 0.2), grassOk)) return false
+      }
+      for (const o of engeller) if (overlaps(eff, o)) return false
+      for (const o of placedRects) if (o.id !== u.id && overlaps(eff, o)) return false
+      return !binayaBiniyor(eff, u.id)
+    }
+    // 1. tur: normal yerleşim kuralı · 2. tur: BETON şartı gevşetilir (arsa yine SAHİPLİ
+    // olmalı, araç şeritleri/rezervler yine korunur) — konumu kaybolmuş yapı, betonsuz
+    // kendi arsasında durmak yerine görünmez kalmasın. Yarıçap tüm haritayı kapsar.
+    for (const gevsek of [false, true]) {
+      for (let r = 1; r <= 36 && !hedef; r++) {
+        for (let dx = -r; dx <= r && !hedef; dx++) for (let dy = -r; dy <= r && !hedef; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const cx = Math.round(u.rect.cx + dx), cy = Math.round(u.rect.cy + dy)
+          if (uygun({ cx, cy, w: u.rect.w, d: u.rect.d }, u.grass || gevsek)) hedef = [cx, cy]
+        }
+      }
+      if (hedef) break
+    }
+    // FAIL-CLOSED: yer bulunamadıysa yapı DURDUĞU YERDE kalır (asla silinmez)
+    if (!hedef) { yerlesik.push({ id: u.id, rect: u.rect }); continue }
+    applyDynamicMove(u.id, hedef[0], hedef[1], placedRot[u.id] ?? 0)
+    placedPos[u.id] = hedef
+    const yeni = { cx: hedef[0], cy: hedef[1], w: u.rect.w, d: u.rect.d }
+    const i = placedRects.findIndex(x => x.id === u.id)
+    if (i >= 0) placedRects[i] = { id: u.id, ...yeni }
+    else placedRects.push({ id: u.id, ...yeni })
+    yerlesik.push({ id: u.id, rect: yeni })
+    ayrilan++
+  }
+  return ayrilan
 }
 
 /**
