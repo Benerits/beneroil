@@ -491,6 +491,19 @@ export class World {
   private concreteMat: THREE.MeshLambertMaterial
   private nightMats: NightMat[] = []
   private nightLights: THREE.PointLight[] = []
+  /** OYUNCU LAMBALARI İÇİN SABİT IŞIK HAVUZU (#1287 "lamba alınca ilk sefer uzun, sonra kısa
+   *  takılma"). three.js'te sahnedeki ışık SAYISI değişince BÜTÜN materyallerin shader'ı
+   *  yeniden derlenir (NUM_POINT_LIGHTS program anahtarının parçası). Her lamba kendi
+   *  PointLight'ını ekleyince tek satın alma 3 sayı değişimi demekti (önizleme kur → gerçek
+   *  kur → önizleme sil) → sahne iki kez baştan derleniyordu; ilk seferde soğuk önbellek
+   *  uzun, sonrakilerde kısa donma. Havuz boot'ta sahneye SABİT sayıda ışık koyar; lamba
+   *  kurulunca boştaki ışık üstüne taşınır, sökülünce serbest kalır. Sayı hiç değişmez →
+   *  derleme yok. Havuz dolunca lamba yalnız emisif ampulle yanar (menzil 18 birim, 6 ışık
+   *  zaten avlunun tamamını kaplıyor; fazlası görsel fark yaratmıyordu). */
+  private lampPool: { light: THREE.PointLight; owner: string | null }[] = []
+  /** temanın gerçek asfalt genişliği (yerleştirme: lamba asfalta dikilmesin) */
+  roadW = 4.6
+  static readonly LAMP_POOL = 6
   private steam: { mesh: THREE.Mesh; offset: number; drift: number; bx: number; by: number; bz: number }[] = []
   private steamT = 0
   /** RÜZGÂR TÜRBİNİ kanatları — update()'te döner. Hız state'ten gelen rüzgâra bağlı;
@@ -520,6 +533,12 @@ export class World {
     const cam = sun.shadow.camera
     cam.left = -55; cam.right = 55; cam.top = 55; cam.bottom = -55; cam.far = 140
     s.add(sun)
+    for (let i = 0; i < World.LAMP_POOL; i++) {
+      const light = new THREE.PointLight(0xffd9a0, 0, 18, 1.7)
+      light.position.set(0, 0, -50) // boşta: zemin altında, şiddet 0
+      s.add(light)
+      this.lampPool.push({ light, owner: null })
+    }
 
     // yerleştirme modu grid'i (1 birimlik kareler)
     this.grid = new THREE.GridHelper(110, 110, 0xffffff, 0xffffff)
@@ -704,6 +723,7 @@ export class World {
     // asfaltın kenarı (ROAD_X + 3.4 = 11.3) onun altında kalmalı — yoksa kapı pedi
     // asfaltın üstüne biniyor.
     const roadW = th.lane.service ? 6.0 : seritSayisi >= 3 ? 6.8 : seritSayisi === 2 ? 6.0 : 4.6
+    this.roadW = roadW
     if (!isWater) {
       const road = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 220), roadMat)
       road.position.set(ROAD_X, 0, 0.01)
@@ -2430,6 +2450,7 @@ export class World {
     const b = this.buildings.find(x => x.id === id)
     if (!b) return null
     this.buildings = this.buildings.filter(x => x.id !== id)
+    if (id.startsWith('lamp')) this.lampPoolBirak(id) // önizleme/küçük resim ışık tutmaz
     if (id.startsWith('wind')) this.blades = this.blades.filter(x => x.id !== id)
     if (id === 'smr') {
       this.steam = this.steam.filter(s => {
@@ -2450,6 +2471,7 @@ export class World {
     if (!list.length) return
     for (const b of list) this.scene.remove(b.group as THREE.Group)
     this.unregister(id)
+    if (id.startsWith('lamp')) this.lampPoolBirak(id)
     if (id === 'smr') this.steam = []
     if (id.startsWith('wind')) this.blades = this.blades.filter(x => x.id !== id)
     if (id === 'market') this.marketGroup = null
@@ -3368,14 +3390,35 @@ export class World {
     bulb.position.set(0.6, 0, 3.0)
     g.add(bulb)
     this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner: regId })
-    const light = new THREE.PointLight(0xffd9a0, 0, 18, 1.7)
-    light.position.set(0.6, 0, 3.2)
-    g.add(light)
-    this.nightLights.push(light)
+    this.lampPoolAl(regId, at.x + 0.6, at.y, 3.2) // havuzdan ışık (yeni PointLight EKLENMEZ)
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.register(regId, t('SOKAK LAMBASI'), g, 3.4)
   }
+
+  /** havuzdan boş ışığı lambaya ver; aynı id'nin eski ışığı önce serbest kalır (yeniden kurulum) */
+  private lampPoolAl(owner: string, x: number, y: number, z: number) {
+    this.lampPoolBirak(owner)
+    const slot = this.lampPool.find(p => !p.owner)
+    if (!slot) return
+    slot.owner = owner
+    slot.light.position.set(x, y, z)
+    if (!this.nightLights.includes(slot.light)) this.nightLights.push(slot.light)
+  }
+
+  private lampPoolBirak(owner: string) {
+    for (const p of this.lampPool) {
+      if (p.owner !== owner) continue
+      p.owner = null
+      p.light.intensity = 0
+      p.light.position.set(0, 0, -50)
+      this.nightLights = this.nightLights.filter(l => l !== p.light)
+    }
+    // ampul materyali de düşsün: eskiden her önizleme/taşıma/satış ölü kayıt bırakıyordu
+    this.nightMats = this.nightMats.filter(m => m.owner !== owner)
+  }
+  /** test/teşhis: havuzdaki ışıkların sahipleri */
+  lampPoolDurum(): (string | null)[] { return this.lampPool.map(p => p.owner) }
 
   buildAirWater(pos?: THREE.Vector2, regId = 'airwater') {
     const at = pos ?? new THREE.Vector2(-4.5, 0.2)

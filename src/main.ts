@@ -4353,7 +4353,7 @@ function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
     if (p.id.startsWith('pump-') || p.id.startsWith('charger-') || p.id === 'tank' || p.id === 'truckpark') continue
     // tabela DEKORATİF: araç engeli değil (yerleştirme kuralıyla tutarlı) — yol kenarına/kenara
     // konunca araçların takılıp trafiği kilitlemesi bitti (#352, #338)
-    if (p.id === 'sign') continue
+    if (p.id === 'sign' || p.id.startsWith('lamp')) continue // lamba da dekoratif (#1286)
     r.push({ cx: p.cx, cy: p.cy, w: p.w, d: p.d })
   }
   return r
@@ -4975,6 +4975,27 @@ function repositionPlacing(x: number, y: number) {
     placing.root.position.set(placing.cx, placing.cy, 0)
     const otherY = placing.id === 'gatein2' ? world.gateOut2.y : world.gateIn2.y
     placing.valid = Math.abs(placing.cy - otherY) >= 6 && !farGateBlockedAt(placing.cy)
+  } else if (placing.id.startsWith('lamp')) {
+    // SOKAK LAMBASI DEKORATİF — yol kenarı serbest (#1286 "alınan lambalar yol kenarına
+    // konulmuyor"). Genel yoldan geçince: yol kenarı yeşil bant hiçbir parsele ait değil →
+    // landOk düşüyordu; üstüne servis şeridi + kapı→pompa koridoru rezervleri lambayı
+    // cx ≤ 1,45'e sıkıştırıyordu. Oysa oyunun kendi dekoratif lambaları x=5,45'te duruyor.
+    // Araç engeli değil (hardRects'te muaf) → şerit rezervleri bağlamaz. Sahip olunan
+    // arsalar (batı/karşı dahil) ESKİSİ GİBİ serbest; ek olarak asfaltın iki kenarındaki
+    // 1,5 birimlik bant açıldı. Asfaltın kendisi temanın GERÇEK yol genişliğinden okunur
+    // (kasaba 4,6 / otoyol 6,8) — sabit ±2,6 otoyolda asfalta lamba diktirirdi.
+    const pid = placing.id
+    placing.cx = Math.round(x * 2) / 2
+    placing.cy = Math.max(-26, Math.min(26, Math.round(y)))
+    placing.root.position.set(placing.cx, placing.cy, 0)
+    const eff = { cx: placing.cx, cy: placing.cy, w: placing.w, d: placing.d }
+    const asfaltMesafe = Math.abs(eff.cx - ROAD_X) - world.roadW / 2 // direğin asfalt kenarına uzaklığı
+    const asfalt = asfaltMesafe < 0.25
+    const kenar = !asfalt && asfaltMesafe <= 1.5
+    const arsa = landOk(eff.cx, eff.cy, true)
+    placing.valid = (kenar || arsa)
+      && !placedRects.some(o => o.id !== pid && overlaps(eff, o))
+      && !fixedObstacles(pid).some(o => !o.lane && overlaps(eff, o))
   } else if (placing.id === 'sign') {
     // Tabela dekoratif (araç engeli DEĞİL) → yol kenarına konabilir, sahiplik/beton aranmaz.
     // İstasyon çevresi + yol kenarı boyunca UZUN yerleştirme (yola çok uzaklaşmasın: cx≤6.5).
@@ -5214,7 +5235,11 @@ ui.onBuy = id => {
     return
   }
   // seviye tabanlı tesisler (batarya/market/tuvalet) İLK kuruluşta yerleştirilir; yükseltme YERİNDE olur (yıkmak gerekmez)
-  const inPlaceUpgrade = (id === 'battery' && state.batteryLevel > 0)
+  // TABELA her zaman vardır (boot'ta seviye 0 kurulu) → yükseltme HEP yerinde. Eskiden
+  // PLACEABLE'da olduğu için her seviyede yerleştirme ekranına düşüyor, hayalet (0,0)'dan
+  // başlıyordu: oyuncu tabelayı her seferinde yeniden yerine sürüklüyordu (#1282).
+  const inPlaceUpgrade = id === 'sign'
+    || (id === 'battery' && state.batteryLevel > 0)
     || (id === 'market' && state.marketLevel > 0)
     || (id === 'market2' && state.market2Level > 0)
     || (id === 'toilet2' && state.toilet2Level > 0)
@@ -5227,6 +5252,7 @@ ui.onBuy = id => {
   }
   if (!buyItem(state, id)) return
   buildVisual(id, placedPos[id] ? new THREE.Vector2(placedPos[id][0], placedPos[id][1]) : undefined) // yükseltmede AYNI konumda kur
+  if (placedRot[id]) world.rotateBuilding(id, placedRot[id]) // kurucular grubu 0°'de yaratır; açı da korunsun
   buyToast(id)
   persist()
   if (selectedBuilding) refreshBuildingCard()
