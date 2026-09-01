@@ -251,6 +251,10 @@ const { GameState, FUEL_PRICE } = await import('../../src/state.ts')
   Car.rotaKopukSayac = 0
   Car.reaktifKacis = 0
 
+  // A* SAYACI AĞ KURULMADAN ÖNCE ALINIR: şerit ağı, L biçimli ünite kolu kapalıysa A*
+  // yedeğine gider ve rotayı ağa PİŞİRİR (uniteKolu → yolBul). Sim boyunca araçlar
+  // pişmiş kolu kullanır, yeniden arama gerekmez — "yol bulucu devrede" kanıtı burada.
+  const aramaOnce = yolStats.arama
   mgr.update(0.1) // şerit ağı ilk update'te kurulur — omurga x'i ancak ondan sonra okunur
   // SENARYO GEÇERLİLİĞİ: yuvadan çıkış omurgasına giden DÜZ bacak gerçekten gövdeyi
   // kesiyor mu? Kesmiyorsa test hiçbir şey ölçmüyor demektir.
@@ -262,7 +266,6 @@ const { GameState, FUEL_PRICE } = await import('../../src/state.ts')
     `senaryo GEÇERSİZ: düz çıkış bacağı gövdeyi kesmiyor (xOut=${L ? L.xOut.toFixed(2) : '?'}) — kusur tetiklenmiyor`)
 
   // ── 3 DAKİKA SİMÜLASYON + 2 DAKİKA BOŞALTMA ──
-  const aramaOnce = yolStats.arama
   const busy = new Map()
   let enUzunCakili = 0, cakiliOrnek = 0, cakiliOlay = 0
   const izle = new Map() // araç → { x, y, t }
@@ -320,7 +323,7 @@ const { GameState, FUEL_PRICE } = await import('../../src/state.ts')
     `servis ${served} ≥ 60 (eski sezgisel kod aynı yerleşimde 39) — çıkış hattı açıldı`,
     `servis ${served} < 60 — çıkış hattı tıkalı (eski sezgisel kod 39)`)
   kontrol(yolStats.arama > aramaOnce,
-    `yol bulucu GERÇEKTEN devrede: simülasyon boyunca ${yolStats.arama - aramaOnce} A* araması koştu`,
+    `yol bulucu GERÇEKTEN devrede: ağ kurulumu + simülasyon boyunca ${yolStats.arama - aramaOnce} A* araması koştu`,
     'yol bulucu hiç çağrılmadı — test sezgisel rotayı ölçüyor, iddia boş')
   kontrol(Car.rotaKopukSayac === 0, 'Car.rotaKopukSayac = 0 (hiçbir araca kopuk rota verilmedi)',
     `Car.rotaKopukSayac = ${Car.rotaKopukSayac} — çözülemeyen rota üretiliyor`)

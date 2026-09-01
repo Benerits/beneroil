@@ -26,11 +26,17 @@
 
 /** Ünitenin servis noktası (aracın durduğu yer). Şerit uçları BUNDAN türer —
  *  world.pumpSlots / world.evSlots API'si tek kaynak, elle aynalama yok. */
+import { yolBul } from './yol-bul'
 export interface UnitPoint {
   /** 'pump-3' / 'ev-1' */
   id: string
   x: number
   y: number
+  /** ÜNİTENİN GERÇEK GÖVDE DİKDÖRTGENİ (main.ts unitRect ile birebir; opts.unitRect'ten gelir).
+   *  NEDEN: ünite döndürülebilir (0/90/180/270). 180°'de araç yuvası gövdenin ARKASINA
+   *  düşer ve omurgadan slota giden DÜZ kol gövdenin İÇİNDEN geçerdi — araç gövdeye
+   *  biner, oraya asla varamaz. Gövdeyi bilmeden "kolun açık mı" sorusu sorulamaz. */
+  rect?: Rect
 }
 
 /**
@@ -102,6 +108,8 @@ export interface StationGeom {
  *  en az bu kadar mesafe bırakılır; yoksa akan araç duran aracın gövdesine biner.
  *  1.05 seçildi: yük testinde "iç içe" ölçütü merkez mesafesi < 1.0 olarak sayılıyor. */
 export const UNIT_CLEAR = 1.05
+/** ünite kolu A* yedeğinin pay kademeleri (cars.ts rotaPadi/PAD_DAR ile aynı) */
+const KOL_PADLARI = [1.0, 0.65]
 /** GELEN ve GİDEN omurga arasındaki mesafe. İki akım aynı kolonda olmasın diye. */
 export const LANE_SEP = 1.05
 /** Çıkış omurgasının kapıya en yakın olabileceği derinlik. NEGATİF OLABİLİR: kapı hattı
@@ -170,8 +178,109 @@ export const PARK_AISLE_SEP = 1.05
 export const PARK_END_PAD = 1.7
 /** Koridor/kol temizlik taraması: bu adımla nokta nokta örneklenir (araç yarı boyu altı). */
 const PARK_TARAMA = 0.35
+/** OMURGA taraması: kolon boyu 40+ birim olabildiği için adım biraz büyük. En ince
+ *  yerleştirilebilir yapı 1.5 birim + katı cisim payı 0.45×2 → 0.5 adım hiçbirini atlamaz. */
+const TARAMA_OMURGA = 0.5
 
 export interface Pt { x: number; y: number }
+
+/** eksen hizalı dikdörtgen (gövde/rezerv) — three.js bilmeyen saf geometri */
+export interface Rect { cx: number; cy: number; w: number; d: number }
+
+/** ünite gövdesini kind+indeks ile veren geri çağrı (CarManagerOpts.unitRect) */
+export type UnitRectFn = (kind: 'pump' | 'ev', i: number) => Rect | null
+
+/** Hat/kol temizlik taraması adımı (araç yarı boyundan küçük — delik atlamasın). */
+const TARAMA = 0.35
+/** iki nokta arası hat katı cisimden temiz mi (nokta nokta tara) */
+export function hatTemiz(a: Pt, b: Pt, bos: (x: number, y: number) => boolean): boolean {
+  const len = Math.hypot(b.x - a.x, b.y - a.y)
+  const n = Math.max(1, Math.ceil(len / TARAMA))
+  for (let i = 0; i <= n; i++) {
+    if (!bos(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n)) return false
+  }
+  return true
+}
+/** bir noktalar dizisinin BÜTÜN bacakları temiz mi */
+function yolTemiz(pts: Pt[], bos: (x: number, y: number) => boolean): boolean {
+  for (let i = 1; i < pts.length; i++) if (!hatTemiz(pts[i - 1], pts[i], bos)) return false
+  return true
+}
+
+/** BİR ÜNİTENİN OMURGAYA BAĞLANMA KOLU (önceden hesaplanmış, katı cisimle doğrulanmış). */
+export interface UniteKol {
+  /** ünitenin servis noktası (aracın durduğu yer) */
+  slot: Pt
+  /** GELEN omurgadan slota: ilk nokta omurga üzerinde, son nokta SLOT */
+  giris: Pt[]
+  /** slottan GİDEN omurgaya: ilk nokta SLOT, son nokta omurga üzerinde */
+  cikis: Pt[]
+  /** kol açık mı — kapalıysa ünite ERİŞİLEMEZ (araç oraya gönderilmez) */
+  acik: boolean
+  /** gövdenin ucundan DOLANILDI mı (döndürülmüş ünite: slot gövdenin arkasında) */
+  dolanma: boolean
+}
+
+/**
+ * ÜNİTE KOLUNU HESAPLA — omurga ile slot arasındaki tek yönlü dik yaklaşma.
+ *
+ * ÜÇ ADAY, SIRAYLA (ilk temiz olan kazanır):
+ *   1. DÜZ kol: omurga → (slot.y) → slot. Yaygın hâl; davranış eskisiyle BİREBİR.
+ *   2/3. GÖVDENİN UCUNDAN DOLANMA: gövde slot ile omurganın ARASINDAysa (180° dönmüş
+ *      ünite) düz kol gövdenin içinden geçer. Ara nokta gövdenin ±y ucunun UNIT_CLEAR
+ *      ötesine konur: araç omurgada o hizaya kadar akar, gövdenin ucundan dolanır,
+ *      slotun kendi kolonundan slota iner. İki bacak da gövdenin dışında kalır.
+ * Hiçbiri temiz değilse kol KAPALI (acik=false) → ünite erişilemez sayılır.
+ *
+ * `bos` verilmezse (test/geriye dönük) her şey açık kabul edilir: eski davranış.
+ */
+export function uniteKolu(slot: Pt, body: Rect | null, xIn: number, xOut: number,
+                          bos?: (x: number, y: number) => boolean): UniteKol {
+  const acikTest = bos ?? (() => true)
+  const yAdaylari: number[] = [slot.y]
+  if (body) {
+    const pay = body.d / 2 + UNIT_CLEAR
+    // gövdenin KAPIYA/omurgaya göre değil, KENDİ eksenine göre iki ucu
+    yAdaylari.push(body.cy + pay, body.cy - pay)
+  }
+  const kur = (xSpine: number, yA: number): Pt[] =>
+    yA === slot.y ? [{ x: xSpine, y: slot.y }, { x: slot.x, y: slot.y }]
+      : [{ x: xSpine, y: yA }, { x: slot.x, y: yA }, { x: slot.x, y: slot.y }]
+  const bul = (xSpine: number): { yol: Pt[]; dolanma: boolean } | null => {
+    for (const yA of yAdaylari) {
+      const yol = kur(xSpine, yA)
+      if (yolTemiz(yol, acikTest)) return { yol, dolanma: yA !== slot.y }
+    }
+    return null
+  }
+  // A* YEDEĞİ (2 Eyl): L biçimli 3 aday (düz / gövdenin iki ucu) kapalıysa ünite hemen
+  // "erişilemez" sayılmaz — yol bulucuya sorulur. Telemetri #4403 kopyasında (180°
+  // dönük pompalar, gövdeler 0.6 aralıkla dizili) üç aday da komşu gövdeye çarpıyordu,
+  // oysa A* her yuvayı buluyordu; ağ dört pompayı da düşürünce servis 0'a inmişti.
+  // Kural: ünite ancak A* de yol bulamazsa erişilemezdir — ağ ile rota katmanı aynı
+  // gerçeği söyler. Pay kademesi cars.ts ile aynı: konfor 1.0, sonra dar 0.65.
+  // Yalnız `bos` verilen (kara) ağlarda çalışır; marina bu yola hiç girmez.
+  const yedek = (xSpine: number): { yol: Pt[]; dolanma: boolean } | null => {
+    if (!bos) return null
+    for (const pad of KOL_PADLARI) for (const yA of yAdaylari) {
+      const bas = { x: xSpine, y: yA }
+      if (!acikTest(bas.x, bas.y)) continue
+      const yol = yolBul(bas, slot, pad)
+      if (yol) return { yol: [bas, ...yol], dolanma: true }
+    }
+    return null
+  }
+  const slotBos = acikTest(slot.x, slot.y)
+  const g = slotBos ? (bul(xIn) ?? yedek(xIn)) : null
+  const c = slotBos ? (bul(xOut) ?? yedek(xOut)) : null
+  return {
+    slot: { x: slot.x, y: slot.y },
+    giris: g ? g.yol : kur(xIn, slot.y),
+    cikis: c ? c.yol.slice().reverse() : kur(xOut, slot.y).slice().reverse(),
+    acik: !!g && !!c,
+    dolanma: !!(g?.dolanma || c?.dolanma),
+  }
+}
 
 /**
  * BİR PARK YERİNİN ÖNCEDEN ÇİZİLMİŞ YOLU.
@@ -214,6 +323,17 @@ export interface StationLanes {
   spillStart: number
   /** KULLANILABİLİR park yerleri (yolu katı cisimle kapalı olanlar burada YOKTUR) */
   parks: ParkLane[]
+  /** ÜNİTE KOLLARI: ünite id ('pump-3') → omurgaya bağlanma yolu (dolanma noktalı olabilir) */
+  kollar: Map<string, UniteKol>
+  /** ULAŞILAMAYAN POMPA indeksleri — kolu katı cisimle kapalı. Araç oraya GÖNDERİLMEZ
+   *  (bozuk pompa ile aynı muamele); oyuncu önündeki yapıyı taşıyınca kendiliğinden döner. */
+  erisilemez: Set<number>
+  /** ULAŞILAMAYAN ŞARJ indeksleri (aynı gerekçe) */
+  erisilemezEv: Set<number>
+  /** omurga HİÇBİR derinlikte temizlenemedi — yerleşim avluyu boydan boya kapatmış */
+  omurgaTikali: boolean
+  /** katı cisme denk geldiği için ELENEN kuyruk slotu sayısı (kapasite o kadar düştü) */
+  dusenSlot: number
 }
 
 export class LaneNetwork {
@@ -242,12 +362,52 @@ export class LaneNetwork {
         if (d > 0.4 && d < dUnit) dUnit = d
       }
       if (!isFinite(dUnit)) dUnit = APRON_LANE_OFF + UNIT_CLEAR // henüz ünite yok
-      const dIn = Math.min(IN_DEPTH_MAX, Math.max(IN_DEPTH_MIN, dUnit - UNIT_CLEAR))
+      const dIn0 = Math.min(IN_DEPTH_MAX, Math.max(IN_DEPTH_MIN, dUnit - UNIT_CLEAR))
       // Çıkış omurgası kapıya daha yakın: çıkan araç zaten kapıya gidiyor, gelen araç
       // ise avlunun içine. İkisi AYNI YÖNDE akar (near +y, far −y) — kafa kafaya İMKÂNSIZ.
-      const dOut = Math.max(EXIT_DEPTH_MIN, dIn - LANE_SEP)
+      const dOutOf = (d: number) => Math.max(EXIT_DEPTH_MIN, d - LANE_SEP)
+      // ── OMURGA DOĞRULAMASI (yeni): kolon KATI CİSİMDEN GEÇİYORSA KAYDIR ──
+      // NEDEN: hesaplanan xIn, yerleştirme rezervinin (cx 2.8 / w 1.5) DIŞINA çıkabiliyor
+      // (yakın yakada 1.6..3.7, karşı yakada 14.2'ye kadar). Yani oyuncu KURALLARA UYGUN
+      // bir bina koyup kendi gelen omurgasını kesebiliyordu: araçlar binanın gövdesine
+      // dayanıp avluda birikiyor, kimse pompaya varamıyordu. Artık kolon önce ölçülür;
+      // kapalıysa DERİNLİK BANDI içinde 0.25 adımlarla en yakın TEMİZ kolona kayar
+      // (xIn ile xOut arası LANE_SEP her adayda korunur — iki akım asla aynı kolonda olmaz).
+      const uy = units.map(u => u.y)
+      const yIn0 = Math.min(g.gateInY, ...uy), yIn1 = Math.max(g.gateInY, ...uy)
+      const yOut0 = Math.min(g.gateOutY, ...uy), yOut1 = Math.max(g.gateOutY, ...uy)
+      const kolonKirli = (x: number, y0: number, y1: number) => {
+        if (!blocked) return 0
+        let n = 0
+        const adet = Math.max(1, Math.ceil((y1 - y0) / TARAMA_OMURGA))
+        for (let i = 0; i <= adet; i++) if (blocked(x, y0 + (y1 - y0) * i / adet)) n++
+        return n
+      }
+      let dIn = dIn0
+      let omurgaTikali = false
+      if (!g.water && blocked) {
+        const adaylar: number[] = []
+        for (let d = IN_DEPTH_MIN; d <= IN_DEPTH_MAX + 1e-9; d += 0.25) adaylar.push(Math.round(d * 100) / 100)
+        if (!adaylar.some(d => Math.abs(d - dIn0) < 1e-9)) adaylar.push(dIn0)
+        // hesaplanan derinliğe EN YAKIN aday önce denenir (kayma minimum olsun);
+        // eşitlikte KAPIYA YAKIN olan tercih edilir (avlunun derinine kaçmasın)
+        adaylar.sort((a, b) => (Math.abs(a - dIn0) - Math.abs(b - dIn0)) || (a - b))
+        let enIyi = dIn0, enAzKirli = Infinity, bulundu = false
+        for (const d of adaylar) {
+          const xi = g.gateX + g.sideSign * d
+          const xo = g.gateX + g.sideSign * dOutOf(d)
+          const kirli = kolonKirli(xi, yIn0, yIn1) + kolonKirli(xo, yOut0, yOut1)
+          if (kirli === 0) { enIyi = d; bulundu = true; break }
+          if (kirli < enAzKirli) { enAzKirli = kirli; enIyi = d }
+        }
+        dIn = enIyi
+        omurgaTikali = !bulundu
+      }
+      const dOut = dOutOf(dIn)
       const xIn = g.water ? QUEUE_X_WATER : g.gateX + g.sideSign * dIn
       const xOut = g.gateX + g.sideSign * dOut
+      /** katı cisim testi (verilmemişse her yer boş) */
+      const bos = (x: number, y: number) => !blocked || !blocked(x, y)
 
       // ── KUYRUK = GELEN OMURGA ÜZERİNDE SABİT SLOTLAR ──
       // Ayrı bir "bekleme koridoru" YOK: avlu (kapı ↔ ünite hattı) fiziksel olarak iki
@@ -275,7 +435,7 @@ export class LaneNetwork {
       }
       // çapa kapının gerisine düşmesin (araç kapıdan girer, geri geri gidemez)
       if ((capa - g.gateInY) * g.dirY < 1.5) capa = g.gateInY + g.dirY * 1.5
-      const queue: Pt[] = []
+      const anaHam: Pt[] = []
       for (let i = 0; i < (g.water ? 4 : qn); i++) {
         const y = capa - g.dirY * i * step
         // MARİNA: kuyruk çitin içinde kalsın — kapının en fazla QUEUE_TAIL_MAX gerisi.
@@ -284,21 +444,54 @@ export class LaneNetwork {
         // koymak, oraya atanan aracı önündeki dizinin içinden geçmeye zorluyordu — o
         // slotlar artık BANKET segmentine gider (aşağıda).
         if (!g.water && (y - g.gateInY) * g.dirY < QUEUE_GATE_CLEAR) break
-        queue.push({ x: xIn, y })
+        anaHam.push({ x: xIn, y })
       }
       // ── BANKET (TAŞMA) SEGMENTİ: sığmayan slotlar kapıdan ÖNCE, yol omuzunda ──
       // Omuz kolonu kapı yaklaşmasının sahneleme noktasıyla aynı x'te: araç yoldan
       // gelirken zaten oradan geçiyor, kuyruğa ARKADAN katılır (konveyör yönü korunur).
-      const spillStart = queue.length
+      const bankHam: Pt[] = []
       if (!g.water) {
         const xs = (g.lane + g.gateX) / 2
-        for (let k = 0; queue.length < qn; k++) {
+        for (let k = 0; anaHam.length + bankHam.length < qn; k++) {
           const y = g.gateInY - g.dirY * (SPILL_BASE + k * step)
           if (Math.abs(y) > SPILL_MAX_Y) break
-          queue.push({ x: xs, y })
+          bankHam.push({ x: xs, y })
         }
       }
+      // ── SLOT ELEMESİ (yeni): KATI CİSMİN İÇİNDEKİ SLOT LİSTEDEN DÜŞER ──
+      // NEDEN: slotlar bugüne kadar hiç doğrulanmıyordu (yalnız otopark koridorları
+      // doğrulanıyordu). Oyuncu kuyruk hattına bina koyduğunda o slota atanan araç
+      // gövdenin dibine sürüp orada kalıyordu; arkasındaki bütün kuyruk da onunla
+      // birlikte kilitleniyordu. Slot DÜŞÜNCE kapasite azalır, fazlası kapıda geri
+      // çevrilir (mevcut onTurnedAway yolu) — kilitlenme yerine GÖRÜNÜR kayıp.
+      // BANKET TELAFİ ETMEZ: düşen ana slotun yerine yeni banket slotu üretilmez,
+      // yoksa "kapasite azaldı" sinyali kaybolur ve oyuncu sorunu hiç fark etmez.
+      let dusenSlot = 0
+      const ele = (list: Pt[]) => list.filter(q => {
+        if (bos(q.x, q.y)) return true
+        dusenSlot++
+        return false
+      })
+      const ana = ele(anaHam)
+      const bank = ele(bankHam)
+      const queue: Pt[] = [...ana, ...bank]
+      const spillStart = ana.length
       if (!queue.length) queue.push({ x: xIn, y: g.gateInY + g.dirY * base })
+      // ── ÜNİTE KOLLARI (yeni): her ünitenin omurgaya bağlanma yolu DOĞRULANIR ──
+      // Kapalıysa ünite ERİŞİLEMEZ: CarManager oraya araç göndermez (bozuk pompa kalıbı).
+      // MARİNA HARİÇ: tekne şeritleri suda, katı cisim listesi karadadır — orada
+      // "kapalı kol" ölçümü anlamsız (ve mevcut marina davranışını bozardı).
+      const kollar = new Map<string, UniteKol>()
+      const erisilemez = new Set<number>()
+      const erisilemezEv = new Set<number>()
+      for (const u of units) {
+        const kol = uniteKolu({ x: u.x, y: u.y }, u.rect ?? null, xIn, xOut, g.water ? undefined : bos)
+        kollar.set(u.id, kol)
+        if (kol.acik) continue
+        const i = Number(u.id.slice(u.id.indexOf('-') + 1))
+        if (!isFinite(i)) continue
+        if (u.id.startsWith('pump-')) erisilemez.add(i); else erisilemezEv.add(i)
+      }
 
       const L: StationLanes = {
         station: g.station, gateX: g.gateX, gateInY: g.gateInY, gateOutY: g.gateOutY,
@@ -306,6 +499,7 @@ export class LaneNetwork {
         // fallback slotu (yalnız marina/boş yerleşim) ana hatta sayılır
         spillStart: g.water ? queue.length : Math.min(spillStart, queue.length),
         parks: this.parkLanes(g, blocked),
+        kollar, erisilemez, erisilemezEv, omurgaTikali, dusenSlot,
       }
       this.byStation.set(g.station, L)
 
@@ -473,8 +667,81 @@ export class LaneNetwork {
     const L = this.byStation.get(station)
     if (!L) return [target]
     const out: Pt[] = fromRoad ? this.gateApproach(L) : []
+    // DÖNDÜRÜLMÜŞ ÜNİTE: gövde slot ile omurganın arasındaysa kol gövdenin ucundan
+    // DOLANIR (rebuild'de hesaplanmıştır). Düz kolda davranış eskisiyle BİREBİR aynı.
+    const kol = this.kolBul(L, target)
+    if (kol && kol.giris.length > 2) { out.push(...kol.giris); return out }
     out.push({ x: L.xIn, y: target.y })  // omurga boyunca ünitenin hizasına
     out.push({ x: target.x, y: target.y }) // KOL: yalnız bu üniteye ait dik yaklaşma
+    return out
+  }
+
+  /** hedefe (ünite servis noktasına) ait önceden hesaplanmış kol — yoksa null */
+  private kolBul(L: StationLanes, p: Pt): UniteKol | null {
+    let en: UniteKol | null = null, enD = 0.8
+    for (const k of L.kollar.values()) {
+      const d = Math.hypot(k.slot.x - p.x, k.slot.y - p.y)
+      if (d < enD) { enD = d; en = k }
+    }
+    return en
+  }
+
+  /** ÜNİTEYE ARAÇ GÖNDERİLEBİLİR Mİ — kolu katı cisimle kapalıysa HAYIR.
+   *  Ağ henüz kurulmadıysa (ilk kare) engellemez: fail-open, trafik hiç başlamazlık olmaz. */
+  unitErisilebilir(station: string, kind: 'pump' | 'ev', i: number): boolean {
+    const L = this.byStation.get(station)
+    if (!L) return true
+    return !(kind === 'pump' ? L.erisilemez : L.erisilemezEv).has(i)
+  }
+
+  /** TANI RAPORU (testler + ?traffic=1 katmanı okur; oyunu etkilemez) */
+  laneRapor(station: string): {
+    xIn: number; xOut: number; kuyruk: number; banket: number; dususen: number
+    erisilemez: string[]; omurgaTikali: boolean
+  } | null {
+    const L = this.byStation.get(station)
+    if (!L) return null
+    return {
+      xIn: L.xIn, xOut: L.xOut,
+      kuyruk: L.spillStart,
+      banket: L.queue.length - L.spillStart,
+      dususen: L.dusenSlot,
+      erisilemez: [...[...L.erisilemez].map(i => `pump-${i}`), ...[...L.erisilemezEv].map(i => `ev-${i}`)],
+      omurgaTikali: L.omurgaTikali,
+    }
+  }
+
+  /**
+   * YERLEŞTİRME REZERVLERİ — GERÇEKTEN HESAPLANMIŞ şeritler.
+   *
+   * NEDEN: main.ts'teki rezervler SABİT yazılıydı (iç koridor cx 2.8 / w 1.5) ama
+   * hesaplanan omurga o bandın dışına çıkabiliyor (yakın yakada 1.6..3.7). Yani oyuncu
+   * "geçerli" bir bina koyup kendi gelen omurgasını, kuyruk slotunu ya da bir ünitenin
+   * kolunu kapatabiliyordu. Rezerv artık ağın KENDİSİNDEN türer: şerit nereye kaydıysa
+   * rezerv de oraya kayar, tek doğru kaynak.
+   *
+   * `unite` alanı: o dikdörtgen hangi ünitenin koluna ait — üniteyi taşırken kendi kolu
+   * kendisini engellemesin diye çağıran eleyebilir.
+   */
+  laneRezervleri(): { cx: number; cy: number; w: number; d: number; unite?: string }[] {
+    const GEN = 2.2
+    const out: { cx: number; cy: number; w: number; d: number; unite?: string }[] = []
+    for (const L of this.byStation.values()) {
+      const ys = [L.gateInY, L.gateOutY, ...[...L.kollar.values()].map(k => k.slot.y)]
+      const y0 = Math.min(...ys), y1 = Math.max(...ys)
+      out.push({ cx: L.xIn, cy: (y0 + y1) / 2, w: GEN, d: Math.max(GEN, y1 - y0) })
+      out.push({ cx: L.xOut, cy: (y0 + y1) / 2, w: GEN, d: Math.max(GEN, y1 - y0) })
+      for (const q of L.queue) out.push({ cx: q.x, cy: q.y, w: GEN, d: GEN })
+      for (const [id, k] of L.kollar) {
+        for (const yol of [k.giris, k.cikis]) {
+          for (let i = 1; i < yol.length; i++) {
+            const a = yol[i - 1], b = yol[i]
+            out.push({ cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,
+              w: Math.max(GEN, Math.abs(b.x - a.x)), d: Math.max(GEN, Math.abs(b.y - a.y)), unite: id })
+          }
+        }
+      }
+    }
     return out
   }
 
@@ -522,10 +789,14 @@ export class LaneNetwork {
     // dönüyor, sonra yola çıkıyordu. Ekranda kapı ağzında küçük bir "S" kıvrımı,
     // ölçümde gereksiz yol. Her iki yakada da simetrik olarak oluyordu.
     const dOut = L.sideSign * (L.xOut - L.gateX) // kapıdan avlunun içine derinlik
-    const yol: Pt[] = [
-      { x: L.xOut, y: from.y },                       // kol: giden omurgaya çık
-      { x: L.xOut, y: L.gateOutY },                   // omurga boyunca çıkış kapısına
-    ]
+    // DÖNDÜRÜLMÜŞ ÜNİTE: çıkış kolu da gövdenin ucundan dolanır (giriş koluyla aynı kalıp)
+    const kol = this.kolBul(L, from)
+    const yol: Pt[] = kol && kol.cikis.length > 2
+      ? [...kol.cikis.slice(1), { x: L.xOut, y: L.gateOutY }]
+      : [
+        { x: L.xOut, y: from.y },                     // kol: giden omurgaya çık
+        { x: L.xOut, y: L.gateOutY },                 // omurga boyunca çıkış kapısına
+      ]
     if (dOut > 0.1) yol.push({ x: L.gateX, y: L.gateOutY }) // kapı ağzı (yalnız ileriyse)
     yol.push(
       { x: L.lane, y: L.gateOutY + L.dirY * 4 },      // yola katıl

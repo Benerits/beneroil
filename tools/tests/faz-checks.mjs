@@ -349,7 +349,11 @@ console.log('== 14) ŞERİT AĞI (rezervasyon grafiği SİLİNDİ) ==')
     Math.abs(Math.abs(F.xIn - F.gateX) - Math.abs(N.xIn - N.gateX)) < 1e-6)
   // KUYRUK: sıranın BAŞI akış yönünde en ileride, kuyruk kapıya doğru geri diziliyor.
   const q = N.queue
-  check('kuyruk slotları gelen omurga üzerinde', q.every(s => s.x === N.xIn))
+  // ANA HAT omurgada; spillStart'tan sonraki BANKET slotları kapıdan önce yol omuzundadır
+  // (traffic-graph "BANKET (TAŞMA) SEGMENTİ") — o yüzden yalnız ana hat denetlenir.
+  check('ana hat kuyruk slotları gelen omurga üzerinde (banket hariç)',
+    q.slice(0, N.spillStart).every(s => s.x === N.xIn) && N.spillStart > 0,
+    `spillStart ${N.spillStart} · x'ler ${q.map(s => s.x.toFixed(2)).join(',')}`)
   check('slot 0 sıranın BAŞI (akış yönünde en ileride)',
     q.length > 1 && (q[0].y - q[1].y) * N.dirY > 0)
   check('slotlar araç boyundan geniş aralıklı',

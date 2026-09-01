@@ -1,6 +1,8 @@
 import * as THREE from 'three'
-import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, SLOT_MIN_ARA, PARK_YER } from './world'
+import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, SLOT_MIN_ARA, PARK_YER,
+  PUMP_SLOT_OFF, EV_SLOT_OFF } from './world'
 import { Car, CarManager, Tanker } from './cars'
+import { uniteKolu } from './traffic-graph'
 import { UI, BuildingCard } from './ui'
 import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
 import { TrafficDebug, trafficDebugOn } from './traffic-debug'
@@ -2206,6 +2208,9 @@ const cars = new CarManager(world.scene, modelLib, {
   evSlot: i => world.evSlots[i],
   pumpAngle: i => world.pumpAngles[i] ?? 0,
   evAngle: i => world.evAngles[i] ?? 0,
+  // ŞERİT AĞI GÖVDEYİ BİLMELİ: 180° dönmüş ünitede araç yuvası gövdenin ARKASINA düşer,
+  // omurgadan slota giden düz kol gövdenin İÇİNDEN geçerdi. Dikdörtgen hardRects ile birebir.
+  unitRect: (kind, i) => uniteGovdeRect(kind, i),
   trafficPull: () => (guestPaused ? 1 : state.trafficPull()),
   segments: () => state.activeSegments(),
   // MARİNA: tekne segmentleri (kara şubede boş dizi döner → tekne doğmaz)
@@ -4296,6 +4301,62 @@ function hardRects(): { cx: number; cy: number; w: number; d: number }[] {
   return r
 }
 
+/** ÜNİTE GÖVDESİ tek kaynaktan (hardRects ile BİREBİR aynı dikdörtgen): şerit ağı da,
+ *  yerleştirme doğrulaması da aynı gövdeyi görmeli — yoksa "hesapta açık, sahnede kapalı"
+ *  ayrışması olur (bkz. metin↔formül ayrışması kalıbı). */
+function uniteGovdeRect(kind: 'pump' | 'ev', i: number): Rect | null {
+  if (kind === 'pump') {
+    const b = world.pumpBase[i]
+    if (b) return unitRect(b, world.pumpAngles[i] ?? 0, 1.5, 3.4)
+    const s = world.pumpSlots[i]
+    return s ? { cx: s.x - PUMP_SLOT_OFF, cy: s.y, w: 1.5, d: 3.4 } : null
+  }
+  const b = world.evBase[i]
+  if (b) return unitRect(b, world.evAngles[i] ?? 0, 0.9, 1.4)
+  const s = world.evSlots[i]
+  return s ? { cx: s.x - EV_SLOT_OFF, cy: s.y, w: 0.9, d: 1.4 } : null
+}
+
+/** KURULU ünitenin şerit ağındaki erişim durumu (kart + HUD tek kaynaktan okur).
+ *  Ağ yoksa/ünite yoksa TRUE: eksik veri yüzünden yanlış alarm verilmez. */
+function uniteErisimVar(kind: 'pump' | 'ev', i: number): boolean {
+  const s = kind === 'pump' ? world.pumpSlots[i] : world.evSlots[i]
+  if (!s) return true
+  try { return cars.uniteErisilebilir(s.x > ROAD_X ? 'far' : 'near', kind, i) } catch { return true }
+}
+
+/**
+ * ÜNİTE ADAY KONUMDA ARAÇLA ULAŞILABİLİR Mİ — yerleştirme/döndürme KAPISI.
+ *
+ * NEDEN: pompayı kurallara uygun bir yere koyup önüne başka bir yapı denk getirmek
+ * mümkündü; ünite kuruluyor, hiç müşteri almıyor ve oyuncu sebebini göremiyordu.
+ * Burada aday gövde+yuva ÖNCEDEN hesaplanır (world.addPump ile birebir türetme) ve
+ * şerit ağının saf kol hesabıyla (uniteKolu) sınanır. Ağ henüz kurulmadıysa FAIL-OPEN:
+ * ilk kare/açılış onarımı yerleştirmeyi kilitlemesin.
+ */
+function uniteUlasilabilir(id: string, cx: number, cy: number, rot: number): boolean {
+  const pompa = id.startsWith('pump-')
+  const idx = Number(id.slice(pompa ? 'pump-'.length : 'charger-'.length))
+  if (!isFinite(idx)) return true
+  let L: ReturnType<CarManager['graph']['get']> = null
+  try { L = cars.graph.get(cx > ROAD_X ? 'far' : 'near') } catch { return true }
+  if (!L) return true
+  const body = unitBodyPos(id, cx, cy, rot)
+  // yuva/açı türetmesi world.addPump/addEvCharger ile BİREBİR (karşı yakada 180° flip)
+  const dir = rot * Math.PI / 2 + (cx > ROAD_X ? Math.PI : 0)
+  const off = pompa ? PUMP_SLOT_OFF : EV_SLOT_OFF
+  const slot = { x: body.x + Math.cos(dir) * off, y: body.y + Math.sin(dir) * off }
+  const gov = unitRect({ x: body.x, y: body.y }, dir, pompa ? 1.5 : 0.9, pompa ? 3.4 : 1.4)
+  // katı cisim listesi: bu ünite ADAY konumunda, ötekiler yerinde
+  const eski = uniteGovdeRect(pompa ? 'pump' : 'ev', idx)
+  const rects = hardRects().filter(r => !(eski && r.cx === eski.cx && r.cy === eski.cy
+    && r.w === eski.w && r.d === eski.d))
+  rects.push(gov)
+  const bos = (x: number, y: number) => !rects.some(o =>
+    Math.abs(x - o.cx) < o.w / 2 + 0.45 && Math.abs(y - o.cy) < o.d / 2 + 0.45)
+  return uniteKolu(slot, gov, L.xIn, L.xOut, bos).acik
+}
+
 /** `lane: true` = ARAÇ KORİDORU (yol/şerit rezervi). Tabela bu rezervlere BAĞLI DEĞİLDİR:
  *  dekoratiftir ve hardRects() onu zaten araç engeli saymaz (#352/#338), yani şeride
  *  dikilse bile trafiği kilitleyemez. Bayrak sayesinde bunlar tek yerden elenebiliyor. */
@@ -4343,6 +4404,21 @@ function fixedObstacles(skipId = ''): (Rect & { lane?: boolean })[] {
     const b = world.evBase[i]; const s = world.evSlots[i]
     if (b) r.push(unitRect({ x: (b.x + s.x) / 2, y: (b.y + s.y) / 2 }, world.evAngles[i] ?? 0, 4.0, 2.6))
     else r.push({ cx: s.x - 0.6, cy: s.y, w: 4.0, d: 2.6 })
+  }
+  // ── HESAPLANMIŞ ŞERİT REZERVLERİ (tek doğru kaynak: trafiğin KENDİ ağı) ──
+  // Yukarıdaki sabit koridorlar bir TAHMİNDİ: gerçek gelen omurga ünitelerden türer ve
+  // o bandın (cx 2.8 / w 1.5) dışına çıkabiliyor — yakın yakada 1.6..3.7, karşı yakada
+  // 14.2'ye kadar. Yani oyuncu KURALLARA UYGUN bir bina koyup kendi gelen omurgasını,
+  // bir kuyruk slotunu ya da bir ünitenin kolunu kesebiliyordu. Artık rezerv ağdan okunur:
+  // şerit nereye kaydıysa rezerv de oraya kayar.
+  // ÜNİTE MUAFİYETİ: pompa/şarj şeridi TANIMLAR (omurga ünitelerin derinliğinden türer),
+  // o yüzden ünite yerleştirirken bu rezervler uygulanmaz — ünitenin gerçek kapısı
+  // erişilebilirlik testidir (uniteUlasilabilir). Uygulansaydı ilk pompadan sonra ikincisi
+  // hiçbir yere sığmazdı: ünite kendi omurgasının rezervine çarpardı.
+  if (!skipId.startsWith('pump-') && !skipId.startsWith('charger-')) {
+    try {
+      for (const z of cars.laneRezervleri()) r.push({ cx: z.cx, cy: z.cy, w: z.w, d: z.d, lane: true })
+    } catch { /* şerit ağı henüz kurulmadı (açılış onarımı) — sabit rezervler yeterli */ }
   }
   return r
 }
@@ -4603,7 +4679,7 @@ function landOk(x: number, y: number, grassOk: boolean): boolean {
 /** B8: karşı yaka nüshaları YALNIZ karşı yakaya kurulabilir (ziyaretler yaka-duyarlı) */
 const FAR_ONLY = new Set(['market2', 'toilet2', 'wash2', 'oil2', 'coffee2', 'restaurant2', 'truckpark2'])
 
-function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
+function isValidPlacement(p: Rect, skipId: string, grassOk: boolean, rot?: number): boolean {
   // Not: pompa/şarj/tank artık yol karşısına da konabilir (sahip olunan+betonlanmış karşı parsele).
   // İlk karşı pompa/şarj konunca karşı istasyon (otomatik giriş-çıkış + karşı şerit trafiği) aktive olur.
   // Sahiplik/beton kısıtı aşağıdaki landOk tarafından zaten uygulanır.
@@ -4614,6 +4690,10 @@ function isValidPlacement(p: Rect, skipId: string, grassOk: boolean): boolean {
   }
   for (const o of fixedObstacles(skipId)) if (overlaps(p, o)) return false
   for (const o of placedRects) if (o.id !== skipId && overlaps(p, o)) return false
+  // ÜNİTE KAPISI: pompa/şarj konduğu yerde ARAÇLA ULAŞILABİLİR olmalı. Açı bilinmeden
+  // (rot verilmeden) sınanamaz — açı verilmeyen çağrılarda (açılış onarımı) eski davranış.
+  if (rot !== undefined && (skipId.startsWith('pump-') || skipId.startsWith('charger-'))
+      && !uniteUlasilabilir(skipId, p.cx, p.cy, rot)) return false
   return true
 }
 
@@ -4698,9 +4778,12 @@ function hideReserves() {
   if (reserveOverlay) { world.scene.remove(reserveOverlay); reserveOverlay = null }
 }
 let reserveHintShown = false
+/** ulaşım uyarısı yerleştirme oturumunda BİR KEZ (kare başına toast spam olmasın) */
+let ulasimUyarisiGosterildi = false
 
 function startPlacement(id: string, move = false) {
   cancelPlacement()
+  ulasimUyarisiGosterildi = false
   const f = footprintOf(id, move)
   if (!f) return
   const root = new THREE.Group()
@@ -4853,7 +4936,16 @@ function repositionPlacing(x: number, y: number) {
     placing.root.rotation.z = placing.rot * Math.PI / 2 + (placingFarFlip() ? Math.PI : 0)
     const odd = placing.rot % 2 === 1
     const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
-    placing.valid = isValidPlacement(eff, placing.id, placing.grass)
+    placing.valid = isValidPlacement(eff, placing.id, placing.grass, placing.rot)
+    // "YER BOŞ AMA KIRMIZI" — ünitelerde kırmızının SEBEBİ görünmez olabiliyor: arsa da
+    // boş, rezerv de temiz, ama aracın omurgadan slota giden kolu kapalı. Sebebi bir kez
+    // yazıyoruz (rezerv ipucu kalıbının aynısı; her karede toast spam olmasın).
+    if (!placing.valid && !ulasimUyarisiGosterildi
+        && (placing.id.startsWith('pump-') || placing.id.startsWith('charger-'))
+        && isValidPlacement(eff, placing.id, placing.grass)) {
+      ulasimUyarisiGosterildi = true
+      ui.toast(t('Araç bu üniteye ulaşamaz — önünü kapatan yapıyı taşı ya da üniteyi döndür.'), 'bad', true)
+    }
   }
   placing.planeMat.color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
   placing.planeMat.opacity = placing.valid ? 0.22 : 0.34
@@ -5086,6 +5178,13 @@ ui.onRotate = id => {
       || fixedObstacles(id).some(o => overlaps(eff, o))
     if (carpisma) {
       ui.toast(t('Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.'), 'bad')
+      return
+    }
+    // AÇI DEĞİŞİNCE ARAÇ YUVASI DA DÖNER (world.addPump): yeni açıda yuva gövdenin
+    // arkasına düşüp bir yapının içinde kalabilir. Ünite "kurulu ama müşterisiz"
+    // kalmasın diye döndürme burada reddedilir (yerleştirmedeki kapının aynısı).
+    if ((id.startsWith('pump-') || id.startsWith('charger-')) && !uniteUlasilabilir(id, pos[0], pos[1], yeni)) {
+      ui.toast(t('Araç bu üniteye ulaşamaz — önünü kapatan yapıyı taşı ya da üniteyi döndür.'), 'bad')
       return
     }
     const i = placedRects.findIndex(r => r.id === id)
@@ -6448,6 +6547,17 @@ function refreshBuildingCard() {
   const card = buildingCard(selectedBuilding)
   if (!card) return
   const facId = selectedBuilding.split('#')[0]
+  // ERİŞİLEMEZ ÜNİTE (eski yerleşimler): şerit ağı bu üniteye araç GÖNDERMİYOR. Ünite
+  // çalışıyor görünür, ciro sıfırdır ve sebebi hiçbir yerde yazmıyordu ("görünmez özellik"
+  // kalıbı). Kart artık açıkça söylüyor; HUD'da da bozuk pompa gibi bir etiket çıkar.
+  if (facId.startsWith('pump-') || facId.startsWith('charger-')) {
+    const pompa = facId.startsWith('pump-')
+    const i = Number(facId.slice(pompa ? 'pump-'.length : 'charger-'.length))
+    const sv = pompa ? world.pumpSlots[i] : world.evSlots[i]
+    if (sv && !uniteErisimVar(pompa ? 'pump' : 'ev', i)) {
+      card.stats.push([t('UYARI'), t('Araç bu üniteye ulaşamıyor — önündeki yapıyı taşı'), 'bad'])
+    }
+  }
   if (['market', 'market2', 'toilet', 'toilet2', 'wash', 'wash2', 'oil', 'oil2', 'coffee', 'coffee2',
        'restaurant', 'restaurant2', 'truckpark', 'truckpark2', 'hotel', 'selfwash', 'airwater'].includes(facId)) {
     card.stats.push([t('Bugünkü ciro'), `₺${Math.round(state.facDaily[facId] ?? 0).toLocaleString('tr-TR')}`, 'good'])
@@ -7309,6 +7419,16 @@ function frame() {
 
   // bina uyarı etiketleri
   const warns = new Map<string, { text: string; maintId: string }>()
+  // ERİŞİLEMEZ ÜNİTE — bozuk pompa uyarısının kalıbı. Tamir edilecek bir şey YOK
+  // (maintId boş): çözüm önündeki yapıyı taşımak. Oyuncu yolu açınca etiket kendiliğinden
+  // düşer (şerit ağı yerleşim değişince yeniden kurulur). BOZUK etiketi bunun ÜSTÜNE yazar:
+  // arıza daha acil ve tıklanabilir bir eylemi var.
+  for (let i = 0; i < state.pumps; i++) {
+    if (!uniteErisimVar('pump', i)) warns.set(`pump-${i}`, { text: t('ARAÇ ULAŞAMIYOR'), maintId: '' })
+  }
+  for (let i = 0; i < state.evChargers; i++) {
+    if (!uniteErisimVar('ev', i)) warns.set(`charger-${i}`, { text: t('ARAÇ ULAŞAMIYOR'), maintId: '' })
+  }
   state.brokenPumps.forEach(i => warns.set(`pump-${i}`, { text: t('ARIZA · TAMİR ₺800'), maintId: `fix-pump-${i}` }))
   state.brokenChargers.forEach(i => warns.set(`charger-${i}`, { text: t('ARIZA · TAMİR ₺1.000'), maintId: `fix-charger-${i}` }))
   if (state.hasSolar && state.solarDirt >= 0.6) warns.set('solar', { text: t('TEMİZLİK ₺300'), maintId: 'clean-solar' })
