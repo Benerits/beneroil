@@ -201,6 +201,20 @@ const olay = await import('../../src/trafik-olay.ts')
     check('sıkışma: atPump/parked fazı sıkışma SAYILMIYOR', g.length === 0, JSON.stringify(g.map(x => x.govde.k)))
   }
 
+  // 3d') fren muafiyeti: konveyör kuralının KASITLI bekletmesi (frenli=true) arıza sayılmaz.
+  //      Fren bırakılınca (frenli=false) süre SIFIRDAN başlar — gerçek kilit yine 45 sn'de yakalanır.
+  {
+    let fren = true
+    const g = kur(() => [{ ...araba(1, 3, 3, 'driving'), frenli: fren }])
+    sur(120)
+    check('fren muafiyeti: 120 sn frenli hareketsizlikte olay YOK', g.length === 0, JSON.stringify(g.map(x => x.govde.k)))
+    fren = false
+    sur(44)
+    check('fren muafiyeti: fren bırakıldıktan 44 sn sonra hâlâ olay YOK (süre sıfırdan)', g.length === 0, String(g.length))
+    sur(2)
+    check('fren muafiyeti: bırakıldıktan 45 sn sonra GERÇEK sıkışma yakalandı', g.length === 1 && g[0].govde.k === 'sikisma', JSON.stringify(g.map(x => x.govde.k)))
+  }
+
   // 3e) yığılma: 3 birimlik dairede 4 araç (iç içe olmadan)
   {
     // dört araç bir aracın 3 birimlik çevresinde; ikili mesafeler 2.4 (> 2.15) →

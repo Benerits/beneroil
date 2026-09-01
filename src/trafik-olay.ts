@@ -48,6 +48,11 @@ export interface OlayAraci {
   phase: string
   slotIndex: number
   kind: string
+  /** konveyör/blok freni şu an bu aracı KASITLI bekletiyor (Car.blokT > 0).
+   *  Kural gereği duran araç arıza değildir — sıkışma sayacına girmez. Gerçek
+   *  kilitlenme yine yakalanır: 30 sn sonra muafiyet freni bırakır, blokT sıfırlanır
+   *  ve hâlâ kıpırdamayan araç sayaca döner. */
+  frenli?: boolean
 }
 
 export interface OlayBaglam {
@@ -202,7 +207,8 @@ function olcum(araclar: OlayAraci[], adim: number) {
     const onceki = durgun.get(id)
     if (!onceki) { durgun.set(id, { x: c.x, y: c.y, sn: 0 }); continue }
     const yol = Math.hypot(c.x - onceki.x, c.y - onceki.y)
-    if (yol > SIKISMA_TOLERANS) durgun.set(id, { x: c.x, y: c.y, sn: 0 })
+    // fren altındaki bekleyiş = tasarım, arıza değil → süre biriktirme, tazele
+    if (yol > SIKISMA_TOLERANS || c.frenli) durgun.set(id, { x: c.x, y: c.y, sn: 0 })
     else {
       const sn = onceki.sn + adim
       durgun.set(id, { x: onceki.x, y: onceki.y, sn })
