@@ -40,7 +40,9 @@ function parkLot(THREE, id, cx, cy, rot = 0) {
 
 function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highway = null, service = null,
                       entryMul = 1, pullMul = 1, parking = null, parkChance = 0 }) {
-  __seed = 20260726 // her senaryo AYNI tohumla başlar → A/B birebir karşılaştırılabilir
+  // her senaryo AYNI tohumla başlar → A/B birebir karşılaştırılabilir.
+  // SEED env'i yalnız DAĞILIM ölçümü için (tohum duyarlılığı raporu); varsayılan sabit.
+  __seed = Number(process.env.SEED) || 20260726
   const scene = new THREE.Scene()
   const state = new GameState()
   state.pumps = pumps; state.evChargers = evs; state.wideGates = wide
@@ -80,6 +82,11 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   let pOrnek = 0, pCakisma = 0, pAgir = 0, pDisari = 0, pDisariOrnek = 0, parkVaris = 0
   // APRON YIĞINI: aynı anda avluda (kapı ile pompalar arası) kaç araç birikti
   let apronMax = 0
+  // ── KONVEYÖR ÖLÇÜMÜ: kuyruk/omurga hattında ARDIŞIK araç çifti mesafesi ──
+  // Canlı telemetrideki en büyük küme (22x) kuyruk başında burun buruna araçlardı.
+  // HER KAREDE ölçülür (örnekleme değil): hedef, hiçbir karede < 2.5 çift olmaması
+  // ve < 2.66 (gövde boyu) çiftin ~0 olması — görsel iç içelik biter.
+  let kuyrukCift = 0, kuyrukIhlal = 0, kuyrukSert = 0, kuyrukMin = Infinity, kuyrukZirve = 0
   const mgr = new CarManager(scene, null, {
     pumpCount: () => pumps, evCount: () => evs,
     pumpSlot: i => pumpSlots[Math.min(i, pumpSlots.length - 1)],
@@ -122,6 +129,45 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     for (const c of mgr.cars) {
       if (c.phase === 'atPump' && !busy.has(c)) busy.set(c, i + 60)
     }
+    // ── KONVEYÖR: kuyruk hattındaki ardışık çiftler (her karede — "hiçbir karede" iddiası) ──
+    // İki segment var: ANA hat (gelen omurga, xIn kolonu) + BANKET (yol omuzu, kapıdan
+    // önce). Çift, iki araç da AYNI segmentin kolonundayken ölçülür; segmentler arası
+    // geçiş yapan araç (kapı manevrası) o an hiçbir kolonda değildir ve ölçüme girmez —
+    // indiği anda tekrar sayılır, kalıcı bir ihlal asla gizlenemez.
+    // İKİ KADEME (bilerek): SERT ölçüt (<2.5, tek kare bile yasak) yalnız DURAN çiftlere
+    // uygulanır — oyuncunun gördüğü "kuyruk iç içe" duran araçlardır ve konveyör bunlara
+    // taban 2.55 garantisi verir. Slota ÇAPRAZ yanaşan araç yerleşmiş komşusunun 2.2-2.5
+    // yanından yarım saniye geçebilir (ölçüldü, min ~2.0); o bir manevra, iç içelik değil —
+    // yine de <2.66 oranı TÜM çiftlerde ~0 tutulur ki sürüklenme saklanamasın.
+    for (const st of far ? ['near', 'far'] : ['near']) {
+      const L = mgr.graph.get(st)
+      if (!L) continue
+      const spillX = L.spillStart < L.queue.length ? L.queue[L.spillStart].x : null
+      const hat = c => Math.abs(c.group.position.x - L.xIn) < 0.6 ? 'ana'
+        : (spillX != null && Math.abs(c.group.position.x - spillX) < 0.6 ? 'banket' : null)
+      const q = mgr.cars.filter(c => c.station === st && c.waitIndex >= 0
+        && (c.phase === 'waiting' || c.phase === 'driving') && hat(c))
+        .sort((a, b) => a.waitIndex - b.waitIndex)
+      if (q.length > kuyrukZirve) kuyrukZirve = q.length
+      for (let k = 1; k < q.length; k++) {
+        if (hat(q[k]) !== hat(q[k - 1])) continue
+        const A = q[k - 1], B = q[k]
+        const d = Math.hypot(A.group.position.x - B.group.position.x,
+                             A.group.position.y - B.group.position.y)
+        kuyrukCift++
+        if (d < kuyrukMin) kuyrukMin = d
+        if (d < 2.66) kuyrukIhlal++
+        // DURAN çift: ikisi de son karede ~kıpırdamamış (kayan/yanaşan araç hariç;
+        // ilk kez görülen araç NaN karşılaştırmasıyla duran SAYILMAZ)
+        const durA = Math.hypot(A.group.position.x - (A.__kx ?? NaN),
+                                A.group.position.y - (A.__ky ?? NaN)) < 0.02
+        const durB = Math.hypot(B.group.position.x - (B.__kx ?? NaN),
+                                B.group.position.y - (B.__ky ?? NaN)) < 0.02
+        if (d < 2.5 && durA && durB) kuyrukSert++
+      }
+    }
+    // önceki konum (duran çift tespiti) her adımda HERKES için güncellenir
+    for (const c of mgr.cars) { c.__kx = c.group.position.x; c.__ky = c.group.position.y }
     // ── GÖRSEL ÇAKIŞMA: gövdeleri üst üste binen araç çifti (oyuncunun ŞİKÂYET ETTİĞİ şey) ──
     if (i % 30 === 0) {
       const gorunur = mgr.cars.filter(c => c.phase !== 'gone' && c.phase !== 'transit')
@@ -200,14 +246,20 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     if (st3.length) console.log('   sıkışanlar:', st3.join(' | '))
   }
   // KALICI SIKIŞAN: yol alması gereken ama 3 sn'den uzun süredir kıpırdayamayan araç.
-  // Artık "kurallı bekleme" istisnası YOK — mimaride bekleme diye bir şey kalmadı,
-  // dolayısıyla her duruş gerçek bir kusurdur.
+  // TEK istisna KONVEYÖR DURUŞU: blok kuralı gereği sırasını bekleyen araç (blokFren
+  // < 0.15) hardStuckT biriktirmez (Car.update) — o bir bekleme, kusur değil. Kuralın
+  // kendisi kalıcı blok üretirse 30 sn kapısı açılır ve blokStats.muaf sayar; muaf'ın
+  // patlaması ayrı bir kriter olarak aşağıda denetlenir. hardStuckT > 3 hâlâ gerçek kusur.
   const stuck = mgr.cars.filter(c => c.hardStuckT > 3).length
+  const blok = { ...(mgr.blokStats ?? { durusSn: 0, muaf: 0 }) } // eski kod fallback (A/B stash koşusu)
   if (!quiet) console.log(`${label}: servis=${served} kayıp=${lost} giremeyen=${turnedAway}${highway ? ' rampKayıp=' + rampLost : ''}`
     + ` | buharlaşma=${st.total} | kalıcı sıkışan=${stuck}`
     + ` | ÇAKIŞMA ${cakOrt.toFixed(1)} çift/kare · içiçe ${cakAgirOrt.toFixed(2)} (akış ${icAkisOrt.toFixed(2)} + yerleşim ${icDuranOrt.toFixed(2)})`
     + ` | AKIŞ hız ${(fl.ort * 100).toFixed(0)}% sapma ${fl.sapma.toFixed(2)} durma ${fl.duraklama} (%${(fl.durmaOrani * 100).toFixed(1)} kare)`
-    + ` | apron zirve ${apronMax}`)
+    + ` | apron zirve ${apronMax}`
+    + ` | KUYRUK zirve ${kuyrukZirve} · çift min ${isFinite(kuyrukMin) ? kuyrukMin.toFixed(2) : '—'}`
+    + ` · <2.66 ${kuyrukIhlal}/${kuyrukCift} · <2.5 ${kuyrukSert}`
+    + ` | blok duruş ${blok.durusSn.toFixed(0)}sn muaf ${blok.muaf}`)
   const park = { varis: parkVaris, cakisma: pOrnek ? pCakisma / pOrnek : 0,
     agir: pOrnek ? pAgir / pOrnek : 0, disari: pDisari, disariOrnek: pDisariOrnek }
   if (!quiet && parking) {
@@ -216,7 +268,8 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
       + ` | kullanılabilir şerit ${mgr.graph.parkLanesOf?.('near').length ?? '-'}/${parkSpots.length}`)
   }
   return { st, stuck, served, rampLost, laneUse: svcSpawns, cakisma: cakOrt, cakismaAgir: cakAgirOrt,
-    icAkis: icAkisOrt, icDuran: icDuranOrt, flow: fl, apronMax, turnedAway, park }
+    icAkis: icAkisOrt, icDuran: icDuranOrt, flow: fl, apronMax, turnedAway, park,
+    kuyruk: { cift: kuyrukCift, ihlal: kuyrukIhlal, sert: kuyrukSert, min: kuyrukMin, zirve: kuyrukZirve }, blok }
 }
 
 let fail = 0
@@ -243,6 +296,17 @@ for (const [n, r] of on) {
     `${kod}: iç içe (AKIŞ) ${r.icAkis.toFixed(2)} > 0.3 — şeritler ayrık değil`)
   kontrol(r.flow.ort >= 0.75, `${kod}: akış hızı %${(r.flow.ort * 100).toFixed(0)} (akıcı)`,
     `${kod}: akış hızı %${(r.flow.ort * 100).toFixed(0)} — araçlar sürünüyor`)
+  // KONVEYÖR (hedef metrik): kuyrukta ardışık çift hiçbir karede < 2.5 değil,
+  // < 2.66 (gövde boyu) çift ~0 — görsel iç içelik bitti. Asıl laboratuvar T10'da;
+  // burada regresyon çiti (T1-T3'te kuyruk nadir oluşur, boş küme geçer sayılmaz diye
+  // "gördüyse temiz" biçiminde yazıldı: sert ihlal MUTLAK sıfır).
+  kontrol(r.kuyruk.sert === 0, `${kod}: DURAN kuyruk çiftinde < 2.5 HİÇ yok (tüm çiftlerde min ${isFinite(r.kuyruk.min) ? r.kuyruk.min.toFixed(2) : '—'})`,
+    `${kod}: ${r.kuyruk.sert} karede DURAN kuyruk çifti < 2.5 (min ${r.kuyruk.min.toFixed(2)}) — konveyör kapısı delik`)
+  kontrol(r.kuyruk.ihlal <= Math.max(2, r.kuyruk.cift * 0.001),
+    `${kod}: kuyrukta < 2.66 çift ~0 (${r.kuyruk.ihlal}/${r.kuyruk.cift})`,
+    `${kod}: kuyrukta ${r.kuyruk.ihlal}/${r.kuyruk.cift} çift < 2.66 — iç içelik sürüyor`)
+  kontrol(r.blok.muaf === 0, `${kod}: 30 sn kilitlenme kapısı hiç gerekmedi (muaf 0)`,
+    `${kod}: kilitlenme kapısı ${r.blok.muaf} kez açıldı — blok bir yerde kalıcı kilit üretiyor`)
 }
 
 console.log('--- OTOYOL (ramp/merge) ---')
@@ -286,6 +350,16 @@ kontrol(t8.flow.ort >= 0.7, `T8: baskı altında akış %${(t8.flow.ort * 100).t
   `T8: baskı altında akış %${(t8.flow.ort * 100).toFixed(0)} — trafik sürünüyor`)
 kontrol(t8.turnedAway > 0, `T8: ${t8.turnedAway} müşteri kapasite yüzünden GİREMEDİ (görünür kayıp)`,
   'T8: kapasite baskısı hiç görünmedi — giremeyen müşteri sayılmıyor')
+// KONVEYÖR (derin kuyruk çiti): duran çiftte < 2.5 MUTLAK yasak; < 2.66 oranı ≤ %1
+// (KONVEYÖRSÜZ ölçüm: min 0.00 — tam üst üste — ve 874/19389 = %4.5; tüm ihlaller
+// hareket hâlindeki yanaşma anlarına indi, duran kuyrukta iç içelik kalmadı.)
+kontrol(t8.kuyruk.sert === 0, `T8: DURAN kuyruk çiftinde < 2.5 yok (min ${t8.kuyruk.min.toFixed(2)})`,
+  `T8: ${t8.kuyruk.sert} karede DURAN çift < 2.5 — konveyör kapısı delik`)
+kontrol(t8.kuyruk.ihlal <= t8.kuyruk.cift * 0.01,
+  `T8: kuyrukta < 2.66 oranı %${(100 * t8.kuyruk.ihlal / Math.max(1, t8.kuyruk.cift)).toFixed(2)} ≤ %1 (konveyörsüz %4.5)`,
+  `T8: kuyrukta ${t8.kuyruk.ihlal}/${t8.kuyruk.cift} çift < 2.66 — iç içelik geri geldi`)
+kontrol(t8.blok.muaf === 0, 'T8: 30 sn kilitlenme kapısı hiç gerekmedi (muaf 0)',
+  `T8: kilitlenme kapısı ${t8.blok.muaf} kez açıldı`)
 
 // ---- T9: OTOPARK YOĞUN ----
 // Oyuncu ekran görüntüsü: park yerleri (beyaz çizgili slotlar) BOŞ dururken araçlar
@@ -314,6 +388,38 @@ console.log('--- T9: OTOPARK YOĞUN (park koridoru pompa sırasının dibinde) -
     `T9: ${t9.park.disari}/${t9.park.disariOrnek} örnekte araç slotunun dışında durdu`)
   kontrol(t9.park.agir <= 0.3, `T9: otoparkta iç içe ${t9.park.agir.toFixed(2)} ≤ 0.3 (eski mimari 2.06)`,
     `T9: otoparkta iç içe ${t9.park.agir.toFixed(2)} > 0.3 — park kolları ayrık değil`)
+}
+
+// ---- T10: TEK POMPA YOĞUN (canlı telemetrideki 22x kümenin laboratuvar kopyası) ----
+// Gün-1 istasyonu: 1 pompa, şarj yok, yoğun giriş. 19 saatlik canlı olay kaydında en
+// büyük iç içe kümesi (22x) tam bu profildeydi: kuyruk başında araçlar burun buruna
+// (replay #2647: 4 bekleyen + 1 serviste). Konveyör kuralının asıl sınavı burası:
+// kuyruk sürekli dolu, terfi zinciri her serviste baştan sona işliyor.
+console.log('--- T10: TEK POMPA YOĞUN (gün-1 istasyonu, telemetri kümesinin kopyası) ---')
+{
+  const t10 = run('T10 tek pompa · trafik ×2.2 · yoğun saat ×1.8',
+    { pumps: 1, evs: 0, far: false, wide: false, entryMul: 1.8, pullMul: 2.2 })
+  kontrol(t10.kuyruk.cift >= 1000 && t10.kuyruk.zirve >= 5,
+    `T10: ölçüm DOLU kümede (${t10.kuyruk.cift} çift-kare · kuyruk zirvesi ${t10.kuyruk.zirve} araç)`,
+    `T10: kuyruk hiç dolmadı (${t10.kuyruk.cift} çift-kare, zirve ${t10.kuyruk.zirve}) — boş kümeden geçen iddia YASAK`)
+  // KONVEYÖRSÜZ AYNI SENARYO (ölçüldü): çift min 0.03 (tam üst üste) · < 2.66 oranı
+  // 931/37111 = %2.5. Konveyörle: DURAN çiftte < 2.5 MUTLAK sıfır; < 2.66 kalıntısı
+  // yalnız slota yanaşma ANLARINDA (hareket hâlinde, ölçülen min ~1.4, tipik 2.2-2.5)
+  // ve oran ≥ 6 kat düşük. "Görsel iç içelik" duran kuyruğun kusuruydu — bitti.
+  kontrol(t10.kuyruk.sert === 0,
+    `T10: DURAN kuyruk çiftinde < 2.5 HİÇBİR karede yok (tüm çiftlerde min ${isFinite(t10.kuyruk.min) ? t10.kuyruk.min.toFixed(2) : '—'}, konveyörsüz 0.03)`,
+    `T10: ${t10.kuyruk.sert} karede DURAN çift < 2.5 (min ${t10.kuyruk.min.toFixed(2)}) — 22x küme lab kopyasında hâlâ iç içe`)
+  kontrol(t10.kuyruk.ihlal <= t10.kuyruk.cift * 0.01,
+    `T10: kuyrukta < 2.66 oranı %${(100 * t10.kuyruk.ihlal / Math.max(1, t10.kuyruk.cift)).toFixed(2)} ≤ %1 (konveyörsüz %2.5)`,
+    `T10: kuyrukta ${t10.kuyruk.ihlal}/${t10.kuyruk.cift} çift < 2.66 — görsel iç içelik sürüyor`)
+  kontrol(t10.stuck === 0, 'T10: kalıcı sıkışan 0', `T10: kalıcı sıkışan ${t10.stuck}`)
+  kontrol(t10.st.total === 0, 'T10: buharlaşma 0', `T10: buharlaşma ${t10.st.total}`)
+  kontrol(t10.blok.muaf === 0, 'T10: 30 sn kilitlenme kapısı hiç gerekmedi (muaf 0)',
+    `T10: kilitlenme kapısı ${t10.blok.muaf} kez açıldı`)
+  kontrol(t10.icAkis <= 0.3, `T10: iç içe (AKIŞ) ${t10.icAkis.toFixed(2)} ≤ 0.3`,
+    `T10: iç içe (AKIŞ) ${t10.icAkis.toFixed(2)} > 0.3`)
+  kontrol(t10.turnedAway > 0, `T10: ${t10.turnedAway} müşteri kapasiteden giremedi (tek pompa, doğal)`,
+    'T10: tek pompa yoğun saatte hiç kapasite baskısı üretmedi — senaryo yanlış kurulmuş')
 }
 
 const sum = a => a.reduce((x, y) => x + y, 0)

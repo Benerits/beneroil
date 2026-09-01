@@ -94,8 +94,33 @@ export const QUEUE_BASE_WATER = 4
 export const QUEUE_STEP_WATER = 9
 export const QUEUE_X_WATER = 6.9
 /** Kuyruk kapının EN FAZLA bu kadar gerisine uzayabilir (avlunun içinde, çitin dibinde).
- *  Daha uzunu sahayı taşar; oradan sonrası kapasite değil, "giremeyen müşteri"dir. */
+ *  Daha uzunu sahayı taşar; oradan sonrası kapasite değil, "giremeyen müşteri"dir.
+ *  (Konveyör kuralından beri yalnız MARİNA kuyruğu için geçerli — kara kuyruğunun
+ *  taşması artık BANKET segmentine gider, aşağıya bak.) */
 export const QUEUE_TAIL_MAX = 17
+/**
+ * ── BANKET (TAŞMA) KUYRUĞU — KONVEYÖR KURALININ GEOMETRİ AYAĞI ──
+ * ANA kuyruk hattı kapının İÇİNDE, gelen omurga üzerindedir ve kapı ağzında biter
+ * (QUEUE_GATE_CLEAR). Eskiden taşan slotlar aynı kolonda kapının GERİSİNE uzuyordu;
+ * ölçülen sonuç (T10 tanı koşusu): o slota atanan araç hatta KAPIDAN girip önündeki
+ * dizinin İÇİNDEN geriye sürmek zorundaydı — konveyör yönüne ters, ya iç içe geçiyor
+ * (canlı telemetrideki %96'lık küme) ya da blok kuralıyla yolun ORTASINDA kalıyordu.
+ * Yeni model gerçek istasyondaki gibi: sığmayan kuyruk KAPIDAN ÖNCE, yol omuzunda
+ * bekler. Banket hattı araçların geldiği yönle AYNI yönde akar → araç kuyruğa hep
+ * ARKADAN katılır, kimse kimsenin içinden geçmez; ilerleme tek yönlü konveyördür.
+ */
+/** Ana kuyruk slotu kapı ağzına en fazla bu kadar yaklaşır (kapı ağzında araç durmaz —
+ *  giren herkes o noktadan geçiyor; eski dizilimde tam ağızda duran slot 0.35'lik
+ *  burun buruna geçişler üretiyordu). */
+export const QUEUE_GATE_CLEAR = 1.2
+/** Banket kuyruğunun kapıya (giriş ağzına) mesafe tabanı. 2.4 ölçülerek seçildi:
+ *  3.4 (sahneleme noktasının üstü) banket başını kapıdan gereksiz uzaklaştırıyor ve
+ *  banket→ana hat aktarımının yolunu uzatıyordu (pompa o kadar boş bekliyor — T2/T3
+ *  servisinde ölçülür kayıp). 2.4 ayrıca sahneleme noktasını (kapı−3.4) iki slotun
+ *  ORTASINA düşürür: kapıya dönen araç banketteki araçların üstünden değil arasından geçer. */
+export const SPILL_BASE = 2.4
+/** Banket kuyruğu haritanın dışına taşmasın (yol ±44'e kadar, karar noktaları ±26). */
+export const SPILL_MAX_Y = 38
 
 /** GERİYE DÖNÜK: ünite yokken (henüz pompa kurulmamış) kullanılan varsayılan apron ofseti. */
 export const APRON_LANE_OFF = 1.75
@@ -147,8 +172,12 @@ export interface StationLanes {
   xIn: number
   /** GİDEN omurga (üniteler → çıkış kapısı) x kolonu */
   xOut: number
-  /** kuyruk slotları — gelen omurga üzerinde SABİT noktalar (araç slota kayar) */
+  /** kuyruk slotları — gelen omurga üzerinde SABİT noktalar (araç slota kayar).
+   *  spillStart'tan itibaren BANKET slotları: kapıdan önce, yol omuzunda. */
   queue: Pt[]
+  /** bu indeksten itibaren slotlar BANKET (taşma) segmentinde — kapının DIŞINDA.
+   *  queue.length'e eşitse banket yok (marina hep böyle). */
+  spillStart: number
   /** KULLANILABİLİR park yerleri (yolu katı cisimle kapalı olanlar burada YOKTUR) */
   parks: ParkLane[]
 }
@@ -215,16 +244,33 @@ export class LaneNetwork {
       const queue: Pt[] = []
       for (let i = 0; i < (g.water ? 4 : qn); i++) {
         const y = capa - g.dirY * i * step
-        // KUYRUK ÇİTİN İÇİNDE KALSIN: kapının en fazla QUEUE_TAIL_MAX gerisine uzar,
-        // sonrası kapasite değildir (yer bulamayan müşteri "giremeyen" olarak sayılır).
-        if ((y - g.gateInY) * g.dirY < -QUEUE_TAIL_MAX) break
+        // MARİNA: kuyruk çitin içinde kalsın — kapının en fazla QUEUE_TAIL_MAX gerisi.
+        if (g.water && (y - g.gateInY) * g.dirY < -QUEUE_TAIL_MAX) break
+        // KARA: ana hat kapı ağzında BİTER (konveyör kuralı). Kapı ağzına/gerisine slot
+        // koymak, oraya atanan aracı önündeki dizinin içinden geçmeye zorluyordu — o
+        // slotlar artık BANKET segmentine gider (aşağıda).
+        if (!g.water && (y - g.gateInY) * g.dirY < QUEUE_GATE_CLEAR) break
         queue.push({ x: xIn, y })
+      }
+      // ── BANKET (TAŞMA) SEGMENTİ: sığmayan slotlar kapıdan ÖNCE, yol omuzunda ──
+      // Omuz kolonu kapı yaklaşmasının sahneleme noktasıyla aynı x'te: araç yoldan
+      // gelirken zaten oradan geçiyor, kuyruğa ARKADAN katılır (konveyör yönü korunur).
+      const spillStart = queue.length
+      if (!g.water) {
+        const xs = (g.lane + g.gateX) / 2
+        for (let k = 0; queue.length < qn; k++) {
+          const y = g.gateInY - g.dirY * (SPILL_BASE + k * step)
+          if (Math.abs(y) > SPILL_MAX_Y) break
+          queue.push({ x: xs, y })
+        }
       }
       if (!queue.length) queue.push({ x: xIn, y: g.gateInY + g.dirY * base })
 
       const L: StationLanes = {
         station: g.station, gateX: g.gateX, gateInY: g.gateInY, gateOutY: g.gateOutY,
         lane: g.lane, sideSign: g.sideSign, dirY: g.dirY, xIn, xOut, queue,
+        // fallback slotu (yalnız marina/boş yerleşim) ana hatta sayılır
+        spillStart: g.water ? queue.length : Math.min(spillStart, queue.length),
         parks: this.parkLanes(g, blocked),
       }
       this.byStation.set(g.station, L)
@@ -398,15 +444,34 @@ export class LaneNetwork {
     return out
   }
 
-  /** KUYRUK ŞERİDİ: yol → kapı → gelen omurga → i. slot. */
+  /** KUYRUK ŞERİDİ: yol → kapı → gelen omurga → i. slot.
+   *  BANKET slotu için kapıdan İÇERİ GİRİLMEZ: araç yol omuzunda, kapının önünde
+   *  bekler (taşma kuyruğu). Omuz hattı geliş yönüyle aynı yönde akar — araç kuyruğa
+   *  hep arkadan katılır, önündeki dizinin içinden geçmek imkânsızdır. */
   queuePath(station: string, i: number, fromRoad = true): Pt[] {
     const L = this.byStation.get(station)
     if (!L) return []
     const s = this.slot(station, i)
     if (!s) return []
+    if (Math.min(i, L.queue.length - 1) >= L.spillStart) return [{ x: s.x, y: s.y }]
     const out: Pt[] = fromRoad ? this.gateApproach(L) : []
     out.push({ x: L.xIn, y: s.y })
     return out
+  }
+
+  /** BANKETTEN ANA HATTA TERFİ YOLU: omuz → kapı ağzı → gelen omurga → hedef slot.
+   *  Düz çizgi çitin köşesinden geçerdi; terfi kapıdan yapılır. */
+  spillPromotePath(station: string, i: number): Pt[] {
+    const L = this.byStation.get(station)
+    const s = this.slot(station, i)
+    if (!L || !s) return s ? [s] : []
+    return [{ x: L.gateX, y: L.gateInY }, { x: L.xIn, y: L.gateInY }, { x: L.xIn, y: s.y }]
+  }
+
+  /** i. slot banket segmentinde mi (kapının dışında, yol omuzunda) */
+  isSpillSlot(station: string, i: number): boolean {
+    const L = this.byStation.get(station)
+    return !!L && Math.min(i, L.queue.length - 1) >= L.spillStart
   }
 
   /**

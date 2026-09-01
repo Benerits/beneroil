@@ -14,6 +14,31 @@ const BOAT_SPEED: Record<string, number> = {
 const DEMAND_AMOUNTS = [100, 150, 200, 250, 300, 400]
 const DECISION_Y = -26 // yakın şeritte istasyona girme kararının verildiği nokta
 
+/**
+ * ── KONVEYÖR / BLOK KURALI (kuyruk + gelen omurga) ──
+ * Twitter'da iki oyuncu bağımsız aynı çözümü önerdi, oyun sahibi benimsedi: konveyör
+ * bant / blok sinyalizasyonu — araç, önündeki BÖLÜM boşalmadan ilerleyemez. Bu bir
+ * PAZARLIK/REZERVASYON DEĞİL (o mimari bir kez silindi, ölçümle): tek taraflı bir
+ * doluluk kapısı. Yalnız AYNI kuyruk/gelen-omurga hattındaki araçlara bakılır; çapraz
+ * akış (çıkış omurgası, yol transiti, UNIT_CLEAR yakın-geçişi) bloğa dahil DEĞİLDİR —
+ * dahil edilse kilitlenme doğardı.
+ * Canlı telemetri gerekçesi (2.707 olay/19 saat): olayların %96'sı iç içe+yığılma,
+ * en büyük küme (22x) tek pompalı gün-1 istasyonunda kuyruk başı; replay #2647'de
+ * 4 bekleyen + 1 serviste burun buruna. Kök: slotlar arası geçişte mesafe kapısı yoktu.
+ */
+/** Öndekine bu mesafede fren başlar; kuyruk terfisi de bu eşiği bekler. */
+const BLOK_MESAFE = 3.0
+/** Tam duruş eşiği (yumuşak fren 3.0 → 2.2 arasında mesafeyle orantılı). */
+const BLOK_DUR = 2.2
+/** AYRIK ZAMAN TAŞMA PAYI: kare adımı kaba (testte dt=0.1, 0.7 birim/kare) — orantılı
+ *  fren tek karede eşiğin altına taşabiliyor. Adım, araç öndekine bu mesafeden daha
+ *  fazla yaklaşamayacak şekilde ayrıca kırpılır → ardışık çift HİÇBİR karede 2.5'in
+ *  altına inmez (hedef metrik: görsel iç içelik biter, gövde 2.66'ya pay kalır). */
+const BLOK_TABAN = 2.55
+/** Kilitlenme koruması: blok yüzünden bu kadar sn ilerleyemeyen aracın kapısı otomatik
+ *  açılır (kural yalnız O ARAÇ için askıya alınır) — buharlaşma/kalıcı sıkışan 0 kalır. */
+const BLOK_KILIT_SN = 30
+
 export type CarPhase = 'transit' | 'driving' | 'waiting' | 'atPump' | 'toPark' | 'parked' | 'leaving' | 'gone'
 export type CarKind = 'fuel' | 'ev'
 export type BodyKind = 'sedan' | 'hatch' | 'suv'
@@ -377,6 +402,15 @@ export class Car {
   /** ÖNDEKİ ARACA HIZ EŞİTLEME (1 = tam hız). Bu bir MÜZAKERE DEĞİL: araç durmaz,
    *  yalnız öndekinin hızını kopyalar. Kimse kimseyi beklemediği için kilitlenme üretemez. */
   speedScale = 1
+  /** KONVEYÖR BLOĞU: bu karede uygulanan fren çarpanı (1 = serbest, 0 = kural gereği
+   *  tam duruş). Kural duruşu bir KUSUR değildir: hardStuckT saymaz, akış örneklemesine
+   *  girmez — aynen slotunda bekleyen araç gibi "sırasını bekliyor" sayılır. */
+  blokFren = 1
+  /** blok/terfi kapısı yüzünden ilerleyemeden geçen süre (sn) — kilitlenme sayacı */
+  blokT = 0
+  /** KİLİTLENME KAPISI AÇIK: konveyör kuralı yalnız BU ARAÇ için askıda. Araç mevcut
+   *  bacağını bitirince (yol tükenince) kendiliğinden kapanır. */
+  blokMuaf = false
   /** AKIŞ ÖLÇÜMÜ: aracın son karedeki hızı (nominal hızın oranı, 0..1). */
   hizOrani = 1
   /** duraksama süresi (sn) — hız nominalin %15'inin altındayken birikir.
@@ -798,8 +832,11 @@ export class Car {
       // Oyun sahibinin istediği şey ("akıcılık") burada ÖLÇÜLEBİLİR hale geliyor.
       const gitti = Math.hypot(this.group.position.x - p0x, this.group.position.y - p0y)
       this.hizOrani = dt > 0 && nominal > 0 ? Math.min(1, gitti / (nominal * dt)) : 1
-      if (this.hizOrani < 0.15) this.hardStuckT += dt
-      else this.hardStuckT = Math.max(0, this.hardStuckT - dt * 3)
+      // KONVEYÖR DURUŞU SIKIŞMA DEĞİLDİR: blok kuralı gereği duran araç (blokFren < 0.15)
+      // slotunda bekleyen araçla aynı statüde — kusur sayacı işlemez. Kuralın kendisi
+      // kilitlenirse 30 sn kapısı (BLOK_KILIT_SN) açılır; kalıcı sıkışma yine imkânsız.
+      if (this.hizOrani < 0.15 && this.blokFren >= 0.15) this.hardStuckT += dt
+      else if (this.hizOrani >= 0.15) this.hardStuckT = Math.max(0, this.hardStuckT - dt * 3)
     } else {
       // hedefine varmış araç "duraksamış" sayılmaz (pompada bekleyen müşteri akış değil)
       this.hizOrani = 1
@@ -1302,6 +1339,10 @@ export class CarManager {
   /** AKIŞ DÜZGÜNLÜĞÜ TELEMETRİSİ (yeni metrik, oyun sahibinin istediği şey).
    *  ort = ortalama hız oranı, sapma = varyans, duraklama = "durdu" olayı sayısı. */
   flowStats = { orneklem: 0, toplam: 0, kareToplam: 0, duraklama: 0, duraklamaKare: 0 }
+  /** KONVEYÖR TELEMETRİSİ: durusSn = kural gereği duruşta geçen toplam araç-saniye,
+   *  muaf = 30 sn kilitlenme kapısının kaç kez açıldığı. Sağlıklı akışta muaf 0'dır;
+   *  patlarsa kural bir yerde kalıcı blok üretiyor demektir (testler okur). */
+  blokStats = { durusSn: 0, muaf: 0 }
   /** akış özeti: ortalama hız oranı + standart sapma (0 = kusursuz akış) */
   get flow() {
     const n = Math.max(1, this.flowStats.orneklem)
@@ -1560,6 +1601,11 @@ export class CarManager {
       for (const o of this.neighbors(cp.x, cp.y, c.boat ? 3 : 1)) {
         if (o === c || o.phase === 'gone' || !o.moving) continue
         // DURAN araç yol kenarı dekorudur: onu takip etmek "bekleme" olurdu.
+        // BANKET KUYRUĞU da kuyruk-dışı trafik için dekordur: giriş sahneleme noktası
+        // banket hattının üstünden geçer; şarja/pompaya giden araç kayan banket aracını
+        // takip edince şarj ünitesi yol boyunca REZERVE bekliyordu (T2'de ölçülür servis
+        // kaybı). Kuyruk üyeleri banketi zaten konveyör bloğuyla takip ediyor.
+        if (c.waitIndex < 0 && o.waitIndex >= 0 && this.graph.isSpillSlot(o.station, o.waitIndex)) continue
         const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
         const forward = dx * dir.x + dy * dir.y
         const lenO = o.boat ? BOAT_LEN[o.boat] : 0
@@ -1598,11 +1644,23 @@ export class CarManager {
       }
     }
 
+    // ---- KONVEYÖR BLOĞU (gelen omurga): öndeki bölüm boşalmadan ilerleme yok ----
+    // Hız eşitlemesinden FARKI: eşitleme yalnız HAREKET EDEN öndekini kopyalar (taban
+    // 0.3, kimse durmaz); blok ise kuyruk/omurga hattında DURAN öndekine karşı da
+    // işler ve 2.2'de TAM durdurur. Kilitlenme üretmemesi üç sınırla garanti:
+    //  1. KAPSAM: yalnız kuyruk üyeleri (waitIndex) + omurga üzerindeki pompa yolcuları.
+    //     Çıkış omurgası, kollar (arm), transit, otopark/tır trafiği ve MARİNA hariç.
+    //  2. KARŞI AKIŞ MUAF: burun buruna gelen iki araç birbirini BEKLEMEZ, yanından/
+    //     içinden geçer (UNIT_CLEAR yakın-geçiş tasarımı) — karşılıklı fren = kilit olurdu.
+    //  3. 30 SN KAPISI: yine de ilerleyemeyen aracın kuralı yalnız o araç için askıya
+    //     alınır (blokMuaf) — buharlaşma/kalıcı sıkışan 0 kalır.
+    this.konveyorBlok(dt)
+
     // ---- KUYRUK İLERLEMESİ: slotlar SABİT, araç bir öndeki slota KAYAR ----
     // Oyun sahibi: "Araç slota kayar, sırası gelince bir sonraki slota kayar. Kuyruk
     // ilerlemesi anlık değil, akıcı." Ön slot boşalınca araç oraya AKAR (ışınlanmaz).
-    this.kuyrukIlerlet('near')
-    if (this.opts.farActive?.()) this.kuyrukIlerlet('far')
+    this.kuyrukIlerlet('near', dt)
+    if (this.opts.farActive?.()) this.kuyrukIlerlet('far', dt)
 
     // giriş kararı — yakın şeritte y>-26'da, karşı şeritte (araç güneye gider) y<+26'da.
     // OTOYOL (rapor §6.4): karar çok daha ERKEN verilir (tesisten decisionDist birim önce)
@@ -1650,7 +1708,17 @@ export class CarManager {
       const uygun = (c: Car) => c.station === st && c.waitIndex >= 0 && c.slotIndex === -1 && c.patience > 0
         && (c.phase === 'waiting' || c.phase === 'driving')
       // ÖNCELİK: reklamla kurtarılan VIP kuyrukta öne geçer (teklifin somut karşılığı).
-      const waiting = this.cars.find(c => c.oncelikli && uygun(c)) ?? this.cars.find(uygun)
+      // ONUN DIŞINDA POMPAYA HEP KUYRUK BAŞI GİDER (en küçük waitIndex) — eskiden dizi
+      // sırası kullanılıyordu ve ORTADAKİ araç seçilebiliyordu: önündeki dizinin içinden
+      // pompaya sürüyor, konveyör bloğuna takılıp pompayı dakikalarca boş bırakıyordu
+      // (T10 tanı koşusunda servis bu yüzden çökmüştü). VIP yine öne geçer; öndekilerin
+      // arasından geçerken bloğa takılırsa 30 sn kapısı açar — nadir, kabul edilen bedel.
+      let waiting = this.cars.find(c => c.oncelikli && uygun(c)) ?? null
+      if (!waiting) {
+        for (const c of this.cars) {
+          if (uygun(c) && (!waiting || c.waitIndex < waiting.waitIndex)) waiting = c
+        }
+      }
       if (waiting) this.sendToSlot(waiting, i)
     }
 
@@ -1668,9 +1736,12 @@ export class CarManager {
       // sabrı biter (görünür kayıp), ya da karar noktasında yoluna devam eder.
       car.update(dt)
       // AKIŞ DÜZGÜNLÜĞÜ ÖRNEKLEMESİ (yeni metrik): yalnız YOL ALMASI gereken araçlar.
+      // KONVEYÖR DURUŞU HARİÇ: kural gereği sırasını bekleyen araç (blokFren < 0.15)
+      // "akış kusuru" değildir — slotunda bekleyen araç nasıl sayılmıyorsa bu da sayılmaz.
+      // (Kuralın kendisi kalıcı blok üretirse blokStats.muaf patlar; testler onu okur.)
       const movingPhase = car.phase === 'transit' || car.phase === 'driving'
         || car.phase === 'leaving' || car.phase === 'toPark'
-      if (movingPhase && car.moving) {
+      if (movingPhase && car.moving && car.blokFren >= 0.15) {
         const f = this.flowStats
         f.orneklem++
         f.toplam += car.hizOrani
@@ -1716,22 +1787,176 @@ export class CarManager {
 
 
   /**
+   * KONVEYÖR BLOĞU — gelen omurga/kuyruk hattında öndekine mesafe kapısı.
+   * Araç, öndeki araca BLOK_MESAFE'den (3.0) fazla yaklaşınca mesafeyle orantılı
+   * yavaşlar ve BLOK_DUR'da (2.2) tamamen durur. Kapsam bilerek dar (kilitlenme
+   * doğmasın): yalnız kuyruk üyeleri + omurga ÜZERİNDEKİ pompa yolcuları fren yapar;
+   * öndeki olarak da yalnız aynı hattın araçları sayılır. atPump/arm/çıkış/transit/
+   * otopark trafiği ve tekneler (marina aralıkları kendi ölçeğinde) kapsam DIŞI.
+   */
+  private konveyorBlok(dt: number) {
+    for (const c of this.cars) {
+      c.blokFren = 1
+      // 30 sn kapısı açık: kural bu araç için askıda. Mevcut bacağını bitirince kapanır.
+      if (c.blokMuaf) { if (!c.moving) { c.blokMuaf = false; c.blokT = 0 } continue }
+      if (c.phase !== 'driving' && c.phase !== 'waiting') { c.blokT = 0; continue }
+      if (c.boat) continue                       // marina: tekne boyu araç ölçeğinde değil
+      if (!c.moving) continue                    // slotunda duran araç frenlemez (terfi kapısı kuyrukIlerlet'te)
+      const L = this.graph.get(c.station)
+      if (!L) continue
+      const cp = c.group.position
+      const dir = c.headingDir()
+      if (!dir) continue
+      const omurgada = Math.abs(cp.x - L.xIn) <= 0.6
+      // KAPSAM: kuyruk üyesi (slota giden/kayan) her yerde; YAKIT pompası yolcusu YALNIZ
+      // omurga boyunca seyrederken (kola dönen araç bloktan çıkar — kural 3: arm'de blok
+      // yok). EV'ler kapsam DIŞI: şarj kuyruğu yok, EV omurgada yakıt kuyruğunun yanından
+      // kendi koluna geçer — bloğa alınsa duran kuyruğun arkasında boşuna kilitlenirdi
+      // (ölçüldü: T8 tanı koşusunda durusSn'nin büyük kalemi buydu).
+      if (c.waitIndex < 0 && !(c.slotIndex >= 0 && c.kind === 'fuel' && omurgada && Math.abs(dir.y) >= 0.7)) continue
+      let gap = Infinity
+      for (const o of this.neighbors(cp.x, cp.y, 1)) {
+        if (o === c || o.phase === 'gone' || o.station !== c.station || o.boat) continue
+        // öndeki olarak yalnız AYNI hattın araçları: kuyruk üyeleri + omurgadaki yolcular
+        // (atPump kendi kolunda UNIT_CLEAR kadar ayrıktır, bloğa girmez — kural 3)
+        if (o.phase !== 'driving' && o.phase !== 'waiting') continue
+        if (o.waitIndex < 0 && !(o.slotIndex >= 0 && Math.abs(o.group.position.x - L.xIn) <= 0.6)) continue
+        // KARŞI AKIŞ MUAF: burun buruna gelen araç beklenmez (bekle → karşılıklı kilit).
+        // Yanından/içinden geçer — UNIT_CLEAR yakın-geçiş tasarımının devamı.
+        const od = o.headingDir()
+        if (od && od.x * dir.x + od.y * dir.y < -0.3) continue
+        const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
+        const ileri = dx * dir.x + dy * dir.y
+        if (ileri < 0.2 || ileri > BLOK_MESAFE) continue
+        // yanal pencere 1.2: slota ÇAPRAZ yanaşan araçların (banket katılımı) izdüşümü
+        // 0.9'u aşabiliyordu — ölçüldü: aynı anda katılan iki araç 2.2'ye sokuluyordu.
+        // Öndeki kümesi zaten yalnız kuyruk/omurga araçları; komşu kolonlar (çıkış 1.05,
+        // transit şeridi 1.37) öndeki KAPSAMINA girmediği için pencere onlara değmez.
+        const lx = dx - dir.x * ileri, ly = dy - dir.y * ileri
+        if (lx * lx + ly * ly > 1.44) continue
+        if (ileri < gap) gap = ileri
+      }
+      if (gap < BLOK_MESAFE) {
+        // yumuşak fren: 3.0'da tam hız → 2.2'de sıfır, mesafeyle orantılı. Ek olarak
+        // adım kırpılır: ayrık zaman adımı öndekine BLOK_TABAN'dan fazla yaklaştıramaz
+        // (kaba dt tek karede eşiğin altına taşırmasın — ardışık çift 2.5'in altına inmez).
+        const oran = Math.max(0, (gap - BLOK_DUR) / (BLOK_MESAFE - BLOK_DUR))
+        const adimSiniri = dt > 0 ? Math.max(0, gap - BLOK_TABAN) / (CAR_SPEED * dt) : oran
+        const f = Math.min(oran, adimSiniri)
+        c.blokFren = f
+        c.speedScale = Math.min(c.speedScale, f)
+        if (f < 0.15) {
+          this.blokStats.durusSn += dt
+          c.blokT += dt
+          if (c.blokT >= BLOK_KILIT_SN) { c.blokMuaf = true; this.blokStats.muaf++ }
+        } else c.blokT = 0
+      } else c.blokT = 0
+    }
+  }
+
+  /**
    * KUYRUK İLERLEMESİ — slotlar sabit, araç bir öndeki slota KAYAR.
    * Kuyruk şeridi GELEN OMURGA üzerindedir (tek sıra): ön slot boşalınca arkadaki araç
    * oraya akar. Bu bir müzakere değil, deterministik bir konveyör — beklemek yok, sıra var.
+   * TERFİ KAPISI (konveyör kuralı 1): araç slot i-1'e ancak (a) slot BOŞSA ve (b) öndeki
+   * araca dünya mesafesi ≥ BLOK_MESAFE ise kayar; değilse OLDUĞU SLOTTA bekler. Zincir
+   * her tikte baştan sona TEK GEÇİŞTE çözülür (baştaki önce, arkası zincirle) —
+   * deterministik, pazarlıksız. Eskiden kapı yoktu: birden çok araç aynı anda öne
+   * kayınca kuyruk başında burun buruna geliyorlardı (canlı telemetrideki 22x küme).
    */
-  private kuyrukIlerlet(st: 'near' | 'far') {
+  /**
+   * BANKET SIRA DÜZELTMESİ — fiziksel sıra ile indeks sırası ayrışırsa slotlar takas
+   * edilir (pazarlık değil, defter düzeltmesi; deterministik).
+   * NEDEN: banket kuyruğuna araç KARAR NOKTASINDAN katılır (near'da y=-26) ve derin
+   * slotlar bu noktanın gerisinde kalabilir — araç slotuna GÜNEYE dönerek iner. Aynı
+   * anda hat ilerliyorsa derin slottan terfi eden araç KUZEYE çıkar: ikisi aynı kolonda
+   * burun buruna geçiyordu (ölçüldü: T8'de çift 0.04'e kadar düştü). İndeksleri fiziksel
+   * sıraya göre yeniden dağıtınca herkesin hedefi KENDİ tarafında kalır, kimse kimseyle
+   * kesişmez; kuyruk adaleti bozulmaz (aynı indeks kümesi aynı araç kümesinde kalır).
+   */
+  private banketSirala(st: 'near' | 'far') {
+    const L = this.graph.get(st)
+    if (!L || L.spillStart >= L.queue.length) return
     const occ = this.waitOccFor(st)
     const n = this.waitSlotCount(st)
-    for (let i = 1; i < n; i++) {
+    const xs = L.queue[L.spillStart].x
+    const uyeler: Car[] = []
+    // İNDEKS FİLTRESİ YOK, KONUM FİLTRESİ VAR: hat hızlı akarken bir banket aracının
+    // indeksi ANA slot aralığına düşebilir (terfi zinciri fiziksel ilerlemesinden hızlı
+    // koşar) — araç bedenen hâlâ bankettedir. Ölçüldü: böyle bir araç (w0, gövdesi
+    // bankette) yeni katılanların arasında duvar oluyor, arkası 2.1'e sıkışıyordu.
+    // Bankette DURAN herkes sıralamaya girer; ana kolondaki araçlar (2.13 uzakta) girmez.
+    for (let i = 0; i < n; i++) {
+      const c = occ[i]
+      if (!c || c.phase === 'gone' || c.slotIndex >= 0) continue
+      if (c.phase !== 'waiting' && c.phase !== 'driving') continue
+      if (Math.abs(c.group.position.x - xs) > 1.2) continue // banket hattında değil
+      uyeler.push(c)
+    }
+    if (uyeler.length < 2) return
+    const indeksler = uyeler.map(c => c.waitIndex).sort((a, b) => a - b)
+    // fiziksel sıra: akış yönünde en ilerideki (kapıya en yakın) araç en küçük indeksi alır
+    const sirali = uyeler.slice().sort((a, b) => {
+      const pa = (a.group.position.y - L.gateInY) * L.dirY
+      const pb = (b.group.position.y - L.gateInY) * L.dirY
+      return pb - pa || a.waitIndex - b.waitIndex
+    })
+    // önce TÜM üyelerin defter kaydı silinir, sonra yeni sıra yazılır — tek tek takas
+    // ederken bir aracın kaydı diğerininkini ezebiliyordu (aynı hücreye iki yazım)
+    for (const c of uyeler) occ[c.waitIndex] = null
+    for (let r = 0; r < sirali.length; r++) {
+      const car = sirali[r], hedef = indeksler[r]
+      const degisti = car.waitIndex !== hedef
+      car.waitIndex = hedef
+      occ[hedef] = car
+      if (degisti) {
+        // hedef ANA slotsa kapıdan girilir (düz çizgi çitten geçerdi)
+        const hedefNokta = this.waitSpotAt(hedef, st)
+        const yol = hedef < L.spillStart
+          ? [...this.vs(this.graph.spillPromotePath(st, hedef).slice(0, -1)), hedefNokta]
+          : [hedefNokta]
+        car.setPath(temizRota(car, yol), () => { car.phase = 'waiting' })
+      }
+    }
+  }
+
+  private kuyrukIlerlet(st: 'near' | 'far', dt: number) {
+    this.banketSirala(st)
+    const occ = this.waitOccFor(st)
+    const n = this.waitSlotCount(st)
+    let onde: Car | null = null // fiziksel öndeki: daha küçük indeksli SON dolu slotun aracı
+    for (let i = 0; i < n; i++) {
       const car = occ[i]
       if (!car || car.phase === 'gone' || car.slotIndex >= 0) continue
-      if (occ[i - 1]) continue           // ön slot dolu → sıra ilerlemez
-      occ[i] = null
-      occ[i - 1] = car
-      car.waitIndex = i - 1
-      // AKICI GEÇİŞ: ışınlanmaz, yeni slota sürer (faz 'waiting' kalır, sabır işlemeye devam)
-      car.setPath(temizRota(car, [this.waitSpotAt(i - 1, st)]), () => { car.phase = 'waiting' })
+      if (i > 0 && !occ[i - 1]) {
+        const d = onde
+          ? Math.hypot(car.group.position.x - onde.group.position.x,
+                       car.group.position.y - onde.group.position.y)
+          : Infinity
+        if (!car.blokMuaf && !car.boat && d < BLOK_MESAFE) {
+          // TERFİ KAPISI KAPALI: öndeki bölüm henüz boşalmadı — olduğu slotta bekler.
+          // (Hareketsiz beklerken kilitlenme sayacı burada işler; hareket hâlindeyse
+          //  konveyorBlok zaten sayıyor — çift sayım olmasın.)
+          if (!car.moving) {
+            car.blokT += dt
+            if (car.blokT >= BLOK_KILIT_SN) { car.blokMuaf = true; this.blokStats.muaf++ }
+          }
+        } else {
+          occ[i] = null
+          occ[i - 1] = car
+          car.waitIndex = i - 1
+          car.blokT = 0
+          // AKICI GEÇİŞ: ışınlanmaz, yeni slota sürer (faz 'waiting' kalır, sabır işler).
+          // BANKETTEN ANA HATTA geçen araç kapıdan girer (düz çizgi çitten geçerdi).
+          const hedef = this.waitSpotAt(i - 1, st)
+          const kapidan = this.graph.isSpillSlot(st, i) && !this.graph.isSpillSlot(st, i - 1)
+          const yol = kapidan
+            ? [...this.vs(this.graph.spillPromotePath(st, i - 1).slice(0, -1)), hedef]
+            : [hedef]
+          car.setPath(temizRota(car, yol), () => { car.phase = 'waiting' })
+        }
+      }
+      onde = car
     }
   }
 
@@ -2071,10 +2296,13 @@ export class CarManager {
     car.slotIndex = slot
     car.phase = 'driving'
     const p = this.opts.pumpSlot(slot)
-    // KUYRUK -> POMPA: araç zaten GELEN OMURGA üzerindedir (kuyruk slotu orada). Rota
-    // omurga boyunca ünitenin hizasına, sonra ünite koluna girer — önceden hesaplanmış,
-    // her seferinde AYNI. Yol tarafı bacağı yok (fromRoad=false).
-    car.setPath(temizRota(car, this.entryPath(p, car.station, false)), () => this.arriveAtSlot(car))
+    // KUYRUK -> POMPA: araç normalde GELEN OMURGA üzerindedir (kuyruk slotu orada) →
+    // rota omurga boyunca ünitenin hizasına, sonra ünite koluna. Yol tarafı bacağı yok.
+    // İSTİSNA: araç hâlâ BANKETTEYSE (kapının dışında — ana hat hiç kurulamayan dar
+    // yerleşim ya da tam terfi anı) kapıdan girmesi gerekir → fromRoad=true.
+    const G2 = this.geom(car.station)
+    const derinlik = G2.sideSign < 0 ? (G2.gateX - car.group.position.x) : (car.group.position.x - G2.gateX)
+    car.setPath(temizRota(car, this.entryPath(p, car.station, derinlik < -0.3)), () => this.arriveAtSlot(car))
   }
 
   /** servis bitti, tesis kullanacak → otoparka çek. Otopark yok/dolu ise false. */
