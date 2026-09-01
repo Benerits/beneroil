@@ -770,7 +770,9 @@ function rehberSeridi(): string {
   const ana = r.ready
     ? t('{0}★ · SIRADAKİ YILDIZ HAZIR {1}', String(r.stars), rehberYildizOdulu(r))
     : r.engel
-      ? (r.engel === 'kredi'
+      ? (r.engel === 'tavan'
+          ? t('{0}★ · MARKA ZİRVEDE — yıldız tavanı, devir kapalı', String(r.stars))
+          : r.engel === 'kredi'
           ? t('{0}★ · sıradaki yıldız kredin kapanana kadar bekliyor', String(r.stars))
           : t('{0}★ · sıradaki yıldız ortaklığın bitene kadar bekliyor', String(r.stars)))
       : t('{0}★ · sıradaki yıldıza ₺{1} kaldı {2}', String(r.stars), trY(r.remaining), rehberYildizOdulu(r))
@@ -822,7 +824,9 @@ function rehberBilgiMetni(): string {
     sat.push(t('ŞU AN {0}. yıldızı alabilirsin. {1}', String(r.stars + 1), rehberYildizOdulu(r)))
     sat.push(t('Nereden: Ofis › Şubeler › Marka & Devir → “İstasyonu Devret”.'))
   } else if (r.engel) {
-    sat.push(r.engel === 'kredi'
+    sat.push(r.engel === 'tavan'
+      ? t('Marka yıldızı TAVANDA ({0}★): daha fazla yıldız yok, devir kapalı — çarpanların zirvede, istasyonunu büyütmeye devam et.', String(r.stars))
+      : r.engel === 'kredi'
       ? t('Sıradaki yıldız BEKLİYOR: açık kredin var. Kredi kapanmadan istasyon devredilemez.')
       : t('Sıradaki yıldız BEKLİYOR: aktif ortaklığın var. Ortaklık bitmeden istasyon devredilemez.'))
   } else {
@@ -1471,6 +1475,9 @@ function openOfficePanel() {
         + `<span class="pz-fine">${t('Ekipman gider ama ARSALARIN VE BETONUN SENDE KALIR. Yeni istasyon kuruluş sermayesi ve eğitimli kadroyla açılır — aynı yolu baştan yürümezsin.')}</span>`
         + `</div><button class="btn warn" id="of-handover" style="width:100%;justify-content:center;margin-top:8px">`
         + (handoverArmed() ? t('EMİN MİSİN? Devretmek için tekrar bas') : t('İstasyonu Devret')) + `</button>`
+    } else if (state.atStarCap()) {
+      // #1291: 40★'da devir yıldız getirmiyordu ama düğme açıktı → ekipman boşa gidiyordu
+      html += `<div class="pz-lock">${t('Marka yıldızı TAVANDA ({0}★). Devir artık yıldız getirmez, bu yüzden kapalı — çarpanların zirvede.', String(state.brandStars))}</div>`
     } else if (state.loan.active || state.partner.active) {
       html += `<div class="pz-lock">${t('Devir için önce kredi/ortaklık kapatılmalı.')}</div>`
     } else {

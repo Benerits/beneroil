@@ -194,6 +194,25 @@ console.log('\n== 7) EŞİK HER TURDA ERİŞİLEBİLİR ==')
   bekle(!engel, engel ? `KİLİT: ${engel}` : `tek şubeyle 12 devire kadar eşik aşılabilir (maks ekipman ₺${tl(maks)})`)
 }
 
+console.log('\n== 8) YILDIZ TAVANI (#1291): 40★ da devir KAPALI, 39★ da açık, sunucu ile aynı tavan ==')
+{
+  // 40★'lık oyuncu devredince istemci 41 yazıyor, hydrate/sunucu 40'a kırpıyordu → ekipman gitti, yıldız gelmedi
+  const srvSrc = fs.readFileSync(path.join(process.cwd(), 'server/index.js'), 'utf8')
+  bekle(GameState.BRAND_STARS_MAX === 40, `BRAND_STARS_MAX = ${GameState.BRAND_STARS_MAX}`)
+  bekle(/Math\.min\(40, n\(s\.brandStars\)\)/.test(srvSrc) && /clamp\(s\.brandStars, 0, 40, 0\)/.test(srvSrc),
+    'sunucu tavanı da 40 (maxIncomeRate + sanitize)')
+  const s39 = buyuk(); s39.brandStars = 39; s39.handoverCount = 39
+  const s40 = buyuk(); s40.brandStars = 40; s40.handoverCount = 40
+  bekle(s39.canHandover() && !s39.atStarCap(), '39★: devir açık')
+  bekle(!s40.canHandover() && s40.atStarCap(), '40★: devir KAPALI (canHandover false)')
+  bekle(s40.handover() === null, '40★: handover() null döner, ekipman gitmez')
+  bekle(s40.pumps === 14 && s40.brandStars === 40, '40★: pompalar ve yıldız yerinde')
+  bekle(s40.rehber().engel === 'tavan' && !s40.rehber().ready, "40★: rehber engel='tavan', ready=false")
+  bekle(s39.rehber().engel === null, "39★: engel yok")
+  const h = new GameState(); hydrateState(h, serializeState(s40))
+  bekle(h.brandStars === 40 && h.atStarCap(), 'hydrate: 40★ korunur ve tavan bayrağı doğru')
+}
+
 function sumUpto(arr, k) {
   return arr.slice(0, Math.max(0, Math.min(arr.length, Math.floor(k) || 0))).reduce((a, b) => a + b, 0)
 }

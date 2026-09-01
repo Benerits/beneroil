@@ -508,7 +508,7 @@ export type Rehber = {
   equip: number; threshold: number; remaining: number; pct: number
   ready: boolean
   /** devri bekleten borç (varsa): kredi veya ortaklık kapatılmalı */
-  engel: 'kredi' | 'ortak' | null
+  engel: 'kredi' | 'ortak' | 'tavan' | null
   /** eşik şube sayısı tavanına dayandı mı (tavanı yükseltmenin tek yolu yeni şube) */
   tavanda: boolean
   /** #653 teşhisi: oyuncu "yer kalmadı" hissindeyken çıkış yolu gösterilmeli */
@@ -1769,9 +1769,16 @@ export class GameState {
     const coef = this.handoverAtCap() ? 0.3 : 0.6
     return Math.round(this.equipmentValue() * coef + Math.min(100_000, perDay * 10))
   }
-  /** Devir şartı: eşik ekipman + borçsuzluk (gönüllü, asla zorunlu değil). */
+  /** MARKA YILDIZI TAVANI — sunucu (server/index.js maxIncomeRate/sanitize) ve hydrate ile
+   *  BİREBİR. #1291: 40★'lık oyuncu devredince istemci 41 yazıyor, sunucu/hydrate 40'a
+   *  kırpıyordu → ekipman gitti, yıldız GELMEDİ. Tavandayken devir kapalıdır ve panel
+   *  sebebini söyler; tavan yükseltilecekse ÜÇ yer birlikte değişmeli. */
+  static readonly BRAND_STARS_MAX = 40
+  /** yıldız tavanına dayandı mı (devir artık yıldız getirmez) */
+  atStarCap(): boolean { return this.brandStars >= GameState.BRAND_STARS_MAX }
+  /** Devir şartı: eşik ekipman + borçsuzluk + yıldız tavanının altı (gönüllü, asla zorunlu değil). */
   canHandover(): boolean {
-    return this.companyEquipmentValue() >= this.handoverThreshold() && !this.loan.active && !this.partner.active
+    return !this.atStarCap() && this.companyEquipmentValue() >= this.handoverThreshold() && !this.loan.active && !this.partner.active
   }
   /** Kadro mirasının SERVETE eklediği bedel (₺). Sunucu buildingValue() müdür kurulumunu
    *  ve personel eğitimini servete SAYIYOR; bedava seviye atlatmak serveti şişirir.
@@ -1856,7 +1863,7 @@ export class GameState {
     const hedef = [...kilitli].sort((a, b) => a.starsLeft - b.starsLeft || a.cash - b.cash)[0] ?? null
     // BİR SONRAKİ YILDIZIN AÇACAKLARI: devir düğmesine basmanın SOMUT karşılığı.
     const yildizAcar = kilitli.filter(s => s.stars === this.brandStars + 1)
-    const engel = this.loan.active ? 'kredi' : this.partner.active ? 'ortak' : null
+    const engel = this.atStarCap() ? 'tavan' : this.loan.active ? 'kredi' : this.partner.active ? 'ortak' : null
     const ready = this.canHandover()
     // #653 "YER KALMADI" TEŞHİSİ.
     // Eşik ŞUBE SAYISINA bağlı bir tavanda (BRANCH_EQUIP_CAP × şube) duruyorsa ve oyuncu
@@ -3734,8 +3741,8 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   // Eski kayıtta alan yok → undefined kalır ve haciz yolu güvenli tarafa (ortaklık) düşer.
   if (s.loan && !VALID.includes(s.loan.loc as LocId)) delete s.loan.loc
   // prestij alanları: bozuk save NaN/negatif getirirse tüm ekonomi NaN olur, '★'.repeat crash
-  s.brandStars = Math.max(0, Math.min(40, Math.round(Number(s.brandStars) || 0)))
-  s.handoverCount = Math.max(0, Math.min(40, Math.round(Number(s.handoverCount) || 0)))
+  s.brandStars = Math.max(0, Math.min(GameState.BRAND_STARS_MAX, Math.round(Number(s.brandStars) || 0)))
+  s.handoverCount = Math.max(0, Math.min(GameState.BRAND_STARS_MAX, Math.round(Number(s.handoverCount) || 0)))
   if (Array.isArray(data.ownedParcels)) s.ownedParcels = new Set(data.ownedParcels as string[])
   if (Array.isArray(data.pavedParcels)) s.pavedParcels = new Set(data.pavedParcels as string[])
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])

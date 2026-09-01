@@ -495,6 +495,8 @@ const EN: Record<string, string> = {
     'Handover unlocks at ₺{0} of installed equipment (currently ₺{1}). The threshold doubles with each handover.',
   'İstasyonu Devret': 'Hand Over Station',
   'EMİN MİSİN? Devretmek için tekrar bas': 'ARE YOU SURE? Tap again to hand over',
+  'Marka yıldızı TAVANDA ({0}★). Devir artık yıldız getirmez, bu yüzden kapalı — çarpanların zirvede.':
+    'Brand stars are CAPPED ({0}★). Handing over no longer earns a star, so it is closed — your multipliers are maxed.',
   'Devir için önce kredi/ortaklık kapatılmalı.': 'Close your loan/partnership before handing over.',
   'Devir, ₺250.000 üzeri kurulu ekipmanla açılır (şu an ₺{0}).': 'Handover unlocks with over ₺250,000 of installed equipment (currently ₺{0}).',
   'Devir şartları sağlanmıyor.': 'Handover requirements are not met.',
@@ -1514,6 +1516,7 @@ const EN: Record<string, string> = {
   'Tüm şubeler açık — marka yıldızı biriktirmeye devam et.':
     'All branches are open — keep collecting brand stars.',
   '{0}★ · SIRADAKİ YILDIZ HAZIR {1}': '{0}★ · NEXT STAR IS READY {1}',
+  '{0}★ · MARKA ZİRVEDE — yıldız tavanı, devir kapalı': '{0}★ · BRAND AT ITS PEAK — star cap reached, handover closed',
   '{0}★ · sıradaki yıldız kredin kapanana kadar bekliyor':
     '{0}★ · your next star waits until your loan is closed',
   '{0}★ · sıradaki yıldız ortaklığın bitene kadar bekliyor':
@@ -1528,6 +1531,8 @@ const EN: Record<string, string> = {
   'ŞU AN {0}. yıldızı alabilirsin. {1}': 'You can claim star {0} RIGHT NOW. {1}',
   'Nereden: Ofis › Şubeler › Marka & Devir → “İstasyonu Devret”.':
     'Where: Office › Branches › Brand & Handover → “Hand Over the Station”.',
+  'Marka yıldızı TAVANDA ({0}★): daha fazla yıldız yok, devir kapalı — çarpanların zirvede, istasyonunu büyütmeye devam et.':
+    'Brand stars are CAPPED ({0}★): no more stars, handover is closed — your multipliers are maxed, keep growing your station.',
   'Sıradaki yıldız BEKLİYOR: açık kredin var. Kredi kapanmadan istasyon devredilemez.':
     'Your next star is ON HOLD: you have an open loan. The station can’t be handed over until it’s closed.',
   'Sıradaki yıldız BEKLİYOR: aktif ortaklığın var. Ortaklık bitmeden istasyon devredilemez.':
@@ -2056,6 +2061,8 @@ const FR: Record<string, string> = {
     'La cession se débloque à ₺{0} de matériel installé (actuellement ₺{1}). Le seuil double à chaque cession.',
   'İstasyonu Devret': 'Céder la station',
   'EMİN MİSİN? Devretmek için tekrar bas': 'TU ES SÛR ? Appuie encore pour céder',
+  'Marka yıldızı TAVANDA ({0}★). Devir artık yıldız getirmez, bu yüzden kapalı — çarpanların zirvede.':
+    'Étoiles de marque au PLAFOND ({0}★). La cession ne rapporte plus d’étoile, elle est donc fermée — tes multiplicateurs sont au maximum.',
   'Devir için önce kredi/ortaklık kapatılmalı.': 'Solde ton crédit/partenariat avant de céder.',
   'Devir, ₺250.000 üzeri kurulu ekipmanla açılır (şu an ₺{0}).':
     'La cession se débloque au-delà de ₺250.000 de matériel installé (actuellement ₺{0}).',
@@ -3324,6 +3331,7 @@ const FR: Record<string, string> = {
   'Tüm şubeler açık — marka yıldızı biriktirmeye devam et.':
     'Toutes les succursales sont ouvertes — continue à collectionner les étoiles de marque.',
   '{0}★ · SIRADAKİ YILDIZ HAZIR {1}': '{0}★ · PROCHAINE ÉTOILE PRÊTE {1}',
+  '{0}★ · MARKA ZİRVEDE — yıldız tavanı, devir kapalı': '{0}★ · MARQUE AU SOMMET — plafond d’étoiles atteint, cession fermée',
   '{0}★ · sıradaki yıldız kredin kapanana kadar bekliyor':
     '{0}★ · ta prochaine étoile attend le remboursement de ton prêt',
   '{0}★ · sıradaki yıldız ortaklığın bitene kadar bekliyor':
@@ -3338,6 +3346,8 @@ const FR: Record<string, string> = {
   'ŞU AN {0}. yıldızı alabilirsin. {1}': 'Tu peux obtenir l’étoile {0} MAINTENANT. {1}',
   'Nereden: Ofis › Şubeler › Marka & Devir → “İstasyonu Devret”.':
     'Où : Bureau › Succursales › Marque et cession → « Céder la station ».',
+  'Marka yıldızı TAVANDA ({0}★): daha fazla yıldız yok, devir kapalı — çarpanların zirvede, istasyonunu büyütmeye devam et.':
+    'Étoiles de marque au PLAFOND ({0}★) : plus d’étoiles, cession fermée — tes multiplicateurs sont au maximum, continue à agrandir ta station.',
   'Sıradaki yıldız BEKLİYOR: açık kredin var. Kredi kapanmadan istasyon devredilemez.':
     'Ta prochaine étoile est EN ATTENTE : tu as un prêt en cours. Impossible de céder la station avant de l’avoir remboursé.',
   'Sıradaki yıldız BEKLİYOR: aktif ortaklığın var. Ortaklık bitmeden istasyon devredilemez.':
