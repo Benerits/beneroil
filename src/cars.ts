@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
-import { LaneNetwork, StationGeom, UnitPoint, ParkPoint, ParkLane, Pt } from './traffic-graph'
+import { LaneNetwork, StationGeom, UnitPoint, ParkPoint, ParkLane, Pt, Rect, QUEUE_GATE_CLEAR } from './traffic-graph'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
@@ -741,6 +741,9 @@ export class Car {
    *  tetiklendi. Oyuncunun "arabalar pompalara takılıyor" dediği olayın SAYISAL karşılığı —
    *  rota temizliği çalışıyorsa bu sayı düşmeli. Testler/telemetri okur, oyunu etkilemez. */
   static reaktifKacis = 0
+  /** ÖLÇÜM: kuyruk slotu katı cismin İÇİNDE bulundu (şerit ağı elemesinden kaçan hâl).
+   *  Sağlıklı yerleşimde 0'dır; patlarsa ağ ile katı cisim listesi ayrışmış demektir. */
+  static katiIcindeSlot = 0
   /** yağ değişimi körüğü gibi BİNA İÇİNE sürüşlerde duvar çarpışmasını kapatır */
   ghostSolid = false
   // `stuckHits` / `softPassT` SİLİNDİ: "iki kez aynı yerde takılırsan araçlardan geç"
@@ -1274,6 +1277,10 @@ export interface CarManagerOpts {
   /** ünitenin oyuncu açısı (rad) — araç slotta bu açıyla hizalanır */
   pumpAngle?: (i: number) => number
   evAngle?: (i: number) => number
+  /** ÜNİTE GÖVDESİ (main.ts unitRect ile birebir) — şerit ağı 180° dönmüş ünitede
+   *  kolu gövdenin ucundan dolaştırabilsin diye gövdeyi BİLMEK zorunda. Verilmezse
+   *  kollar hep düz çizilir (eski davranış). */
+  unitRect?: (kind: 'pump' | 'ev', i: number) => Rect | null
   /** trafik arz çarpanı (tabela+reklam; 1.0..~2.0) — spawn aralığını böler, transit cap'i büyütür */
   trafficPull?: () => number
   /** açık müşteri segmentleri (₺/müşteri ekseni) — kilitliyse null/boş, davranış klasik kalır */
@@ -1336,6 +1343,9 @@ export class CarManager {
   private graphKey = ''
   private waitOcc: (Car | null)[] = []
   private waitOccFar: (Car | null)[] = []
+  /** SAVUNMA KATMANI: katı cismin içinde ölçülen kuyruk slotları (ağ yeniden kurulunca sıfırlanır) */
+  private katiSlotNear = new Set<number>()
+  private katiSlotFar = new Set<number>()
   /** AKIŞ DÜZGÜNLÜĞÜ TELEMETRİSİ (yeni metrik, oyun sahibinin istediği şey).
    *  ort = ortalama hız oranı, sapma = varyans, duraklama = "durdu" olayı sayısı. */
   flowStats = { orneklem: 0, toplam: 0, kareToplam: 0, duraklama: 0, duraklamaKare: 0 }
@@ -1384,10 +1394,23 @@ export class CarManager {
     const G = this.geom(st)
     const s = this.graph.slot(st, i)
     const x = s ? s.x : G.gateX + G.sideSign * 0.8
-    let y = s ? s.y : G.gateInY + G.dirY * (3.4 + i * 2.9)
+    const y0 = s ? s.y : G.gateInY + G.dirY * (3.4 + i * 2.9)
+    let y = y0
     for (let k = 0; k < 6 && Car.isSolidAt(x, y); k++) y += G.dirY * 1.4
+    // İKİNCİ SİGORTA (şerit ağı slotu ZATEN eliyor — bu, ağın göremediği bir katı cisim
+    // için savunma): kaçış başarısızsa araç KATI CİSMİN İÇİNE oturtulmaz. Eskiden döngü
+    // biter ve gövdenin içindeki nokta aynen dönerdi; araç oraya sürüp gövdeye biniyor,
+    // arkasındaki bütün kuyruk kilitleniyordu. Artık slot KAPALI işaretlenir (bir daha
+    // kimseye verilmez) ve araç kapı ağzındaki temiz noktaya çekilir.
+    if (Car.isSolidAt(x, y)) {
+      Car.katiIcindeSlot++
+      this.katiSlotlarFor(st).add(i)
+      y = G.gateInY + G.dirY * QUEUE_GATE_CLEAR
+    }
     return new THREE.Vector3(x, y, 0)
   }
+  /** o yakada KATI CİSME denk geldiği ölçülen (bir daha dağıtılmayacak) kuyruk slotları */
+  private katiSlotlarFor(st: 'near' | 'far') { return st === 'far' ? this.katiSlotFar : this.katiSlotNear }
   /** Pt → Vector3 (şerit ağı three.js bilmez, dönüşüm burada) */
   private v(p: Pt): THREE.Vector3 { return new THREE.Vector3(p.x, p.y, 0) }
   private vs(ps: Pt[]): THREE.Vector3[] { return ps.map(p => this.v(p)) }
@@ -1397,11 +1420,15 @@ export class CarManager {
     const out: UnitPoint[] = []
     for (let i = 0; i < this.opts.pumpCount(); i++) {
       const s = this.opts.pumpSlot(i)
-      if (s && this.pumpStation(i) === st) out.push({ id: `pump-${i}`, x: s.x, y: s.y })
+      if (s && this.pumpStation(i) === st) {
+        out.push({ id: `pump-${i}`, x: s.x, y: s.y, rect: this.opts.unitRect?.('pump', i) ?? undefined })
+      }
     }
     for (let i = 0; i < this.opts.evCount(); i++) {
       const s = this.opts.evSlot(i)
-      if (s && this.evStation(i) === st) out.push({ id: `ev-${i}`, x: s.x, y: s.y })
+      if (s && this.evStation(i) === st) {
+        out.push({ id: `ev-${i}`, x: s.x, y: s.y, rect: this.opts.unitRect?.('ev', i) ?? undefined })
+      }
     }
     return out
   }
@@ -1416,6 +1443,12 @@ export class CarManager {
     return out
   }
   private waitOccFor(st: 'near' | 'far') { return st === 'far' ? this.waitOccFar : this.waitOcc }
+  /** YERLEŞTİRME REZERVLERİ: hesaplanmış şeritlerin dikdörtgenleri (main.ts fixedObstacles okur) */
+  laneRezervleri() { return this.graph.laneRezervleri() }
+  /** ÜNİTEYE ARAÇ ULAŞABİLİYOR MU (bina kartı / HUD uyarısı okur) */
+  uniteErisilebilir(st: 'near' | 'far', kind: 'pump' | 'ev', i: number) {
+    return this.graph.unitErisilebilir(st, kind, i)
+  }
   /** o şubede kaç kuyruk slotu var — şerit ağından gelir (geniş kapı 10, dar 8, marina 4) */
   private waitSlotCount(st: 'near' | 'far') {
     return this.graph.queueCount(st) || (this.opts.isWater?.() && st === 'near' ? 4 : 8)
@@ -1435,11 +1468,17 @@ export class CarManager {
   /** ARAÇ TİPİNE göre ekipman var mı — benzinli araç şarj-only istasyona girip
    *  sonsuza dek bekliyordu ("normal arabalar giriyor, hareket etmeden bekliyor" şikâyeti) */
   private stationHasEquipmentFor(kind: 'fuel' | 'ev', st: 'near' | 'far'): boolean {
+    // ERİŞİLEMEZ ÜNİTE EKİPMAN SAYILMAZ: yoksa müşteri "burada pompa var" diye içeri
+    // girip asla servis edilemeyeceği bir kuyrukta sabrını tüketirdi.
     if (kind === 'ev') {
-      for (let i = 0; i < this.opts.evCount(); i++) if (this.evStation(i) === st) return true
+      for (let i = 0; i < this.opts.evCount(); i++) {
+        if (this.evStation(i) === st && this.graph.unitErisilebilir(st, 'ev', i)) return true
+      }
       return false
     }
-    for (let i = 0; i < this.opts.pumpCount(); i++) if (this.pumpStation(i) === st) return true
+    for (let i = 0; i < this.opts.pumpCount(); i++) {
+      if (this.pumpStation(i) === st && this.graph.unitErisilebilir(st, 'pump', i)) return true
+    }
     return false
   }
 
@@ -1520,6 +1559,9 @@ export class CarManager {
     if (key !== this.graphKey) {
       this.graphKey = key
       this.graph.rebuild(stationsNow, (x, y) => Car.isSolidAt(x, y))
+      // yerleşim değişti → "katı içinde" damgaları düşer (oyuncu binayı taşımış olabilir)
+      this.katiSlotNear.clear()
+      this.katiSlotFar.clear()
     }
 
     // yoldan geçen trafik
@@ -1703,8 +1745,12 @@ export class CarManager {
 
     // bekleyen yakıt müşterilerini boş (ve sağlam) pompaya yolla — pompanın istasyonuyla eşleşen müşteri
     for (let i = 0; i < this.opts.pumpCount(); i++) {
-      if (this.pumpOcc[i] || this.opts.isPumpBroken(i)) continue
-      const st = this.pumpStation(i)
+      const st0 = this.pumpStation(i)
+      // ERİŞİLEMEZ ÜNİTE = BOZUK ÜNİTE (aynı kapı): kolu katı cisimle kapalıysa araç
+      // oraya gönderilmez. Eskiden gönderiliyor ve gövdenin dibinde sonsuza dek bekliyordu.
+      if (this.pumpOcc[i] || this.opts.isPumpBroken(i)
+          || !this.graph.unitErisilebilir(st0, 'pump', i)) continue
+      const st = st0
       const uygun = (c: Car) => c.station === st && c.waitIndex >= 0 && c.slotIndex === -1 && c.patience > 0
         && (c.phase === 'waiting' || c.phase === 'driving')
       // ÖNCELİK: reklamla kurtarılan VIP kuyrukta öne geçer (teklifin somut karşılığı).
@@ -2192,6 +2238,7 @@ export class CarManager {
       for (let i = 0; i < this.opts.evCount(); i++) {
         if (this.evStation(i) !== car.station) continue // yalnız bu istasyonun şarjları
         if (this.evOcc[i] || this.opts.isChargerBroken(i)) continue
+        if (!this.graph.unitErisilebilir(car.station, 'ev', i)) continue // kolu kapalı
         const d = Math.abs(this.opts.evSlot(i).y - gy)
         if (d < bestD) { bestD = d; slot = i }
       }
@@ -2216,6 +2263,7 @@ export class CarManager {
     for (let i = 0; i < this.opts.pumpCount(); i++) {
       if (this.pumpStation(i) !== car.station) continue // yalnız bu istasyonun pompaları
       if (this.pumpOcc[i] || this.opts.isPumpBroken(i)) continue
+      if (!this.graph.unitErisilebilir(car.station, 'pump', i)) continue // kolu kapalı
       const d = Math.abs(this.opts.pumpSlot(i).y - gy)
       if (d < bestD) { bestD = d; slot = i }
     }
@@ -2234,7 +2282,10 @@ export class CarManager {
     // boş bekleme noktası REZERVE edilir; hiç yer yoksa araç girmez, yoluna gider
     const waitOcc = this.waitOccFor(car.station)
     let wi = -1
-    for (let i = 0; i < this.waitSlotCount(car.station); i++) if (!waitOcc[i]) { wi = i; break }
+    const kapali = this.katiSlotlarFor(car.station)
+    for (let i = 0; i < this.waitSlotCount(car.station); i++) {
+      if (!waitOcc[i] && !kapali.has(i)) { wi = i; break }
+    }
     if (wi >= 0) {
       waitOcc[wi] = car
       car.waitIndex = wi

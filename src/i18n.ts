@@ -107,6 +107,12 @@ const EN: Record<string, string> = {
   "YARIM doldur": "Fill HALF",
   "Müdür tank %{0} altına düşünce sipariş verecek.": "The manager will reorder when the tank drops below {0}%.",
   "Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.": "Doesn't fit here — rotating would overlap another building or the vehicle lane. Move it first.",
+  // ŞERİT AĞI: erişilemez ünite (araç kolu katı cisimle kapalı)
+  "Araç bu üniteye ulaşamaz — önünü kapatan yapıyı taşı ya da üniteyi döndür.":
+    "Cars can't reach this unit — move the building blocking it, or rotate the unit.",
+  "Araç bu üniteye ulaşamıyor — önündeki yapıyı taşı":
+    "Cars can't reach this unit — move the building in front of it",
+  "ARAÇ ULAŞAMIYOR": "NO CAR ACCESS",
   "Döndürüldü ({0}°)": "Rotated ({0}°)",
   "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Move mode: arrows/tap to move · R key or ⟳ to ROTATE · ✓ to place",
   "Yerleştirme modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Placement mode: arrows/tap to move · R key or ⟳ to ROTATE · ✓ to place",
@@ -1624,6 +1630,12 @@ const FR: Record<string, string> = {
   "YARIM doldur": "Remplir à MOITIÉ",
   "Müdür tank %{0} altına düşünce sipariş verecek.": "Le gérant recommandera quand la cuve descend sous {0} %.",
   "Buraya sığmıyor — döndürünce başka bir yapıya/araç yoluna çarpıyor. Önce taşı.": "Ça ne rentre pas ici — en pivotant, ça chevaucherait un autre bâtiment ou la voie. Déplace-le d'abord.",
+  // ŞERİT AĞI: erişilemez ünite (araç kolu katı cisimle kapalı)
+  "Araç bu üniteye ulaşamaz — önünü kapatan yapıyı taşı ya da üniteyi döndür.":
+    "Les voitures ne peuvent pas atteindre cette unité — déplace le bâtiment qui bloque, ou pivote l'unité.",
+  "Araç bu üniteye ulaşamıyor — önündeki yapıyı taşı":
+    "Les voitures ne peuvent pas atteindre cette unité — déplace le bâtiment devant elle",
+  "ARAÇ ULAŞAMIYOR": "ACCÈS VOITURE IMPOSSIBLE",
   "Döndürüldü ({0}°)": "Pivoté ({0}°)",
   "Taşıma modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Mode déplacement : flèches/toucher pour bouger · touche R ou ⟳ pour PIVOTER · ✓ pour placer",
   "Yerleştirme modu: oklar/dokunuş taşır · R tuşu ya da ⟳ DÖNDÜRÜR · ✓ yerleştir": "Mode placement : flèches/toucher pour bouger · touche R ou ⟳ pour PIVOTER · ✓ pour placer",
