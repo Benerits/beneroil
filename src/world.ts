@@ -474,7 +474,7 @@ export class World {
   private steamT = 0
   /** RÜZGÂR TÜRBİNİ kanatları — update()'te döner. Hız state'ten gelen rüzgâra bağlı;
    *  durgun havada yavaşlar, böylece üretimin değişkenliği EKRANDA da görünür. */
-  private blades: { mesh: THREE.Object3D; id: string }[] = []
+  private blades: { mesh: THREE.Object3D; id: string; eksen?: THREE.Vector3 }[] = []
   windSpin = 1
   private sun: THREE.DirectionalLight
   private hemi: THREE.HemisphereLight
@@ -1181,10 +1181,21 @@ export class World {
     // kanatlar: dönüş hızı rüzgâra orantılı (state.windFactor → main her karede yazar)
     if (this.blades.length) {
       const w = 2.4 * Math.max(0.12, this.windSpin)
-      // EKSEN: kanat düğümü KENDİ yerel uzayında döner; modelde rotor düzlemi öne
-      // bakar, göbek ekseni yerel Z'dir. İlk sürüm Y'ye döndürüyordu — kanatlar
-      // pervane gibi değil ATLIKARINCA gibi yalpalıyordu (oyuncu bildirdi).
-      for (const b of this.blades) b.mesh.rotation.z += w * dt
+      // EKSEN — OYUNCUNUN TARİFİ BİREBİR: yükseklik z, dönüş DÜNYA Y'sinde (üstten
+      // bakışta önceki yanlış eksene 90° dik olan). Yerel eksen TAHMİN EDİLMİYOR:
+      // convert() sarmalayıcıları + fitModel yüzünden düğümün yerel çerçevesi iç içe
+      // dönüşlerin arkasında — iki kez yanlış tahmin edildi (y: atlıkarınca, z: yine
+      // yanlış düzlem). Dünya Y'si kanatların yerel uzayına BİR KEZ çevrilir (henüz
+      // hiç dönmemişken) ve saklanır; spin kendi ekseni etrafında olduğu için bu
+      // eksen sonsuza dek geçerli kalır. Türbin ry ile döndürülse de doğru.
+      for (const b of this.blades) {
+        if (!b.eksen) {
+          b.mesh.updateWorldMatrix(true, false)
+          const q = b.mesh.getWorldQuaternion(new THREE.Quaternion()).invert()
+          b.eksen = new THREE.Vector3(0, 1, 0).applyQuaternion(q).normalize()
+        }
+        b.mesh.rotateOnAxis(b.eksen, w * dt)
+      }
     }
   }
 
