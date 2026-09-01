@@ -63,7 +63,11 @@ export interface ParkPoint {
  * rozeti de gerçek (kullanılabilir) sayıyı gösterir. Deterministik: bina sırası +
  * nokta indeksi (greedy) — aynı yerleşim her zaman aynı havuzu verir.
  */
-export const PARK_NOKTA_AYRIK = 2.8
+export const PARK_NOKTA_AYRIK = 2.4
+// EŞİK NEDEN 2,4 (2,8 değil): park YAN YANA — belirleyici ölçü gövde BOYU (2,66)
+// değil, iç içe OLAY eşiği (2,15). 2,4 = 2,15 + pay; böylece tek lotun dürüst
+// 2,5 aralıklı iki yeri hayatta kalırken komşu lotların < 2,4 çakışan uçları elenir.
+// 2,8 olsaydı 2,5 aralıklı meşru çift de elenir, ayak izini büyütmek gerekirdi.
 export function parkHavuzuAyikla<T extends { pos: { x: number; y: number } }>(spots: T[]): T[] {
   const out: T[] = []
   for (const s of spots) {

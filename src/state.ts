@@ -337,6 +337,10 @@ export const LAMP_REP_MAX_COUNT = Math.ceil(LAMP_REP_CAP / LAMP_REP_PER)  // = 8
  *  ⚠️ server/index.js pendingCash clamp'i buradan türetilir — biri değişirse ikisi de
  *  değişmeli, yoksa meşru oyuncunun kumbarası kayıtta kırpılır ("param gitti"). */
 export const SAYAC_KUMBARA_MAX = 12
+/** Otopark yer sayısı — ÇİZİM (world), park noktası (traffic) ve MAĞAZA METNİ aynı
+ *  sabitten okur. Burada (state) durur çünkü world zaten state'ten import ediyor;
+ *  tersi döngü olurdu. 4→2: 1,25 aralık araçları fiziksel bindiriyordu (1 Eyl). */
+export const PARK_YER = 2
 /** İTİBAR YÜKSELİŞ TAVANI için gereken en az günlük müşteri örneği. Bunun altında
  *  (gün başı, tenha dakika) tavan uygulanmaz — 2 müşteriyle gün yargılanmaz. */
 export const REP_TAVAN_ORNEK = 8
@@ -3193,7 +3197,7 @@ export function getShopItems(s: GameState): ShopRow[] {
       ? t('Gece aydınlatması — itibar katkısı {0} lambada doldu; fazlası yalnız görsel. Taşınır, satılır.', LAMP_REP_MAX_COUNT)
       : t('Gece aydınlatması — istasyon güvenli görünür ({0} lambaya kadar +itibar, taşınır, satılır)', LAMP_REP_MAX_COUNT),
     LAMP_COST, null)
-  row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+4 araç'),
+  row('parking', 'i-parking', s.parkingCount ? t('Otopark ({0})', s.parkingCount) : t('Otopark'), t('+{0} araç', PARK_YER),
     t('Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)'), PARKING_COST, null)
 
   row('market', 'i-market', s.marketLevel === 0 ? t('Market') : t('Market Sv.{0}', s.marketLevel + 1), `+₺${25 * (s.marketLevel + 1)}-${60 * (s.marketLevel + 1)}`,

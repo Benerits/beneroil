@@ -54,7 +54,7 @@ console.log('== 1) Kaynak denetimi: eleme + çıkış kapsamı yerinde ==')
 const graphSrc = readFileSync(new URL('../../src/traffic-graph.ts', import.meta.url), 'utf8')
 const worldSrc = readFileSync(new URL('../../src/world.ts', import.meta.url), 'utf8')
 const carsSrc = readFileSync(new URL('../../src/cars.ts', import.meta.url), 'utf8')
-check('eleme eşiği tanımlı (PARK_NOKTA_AYRIK = 2.8)', /export const PARK_NOKTA_AYRIK = 2\.8\b/.test(graphSrc))
+check('eleme eşiği tanımlı ve OLAY eşiğinin üstünde', PARK_NOKTA_AYRIK > 2.15)
 check('havuz süzgeci saf fonksiyon (parkHavuzuAyikla) traffic-graph\'ta',
   /export function parkHavuzuAyikla/.test(graphSrc))
 check('world.getParkingSpots havuzdan geçiyor (rozet + atama + şerit ağı tek kaynaktan)',
@@ -443,7 +443,7 @@ if (!PORT) {
       muaf: d.cars.blokStats?.muaf ?? -1, cikisMuaf: d.cars.blokStats?.cikisMuaf ?? -1,
       seritler: d.cars.graph.parkLanesOf?.('near')?.length ?? -1 }
   })
-  check(`CANLI havuz tekliği: ${oc.havuzN} nokta, en yakın çift ${oc.havuzMin?.toFixed(2)} ≥ 2.8 (kullanılabilir şerit ${oc.seritler})`,
+  check(`CANLI havuz tekliği: ${oc.havuzN} nokta, en yakın çift ${oc.havuzMin?.toFixed(2)} ≥ eşik (kullanılabilir şerit ${oc.seritler})`,
     oc.havuzN > 0 && oc.havuzMin >= PARK_NOKTA_AYRIK, `havuz ${oc.havuzN} · min ${oc.havuzMin}`)
   // BOŞ KÜMEDEN GEÇEN İDDİA YASAK: sahnede GERÇEKTEN aynı anda ≥2 park etmiş araç görülmeli
   check(`ölçüm DOLU kümede (park zirvesi ${oc.parkZirve} araç · çıkış ${oc.cikCift} çift-örnek · ${oc.ornek} örnek)`,

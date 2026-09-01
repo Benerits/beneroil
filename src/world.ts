@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { StaticLib, fitModel } from './models'
-import { PARCEL_COLS, PARCEL_ROWS, FuelType } from './state'
+import { PARCEL_COLS, PARCEL_ROWS, FuelType, PARK_YER } from './state'
+export { PARK_YER }
 import { LocationTheme, activeTheme } from './themes'
 import type { Kit } from './kits'
 import { asset, texture, isLightMode } from './platform'
@@ -21,8 +22,13 @@ export const ROAD_X = 7.9
  * Park noktaları hem çizim hem de trafik tarafından parkYerX() ile TEK KAYNAKTAN
  * okunur; ikisi ayrı hesaplanırsa araç çizginin üstüne park eder.
  */
-export const PARK_YER = 4
-export const PARK_ARALIK = 1.25
+// KAPASİTE GERÇEĞE ÇEKİLDİ (1 Eyl, canlı telemetri): 1,25 aralıklı 4 şerit,
+// gövdesi ~1,3 olan araçları FİZİKSEL BİNDİRMEYLE park ettiriyordu — canlıdaki
+// parked+parked 240 çiftlik kümenin kaynağı buydu. Ayak izi DEĞİŞMEDİ (ped 5,0):
+// 2 yer x 2,5 aralık. Çizgi, kapasite rozeti ve park noktası aynı sabitlerden
+// türediği için üçü artık aynı gerçeği söylüyor (4 şerit çizip 2'sine izin veren
+// yalancı görsel de böylece doğmadı). Gelir adet bazlı — ekonomi etkilenmez.
+export const PARK_ARALIK = 2.5
 export const PARK_PAD_W = PARK_YER * PARK_ARALIK        // 5.0
 export const parkYerX = (i: number) => -PARK_PAD_W / 2 + PARK_ARALIK * (i + 0.5)
 export const LANE_NEAR = 6.95

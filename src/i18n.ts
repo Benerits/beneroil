@@ -897,7 +897,7 @@ const EN: Record<string, string> = {
     'Tire air & water — cheap but draws customers (income grows up to {0} units)',
   'Lastik havası ve su — gelir tavanına ulaştın ({0} ünite), yeni ünite kazanç eklemez.':
     'Tire air & water — you have hit the income ceiling ({0} units); another unit adds no earnings.',
-  'Otopark': 'Parking Lot', 'Otopark ({0})': 'Parking Lot ({0})', '+4 araç': '+4 cars',
+  'Otopark': 'Parking Lot', 'Otopark ({0})': 'Parking Lot ({0})', '+{0} araç': '+{0} cars',
   'Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)':
     'Striped lot — customers park and use facilities (unlimited)',
   'Sokak Lambası': 'Street Lamp', 'Sokak Lambası ({0})': 'Street Lamp ({0})', '+itibar': '+reputation',
@@ -2523,7 +2523,7 @@ const FR: Record<string, string> = {
     'Air pour les pneus & eau — plafond de revenus atteint ({0} unités) ; une unité de plus ne rapporte rien.',
   'Otopark': 'Parking',
   'Otopark ({0})': 'Parking ({0})',
-  '+4 araç': '+4 voitures',
+  '+{0} araç': '+{0} voitures',
   'Çizgili park alanı — müşteriler park edip tesisleri kullanır (sınırsız kurulur)':
     'Places matérialisées — les clients se garent et profitent des installations (illimité)',
   'Sokak Lambası': 'Lampadaire',
