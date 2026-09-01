@@ -3,6 +3,7 @@ import { t } from './i18n'
 import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
 import { LaneNetwork, StationGeom, UnitPoint, ParkPoint, ParkLane, Pt } from './traffic-graph'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
+import { yolBul, engelleriAyarla, segmentDikdortgeniKesiyor } from './yol-bul'
 
 const CAR_COLORS = [0x5b8def, 0xe25b5b, 0xf2c14e, 0x62b56b, 0x9a7bd0, 0xe8e6e1, 0x4a5560, 0x53b8a7, 0xef8b4e]
 const CAR_SPEED = 7
@@ -311,7 +312,7 @@ import { ModelLib, cloneModel, CAR_FILES, fitModel } from './models'
 // aynı rota (kuyruk→pompa, pompa→çıkış, kapı→pompa) saniyede onlarca kez baştan
 // temizleniyordu. Aynı (başlangıç, ara noktalar, pad) üçlüsünün temizlenmiş sonucu burada
 // saklanır; yerleşim imzası değişince tamamı boşalır (Car.solids setter'ı).
-const rotaOnbellek = new Map<string, THREE.Vector3[]>()
+const rotaOnbellek = new Map<string, { yol: THREE.Vector3[]; kopuk: boolean }>()
 // Taşarsa komple boşalt: LRU tutmaya değmez, zaten her yerleşim değişiminde sıfırlanıyor.
 // Sınır, yol üzerindeki SÜREKLİ değişen başlangıç noktalarının anahtarı şişirmesine karşı.
 const ROTA_ONBELLEK_MAX = 1200
@@ -736,11 +737,19 @@ export class Car {
       rotaOnbellek.clear()
       Car.rotaCacheStats.flush++
     }
+    // Yol bulucu KENDİ ızgarasını bu listeden kurar; sürüm değişmediyse ızgara korunur,
+    // yalnız dizi referansı tazelenir (main.ts her karede YENİ dizi atıyor).
+    engelleriAyarla(Car._solids, Car.solidSurum)
   }
   /** ÖLÇÜM: reaktif kaçış (1.6 sn kıpırdayamayıp engelin etrafından dolanma) kaç kez
    *  tetiklendi. Oyuncunun "arabalar pompalara takılıyor" dediği olayın SAYISAL karşılığı —
    *  rota temizliği çalışıyorsa bu sayı düşmeli. Testler/telemetri okur, oyunu etkilemez. */
   static reaktifKacis = 0
+  /** ÖLÇÜM: kaç kez "hedefe HİÇ rota yok" durumu oluştu. Sessiz başarısızlığın
+   *  sayısal karşılığı — sağlıklı bir yerleşimde 0 kalmalı, testler bunu denetler. */
+  static rotaKopukSayac = 0
+  /** bu aracın son rotası eksik/kirli mi (yol bulucu bile çözemedi) */
+  rotaKopuk = false
   /** yağ değişimi körüğü gibi BİNA İÇİNE sürüşlerde duvar çarpışmasını kapatır */
   ghostSolid = false
   // `stuckHits` / `softPassT` SİLİNDİ: "iki kez aynı yerde takılırsan araçlardan geç"
@@ -801,24 +810,33 @@ export class Car {
         // engele takıldıysa say; 1.6 sn ilerleyemezse başka yönden dolaş
         if (movedDist < step * 0.25) this.solidStuckT += dt
         else this.solidStuckT = 0
-        if (this.solidStuckT > 1.6 && this.path.length < 12) {
+        // ── REAKTİF KAÇIŞ: A* YENİDEN PLANLAMA (eski 14 ADAY SEZGİSELİ SİLİNDİ) ──
+        // Eski hâli engelin etrafında 14 aday nokta deniyordu. İki ölümcül kusuru vardı:
+        //   1) hiçbiri uymazsa HİÇBİR ŞEY olmuyordu → araç sonsuza dek orada kalıyordu,
+        //   2) hedef waypoint'in KENDİSİ katı cismin içindeyse (döndürülmüş pompanın
+        //      yuvası gibi) hiçbir aday oraya yaklaşamaz → 1.6 sn'de bir sonsuz döngü.
+        // Artık gerçek bir yol araması yapılır ve erişilemez waypoint DÜŞÜRÜLÜR.
+        // Hız sınırı korunuyor: solidStuckT sıfırlandığı için araç başına en fazla
+        // 1.6 sn'de bir yeniden planlama koşar.
+        if (this.solidStuckT > 1.6) {
           this.solidStuckT = 0
           Car.reaktifKacis++
-          const base = Math.atan2(target.y - pos.y, target.x - pos.x)
-          let best: THREE.Vector3 | null = null
-          let bestScore = Infinity
-          // iki yarıçap: 2.2 (dar manevra) + 3.6 (pompa SIRASININ etrafından dolanış —
-          // "arka sıradaki pompaya gidemiyor" şikayetinin fixi)
-          for (const r of [2.2, 3.6]) for (const a of [50, -50, 90, -90, 130, -130, 180]) {
-            const ang = base + a * Math.PI / 180
-            const cx2 = pos.x + Math.cos(ang) * r
-            const cy2 = pos.y + Math.sin(ang) * r
-            if (Car.insideSolid(cx2, cy2)) continue
-            if (Car.insideSolid(pos.x + Math.cos(ang) * r / 2, pos.y + Math.sin(ang) * r / 2)) continue
-            const score = Math.hypot(target.x - cx2, target.y - cy2) + Math.abs(a) * 0.015 + (r - 2.2) * 0.4
-            if (score < bestScore) { bestScore = score; best = new THREE.Vector3(cx2, cy2, 0) }
+          // Hedef waypoint gövdenin içindeyse ona ASLA varılamaz — atla (ama son
+          // waypoint'i asla atma: onArrive geri çağrısının anlamı orada).
+          let hi = 0
+          while (hi < this.path.length - 1 && Car.insideSolid(this.path[hi].x, this.path[hi].y)) hi++
+          const hedef = this.path[hi]
+          const yol = yolBul(pos, hedef, rotaPadi(this)) ?? yolBul(pos, hedef, PAD_FIZIK)
+          if (yol) {
+            const kalan = this.path.slice(hi + 1)
+            this.path = [...yol.map(p => new THREE.Vector3(p.x, p.y, 0)), ...kalan]
+          } else if (hi < this.path.length - 1) {
+            this.path.splice(0, hi + 1) // bu ara noktaya gidilemiyor: sıradakine yönel
+          } else {
+            // SON hedefe gidilemiyor: rotayı bozmuyoruz (onArrive korunur) ama sessiz
+            // kalmıyoruz — ölçülebilir bir kusur olarak işaretlenir.
+            if (!this.rotaKopuk) { this.rotaKopuk = true; Car.rotaKopukSayac++ }
           }
-          if (best) this.path.unshift(best) // ara nokta: engelin öbür yanından dolan
         }
         if (moved) {
           const yaw = Math.atan2(d.y, d.x) + (this.reversing ? Math.PI : 0)
@@ -1070,27 +1088,9 @@ export class Tanker {
 // üst üste biniyordu. Şerit ağı slotları GELEN OMURGA üzerine koyar: tek sıra, çıkışla
 // 1.05 birim ayrık.
 
-/** Eksen hizalı dikdörtgen ile doğru parçası kesişiyor mu (slab yöntemi).
- *  pad: aracın yarı genişliği kadar şişirme — teğet geçişler de engel sayılır. */
-function segmentDikdortgeniKesiyor(
-  ax: number, ay: number, bx: number, by: number,
-  r: { cx: number; cy: number; w: number; d: number }, pad: number,
-): boolean {
-  const minX = r.cx - r.w / 2 - pad, maxX = r.cx + r.w / 2 + pad
-  const minY = r.cy - r.d / 2 - pad, maxY = r.cy + r.d / 2 + pad
-  // her iki uç da aynı tarafta kalıyorsa kesişim yok (ucuz eleme)
-  if ((ax < minX && bx < minX) || (ax > maxX && bx > maxX)) return false
-  if ((ay < minY && by < minY) || (ay > maxY && by > maxY)) return false
-  const dx = bx - ax, dy = by - ay
-  let t0 = 0, t1 = 1
-  for (const [p, q] of [[-dx, ax - minX], [dx, maxX - ax], [-dy, ay - minY], [dy, maxY - ay]]) {
-    if (p === 0) { if (q < 0) return false; continue }
-    const t = q / p
-    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t }
-    else { if (t < t0) return false; if (t < t1) t1 = t }
-  }
-  return true
-}
+// `segmentDikdortgeniKesiyor` ARTIK BURADA DEĞİL: yol-bul.ts'ten geliyor. Tek kopya
+// olması ŞART — rota temizliğinin "temiz" dediğiyle yol bulucunun "temiz" dediği ölçüt
+// birbirinden ayrılırsa doğrulama katmanı sessizce yalan söyler.
 
 /** Nokta, şişirilmiş dikdörtgenin içinde mi (kaçınılmaz engel elemesi için). */
 function noktaKutuda(p: THREE.Vector3, r: { cx: number; cy: number; w: number; d: number }, pad: number): boolean {
@@ -1206,6 +1206,55 @@ function rotayiTemizle(yol: THREE.Vector3[], pad = 1.0): THREE.Vector3[] {
   return cikti
 }
 
+/**
+ * ROTA DOĞRULAMA + A* ONARIMI — "sessiz başarısızlık" katmanının kapatılması.
+ *
+ * `rotayiTemizle` sezgiseldir: çözemezse KİRLİ rotayı sessizce döndürür. O rotanın
+ * kirli bacağına giren araç `Car.insideSolid` duvarına toslar ve orada kalır — canlı
+ * telemetrideki en büyük kusur sınıfı buydu (#4403: 180° döndürülmüş pompaların
+ * yuvası çıkış omurgasının ters yanında; düz çıkış bacağı gövdeyi kesiyor).
+ *
+ * Burada HER bacak (başlangıç→ilk dahil) FİZİKSEL payla denetlenir; kesen bacak
+ * gerçek yol bulucunun çıktısıyla değiştirilir. Pay kademeleri: konforlu → dar →
+ * fiziksel. Hiçbiri bulamazsa bacak olduğu gibi bırakılır ve `kopuk` işaretlenir.
+ *
+ * KAÇINILMAZ GÖVDELER: aracın yanaştığı pompanın gövdesi yuvanın DİBİNDEDİR; rotanın
+ * ilk/son noktasını içine alan cisimlerden "kaçınmak" anlamsızdır (yuvaya hiç varılamaz).
+ * Bunlar denetim kümesinden çıkarılır — eski `rotayiTemizle` ile aynı ölçüt.
+ */
+function rotayiDogrula(yol: THREE.Vector3[], pad: number): { yol: THREE.Vector3[]; kopuk: boolean } {
+  if (!Car.solids.length || yol.length < 2) return { yol, kopuk: false }
+  const bas = yol[0], son = yol[yol.length - 1]
+  const denet = Car.solids.filter(r => !noktaKutuda(bas, r, PAD_FIZIK) && !noktaKutuda(son, r, PAD_FIZIK))
+  if (!denet.length) return { yol, kopuk: false }
+  const kirli = (a: THREE.Vector3, b: THREE.Vector3) =>
+    denet.some(r => segmentDikdortgeniKesiyor(a.x, a.y, b.x, b.y, r, PAD_FIZIK))
+  const cikti: THREE.Vector3[] = [yol[0]]
+  let kopuk = false
+  for (let i = 1; i < yol.length; i++) {
+    const a = cikti[cikti.length - 1], b = yol[i]
+    if (!kirli(a, b)) { cikti.push(b); continue }
+    let onarildi = false
+    // PAY KADEMELERİ: önce konfor (araç genişliği), sonra dar, en son fiziksel sınır.
+    // "Hiç rota yok" demektense duvara sürtmeyen dar rota üretilir.
+    for (const p of [pad, PAD_DAR, PAD_FIZIK]) {
+      const bacak = yolBul(a, b, p)
+      if (!bacak) continue
+      const noktalar = bacak.map(q => new THREE.Vector3(q.x, q.y, 0))
+      // ONAY ŞARTI: onarılmış bacakların HEPSİ temiz olmalı. (A* çıktısının ilk/son
+      // bacağı kaçınılmaz gövdeye değebilir; `denet` zaten onları dışlıyor.)
+      let onceki = a, tamam = true
+      for (const n of noktalar) { if (kirli(onceki, n)) { tamam = false; break } onceki = n }
+      if (!tamam) continue
+      for (const n of noktalar) cikti.push(n)
+      onarildi = true
+      break
+    }
+    if (!onarildi) { kopuk = true; cikti.push(b) } // en iyi çaba: hedef semantiği bozulmaz
+  }
+  return { yol: cikti, kopuk }
+}
+
 /** Rota temizliği için aracın yarı genişliği + emniyet payı.
  *  TIR/kamyonet gövdesi binekten belirgin geniştir: sabit 1.0 pay ile tır, binek için
  *  yeterli olan boşluğa dalıp pompaya sürtüyordu (oyuncu: "arabalar pompalara takılıyor").
@@ -1231,14 +1280,29 @@ function temizRota(car: Car, ham: THREE.Vector3[]): THREE.Vector3[] {
   let anahtar = pad + '|' + q2(p0.x) + ',' + q2(p0.y)
   for (const p of ham) anahtar += '|' + q10(p.x) + ',' + q10(p.y)
   const hazir = rotaOnbellek.get(anahtar)
-  if (hazir) { Car.rotaCacheStats.hit++; return hazir }
+  if (hazir) {
+    Car.rotaCacheStats.hit++
+    // KOPUKLUK ARACIN ÖZELLİĞİ: önbellekten gelse bile o araca işaretlenir, yoksa
+    // "ölçülebilir olsun" şartı önbellek isabetlerinde sessizce kaybolurdu.
+    car.rotaKopuk = hazir.kopuk
+    if (hazir.kopuk) Car.rotaKopukSayac++
+    return hazir.yol
+  }
   Car.rotaCacheStats.miss++
   const tam = [new THREE.Vector3(p0.x, p0.y, 0), ...ham]
+  // 1) SEZGİSEL TEMİZLİK (ucuz, çoğu vakayı çözer ve rotayı KISA tutar)
+  const kaba = rotayiTemizle(tam, pad)
+  // 2) DOĞRULAMA + A* ONARIMI: sezgiselin bıraktığı KİRLİ bacak varsa gerçek yol
+  //    buluculla değiştirilir. Buradan çıkan rotanın hiçbir bacağı (kaçınılmaz gövdeler
+  //    dışında) katı cisim kesmez — ya da kopuk=true ile ölçüme düşer.
+  const { yol: dogru, kopuk } = rotayiDogrula(kaba, pad)
   // KOPYALA: ham noktalar dünyadan gelen CANLI vektörler olabilir (pompa yuvası gibi);
   // önbellekte referans tutulursa ünite taşınınca saklı rota sessizce bozulurdu.
-  const temiz = rotayiTemizle(tam, pad).slice(1).map(p => p.clone())
+  const temiz = dogru.slice(1).map(p => p.clone())
   if (rotaOnbellek.size >= ROTA_ONBELLEK_MAX) rotaOnbellek.clear()
-  rotaOnbellek.set(anahtar, temiz)
+  rotaOnbellek.set(anahtar, { yol: temiz, kopuk })
+  car.rotaKopuk = kopuk
+  if (kopuk) Car.rotaKopukSayac++
   return temiz
 }
 

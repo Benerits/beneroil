@@ -60,6 +60,7 @@
     "test:tema": "node tools/tests/tema-check.mjs",
     "test:rakip": "tsx tools/tests/rakip-check.mjs",
     "test:rota": "tsx tools/tests/rota-check.mjs",
+    "test:yolbul": "tsx tools/tests/yol-bul-check.mjs",
     "test:aci": "tsx tools/tests/aci-check.mjs",
     "test:devir": "tsx tools/tests/devir-check.mjs",
     "test:devirkumbara": "tsx tools/tests/devir-kumbara-check.mjs",
