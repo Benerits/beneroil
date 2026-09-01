@@ -3687,7 +3687,11 @@ function maybeGuestGate() {
   if (auth.loggedIn() || guestGateShown || state.day < GUEST_MAX_DAY) return
   guestGateShown = true
   guestPaused = true
-  showAuthGate(t('Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.', GUEST_MAX_DAY), true)
+  // #1315: web'de Apple düğmesi GİZLİ (yalnız iOS native) ama metin "Google/Apple" vaat
+  // ediyordu → Windows'ta oyuncu Apple girişi arayıp "menü açılmıyor" dedi. Metin platforma göre.
+  showAuthGate(isNativePlatform()
+    ? t('Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.', GUEST_MAX_DAY)
+    : t('Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.', GUEST_MAX_DAY), true)
 }
 
 function persist() {

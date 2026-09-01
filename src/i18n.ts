@@ -419,6 +419,8 @@ const EN: Record<string, string> = {
   'Kredi taksiti': 'Loan instalment',
   'Reklam kampanyası': 'Ad campaign',
   'Misafir olarak devam et': 'Continue as guest',
+  'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
+    'You reached Day {0}! Sign up (or continue with Google) to keep playing — your progress moves to the cloud, plus a ₺2,500 bonus and daily streak rewards.',
   'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
     'You reached Day {0}! Sign up (or continue with Google/Apple) to keep playing — your progress moves to the cloud, plus a ₺2,500 bonus and daily streak rewards.',
   'Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
@@ -1964,6 +1966,8 @@ const FR: Record<string, string> = {
   'Kredi taksiti': 'Mensualité du prêt',
   'Reklam kampanyası': 'Campagne publicitaire',
   'Misafir olarak devam et': 'Continuer en invité',
+  'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
+    'Tu as atteint le Jour {0} ! Inscris-toi (ou continue avec Google) pour poursuivre — ta progression passe dans le cloud, avec un bonus de ₺2.500 et des récompenses de série quotidienne.',
   'Gün {0}’e ulaştın! Devam etmek için kaydol ya da Google/Apple ile gir — ilerlemen buluta taşınır, üstüne ₺2.500 bonus + günlük seri bonusu başlar.':
     'Tu as atteint le Jour {0} ! Inscris-toi (ou continue avec Google/Apple) pour poursuivre — ta progression passe dans le cloud, avec un bonus de ₺2.500 et des récompenses de série quotidienne.',
   'Kayıt bonusu: +₺2.500 kasana geçti — hoş geldin patron!':
