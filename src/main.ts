@@ -7013,7 +7013,12 @@ window.addEventListener('pointerup', e => {
         ui.toast(c < 0 ? t('Bir parsele tıkla.')
           : state.owns(c, r) ? 'Bu arsa zaten senin.'
           : !state.parcelAdjacentToOwned(c, r) ? t('Bitişik değil — önce aradaki arsayı almalısın.')
-          : `Para yetmiyor: bu arsa ₺${cost.toLocaleString('tr-TR')}, kasada ₺${Math.floor(state.money).toLocaleString('tr-TR')} var.`, 'bad')
+          // #1271/#1272 (metropol-2, 12/12 parsel, kasada ₺701M): tavan dolmuşken metin
+          // "para yetmiyor" diyordu — geçerlilik formülünde parcelLimitReached vardı, metinde
+          // yoktu. Oyuncu haklı olarak "eşleştirme bug'ı" sandı. Sebep artık kendi cümlesiyle.
+          : state.parcelLimitReached() ? t('Bu şubede arsa tavanı dolu: {0}/{1} parsel. Daha fazla alınamaz — mevcut arsaları daha verimli kullan.', String(state.ownedParcels.size), String(state.parcelLimit()))
+          : state.money < cost ? `Para yetmiyor: bu arsa ₺${cost.toLocaleString('tr-TR')}, kasada ₺${Math.floor(state.money).toLocaleString('tr-TR')} var.`
+          : t('Bu arsa şu an alınamıyor.'), 'bad')
       } else {
         const { c, r } = zoneMode
         ui.toast(c < 0 ? t('Bir parsele tıkla.')

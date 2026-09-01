@@ -89,5 +89,19 @@ if (dr) {
   bekle(omur >= 700, `tam çubuk ${omur} sn ≈ ${(omur / 160).toFixed(1)} oyun günü (eskiden 300 sn)`)
 }
 
+// ── #1271/#1272 arsa tavanı "para yetmiyor" diyordu (metropol-2 12/12, kasada ₺701M) ──
+{
+  const main = oku('src/main.ts')
+  const i = main.indexOf("state.parcelLimitReached() ? t('Bu şubede arsa tavanı dolu")
+  const j = main.indexOf('Para yetmiyor: bu arsa ₺')
+  bekle(i > 0 && j > i, 'arsa tavanı doluyken sebep TAVAN (para metninden ÖNCE sınanıyor)')
+  bekle(/state\.money < cost \? `Para yetmiyor: bu arsa/.test(main), '"para yetmiyor" yalnız para gerçekten yetmeyince yazılıyor')
+  const s = new GameState()
+  s.unlockedLocs = ['kasaba', 'metropol', 'metropol-2']; s.activeLoc = 'metropol-2'
+  s.money = 701_000_000
+  for (const k of ['0,0', '1,0', '2,0', '2,1', '2,2', '1,2', '0,2', '1,1', '3,0', '3,1', '3,2']) s.ownedParcels.add(k)
+  bekle(s.parcelLimit() === 12 && s.parcelLimitReached(), `metropol-2: ${s.ownedParcels.size}/${s.parcelLimit()} → tavan dolu (oyuncunun durumu)`)
+}
+
 console.log(hata ? `\n${hata} HATA` : '\nMUHTELİF TEMİZ')
 process.exit(hata ? 1 : 0)
