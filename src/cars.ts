@@ -39,6 +39,39 @@ const BLOK_TABAN = 2.55
  *  açılır (kural yalnız O ARAÇ için askıya alınır) — buharlaşma/kalıcı sıkışan 0 kalır. */
 const BLOK_KILIT_SN = 30
 
+/**
+ * ── İLERLEME BEKÇİSİ (kalıcı sıkışmaya MUTLAK garanti) ──
+ * Neden gerekti: son çare katmanı (`evaporate`/`recoverStuck`) bilerek silindi çünkü
+ * müşteriyi SESSİZCE yok ediyordu. Ama silinince geriye HİÇBİR sigorta kalmadı:
+ * `driving`/`toPark`/`leaving` fazlarının zaman aşımı yok, `parked` de öyle. Katı
+ * cismin dibinde ya da varılamayan bir hedefe kilitlenen araç sonsuza dek kalıyor ve
+ * tuttuğu kaynağı (kuyruk slotu, pompa yuvası, otopark yeri, tır yeri) hiç bırakmıyor.
+ * Canlı telemetri bunu ölçtü: 14 saatte 2.781 olay, tek başına ≥45 sn kıpırdamayan
+ * `leaving`/`driving`/`toPark` araçları ve bir noktada 20 araçlık `leaving` yığını.
+ *
+ * Bu bekçi eski katmandan İKİ noktada ayrılır ve fark kasıtlıdır:
+ *   1. SESSİZ SİLME YOK. Araç sahnede kalır, çıkışa sürer; servis edilmemiş müşteri
+ *      görünür kayıp olarak (onCarLost) sayılır. Oyuncu ne olduğunu GÖRÜR.
+ *   2. HER KURTARMA SAYILIR. kurtarmaStats + telemetri ('kurtarma' olayı) — sayı
+ *      artıyorsa rota katmanında gerçek bir kusur var demektir, saklanamaz.
+ * Hedef: yol bulma (A*) indiğinde bu sayaç 0 kalmalı. Sıfır kalmayacaksa bile araç
+ * kilitli kalmaz — garanti burada, teşhis sayaçta.
+ */
+/** T1: bu kadar süre ilerleme yoksa rota YENİDEN kurulur (araç başına en fazla 6 sn'de bir) */
+const BEKCI_ROTA_SN = 6
+/** T2: son gerçek ilerlemeden bu kadar sonra KURTARMA (kaynakları bırak, hayalet çıkış) */
+const BEKCI_KURTARMA_SN = 30
+/** otoparka/tır parkına gidiş kapağı: bu süre içinde yerine varamayan araç yeri işgal
+ *  etmeye devam edemez (main.ts'teki yağ değişimi körüğü kapağıyla AYNI ölçü) */
+const BEKCI_PARK_SN = 45
+/** "gerçek ilerleme" eşiği (birim): araç NİHAİ hedefine bu kadar yaklaştıysa ilerliyordur.
+ *  ÖLÇÜ NEDEN "YER DEĞİŞTİRME" DEĞİL: sıkışmanın en sinsi biçimi araç DURMADAN dönerken
+ *  hiçbir yere varamamasıdır (katı cismin dibinde reaktif kaçış manevrası). Yer değiştirme
+ *  ölçüsü o aracı "ilerliyor" sayardı — ölçüldü: T9'da 45 sn'de 76 birim yol yapıp park
+ *  yerine varamayan araçlar. Nihai hedefe yaklaşma ölçüsü onları görür; yavaş sürünen
+ *  sağlıklı araç ise biriktirerek eşiği geçer (eşik kare başına değil, KÜMÜLATİF). */
+const BEKCI_ILERLEME = 0.5
+
 export type CarPhase = 'transit' | 'driving' | 'waiting' | 'atPump' | 'toPark' | 'parked' | 'leaving' | 'gone'
 export type CarKind = 'fuel' | 'ev'
 export type BodyKind = 'sedan' | 'hatch' | 'suv'
@@ -416,6 +449,24 @@ export class Car {
   /** duraksama süresi (sn) — hız nominalin %15'inin altındayken birikir.
    *  Eski adı korundu: traffic-debug.ts `hardStuckT` okuyor. */
   hardStuckT = 0
+  /** KURTARILMIŞ ARAÇ: konveyör freni ve hız eşitlemesi bu araca ARTIK İŞLEMEZ.
+   *  Kurtarma nadirdir (tasarım gereği); araç önünde ne varsa içinden geçerek çıkar —
+   *  amaç güzel görünmek değil, tuttuğu kaynağı bırakıp sahneden GERÇEKTEN çıkmak. */
+  hayalet = false
+  /** BEKÇİ: son gerçek ilerlemeden bu yana geçen süre (sn) */
+  bekciT = 0
+  /** BEKÇİ ÇAPASI: nihai hedefe ULAŞILMIŞ EN KISA mesafe. İlerleme buna göre ölçülür —
+   *  yani sayaç ancak araç "hiç görmediği kadar yakına" gelince sıfırlanır. */
+  bekciMesafe = Infinity
+  /** ölçünün ait olduğu nihai hedef (rotanın son noktası). Rota YENİLENİP hedef AYNI
+   *  kaldıysa ölçü korunur: yoksa 6 sn'de bir rota kuran bekçi kendi ölçüsünü sıfırlar
+   *  ve T2 hiç gelmezdi (ölçüldü — araç engelin dibinde sonsuza dek "yeniden rotalanıyor"). */
+  private bekciHx = NaN
+  private bekciHy = NaN
+  /** T1 yeniden rotalama için araç başına bekleme (sn) — 6 sn'de birden sık rota kurulmaz */
+  bekciRotaT = 0
+  /** `toPark` fazında geçen toplam süre — park/tır yerine hiç varamayan araç kapağı */
+  parkVarisT = 0
   private barsOn = false
   wrongFuelHandled = false
   beingServed = false
@@ -598,6 +649,14 @@ export class Car {
     this.path = points.map(p => p.clone())
     if (Car.waterMinX != null) for (const p of this.path) p.x = Math.max(p.x, Car.waterMinX)
     this.onArrive = onArrive ?? null
+    // BEKÇİ ÖLÇÜSÜ yalnız HEDEF DEĞİŞTİYSE tazelenir; sayaç hiçbir durumda sıfırlanmaz.
+    // (Aynı hedefe yeniden rota kurmak "ilerleme" değildir — kurtarma saati işlemeye
+    //  devam etmeli, yoksa T1 kendi kendini besleyen sonsuz döngü olurdu.)
+    const h = this.path.length ? this.path[this.path.length - 1] : null
+    const degisti = !h || Number.isNaN(this.bekciHx) || Math.hypot(h.x - this.bekciHx, h.y - this.bekciHy) > 0.5
+    this.bekciHx = h ? h.x : NaN
+    this.bekciHy = h ? h.y : NaN
+    if (degisti) this.bekciMesafe = this.hedefUzakligi()
   }
 
   showBars() { this.barsOn = true }
@@ -749,6 +808,27 @@ export class Car {
   /** ARAÇ YOL ALIYOR MU (rotası var mı). Hız eşitlemesi yalnız HAREKET EDEN öndeki
    *  aracı dikkate alır: duran araç yol kenarı dekorudur, onu beklemek yasak. */
   get moving(): boolean { return this.path.length > 0 }
+
+  /** BEKÇİ: rotanın SON noktasına (nihai hedef) uzaklık. Ara nokta değil son nokta:
+   *  reaktif kaçış rotanın BAŞINA ara nokta ekler, ara noktaya yaklaşmak "ilerleme"
+   *  sayılsaydı engelin dibinde dönen araç sonsuza dek ilerliyor görünürdü.
+   *  Rota boşsa Infinity — rotası tükenmiş ama fazı bitmemiş araç (ör. yolu yarıda
+   *  kalan `leaving`) hiçbir yere gidemez; bekçi onu da saymalı. */
+  hedefUzakligi(): number {
+    if (this.path.length === 0) return Infinity
+    const h = this.path[this.path.length - 1]
+    return Math.hypot(h.x - this.group.position.x, h.y - this.group.position.y)
+  }
+
+  /** BEKÇİ ÇAPASINI TAZELE: "ölçü buradan başlasın" (faz değişti / araç izlenmiyor). */
+  bekciSifirla() {
+    this.bekciT = 0
+    this.bekciRotaT = 0
+    this.bekciMesafe = this.hedefUzakligi()
+    const h = this.path.length ? this.path[this.path.length - 1] : null
+    this.bekciHx = h ? h.x : NaN
+    this.bekciHy = h ? h.y : NaN
+  }
   /** akış ölçümü: bu araç şu an "durmuş" sayılıyor mu (olay bazlı sayaç için) */
   durdu = false
 
@@ -1343,6 +1423,14 @@ export class CarManager {
    *  muaf = 30 sn kilitlenme kapısının kaç kez açıldığı. Sağlıklı akışta muaf 0'dır;
    *  patlarsa kural bir yerde kalıcı blok üretiyor demektir (testler okur). */
   blokStats = { durusSn: 0, muaf: 0 }
+  /** BEKÇİ TELEMETRİSİ (blokStats'ın kardeşi): yenidenRota = T1'de kaç kez rota
+   *  yeniden kuruldu, kurtarma = T2/park kapağında kaç araç kurtarıldı, kurtarmaFaz =
+   *  hangi fazda. SAĞLIKLI TRAFİKTE İKİSİ DE 0'DIR; sıfırdan farklıysa rota katmanında
+   *  gerçek bir kusur var demektir (testler ve canlı telemetri bunu okur). */
+  kurtarmaStats: { yenidenRota: number; kurtarma: number; kurtarmaFaz: Record<string, number> }
+    = { yenidenRota: 0, kurtarma: 0, kurtarmaFaz: {} }
+  /** ölçüm kancası: sayaçları sıfırla (A/B koşumları ve testler için) */
+  kurtarmaSifirla() { this.kurtarmaStats = { yenidenRota: 0, kurtarma: 0, kurtarmaFaz: {} } }
   /** akış özeti: ortalama hız oranı + standart sapma (0 = kusursuz akış) */
   get flow() {
     const n = Math.max(1, this.flowStats.orneklem)
@@ -1594,6 +1682,7 @@ export class CarManager {
     this.rebuildCarGrid()
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked' || c.phase === 'waiting') continue
+      if (c.hayalet) continue // kurtarılan araç kimseyi beklemez: çıkana kadar tam hız
       const dir = c.headingDir()
       if (!dir) continue
       const cp = c.group.position
@@ -1620,6 +1709,7 @@ export class CarManager {
     // Sahnedeki fiziksel engeller (tanker vb.) YAVAŞLATIR ama DURDURMAZ.
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked') continue
+      if (c.hayalet) continue // kurtarılan araç engelin de içinden geçer (ghostSolid)
       const dir = c.headingDir()
       if (!dir) continue
       for (const ob of this.opts.extraObstacles()) {
@@ -1735,6 +1825,9 @@ export class CarManager {
       // kaybı görmüyor, biz de sayamıyorduk. Artık her müşteri ya servis edilir, ya
       // sabrı biter (görünür kayıp), ya da karar noktasında yoluna devam eder.
       car.update(dt)
+      // İLERLEME BEKÇİSİ: sıkışan araç için TEK garanti noktası (bkz. BEKCI_* sabitleri).
+      // car.update'ten SONRA çağrılır ki bu karenin gerçek yer değiştirmesi ölçülsün.
+      this.bekci(car, dt)
       // AKIŞ DÜZGÜNLÜĞÜ ÖRNEKLEMESİ (yeni metrik): yalnız YOL ALMASI gereken araçlar.
       // KONVEYÖR DURUŞU HARİÇ: kural gereği sırasını bekleyen araç (blokFren < 0.15)
       // "akış kusuru" değildir — slotunda bekleyen araç nasıl sayılmıyorsa bu da sayılmaz.
@@ -1785,6 +1878,144 @@ export class CarManager {
 
   private onLost(car: Car) { this.opts.onCarLost(car) }
 
+  /**
+   * İLERLEME BEKÇİSİ — araç başına, kare başına. Kapsam: YOL ALMASI GEREKEN fazlar
+   * (`driving`, `toPark`, `leaving`). Bu üç fazın zaman aşımı YOKTU; sabır yalnız
+   * `waiting`/`atPump`'ta işlediği için buralarda kilitlenen araç sonsuza dek kalıyordu.
+   *
+   * MEŞRU DURUŞLAR KAPSAM DIŞI (kurtarma bir CEZA değil, son çaredir):
+   *  · `waiting`/`atPump`/`parked`: durmaları GEREKİR (sabır ve stayT kendi saatlerini tutar),
+   *  · konveyör freni (`blokT > 0` ve muafiyet henüz açılmamış): araç sırasını bekliyor —
+   *    sayaç DONDURULUR, sıfırlanmaz (fren-bırak salınımı bekçiyi sonsuza dek
+   *    sıfırlayabilirdi). Donma en fazla BLOK_KILIT_SN sürer: kural kendi kapısını açar,
+   *    bekçi oradan devralır (tools/tests/bekci-check.mjs senaryo d bunu ölçer),
+   *  · tanker `isBlocked` beklemesi: tanker Car değil (ayrı sınıf), bu döngüye hiç girmez.
+   */
+  private bekci(car: Car, dt: number) {
+    const izlenen = car.phase === 'driving' || car.phase === 'toPark' || car.phase === 'leaving'
+    if (car.phase !== 'toPark') car.parkVarisT = 0
+    if (!izlenen) { car.bekciSifirla(); return }
+    if (car.phase === 'toPark') car.parkVarisT += dt
+    // KONVEYÖR KURALI TUTUYORSA sayaç DONAR (sıkışma değil, sırasını bekliyor). Muafiyet
+    // AÇIKSA (blokMuaf) donma biter: kural o araç için askıya alındı, artık mazereti yok.
+    // Donma KALICI OLAMAZ: blokT ya 30 sn'de muafiyete çıkar ya da kural kapsamından
+    // çıkınca sıfırlanır — yani bekçinin garantisi en kötü ihtimalle 30 sn gecikir.
+    if (car.blokT > 0 && !car.blokMuaf) return
+    // İLERLEME = nihai hedefe, bugüne kadarki EN YAKIN mesafeden 0.5 birim daha yakın.
+    // Uzaklaşmak sayacı bozmaz (manevra), yaklaşmak sıfırlar; dönüp durmak ise ilerleme
+    // DEĞİLDİR — kalıcı sıkışmanın gerçek tanımı budur.
+    const uzak = car.hedefUzakligi()
+    if (uzak < car.bekciMesafe - BEKCI_ILERLEME) {
+      car.bekciMesafe = uzak
+      car.bekciT = 0
+      car.bekciRotaT = 0
+      return
+    }
+    car.bekciT += dt
+    car.bekciRotaT = Math.max(0, car.bekciRotaT - dt)
+    // PARK KAPAĞI: otoparka/tır parkına gidip de yerine varamayan araç, yavaşça
+    // sürünüyor olsa bile yeri işgal ediyor — 45 sn'de yer serbest bırakılır.
+    if (car.bekciT >= BEKCI_KURTARMA_SN || car.parkVarisT > BEKCI_PARK_SN) { this.kurtar(car); return }
+    if (car.bekciT >= BEKCI_ROTA_SN && car.bekciRotaT <= 0) {
+      car.bekciRotaT = BEKCI_ROTA_SN            // araç başına en fazla 6 sn'de bir
+      this.yenidenRotala(car)
+    }
+  }
+
+  /**
+   * T1 — TEK YENİDEN ROTALAMA NOKTASI. Aracın GÜNCEL konumundan güncel hedefine
+   * (faz + slotIndex/waitIndex/park kolu) rotayı baştan kurar. Şimdilik mevcut
+   * üreticileri (entryPath/queuePath/parkEntryPath/cikisRotasi) kullanır; gerçek yol
+   * bulma (A*, `yolBul`) indiğinde SADECE bu gövde değişir — çağıran (bekci) aynı kalır.
+   * Sayaç artıyorsa: rota bir yerde geçilemez bir hedefe çıkıyor demektir.
+   */
+  private yenidenRotala(car: Car) {
+    this.kurtarmaStats.yenidenRota++
+    const p = car.group.position
+    const G = this.geom(car.station)
+    // hâlâ yol tarafındaysa kapıdan girmeli (düz çizgi çitten geçerdi)
+    const yolda = (G.sideSign < 0 ? (G.gateX - p.x) : (p.x - G.gateX)) < -0.3
+    if (car.phase === 'driving') {
+      if (car.slotIndex >= 0) {
+        const s = car.kind === 'ev' ? this.opts.evSlot(car.slotIndex) : this.opts.pumpSlot(car.slotIndex)
+        car.setPath(temizRota(car, this.entryPath(s, car.station, yolda)), () => this.arriveAtSlot(car))
+        return
+      }
+      if (car.waitIndex >= 0) {
+        car.setPath(temizRota(car, this.queuePath(car.waitIndex, car.station, yolda)), () => { car.phase = 'waiting' })
+        return
+      }
+    } else if (car.phase === 'toPark') {
+      if (car.truckSlot >= 0) {
+        const s = this.opts.truckSpots()[car.truckSlot]
+        if (s) {
+          car.reversing = false
+          car.setPath(temizRota(car, [s.stage.clone()]), () => {
+            car.reversing = true
+            car.setPath([s.spot.clone()], () => {
+              car.reversing = false
+              car.phase = 'parked'
+              car.stayT = 14 + Math.random() * 18
+              this.opts.onTruckParked?.(car)
+            })
+          })
+            return
+        }
+      }
+      if (car.parkLane) {
+        const lane = car.parkLane
+        const sp = this.opts.parkSpots().find(s => s.id === lane.id)
+        car.setPath(temizRota(car, this.vs(this.graph.parkEntryPath(lane))), () => {
+          car.phase = 'parked'
+          if (sp) car.group.rotation.z = sp.rot + (lane.side < 0 ? Math.PI : 0)
+        })
+        return
+      }
+      // YAĞ DEĞİŞİMİ KÖRÜĞÜ: hedefi (kapı ağzı + içerisi) CarManager bilmez, main.ts
+      // sürüyor ve kendi 45 sn kapağı var. Rotasını burada EZMEYİZ; T2 yine korur.
+      return
+    }
+    // kalan her durum (leaving ya da hedefsiz kalmış araç): çıkış şeridi baştan kurulur
+    car.setPath(temizRota(car, this.cikisRotasi(car)))
+  }
+
+  /**
+   * T2 — KURTARMA. Son çare, AMA SESSİZ DEĞİL: araç silinmez, tuttuğu HER kaynağı
+   * bırakır (kuyruk slotu · pompa/şarj yuvası · otopark yeri · tır yeri) ve hayalet
+   * olarak çıkışa sürer. Servis edilmemiş müşteri GÖRÜNÜR kayıptır (onCarLost).
+   * Her çağrı sayılır (kurtarmaStats + 'kurtarma' telemetri olayı): yol bulma indikten
+   * sonra bu sayaç 0 olmalı — ama sigortanın kendisi kalmalı, çünkü garanti odur.
+   */
+  private kurtar(car: Car) {
+    const faz = car.phase
+    this.kurtarmaStats.kurtarma++
+    this.kurtarmaStats.kurtarmaFaz[faz] = (this.kurtarmaStats.kurtarmaFaz[faz] ?? 0) + 1
+    // SERVİS EDİLMEMİŞ MÜŞTERİ: pompaya/kuyruğa giderken kilitlenen araç hiç yakıt
+    // almadı. Sessizce yok olmaz — oyuncu parayı ve itibarı ekranda kaybeder.
+    // (toPark/leaving fazındaki araç ya servis edilmiştir ya da kaybı zaten sayılmıştır.)
+    const servissiz = faz === 'driving' && (car.slotIndex >= 0 || car.waitIndex >= 0)
+      && car.filled === 0 && car.chargedKwh === 0 && !car.beingServed && !car.autoServed
+    // TIR YERİ releaseCar'ın kapsamında değil (tır parkı ayrı defter) — önce o bırakılır.
+    if (car.truckSlot >= 0) { this.truckOcc[car.truckSlot] = null; car.truckSlot = -1 }
+    car.truckStagePos = null
+    // parkLane sıfırlanır ki releaseCar otopark ÇIKIŞ koridorunu denemesin: o koridor da
+    // tıkalı olabilir; kurtarılan araç doğrudan çıkış şeridine çıkar.
+    car.parkLane = null
+    car.reversing = false
+    this.releaseCar(car)   // KANONİK bırakma: kuyruk slotu + pompa/şarj + otopark kaydı
+    car.hayalet = true
+    car.ghostSolid = true  // önündeki ne varsa içinden geçer — nadir, tasarım gereği
+    car.blokMuaf = true
+    car.blokT = 0
+    car.speedScale = 1
+    car.cikisYolu = null
+    // rotanın son noktası |y| = 44 → despawn eşiği 42.5'i MUTLAKA geçer.
+    car.setPath(this.cikisRotasi(car)) // HAYALET: engel tanımaz, temizRota gereksiz
+    car.bekciSifirla()
+    car.parkVarisT = 0
+    if (servissiz) this.onLost(car)
+  }
+
 
   /**
    * KONVEYÖR BLOĞU — gelen omurga/kuyruk hattında öndekine mesafe kapısı.
@@ -1797,11 +2028,19 @@ export class CarManager {
   private konveyorBlok(dt: number) {
     for (const c of this.cars) {
       c.blokFren = 1
+      // KURTARILAN ARAÇ KURAL DIŞI: tek işi sahneden çıkmak (kaynağı zaten bıraktı).
+      if (c.hayalet) { c.blokT = 0; continue }
       // 30 sn kapısı açık: kural bu araç için askıda. Mevcut bacağını bitirince kapanır.
       if (c.blokMuaf) { if (!c.moving) { c.blokMuaf = false; c.blokT = 0 } continue }
       if (c.phase !== 'driving' && c.phase !== 'waiting') { c.blokT = 0; continue }
-      if (c.boat) continue                       // marina: tekne boyu araç ölçeğinde değil
-      if (!c.moving) continue                    // slotunda duran araç frenlemez (terfi kapısı kuyrukIlerlet'te)
+      // BLOKT BAYAT KALMASIN: sayaç "kural şu an ilerlememi engelliyor" demektir ve
+      // bekçi bunu MEŞRU DURUŞ sayıp saatini dondurur. Kapsam dışına çıkan araçta eski
+      // değer kalsaydı bekçi o araç için SONSUZA DEK donardı — yani kalıcı sıkışma
+      // garantisi tek bir bayat sayı yüzünden delinirdi (ölçüldü, tanı koşusu).
+      if (c.boat) { c.blokT = 0; continue }      // marina: tekne boyu araç ölçeğinde değil
+      // slotunda duran araç frenlemez (terfi kapısı kuyrukIlerlet'te sayar — o yalnız
+      // 'waiting' araçlar içindir; sürüş fazında duran araçta sayaç sıfırlanır)
+      if (!c.moving) { if (c.phase !== 'waiting') c.blokT = 0; continue }
       const L = this.graph.get(c.station)
       if (!L) continue
       const cp = c.group.position
@@ -1813,7 +2052,7 @@ export class CarManager {
       // yok). EV'ler kapsam DIŞI: şarj kuyruğu yok, EV omurgada yakıt kuyruğunun yanından
       // kendi koluna geçer — bloğa alınsa duran kuyruğun arkasında boşuna kilitlenirdi
       // (ölçüldü: T8 tanı koşusunda durusSn'nin büyük kalemi buydu).
-      if (c.waitIndex < 0 && !(c.slotIndex >= 0 && c.kind === 'fuel' && omurgada && Math.abs(dir.y) >= 0.7)) continue
+      if (c.waitIndex < 0 && !(c.slotIndex >= 0 && c.kind === 'fuel' && omurgada && Math.abs(dir.y) >= 0.7)) { c.blokT = 0; continue }
       let gap = Infinity
       for (const o of this.neighbors(cp.x, cp.y, 1)) {
         if (o === c || o.phase === 'gone' || o.station !== c.station || o.boat) continue

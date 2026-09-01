@@ -20,7 +20,7 @@
  * Olay kaydı TEŞHİS içindir, sayaç TREND için; ikisi birbirinin yerine geçmez.
  */
 
-export type OlayTuru = 'icice' | 'sikisma' | 'yigilma' | 'kuyruk'
+export type OlayTuru = 'icice' | 'sikisma' | 'yigilma' | 'kuyruk' | 'kurtarma'
 
 /** snapshot'taki araç satırı: [x, y, phase, slotIndex, kind] */
 export type OlayAracSatiri = [number, number, string, number, string]
@@ -65,6 +65,10 @@ export interface OlayBaglam {
   kuyrukDolu: () => boolean
   /** içeri hiç giremeyen (turned away) müşteri sayacı — ARTIYORSA kapasite tıkalı */
   giremeyen: () => number
+  /** BEKÇİ KURTARMA sayacı (CarManager.kurtarmaStats.kurtarma) — ARTIYORSA bir araç
+   *  kalıcı sıkışmıştı ve son çare sigortası devreye girdi. Sağlıklı oturumda HİÇ artmaz;
+   *  arttığı an sahnenin tam durumu gönderilir, çünkü kök neden ancak orada görülür. */
+  kurtarma: () => number
 }
 
 /** İÇ İÇE eşiği: merkez mesafesi bunun altındaki çift gözle üst üste görünür. */
@@ -118,9 +122,11 @@ const iciceSure = new Map<string, number>()
 /** araç kimliği → son konum + hareketsiz süre */
 const durgun = new Map<number, { x: number; y: number; sn: number }>()
 let sonGiremeyen = 0
+/** son nabızda okunan kurtarma sayacı (fark = bu nabızda kurtarılan araç) */
+let sonKurtarma = 0
 /** 5 dakikalık kompakt sayaç birikimi */
 let sayacT = 0
-const sayac = { icice: 0, sikisan: 0, bekleyen: 0, ornek: 0 }
+const sayac = { icice: 0, sikisan: 0, bekleyen: 0, kurtarilan: 0, ornek: 0 }
 /** test kancası: gönderilen olayların yerel kaydı */
 const gonderilenler: TrafikOlay[] = []
 
@@ -134,9 +140,9 @@ export function trafikOlayKur(baglam: OlayBaglam, aktifMi: boolean, gondericiOve
 /** test/ölçüm kancası: sayaçları sıfırla */
 export function trafikOlaySifirla() {
   nabizBirikim = 0; gecenSn = 0; sonOlayT = -Infinity; gonderilen = 0
-  sonTur = null; sonTurArtArda = 0; sonGiremeyen = 0; sayacT = 0
+  sonTur = null; sonTurArtArda = 0; sonGiremeyen = 0; sonKurtarma = 0; sayacT = 0
   iciceSure.clear(); durgun.clear(); gonderilenler.length = 0
-  sayac.icice = 0; sayac.sikisan = 0; sayac.bekleyen = 0; sayac.ornek = 0
+  sayac.icice = 0; sayac.sikisan = 0; sayac.bekleyen = 0; sayac.kurtarilan = 0; sayac.ornek = 0
 }
 
 /** test/ölçüm kancası: modülün durumu */
@@ -228,14 +234,26 @@ function olcum(araclar: OlayAraci[], adim: number) {
   const kuyruk = ctx!.kuyrukDolu() && giremeyen > sonGiremeyen
   sonGiremeyen = giremeyen
 
+  // ── KURTARMA: bekçi bir aracı kilitten çıkardı (bkz. cars.ts BEKCI_*) ──
+  // Sayaç TOPLAMDIR; fark alınır. `?.` bilerek: ölçüm modülü hiçbir koşulda oyunu
+  // düşüremez — eksik bağlam veren eski/çıplak kurulumlarda (testler) 0 sayılır.
+  const kurtarmaTop = ctx!.kurtarma?.() ?? 0
+  const kurtarilan = Math.max(0, kurtarmaTop - sonKurtarma)
+  sonKurtarma = kurtarmaTop
+
   // saatlik trend sayacı (olay gönderilsin ya da gönderilmesin birikir)
   sayac.icice += iciceCift
   sayac.sikisan += sikisan
   sayac.bekleyen += gorunur.filter(c => c.phase === 'waiting').length
+  sayac.kurtarilan += kurtarilan
   sayac.ornek++
 
-  // ÖNCELİK: kalıcı sıkışma en ağır kusur, kuyruk en hafifi
-  const tur: OlayTuru | null = sikisan > 0 ? 'sikisma'
+  // ÖNCELİK: KURTARMA > kalıcı sıkışma > iç içe > yığılma > kuyruk (en hafifi).
+  // KURTARMA en üstte, çünkü 'sikisma' bir GÖZLEMDİR ("araç 45 sn kıpırdamadı"),
+  // kurtarma ise KANITTIR: rota katmanı kilidi çözemedi, son çare sigortası çekti.
+  // O anın sahnesi kök nedeni içerir — başka hiçbir kayıt onun yerini tutmaz.
+  const tur: OlayTuru | null = kurtarilan > 0 ? 'kurtarma'
+    : sikisan > 0 ? 'sikisma'
     : iciceSurdu ? 'icice'
     : yigilma ? 'yigilma'
     : kuyruk ? 'kuyruk'
@@ -278,9 +296,9 @@ function sayacGonder() {
   const paket = {
     k: 'trafik',
     icice: Math.round(sayac.icice), sikisan: Math.round(sayac.sikisan),
-    bekleyen: Math.round(sayac.bekleyen), ornek,
+    bekleyen: Math.round(sayac.bekleyen), kurtarilan: Math.round(sayac.kurtarilan), ornek,
   }
-  sayac.icice = 0; sayac.sikisan = 0; sayac.bekleyen = 0; sayac.ornek = 0
+  sayac.icice = 0; sayac.sikisan = 0; sayac.bekleyen = 0; sayac.kurtarilan = 0; sayac.ornek = 0
   if (!aktif || ornek <= 0) return
   gonder('/api/metric', paket)
 }

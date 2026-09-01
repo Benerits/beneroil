@@ -39,6 +39,8 @@ const muaf = [
   /\[spot\.clone\(\)\]/,                 // tır: geri geri park manevrası
   /\[inside\.clone\(\)\]/,               // yağ körüğü içi: ghostSolid, duvar yok sayılır
   /hazir \?\? temizRota/,                // önden çizilmiş çıkış rotası (zaten temiz)
+  /\[s\.spot\.clone\(\)\]/,               // bekçi T1: tırın geri geri park manevrası (yukarıdakinin aynısı)
+  /HAYALET/,                             // bekçi T2: kurtarılan araç engel tanımaz (ghostSolid)
 ]
 const kirli = setPathSatirlari.filter(x =>
   !/temizRota\(/.test(x.l) && !muaf.some(r => r.test(x.l)))

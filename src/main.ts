@@ -2525,7 +2525,7 @@ function facName(id: string): string {
   return ({ market: t('Market'), market2: t('Karşı Market'), toilet2: t('Karşı Tuvalet'),
     wash2: t('Karşı Oto Yıkama'), oil2: t('Karşı Yağ Değişimi'), coffee2: t('Karşı Kahveci'), restaurant2: t('Karşı Restoran'), toilet: t('Tuvalet'), coffee: t('Kahveci'), restaurant: t('Restoran'), oil: t('Yağ değişimi') } as Record<string, string>)[id] ?? id
 }
-const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean }>()
+const pendingVisits = new Map<Car, { visits: Visit[]; score: number; started: boolean; t: number; iptal?: boolean }>()
 // yağ değişimi körüğü: tesis başına tek araç; araç içerideyken görünmez, ~5 sn sonra çıkar
 const oilBusy = new Map<string, Car>()
 const oilPending = new Map<Car, { bayId: string; score: number; t: number; started: boolean; exit: THREE.Vector3 }>()
@@ -2682,7 +2682,7 @@ function personMesh(): THREE.Group {
   return g
 }
 
-function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number; squat?: boolean }) {
+function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number; squat?: boolean; iptal?: boolean }) {
   const start = car.group.position.clone().add(new THREE.Vector3(0.8, -0.6, 0))
   start.z = 0
   const stops = data.visits
@@ -2709,9 +2709,13 @@ function spawnWalkerFor(car: Car, data: { visits: Visit[]; score: number; squat?
         score += v.score
       }
       state.addRep((score - 3.3) * 0.08)
+      pendingVisits.delete(car)
+      // ARAÇ ÇOKTAN UĞURLANDI (bekçi kurtarması / otopark taşıma): yaya tesisleri
+      // GERÇEKTEN gezdi, o yüzden gelir ve itibar yine yazılır — ama araca DOKUNULMAZ.
+      // Sahneden çıkmış aracı ikinci kez uğurlamak rotasını sıfırlardı.
+      if (data.iptal) return
       car.showFeedback(emojiFor(score))
       if (!data.squat) cars.releaseCar(car) // işgalci: oyuncu GÖNDER diyene kadar kalır
-      pendingVisits.delete(car)
     },
   })
 }
@@ -2890,7 +2894,7 @@ function concludeService(car: Car, score: number, revenue = 0) {
   score += missingPenalty(car) + vehicleServices(car)
   const visits = facilityVisits(car)
   if (visits.length > 0 && cars.sendToParking(car)) {
-    pendingVisits.set(car, { visits, score, started: false })
+    pendingVisits.set(car, { visits, score, started: false, t: 0 })
     if (parkInfoShown < 2) { parkInfoShown++; ui.toast(t('Müşteri aracını otoparka çekti, tesisleri kullanacak.'), '') } // eğitici: oturumda 2 kez yeter (bildirim spam fixi)
   } else {
     // otopark doluysa ziyaret gelirleri yine gelsin (hızlı mod)
@@ -5196,11 +5200,20 @@ trafikOlayKur({
     return cars.cars.filter(c => c.phase === 'waiting').length >= slot
   },
   giremeyen: () => state.stats.turnedAway,
+  // BEKÇİ: kalıcı sıkışmayı kıran son çare sigortasının sayacı (cars.ts). Sağlıklı
+  // oturumda hiç artmaz; arttığı an sahnenin tam durumu 'kurtarma' olayı olarak gider.
+  kurtarma: () => cars.kurtarmaStats.kurtarma,
 }, !isFullMode && !isPromoMode)
 // VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
 // doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
 if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
   get state() { return state }, get cars() { return cars }, get world() { return world }, get att() { return attendantFigs },
+  /** TRAFİK SAĞLIK SAYAÇLARI tek yerden (testler + canlı teşhis):
+   *  blok = konveyör kuralı, bekci = kalıcı sıkışma sigortası (sağlıklıysa 0/0),
+   *  akis = hız düzgünlüğü, buharlasma = HER ZAMAN 0 (sessiz silme geri gelmedi mi). */
+  get trafik() {
+    return { blok: cars.blokStats, bekci: cars.kurtarmaStats, akis: cars.flow, buharlasma: cars.evapStats }
+  },
   // TEST KANCALARI (yalnız ?full=1): otomatik doğrulama bina kartı akışını sürebilsin
   get ui() { return ui },
   sec(id: string) { selectedBuilding = id; world.setSelected(id); refreshBuildingCard() },
@@ -7428,10 +7441,26 @@ function frame() {
   }
 
   // park etmiş araçların yayaları
+  // OTOPARK KAPAĞI (5 dk) — yağ değişimi körüğündeki 45 sn kapağının kardeşi.
+  // NORMALDE gerek olmaz: yaya birkaç saniyede döner ve done() aracı uğurlar. Ama iki
+  // delik vardı: (1) araç toPark'ta takılırsa 'parked' hiç olmaz, yaya hiç doğmaz ve
+  // park yeri SONSUZA DEK dolu kalırdı (CarManager tarafında 45 sn kapağı bunu kapatıyor),
+  // (2) araç dışarıdan uğurlanırsa (bekçi kurtarması, bina taşıma) kayıt burada asılı
+  // kalırdı. Kapak SESSİZ SİLME DEĞİLDİR: araç sahnede kalır, kendi çıkış rotasına konur.
   for (const [c, data] of pendingVisits) {
+    if (c.phase !== 'toPark' && c.phase !== 'parked') { // dışarıdan uğurlandı
+      data.iptal = true       // yürüyüşteki yaya dönünce ikinci kez uğurlamasın
+      pendingVisits.delete(c)
+      continue
+    }
+    data.t += dt
     if (c.phase === 'parked' && !data.started) {
       data.started = true
       spawnWalkerFor(c, data)
+    } else if (data.t > 300) {  // yaya 5 dakikadır dönmedi: yeri serbest bırak
+      data.iptal = true
+      pendingVisits.delete(c)
+      cars.releaseCar(c)
     }
   }
   updateWalkers(dt)

@@ -113,7 +113,12 @@ const sunucu = readFileSync(new URL('../../server/index.js', import.meta.url), '
   check('saatlik sayaç kolonları stat_hourly\'de (YENİ TABLO AÇILMAMIŞ)',
     /trafik_icice int NOT NULL DEFAULT 0/.test(sunucu) && /trafik_sikisan int NOT NULL DEFAULT 0/.test(sunucu))
   check('sayaç kolon adları BEYAZ LİSTEDEN geçiyor (SQL enterpolasyonu güvenli)',
-    /const STAT_TOPLAM_KOLON = new Set\(\['trafik_icice', 'trafik_sikisan', 'trafik_bekleyen', 'trafik_ornek'\]\)/.test(sunucu))
+    /const STAT_TOPLAM_KOLON = new Set\(\['trafik_icice', 'trafik_sikisan', 'trafik_bekleyen', 'trafik_kurtarilan', 'trafik_ornek'\]\)/.test(sunucu))
+  // BEKÇİ (kalıcı sıkışma sigortası): yeni olay türü + saatlik sayaç kolonu uçtan uca bağlı mı
+  check("'kurtarma' olay türü sunucuda kabul ediliyor",
+    /KINDS = new Set\(\['icice', 'sikisma', 'yigilma', 'kuyruk', 'kurtarma'\]\)/.test(sunucu))
+  check('kurtarma sayacı saatlik trend kolonunda (trafik_kurtarilan)',
+    /trafik_kurtarilan int NOT NULL DEFAULT 0/.test(sunucu) && /trafik_kurtarilan: n\(mb\.kurtarilan\)/.test(sunucu))
 }
 
 // ───────────────────────────────────── 3) TELEMETRİ MODÜLÜ: TETİK · THROTTLE · BOYUT
