@@ -221,7 +221,13 @@ const q4 = (v: number) => Math.round(v * 4)
  * ona kaydırılmış hâli + gerçek `to` — sonuncudur). Ulaşılamıyorsa null.
  */
 export function yolBul(from: Pt, to: Pt, pad: number): Pt[] | null {
-  const anahtar = engelSurum + '|' + pad + '|' + q4(from.x) + ',' + q4(from.y) + '|' + q4(to.x) + ',' + q4(to.y)
+  // TAM ANAHTAR (determinizm): eski hâli tam `from` ile hesaplayıp 0.25 ızgaralı kaba
+  // anahtara yazıyordu; isabet "komşu konumdan hesaplanmış" rotayı döndürdüğü için sonuç
+  // önbelleğin O ANKİ doluluğuna (LRU tahliyesine) bağlıydı — aynı tohumla iki koşu
+  // ayrışıyordu (otopark-cikis-check 3c). Yuvarlanmış başlangıçla hesaplamak da ilk
+  // bacağı kirletiyordu (yol-bul-check tarama). Ölçüm: yük testinde A* toplam 25 çağrı
+  // (sezgisel temizlik çoğunu çözüyor) → isabet oranı önemsiz, anahtar tam tutulur.
+  const anahtar = engelSurum + '|' + pad + '|' + from.x.toFixed(3) + ',' + from.y.toFixed(3) + '|' + to.x.toFixed(3) + ',' + to.y.toFixed(3)
   if (yolOnbellek.has(anahtar)) {
     yolStats.isabet++
     const v = yolOnbellek.get(anahtar)!

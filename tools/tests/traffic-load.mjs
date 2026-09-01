@@ -595,4 +595,5 @@ const sum = a => a.reduce((x, y) => x + y, 0)
 const servOn = sum(on.map(([, r]) => r.served))
 console.log(`\nTOPLAM servis ${servOn} (eski mimari ${TABAN.T1 + TABAN.T2 + TABAN.T3})`)
 console.log(fail === 0 ? '\n✓ YÜK TESTİ GEÇTİ (şerit ağı, deterministik)' : `\n✗ ${fail} kriter başarısız`)
+if (process.env.YOLSTATS) { const { yolStats } = await import('../../src/yol-bul.ts'); console.log('YOLSTATS', JSON.stringify(yolStats), 'ROTA', JSON.stringify(Car.rotaCacheStats)) }
 process.exit(fail ? 1 : 0)

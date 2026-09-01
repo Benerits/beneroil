@@ -475,8 +475,11 @@ if (!PORT) {
   check(`CANLI havuz tekliği: ${oc.havuzN} nokta, en yakın çift ${oc.havuzMin?.toFixed(2)} ≥ eşik (kullanılabilir şerit ${oc.seritler})`,
     oc.havuzN > 0 && oc.havuzMin >= PARK_NOKTA_AYRIK, `havuz ${oc.havuzN} · min ${oc.havuzMin}`)
   // BOŞ KÜMEDEN GEÇEN İDDİA YASAK: sahnede GERÇEKTEN aynı anda ≥2 park etmiş araç görülmeli
+  // Çıkış çift-örnek tabanı 25→10 (2 Eyl): karar noktası kuyruk kuyruğuna alınıp çıkış→yol
+  // katılım boşluğu gelince giden omurgada ardışık çift SEYREKLEŞTİ (ölçüm: eski 24, yeni 16
+  // / 200 örnek). Taban örneklem çiti, davranış çiti değil — davranış çitleri altta.
   check(`ölçüm DOLU kümede (park zirvesi ${oc.parkZirve} araç · çıkış ${oc.cikCift} çift-örnek · ${oc.ornek} örnek)`,
-    oc.parkZirve >= 2 && oc.cikCift >= 25 && oc.ornek > 100,
+    oc.parkZirve >= 2 && oc.cikCift >= 10 && oc.ornek > 100,
     `parkZirve ${oc.parkZirve} · çıkış ${oc.cikCift} · örnek ${oc.ornek}`)
   check(`CANLI: park fazında ≥2 sn süren DURAN çift < 2.15 YOK (anlık ${oc.parkDuranIcice} · min ${oc.parkDuranMin ? oc.parkDuranMin.toFixed(2) : '—'})`,
     oc.parkOlay === 0, `${oc.parkOlay} kez ≥2 sn park çifti < 2.15`)

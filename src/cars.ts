@@ -290,6 +290,15 @@ function emojiTexture(emoji: string): THREE.Texture {
   return tex
 }
 
+// ÖN ISITMA: oyunda kullanılan emoji kümesi sabit ve küçük. Dokular ilk müşteride
+// değil, yönetici kurulurken üretilir — (1) canlıda ilk 😡'de canvas+doku yükleme
+// takılması olmaz, (2) three.js her doku için uuid çekerken Math.random tüketir;
+// tohumlu testlerde "ilk koşuda ortaya çıkan yeni emoji" RNG akışını kaydırıp aynı
+// tohumla iki koşuyu ayrıştırıyordu (otopark-cikis-check 3c ile ölçüldü).
+// Yeni emoji eklersen buraya da ekle (main.ts emojiFor + moodEmoji + taç/pırıltı).
+const TUM_EMOJI = ['😐', '😠', '😡', '👑', '✨', '🤩', '😄', '🙂', '😒']
+export function emojiDokulariniIsit() { for (const e of TUM_EMOJI) emojiTexture(e) }
+
 function emojiSprite(emoji: string): THREE.Sprite {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(emoji), depthTest: false }))
   sp.scale.set(1.15, 1.15, 1)
@@ -764,6 +773,9 @@ export class Car {
   /** ARAÇ YOL ALIYOR MU (rotası var mı). Hız eşitlemesi yalnız HAREKET EDEN öndeki
    *  aracı dikkate alır: duran araç yol kenarı dekorudur, onu beklemek yasak. */
   get moving(): boolean { return this.path.length > 0 }
+  /** güncel hedef nokta (yolun ilk noktası) — akış kuralları bacağı tanımak için okur */
+  get hedefNokta(): THREE.Vector3 | null { return this.path[0] ?? null }
+  get kalanNokta(): number { return this.path.length }
   /** akış ölçümü: bu araç şu an "durmuş" sayılıyor mu (olay bazlı sayaç için) */
   durdu = false
 
@@ -1280,7 +1292,11 @@ function rotaPadi(car: Car): number {
 function temizRota(car: Car, ham: THREE.Vector3[]): THREE.Vector3[] {
   if (!Car.solids.length || ham.length === 0) return ham
   const pad = rotaPadi(car)
-  const p0 = car.group.position
+  // SAF ANAHTAR (determinizm): başlangıç, anahtardaki yuvarlanmış konumun KENDİSİDİR.
+  // Tam konumla hesaplayıp kaba anahtara yazınca isabet "komşu konumdan hesaplanmış"
+  // rotayı döndürüyor, sonuç önbelleğin doluluğuna bağlı kalıyordu (aynı tohum → farklı
+  // koşu). Dönen liste başlangıcı içermez; ilk bacak ≤0.35 sapar, fiziksel pay bunu örter.
+  const p0 = { x: q2(car.group.position.x) / 2, y: q2(car.group.position.y) / 2 }
   // UCUZ ANAHTAR: yalnız sayı birleştirme. Ara noktalar yerleşimden türediği için 0.1
   // ızgarada birebir tekrar eder; aracın anlık konumu sürekli değiştiğinden 0.5 ızgara.
   let anahtar = pad + '|' + q2(p0.x) + ',' + q2(p0.y)
@@ -1414,7 +1430,7 @@ export class CarManager {
    *  patlarsa kural bir yerde kalıcı blok üretiyor demektir (testler okur). */
   /** cikis* alanları ÇIKIŞ omurgası konveyörünün ayrı defteri (1 Eyl) — giriş metrikleri
    *  eski koşularla kıyaslanabilir kalsın diye tek kaleme karıştırılmadı. */
-  blokStats = { durusSn: 0, muaf: 0, cikisDurusSn: 0, cikisMuaf: 0 }
+  blokStats = { durusSn: 0, muaf: 0, cikisDurusSn: 0, cikisMuaf: 0, katilimYavas: 0 }
   /** akış özeti: ortalama hız oranı + standart sapma (0 = kusursuz akış) */
   get flow() {
     const n = Math.max(1, this.flowStats.orneklem)
@@ -1429,7 +1445,10 @@ export class CarManager {
   // (yakın) istasyonu HİÇ değiştirmez (varsayılanlar = eski sabit değerler).
   constructor(private scene: THREE.Scene, private lib: ModelLib | null,
               private opts: CarManagerOpts,
-              private gateX = 4.2, private serveLane = LANE_NEAR) {}
+              private gateX = 4.2, private serveLane = LANE_NEAR) {
+    // Emoji dokuları burada, ilk müşteriden önce üretilir (bkz. emojiDokulariniIsit).
+    if (typeof document !== 'undefined') emojiDokulariniIsit()
+  }
 
   // ---- Çift istasyon: karşı (far) istasyon, near'ın (ROAD_X,0) etrafında 180° dönmüşüdür.
   // Her yol {gateX, lane, dirY (seyir yönü), sideSign (istasyon yönü)} ile sistematik aynalanır.
@@ -1686,9 +1705,20 @@ export class CarManager {
         if (forward < 0.2 || forward > sep * 1.6) continue
         const lx = dx - dir.x * forward, ly = dy - dir.y * forward
         if (lx * lx + ly * ly > 1.21) continue // başka şeritte → hiç ilgilenmez
-        c.speedScale = Math.min(c.speedScale, Math.max(0.3, forward / sep))
+        // TABAN, AYNI YÖNDE HAREKET EDEN öndekinin GERÇEK hızının altına inebilir (2 Eyl):
+        // sabit 0.3 tabanı, ışıkta 0.22'ye yavaşlayan ya da konveyörle frenlenen öndekinin
+        // ÜSTÜNE BİNDİRİYORDU (telemetri: leaving+transit 528, transit+transit 481 olay).
+        // Kilitlenmezlik korunur: taban yalnız AYNI YÖNDE ve GERÇEKTEN HAREKET EDEN
+        // (hız ≥ 0.15) öndeki için düşer — karşı akış ve DURAN öndeki (konveyör freni)
+        // için 0.3 aynen kalır: burun buruna kilit yine imkânsız, kuyruğun yanından
+        // geçen kapsam-dışı araç (EV, otopark) yine beklemez (T8 ölçümü korunur).
+        const od = o.headingDir()
+        const ayniYon = od ? od.x * dir.x + od.y * dir.y > 0.5 : false
+        const taban = ayniYon && o.hizOrani >= 0.15 ? Math.min(0.3, o.hizOrani) : 0.3
+        c.speedScale = Math.min(c.speedScale, Math.max(taban, forward / sep))
       }
     }
+    this.yolaKatilimBoslugu()
     // Sahnedeki fiziksel engeller (tanker vb.) YAVAŞLATIR ama DURDURMAZ.
     for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked') continue
@@ -1743,12 +1773,21 @@ export class CarManager {
       if (car.phase !== 'transit' || car.converted) continue
       const gateInY = this.opts.gateInY()
       const dist = hw ? hw.decisionDist + hw.signReach * hw.signLevel : 0
-      const decisionY = hw ? gateInY - dist : DECISION_Y
+      // KARAR NOKTASI KUYRUĞUN KUYRUĞUNDAN ÖNCE (2 Eyl): banket slotları yol omuzunda
+      // kapıdan geriye SPILL_MAX_Y'ye kadar uzar (8 slotta −33.9). Sabit −26'da karar veren
+      // araca ARKASINDA kalan slot atanıyor, araç banket kolonunda geri dönüp gelenlerle
+      // burun buruna geliyordu (karşı akış muaf → 2.25'lik duran çift; T8'de ölçüldü).
+      // Karar, en uzak slotun 4 birim gerisinden önce verilir: atanan slot HEP ileridedir.
+      const Lk = this.graph.get(car.lane === 'near' ? 'near' : 'far')
+      const kuyrukSonu = Lk && Lk.queue.length ? Lk.queue[Lk.queue.length - 1].y : null
+      const decisionY = hw ? gateInY - dist
+        : (kuyrukSonu != null ? Math.min(DECISION_Y, kuyrukSonu - 4) : DECISION_Y)
       // KARŞI ŞERİT (otoyol fixi #2, oyuncu: "karşı tarafa ne yapsam müşteri gelmiyor"):
       // karar noktası KENDİ kapısından dist önce olmalı (araç güneye gider → kapının
       // kuzeyi). Eski kod near kapısından −|y| türetiyordu; o nokta yolun sonundan da
       // güneyde kaldığından karşı şeritte tryEnter HİÇ tetiklenmiyordu.
-      const farDecisionY = hw ? (this.opts.farGateInY?.() ?? APRON_OUT_Y) + dist : -DECISION_Y
+      const farDecisionY = hw ? (this.opts.farGateInY?.() ?? APRON_OUT_Y) + dist
+        : (kuyrukSonu != null ? Math.max(-DECISION_Y, kuyrukSonu + 4) : -DECISION_Y)
       const atDecision = car.lane === 'near'
         ? car.group.position.y > decisionY
         : car.group.position.y < farDecisionY
@@ -1868,6 +1907,40 @@ export class CarManager {
    * hattı birbirini asla beklemez). atPump/arm/transit/otopark trafiği ve tekneler
    * (marina aralıkları kendi ölçeğinde) kapsam DIŞI.
    */
+  /**
+   * YOLA KATILIM BOŞLUĞU (2 Eyl): çıkış kapısından şeride katılan araç, şeritte
+   * katılım noktasına YAKLAŞAN transit varsa boşluk bırakır. Telemetride
+   * leaving+transit çakışmalarının kaynağı kapı ağzıydı: araç yola çıktığı anda
+   * arkasından gelen transit onun üstüne biniyordu (transit öndekini 0.3 tabanla
+   * kopyalar, kapıdan çıkan ise sıfırdan hızlanmaz — aynı karede yan yana).
+   * KİLİTLENMEZLİK: (1) araç DURMAZ, 0.15'e iner (sürünür); (2) transit hiç
+   * durmadığı ve doğuş aralığı sonlu olduğu için boşluk KESİN gelir; (3) katılan
+   * araç henüz şerit dışında olduğundan transiti frenlemez → karşılıklı bekleme yok.
+   * Kapsam yalnız `leaving` + rotasının güncel hedefi şerit katılım noktası olan
+   * (x = şerit kolonu) ve henüz şerit kolonuna girmemiş araç.
+   */
+  private yolaKatilimBoslugu() {
+    for (const c of this.cars) {
+      if (c.phase !== 'leaving' || c.boat || c.kalanNokta < 2) continue
+      const L = this.graph.get(c.station)
+      if (!L) continue
+      const hedef = c.hedefNokta
+      if (!hedef) continue
+      const cp = c.group.position
+      // güncel bacak şeride katılım bacağı mı: hedef şerit kolonunda, araç henüz değil
+      if (Math.abs(hedef.x - L.lane) > 0.3 || Math.abs(cp.x - L.lane) < 0.6) continue
+      let yaklasan = false
+      for (const o of this.neighbors(L.lane, hedef.y, 2)) {
+        if (o === c || o.phase !== 'transit' || o.lane !== c.lane) continue
+        if (Math.abs(o.group.position.x - L.lane) > 0.6) continue
+        // katılım noktasına akış yönünde uzaklık: −1..7 penceresi (≈1 sn yol)
+        const s = (hedef.y - o.group.position.y) * L.dirY
+        if (s > -1 && s < 7) { yaklasan = true; break }
+      }
+      if (yaklasan) { c.speedScale = Math.min(c.speedScale, 0.15); this.blokStats.katilimYavas++ }
+    }
+  }
+
   private konveyorBlok(dt: number) {
     for (const c of this.cars) {
       c.blokFren = 1
