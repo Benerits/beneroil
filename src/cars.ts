@@ -81,6 +81,8 @@ const BEKCI_ILERLEME = 0.5
 
 export type CarPhase = 'transit' | 'driving' | 'waiting' | 'atPump' | 'toPark' | 'parked' | 'leaving' | 'gone'
 export type CarKind = 'fuel' | 'ev'
+/** EV müşterisinin şarj bulamayıp gitme nedeni (tryEnter → onEvTurnedAway) */
+export type EvKacisNedeni = 'kapali' | 'bozuk' | 'molaci' | 'molaci-personelli'
 export type BodyKind = 'sedan' | 'hatch' | 'suv'
 
 const lam = (color: number) => new THREE.MeshLambertMaterial({ color })
@@ -1484,8 +1486,11 @@ export interface CarManagerOpts {
   /** karşı istasyon kapı y'leri (far araç güneye gittiği için giriş +y / çıkış -y) */
   farGateInY?: () => number
   farGateOutY?: () => number
-  /** işgalci yüzünden şarj bulamayıp giden EV müşterisi */
-  onEvTurnedAway?: () => void
+  /** şarj bulamayıp giden EV müşterisi — neden: boş ünitenin önü kapalı / arızalı /
+   *  molacı (personelli = şarjcı/müdür zaten uğurlayacak) */
+  onEvTurnedAway?: (neden: EvKacisNedeni) => void
+  /** ünitede şarjcı var mı (molacıyı 8 sn'de kendisi uğurlar) */
+  hasChargerStaff?: (i: number) => boolean
   /** tır parkı noktaları (park + manevra noktası) */
   truckSpots: () => { spot: THREE.Vector3; stage: THREE.Vector3 }[]
   /** tır park ücreti tahsilatı */
@@ -2660,7 +2665,24 @@ export class CarManager {
         if (d < bestD) { bestD = d; slot = i }
       }
       if (slot < 0) {
-        if (this.evOcc.some((x, i) => x?.squatting && this.evStation(i) === car.station)) this.opts.onEvTurnedAway?.()
+        // NEDEN GİREMEDİ? (#1275 #1276 #1292 "boş yer varsa oraya geçsin, niye molacının
+        // yüzünden kaçıyor / şarjcılarım başında"): eskiden herhangi bir molacı varsa
+        // HER kaçış "molacı yüzünden" sayılıp itibar kesiliyordu — oysa boş ünite ÖNÜ
+        // KAPALI (unitErisilebilir) ya da ARIZALI olduğu için görünmez kalmış olabilir.
+        // Oyuncu boş üniteyi görüyor, mesaj molacıyı suçluyordu. Sebep ayrıştırılır;
+        // molacı yalnız gerçekten TEK engelse ve onu uğurlayacak kimse yoksa cezadır.
+        let kapali = 0, bozuk = 0, molaci = 0, personelli = 0
+        for (let i = 0; i < this.opts.evCount(); i++) {
+          if (this.evStation(i) !== car.station) continue
+          const o = this.evOcc[i]
+          if (o?.squatting) { molaci++; if (this.opts.hasChargerStaff?.(i)) personelli++; continue }
+          if (o) continue
+          if (this.opts.isChargerBroken(i)) { bozuk++; continue }
+          if (!this.graph.unitErisilebilir(car.station, 'ev', i)) kapali++
+        }
+        const neden = kapali > 0 ? 'kapali' : bozuk > 0 ? 'bozuk'
+          : molaci > 0 ? (personelli === molaci ? 'molaci-personelli' : 'molaci') : 'dolu'
+        if (neden !== 'dolu') this.opts.onEvTurnedAway?.(neden)
         return // şarj yeri yok, yoluna devam
       }
       this.evOcc[slot] = car

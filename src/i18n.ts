@@ -1031,6 +1031,12 @@ const EN: Record<string, string> = {
     'The slip lane is full — a customer pulled back onto the motorway! Expand your capacity.',
   'EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!':
     'An EV customer saw a charger blocked by a car that wasn’t charging and DROVE OFF — rating dropped!',
+  'EV müşterisi geçti: tek boş ünitede molacı var, şarjcı birazdan uğurlar.':
+    'An EV customer drove past: the only free charger has a loiterer — your attendant will send them off shortly.',
+  'EV müşterisi boş şarja ULAŞAMADI — ünitenin önü kapalı, yapıyı taşı! İtibar düştü.':
+    'An EV customer COULDN’T REACH the free charger — its approach is blocked, move the building! Rating dropped.',
+  'Boş şarj ünitesi ARIZALI — EV müşterisi kaçtı, tamir et! İtibar düştü.':
+    'The free charger is BROKEN — an EV customer drove off, repair it! Rating dropped.',
   'Müşteri tuvalet arıyordu, bulamadı!': 'A customer went looking for a restroom and found none!',
   'Yağ değişimi: +₺{0} kumbarada': 'Oil change: +₺{0} in the piggy bank',
   'Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
@@ -2721,6 +2727,12 @@ const FR: Record<string, string> = {
     'La voie de décélération est saturée — un client est reparti sur l’autoroute ! Augmente ta capacité.',
   'EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!':
     'Un client en véhicule électrique a vu une borne occupée par une voiture qui ne chargeait pas et il EST REPARTI — la note baisse !',
+  'EV müşterisi geçti: tek boş ünitede molacı var, şarjcı birazdan uğurlar.':
+    'Un client électrique est passé : la seule borne libre est occupée par un flâneur, ton employé va bientôt le renvoyer.',
+  'EV müşterisi boş şarja ULAŞAMADI — ünitenin önü kapalı, yapıyı taşı! İtibar düştü.':
+    'Un client électrique N’A PAS PU ATTEINDRE la borne libre — l’accès est bloqué, déplace le bâtiment ! La note baisse.',
+  'Boş şarj ünitesi ARIZALI — EV müşterisi kaçtı, tamir et! İtibar düştü.':
+    'La borne libre est EN PANNE — un client électrique est reparti, répare-la ! La note baisse.',
   'Müşteri tuvalet arıyordu, bulamadı!': 'Un client cherchait des toilettes et n’en a pas trouvé !',
   'Yağ değişimi: +₺{0} kumbarada': 'Vidange : +₺{0} dans la tirelire',
   'Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':

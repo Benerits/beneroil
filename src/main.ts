@@ -2298,13 +2298,25 @@ const cars = new CarManager(world.scene, modelLib, {
     ui.toast(t('Tır park etti: ₺{0} kumbarada', fee), 'good', true)
   },
   onCarReady: car => { if (!ui.activeCar && !isAttendantCar(car)) autoSelect(car); tutStart() },
-  onEvTurnedAway: () => {
+  hasChargerStaff: i => state.autoChargers.has(i) || state.managerLevel >= 3, // Sv.3 müdür de 25 sn'de uğurlar
+  // #1275 #1276 #1292: kaçışın GERÇEK nedeni söylenir. Eskiden tek mesaj vardı ("dolu ama
+  // şarj etmeyen ünite") ve molacıyı şarjcı/müdür zaten uğurlayacak olsa bile itibar
+  // kesiliyordu — 3 şubeli oyuncu "oturup molacı mı kovalayacağım" diye yazdı. Personelli
+  // molacı artık bilgi notu (ceza yok, dolu istasyonla aynı muamele); önü kapalı/arızalı
+  // boş ünite ise kaybın asıl sebebi olarak GÖSTERİLİR (oyuncu "boş yer var" diyordu).
+  onEvTurnedAway: neden => {
     if (evTurnAwayT > 0) return
-    evTurnAwayT = 4
+    evTurnAwayT = neden === 'molaci-personelli' ? 20 : 4
+    if (neden === 'molaci-personelli') {
+      ui.toast(t('EV müşterisi geçti: tek boş ünitede molacı var, şarjcı birazdan uğurlar.'), '', true)
+      return
+    }
     state.stats.lost++
     state.addRep(-0.3)
     audio.miss()
-    ui.toast('EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!', 'bad', true)
+    ui.toast(neden === 'kapali' ? t('EV müşterisi boş şarja ULAŞAMADI — ünitenin önü kapalı, yapıyı taşı! İtibar düştü.')
+      : neden === 'bozuk' ? t('Boş şarj ünitesi ARIZALI — EV müşterisi kaçtı, tamir et! İtibar düştü.')
+      : t('EV müşterisi dolu (ama şarj etmeyen) üniteyi görüp KAÇTI — itibar düştü!'), 'bad', true)
   },
   onCarLost: car => {
     state.stats.lost++
