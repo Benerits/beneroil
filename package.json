@@ -72,6 +72,7 @@
     "test:tirpark": "tsx tools/tests/tir-park-check.mjs",
     "test:vitrin": "tsx tools/tests/vitrin-check.mjs",
     "test:pompaslot": "tsx tools/tests/pompa-slot-check.mjs",
+    "test:otoparkcikis": "tsx tools/tests/otopark-cikis-check.mjs",
     "test:ruzgar": "tsx tools/tests/ruzgar-check.mjs"
   },
   "dependencies": {
