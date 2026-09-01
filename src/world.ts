@@ -6,6 +6,7 @@ import { LocationTheme, activeTheme } from './themes'
 import type { Kit } from './kits'
 import { asset, texture, isLightMode } from './platform'
 import { SCENE_PLANS, type Placement } from './scenery'
+import { parkHavuzuAyikla } from './traffic-graph'
 
 // Koordinat sistemi: z yukarı, y sağa, x kameraya doğru.
 // Ana arsa: x -6.5..5, y -10..10. Güney arsa y -24..-10, kuzey arsa y 10..24.
@@ -3248,7 +3249,14 @@ export class World {
 
   /** yerleştirilen otoparkın dünya park noktaları: pozisyon + yanaşma (stage) + park AÇISI.
    *  Açı otoparkın rotasyonundan türetilir — döndürülen otoparkta araç artık YAN park etmez;
-   *  stage noktası girişin önünde (yerel +Y) — araç nereye konursa konsun kendi önünden yanaşır. */
+   *  stage noktası girişin önünde (yerel +Y) — araç nereye konursa konsun kendi önünden yanaşır.
+   *
+   *  NOKTA HAVUZU TEKLİĞİ (1 Eyl, canlı telemetri: parked+parked 240 / toPark+toPark 124):
+   *  TÜM otoparkların noktaları tek havuzda toplanır ve birbirine PARK_NOKTA_AYRIK'tan
+   *  yakın düşenler ELENİR (parkHavuzuAyikla — gerekçe traffic-graph.ts'te). Çizgili yer
+   *  ÇİZİMİ ve oyuncunun yerleşimi DEĞİŞMEZ; yalnız trafiğin park ettiği nokta kümesi
+   *  ayrışır. Rozet/atama/şerit ağı hepsi BU listeden beslendiği için kapasite de
+   *  gerçek sayıyı gösterir. */
   getParkingSpots(): { id: string; pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] {
     const spots: { id: string; pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[] = []
     for (const b of this.buildings) {
@@ -3265,7 +3273,7 @@ export class World {
         })
       }
     }
-    return spots
+    return parkHavuzuAyikla(spots)
   }
 
   /** tır parkı: park noktası + manevra (yanaşma) noktası çiftleri */

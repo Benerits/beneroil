@@ -47,6 +47,36 @@ export interface ParkPoint {
   sy: number
 }
 
+/**
+ * ── OTOPARK NOKTA HAVUZU TEKLİĞİ (1 Eyl, canlı telemetriyle) ──
+ * Faz analizi (400 olay, <2.15 çift dağılımı): kuyruk fixlerinden SONRA kalan en büyük
+ * iç içe kütlesi OTOPARKTA — parked+parked 240, toPark+toPark 124. Laboratuvar kopyası
+ * (traffic-load T11, 2 bitişik otopark) aynı imzayı verdi ve kaynağı İKİYE ayırdı:
+ *   · AYNI otoparkın komşu çizgili yerleri 1,25 birim arayla — iki park etmiş araç
+ *     kalıcı olarak <2.15'te (tam canlıdaki parked+parked kümesi; ölçülen min 1.25),
+ *   · KOMŞU otoparkların uç noktaları birbirine 1,45'e kadar düşüyor ve iki toPark
+ *     aracı neredeyse aynı noktaya sürüyor (lotlar-arası çift, ölçülen min 0.01).
+ * FIX, pompa-slot fixiyle aynı kalıp (uniteleriAyristir emsali) ama TAŞIMA değil ELEME:
+ * ızgara sabittir (çizim/binalar kıpırdamaz), tüm otoparkların noktaları TEK HAVUZDA
+ * toplanır ve önceki bir noktaya PARK_NOKTA_AYRIK'tan yakın düşen nokta havuza HİÇ
+ * GİRMEZ. Atama zaten boş nokta arar; teklik havuz düzeyinde garanti olur, kapasite
+ * rozeti de gerçek (kullanılabilir) sayıyı gösterir. Deterministik: bina sırası +
+ * nokta indeksi (greedy) — aynı yerleşim her zaman aynı havuzu verir.
+ */
+export const PARK_NOKTA_AYRIK = 2.8
+export function parkHavuzuAyikla<T extends { pos: { x: number; y: number } }>(spots: T[]): T[] {
+  const out: T[] = []
+  for (const s of spots) {
+    let uzak = true
+    for (const o of out) {
+      const dx = o.pos.x - s.pos.x, dy = o.pos.y - s.pos.y
+      if (dx * dx + dy * dy < PARK_NOKTA_AYRIK * PARK_NOKTA_AYRIK) { uzak = false; break }
+    }
+    if (uzak) out.push(s)
+  }
+  return out
+}
+
 export interface StationGeom {
   station: string
   gateX: number

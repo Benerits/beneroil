@@ -19,9 +19,15 @@ const DECISION_Y = -26 // yakın şeritte istasyona girme kararının verildiği
  * Twitter'da iki oyuncu bağımsız aynı çözümü önerdi, oyun sahibi benimsedi: konveyör
  * bant / blok sinyalizasyonu — araç, önündeki BÖLÜM boşalmadan ilerleyemez. Bu bir
  * PAZARLIK/REZERVASYON DEĞİL (o mimari bir kez silindi, ölçümle): tek taraflı bir
- * doluluk kapısı. Yalnız AYNI kuyruk/gelen-omurga hattındaki araçlara bakılır; çapraz
- * akış (çıkış omurgası, yol transiti, UNIT_CLEAR yakın-geçişi) bloğa dahil DEĞİLDİR —
- * dahil edilse kilitlenme doğardı.
+ * doluluk kapısı. Yalnız AYNI hattın araçlarına bakılır; çapraz akış (yol transiti,
+ * UNIT_CLEAR yakın-geçişi, karşı akış) bloğa dahil DEĞİLDİR — dahil edilse kilitlenme
+ * doğardı.
+ * ÇIKIŞ OMURGASI DA KAPSAMDA (1 Eyl): kural başta bilerek yalnız GİRİŞ tarafındaydı;
+ * sonraki faz analizi (400 olay) kalan iç içe kütlesinin bir ayağını leaving ailesinde
+ * gösterdi — aynı giden omurga kolonunda peş peşe çıkan araçlar birbirinin içinden
+ * akıyordu (lab ölçümü: leaving çifti min 0.00). Aynı kalıp DAR kapsamla çıkışa
+ * uygulandı: yalnız leaving fazı + aynı xOut kolonu; kapıdan çıkmış (yolda) araçlar
+ * hariç. Zincirin başı her zaman serbest aktığı için kilitlenme yine üretilemez.
  * Canlı telemetri gerekçesi (2.707 olay/19 saat): olayların %96'sı iç içe+yığılma,
  * en büyük küme (22x) tek pompalı gün-1 istasyonunda kuyruk başı; replay #2647'de
  * 4 bekleyen + 1 serviste burun buruna. Kök: slotlar arası geçişte mesafe kapısı yoktu.
@@ -1342,7 +1348,9 @@ export class CarManager {
   /** KONVEYÖR TELEMETRİSİ: durusSn = kural gereği duruşta geçen toplam araç-saniye,
    *  muaf = 30 sn kilitlenme kapısının kaç kez açıldığı. Sağlıklı akışta muaf 0'dır;
    *  patlarsa kural bir yerde kalıcı blok üretiyor demektir (testler okur). */
-  blokStats = { durusSn: 0, muaf: 0 }
+  /** cikis* alanları ÇIKIŞ omurgası konveyörünün ayrı defteri (1 Eyl) — giriş metrikleri
+   *  eski koşularla kıyaslanabilir kalsın diye tek kaleme karıştırılmadı. */
+  blokStats = { durusSn: 0, muaf: 0, cikisDurusSn: 0, cikisMuaf: 0 }
   /** akış özeti: ortalama hız oranı + standart sapma (0 = kusursuz akış) */
   get flow() {
     const n = Math.max(1, this.flowStats.orneklem)
@@ -1787,19 +1795,25 @@ export class CarManager {
 
 
   /**
-   * KONVEYÖR BLOĞU — gelen omurga/kuyruk hattında öndekine mesafe kapısı.
+   * KONVEYÖR BLOĞU — gelen omurga/kuyruk hattında + GİDEN omurgada öndekine mesafe kapısı.
    * Araç, öndeki araca BLOK_MESAFE'den (3.0) fazla yaklaşınca mesafeyle orantılı
    * yavaşlar ve BLOK_DUR'da (2.2) tamamen durur. Kapsam bilerek dar (kilitlenme
-   * doğmasın): yalnız kuyruk üyeleri + omurga ÜZERİNDEKİ pompa yolcuları fren yapar;
-   * öndeki olarak da yalnız aynı hattın araçları sayılır. atPump/arm/çıkış/transit/
-   * otopark trafiği ve tekneler (marina aralıkları kendi ölçeğinde) kapsam DIŞI.
+   * doğmasın): GİRİŞTE yalnız kuyruk üyeleri + omurga ÜZERİNDEKİ pompa yolcuları,
+   * ÇIKIŞTA (1 Eyl) yalnız giden omurga (xOut) kolonundaki leaving araçları fren yapar;
+   * öndeki olarak da yalnız KENDİ hattının araçları sayılır (giriş hattı ile çıkış
+   * hattı birbirini asla beklemez). atPump/arm/transit/otopark trafiği ve tekneler
+   * (marina aralıkları kendi ölçeğinde) kapsam DIŞI.
    */
   private konveyorBlok(dt: number) {
     for (const c of this.cars) {
       c.blokFren = 1
       // 30 sn kapısı açık: kural bu araç için askıda. Mevcut bacağını bitirince kapanır.
       if (c.blokMuaf) { if (!c.moving) { c.blokMuaf = false; c.blokT = 0 } continue }
-      if (c.phase !== 'driving' && c.phase !== 'waiting') { c.blokT = 0; continue }
+      // ÇIKIŞ KAPSAMI (1 Eyl): leaving de bloğa girer — ama yalnız giden omurga kolonunda
+      // (aşağıdaki kapsam filtresi). Faz analizi kanıtı ve kilitlenmezlik gerekçesi
+      // dosya başındaki KONVEYÖR bloğunda.
+      const cikista = c.phase === 'leaving'
+      if (c.phase !== 'driving' && c.phase !== 'waiting' && !cikista) { c.blokT = 0; continue }
       if (c.boat) continue                       // marina: tekne boyu araç ölçeğinde değil
       if (!c.moving) continue                    // slotunda duran araç frenlemez (terfi kapısı kuyrukIlerlet'te)
       const L = this.graph.get(c.station)
@@ -1807,20 +1821,33 @@ export class CarManager {
       const cp = c.group.position
       const dir = c.headingDir()
       if (!dir) continue
-      const omurgada = Math.abs(cp.x - L.xIn) <= 0.6
-      // KAPSAM: kuyruk üyesi (slota giden/kayan) her yerde; YAKIT pompası yolcusu YALNIZ
-      // omurga boyunca seyrederken (kola dönen araç bloktan çıkar — kural 3: arm'de blok
-      // yok). EV'ler kapsam DIŞI: şarj kuyruğu yok, EV omurgada yakıt kuyruğunun yanından
-      // kendi koluna geçer — bloğa alınsa duran kuyruğun arkasında boşuna kilitlenirdi
-      // (ölçüldü: T8 tanı koşusunda durusSn'nin büyük kalemi buydu).
-      if (c.waitIndex < 0 && !(c.slotIndex >= 0 && c.kind === 'fuel' && omurgada && Math.abs(dir.y) >= 0.7)) continue
+      if (cikista) {
+        // ÇIKIŞ KAPSAMI DAR: yalnız GİDEN omurga (xOut) kolonunda, omurga yönünde
+        // seyreden araç frenler. Kapıdan çıkıp yola katılan (kolon dışı) ve koldan
+        // omurgaya DÖNMEKTE olan (yatay seyir) araçlar kapsam dışı — giriş tarafındaki
+        // "arm'de blok yok" kuralının (kural 3) aynası.
+        if (Math.abs(cp.x - L.xOut) > 0.6 || Math.abs(dir.y) < 0.7) { c.blokT = 0; continue }
+      } else {
+        const omurgada = Math.abs(cp.x - L.xIn) <= 0.6
+        // KAPSAM: kuyruk üyesi (slota giden/kayan) her yerde; YAKIT pompası yolcusu YALNIZ
+        // omurga boyunca seyrederken (kola dönen araç bloktan çıkar — kural 3: arm'de blok
+        // yok). EV'ler kapsam DIŞI: şarj kuyruğu yok, EV omurgada yakıt kuyruğunun yanından
+        // kendi koluna geçer — bloğa alınsa duran kuyruğun arkasında boşuna kilitlenirdi
+        // (ölçüldü: T8 tanı koşusunda durusSn'nin büyük kalemi buydu).
+        if (c.waitIndex < 0 && !(c.slotIndex >= 0 && c.kind === 'fuel' && omurgada && Math.abs(dir.y) >= 0.7)) continue
+      }
       let gap = Infinity
       for (const o of this.neighbors(cp.x, cp.y, 1)) {
         if (o === c || o.phase === 'gone' || o.station !== c.station || o.boat) continue
-        // öndeki olarak yalnız AYNI hattın araçları: kuyruk üyeleri + omurgadaki yolcular
-        // (atPump kendi kolunda UNIT_CLEAR kadar ayrıktır, bloğa girmez — kural 3)
-        if (o.phase !== 'driving' && o.phase !== 'waiting') continue
-        if (o.waitIndex < 0 && !(o.slotIndex >= 0 && Math.abs(o.group.position.x - L.xIn) <= 0.6)) continue
+        // öndeki olarak yalnız AYNI hattın araçları: girişte kuyruk üyeleri + omurgadaki
+        // yolcular (atPump kendi kolunda UNIT_CLEAR kadar ayrıktır, bloğa girmez — kural 3);
+        // çıkışta yalnız aynı xOut kolonundaki leaving araçlar (çapraz akış muaf kalır).
+        if (cikista) {
+          if (o.phase !== 'leaving' || Math.abs(o.group.position.x - L.xOut) > 0.6) continue
+        } else {
+          if (o.phase !== 'driving' && o.phase !== 'waiting') continue
+          if (o.waitIndex < 0 && !(o.slotIndex >= 0 && Math.abs(o.group.position.x - L.xIn) <= 0.6)) continue
+        }
         // KARŞI AKIŞ MUAF: burun buruna gelen araç beklenmez (bekle → karşılıklı kilit).
         // Yanından/içinden geçer — UNIT_CLEAR yakın-geçiş tasarımının devamı.
         const od = o.headingDir()
@@ -1846,9 +1873,14 @@ export class CarManager {
         c.blokFren = f
         c.speedScale = Math.min(c.speedScale, f)
         if (f < 0.15) {
-          this.blokStats.durusSn += dt
+          if (cikista) this.blokStats.cikisDurusSn += dt
+          else this.blokStats.durusSn += dt
           c.blokT += dt
-          if (c.blokT >= BLOK_KILIT_SN) { c.blokMuaf = true; this.blokStats.muaf++ }
+          if (c.blokT >= BLOK_KILIT_SN) {
+            c.blokMuaf = true
+            if (cikista) this.blokStats.cikisMuaf++
+            else this.blokStats.muaf++
+          }
         } else c.blokT = 0
       } else c.blokT = 0
     }
