@@ -1341,6 +1341,8 @@ const EN: Record<string, string> = {
     'These are PERMANENT — your new station starts from here, not from zero.',
   'Kasana geçti': 'Credited to your cash',
   'Devraldığın kadro': 'Crew you inherited',
+  'Sen yokken istasyon ÇALIŞMADI — offline kazanç hesaplı oyuncularda açılır. Kaydol: +₺2.500 bonus.':
+    'Your station did NOT run while you were away — offline earnings unlock with an account. Sign up: +₺2,500 bonus.',
   'Ortak hat kotası bugün doldu — yarın tazelenir': 'Shared supply line quota is used up for today — it refreshes tomorrow',
   'Kota Doldu': 'Quota Used',
   ' · hat kotası: {0}L': ' · line quota left: {0}L',
@@ -3128,6 +3130,8 @@ const FR: Record<string, string> = {
     'Tout cela est PERMANENT — ta nouvelle station part d’ici, pas de zéro.',
   'Kasana geçti': 'Versé dans ta caisse',
   'Devraldığın kadro': 'Équipe héritée',
+  'Sen yokken istasyon ÇALIŞMADI — offline kazanç hesaplı oyuncularda açılır. Kaydol: +₺2.500 bonus.':
+    'Votre station n\'a PAS tourné en votre absence — les gains hors ligne se débloquent avec un compte. Inscrivez-vous : bonus de 2 500 ₺.',
   'Ortak hat kotası bugün doldu — yarın tazelenir': 'Le quota de la ligne partagée est épuisé pour aujourd\'hui — il se renouvelle demain',
   'Kota Doldu': 'Quota épuisé',
   ' · hat kotası: {0}L': ' · quota de ligne restant : {0} L',

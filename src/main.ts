@@ -3341,8 +3341,21 @@ let offlineYazilan = 0
  *  kumbaralı tesisler + idle tesis geliri + pompacı yakıt satışı. Açılıştaki offline raporla
  *  AYNI formül/tavanlar (90 sn eşik, 2 saat cap) — tek kaynaktan yürür ki dengeler ayrışmasın.
  *  Dönüş: oyuncuya yansıyan toplam ₺ (0 = işlemedi). */
+let misafirTeaserGosterildi = false
 function applyAwayEarnings(offSecRaw: number): number {
   if (isFullMode || state.closed) return 0
+  // MİSAFİRE OFFLINE KAZANÇ YOK (Oğuz, 1 Eyl): "misafire neden pasif income gelsin?"
+  // Offline kazanç HESABA bağlı bir ayrıcalık — kayıt olmanın en güçlü sebeplerinden
+  // birini misafire bedava vermek dönüşüm hunisini deler. Misafir dönüşte kazanç
+  // yerine BİR KEZ dönüşüm mesajı görür (rakam uydurmadan: kazancı hesaplamak için
+  // yolları çalıştırmak gerekir, çalıştırmak da mutasyon demek).
+  if (!auth.loggedIn()) {
+    if (!misafirTeaserGosterildi && offSecRaw >= 600) {
+      misafirTeaserGosterildi = true
+      ui.toast(t('Sen yokken istasyon ÇALIŞMADI — offline kazanç hesaplı oyuncularda açılır. Kaydol: +₺2.500 bonus.'), '', true)
+    }
+    return 0
+  }
   const offSec = Math.min(offSecRaw, 7200) // en fazla 2 saatlik birikim
   if (offSec <= 90) return 0
   let total = 0
@@ -3672,6 +3685,7 @@ function applySaveData(d: Record<string, unknown>) {
  *  yeniden yüklenirse offline gelir işliyordu. */
 function applyOfflineEarnings(gecenSn?: number) {
   if (state.closed) return
+  if (!auth.loggedIn()) return   // misafire offline/arka-plan kazancı yok (bkz. applyAwayEarnings)
   if (gecenSn === undefined && !loadedSaveAt) return
   const elapsedSec = gecenSn ?? (Date.now() - loadedSaveAt!) / 1000
   if (elapsedSec < 120) return // <2 dk: anlamsız
