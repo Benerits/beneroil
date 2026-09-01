@@ -940,11 +940,19 @@ export class UI {
    *  (~20 açık geri bildirim: "çok hızlı kayboluyor", "üst üste yığılıyor", "tıklanamıyor") */
   private toastLive: {
     node: HTMLDivElement; base: string; n: number; onemli: boolean
-    solma: number; silme: number
+    dogum: number; solma: number; silme: number
   }[] = []
   /** Aynı anda ekranda duracak EN FAZLA toast — fazlası "ekranı kaplıyor" şikayeti.
    *  3 satır, mobil dar kolonda bile ekranın küçük bir kısmını tutar. */
   private readonly toastMax = 3
+  /** Bir toast'ın (birleştirmelerle uzasa da) ekranda kalabileceği TOPLAM süre. Aynı mesaj
+   *  sürekli tekrar gelince (ör. her saniye "araç bekliyor") her birleştirme süreyi
+   *  tazeliyordu → toast hiç gitmiyordu (#1305 "tıklayınca bile gitmiyor"). */
+  private readonly toastOmurMs = 20000
+  /** Ekran bildirimi tercihi (#1297 #1299 "kapatılabilmeli"): 'onemli' modunda sıradan
+   *  bilgi toast'ları ekrana ÇIKMAZ, yalnız gelen kutusuna düşer (zil rozeti sayar);
+   *  hata/uyarı ('bad') ve önemli olanlar yine görünür. localStorage: benzinlik-toast */
+  toastMod: 'hepsi' | 'onemli' = 'hepsi'
 
   /** GÖRÜNME SÜRESİ okuma hızına göre: "okumaya vakit kalmıyor" şikayeti sabit 3.5 sn'den
    *  geliyordu — uzun cümle de kısa cümle de aynı sürede kayboluyordu. Artık taban süre +
@@ -965,11 +973,13 @@ export class UI {
 
   /** Sayacı artan toast'ın süresini SIFIRDAN başlat — birleştirme yapıp süreyi
    *  tazelemezsek "×3" yazısı görünür görünmez kaybolurdu. */
-  private toastZamanla(rec: { node: HTMLDivElement; base: string; onemli: boolean; solma: number; silme: number }, kind: string) {
+  private toastZamanla(rec: { node: HTMLDivElement; base: string; onemli: boolean; dogum: number; solma: number; silme: number }, kind: string) {
     clearTimeout(rec.solma); clearTimeout(rec.silme)
     rec.node.style.transition = ''
     rec.node.style.opacity = ''
-    const ms = this.toastSure(rec.node.textContent ?? rec.base, kind, rec.onemli)
+    // ömür tavanı: birleştirme süreyi tazeler ama doğumdan itibaren toastOmurMs'i aşamaz
+    const kalanOmur = Math.max(1500, rec.dogum + this.toastOmurMs - Date.now())
+    const ms = Math.min(kalanOmur, this.toastSure(rec.node.textContent ?? rec.base, kind, rec.onemli))
     rec.solma = window.setTimeout(() => { rec.node.style.transition = 'opacity .4s'; rec.node.style.opacity = '0' }, ms)
     rec.silme = window.setTimeout(() => this.toastKapat(rec), ms + 400)
   }
@@ -1001,6 +1011,8 @@ export class UI {
     const text = stripEmoji(t(msg))
     // 'bad' her zaman önemlidir: hata/uyarı gözden kaçmamalı
     const vurgulu = onemli || kind === 'bad'
+    // "Yalnız önemli" modu: sıradan bilgi gelen kutusunda kaldı (yukarıda yazıldı), ekrana çıkmaz
+    if (this.toastMod === 'onemli' && !vurgulu) return
 
     // SPAM KIRICI: aynı mesaj tekrar gelirse YENİ toast dizmek yerine mevcudun üstüne
     // "×N" koy ve süresini tazele. Eskiden yalnızca EN SON toast'a bakılıyordu; araya
@@ -1033,10 +1045,14 @@ export class UI {
     node.textContent = text
     node.dataset.base = text
     node.dataset.n = '1'
-    const rec = { node, base: text, n: 1, onemli: vurgulu, solma: 0, silme: 0 }
+    const rec = { node, base: text, n: 1, onemli: vurgulu, dogum: Date.now(), solma: 0, silme: 0 }
     // TIKLAYINCA KAPANSIN ("kapatmak mümkün değil"). stopPropagation: tıklama altındaki
     // sahneye/butona geçip yanlışlıkla bina koymasın/kamerayı oynatmasın.
+    // Kapatma pointerUP'ta: pointerdown'daki preventDefault bazı mobil tarayıcılarda
+    // takip eden click'i yutuyordu → "üstüne tıklayınca bile gitmiyor" (#1305).
     node.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault() })
+    // Node HEMEN silinmez: click olayı hâlâ bu node'a gelsin ki altındaki sahneye düşmesin.
+    node.addEventListener('pointerup', e => { e.stopPropagation(); node.style.opacity = '0'; window.setTimeout(() => this.toastKapat(rec), 80) })
     node.addEventListener('click', e => { e.stopPropagation(); this.toastKapat(rec) })
     box.appendChild(node)
     this.toastLive.push(rec)

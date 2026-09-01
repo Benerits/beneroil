@@ -2836,12 +2836,18 @@ function ekranFlasi() {
   })
 }
 
+/** Seri sönme süresi (gerçek sn): bu kadar süre hızlı servis gelmezse seri sıfırlanır.
+ *  Gün-1 tek pompada müşteri ~20-30 sn'de bir gelir; 90 sn doğal boşluğu affeder,
+ *  menüde/AFK geçen süreyi affetmez. */
+const COMBO_SONME_SN = 90
+
 /** SERİ İLERLEMESİ (Faz 3.1): sabrı bol müşteriyi hızlı uğurlamak seriyi büyütür.
  *  Yavaş servis seriyi KIRMAZ (yalnız kaçan müşteri kırar) — ceza değil, ödül aracı. */
 function comboIlerlet(car: Car, revenue: number) {
   if (car.patienceFrac < 0.6) return
   const oncekiMult = state.comboMult()
   state.combo++
+  state.comboBosSn = 0
   const yeniMult = state.comboMult()
   // PRİM ÜSTÜNE EKLENİR, geliri ÇARPMAZ: temel gelir çağıran yerde zaten kasaya yazıldı.
   // Böylece ekonomi dengesi tek noktadan (prim oranı) ayarlanabilir kalıyor.
@@ -5596,6 +5602,20 @@ translateDom() // HUD + statik metinleri çevir
     ui.toast(autoPanelPref ? t('Müşteri paneli araç gelince otomatik açılacak.') : t('Panel artık yalnız araca tıklayınca açılır.'), '', true)
   })
 }
+// ekran bildirimi tercihi (ayarlar) — bkz. ui.toastMod
+{
+  const TOAST_MOD_KEY = 'benzinlik-toast'
+  try { if (localStorage.getItem(TOAST_MOD_KEY) === 'onemli') ui.toastMod = 'onemli' } catch { /* kalıcılık yok */ }
+  const tmBtn = document.getElementById('toastmodbtn') as HTMLButtonElement
+  const syncTm = () => { tmBtn.textContent = ui.toastMod === 'hepsi' ? t('Bildirimler: Tümü') : t('Bildirimler: Yalnız önemli') }
+  syncTm()
+  tmBtn.addEventListener('click', () => {
+    ui.toastMod = ui.toastMod === 'hepsi' ? 'onemli' : 'hepsi'
+    try { localStorage.setItem(TOAST_MOD_KEY, ui.toastMod) } catch { /* kota */ }
+    syncTm()
+    ui.toast(ui.toastMod === 'hepsi' ? t('Tüm bildirimler ekranda görünecek.') : t('Yalnız hata ve uyarılar görünecek; gerisi gelen kutusunda.'), '', true, true)
+  })
+}
 ui.syncAccount(auth.currentEmail())
 
 // ---- Canlı kanal (WebSocket): anlık bakiye / bildirim / hot-fix / reload ----
@@ -7111,7 +7131,15 @@ function frame() {
       const want = goster ? 'flex' : 'none'
       if (rh.style.display !== want) rh.style.display = want
     }
-    // SERİ rozeti (Faz 3.2) — çarpan 1'in üstündeyken görünür
+    // SERİ SÖNMESİ: hızlı servis gelmeden COMBO_SONME_SN geçerse seri sessizce biter —
+    // "seri" ardışık hızlı servis demek, boş bekleyen istasyonda ×1.50 tutmak anlamsız
+    // ve rozet "hiç gitmiyor" şikâyetinin kaynağıydı. Toast/ses YOK (bildirim seli).
+    if (state.combo > 0) {
+      state.comboBosSn += dt
+      if (state.comboBosSn >= COMBO_SONME_SN) { state.combo = 0; state.comboBosSn = 0 }
+    }
+    // SERİ rozeti (Faz 3.2) — çarpan 1'in üstündeyken görünür; sağ sütunda promo/yoğun
+    // saat rozetinin ALTINA iner (aynı köşeyi paylaşırlar, üst üste binmesinler).
     const cb = document.getElementById('combobadge') as HTMLDivElement | null
     if (cb) {
       const mult = state.comboMult()
@@ -7121,6 +7149,9 @@ function frame() {
         const el = document.getElementById('combomult')
         const txt = `×${mult.toFixed(2)}`
         if (el && el.textContent !== txt) el.textContent = txt
+        const ustDolu = (rt && rt.style.display !== 'none') || (rh && rh.style.display !== 'none')
+        const top = ustDolu ? 'calc(180px + env(safe-area-inset-top))' : 'calc(136px + env(safe-area-inset-top))'
+        if (cb.style.top !== top) cb.style.top = top
       }
     }
   }

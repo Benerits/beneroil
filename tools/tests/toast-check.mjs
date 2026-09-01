@@ -41,6 +41,18 @@ bekle(/simdi - this\.sonToastSes < kapi/.test(ses), 'kapı süresi dolmadan ikin
 bekle(/\.toast\.imp/.test(html), 'önemli toast için ayrı görsel stil (.imp) var')
 bekle(/pointer-events: auto/.test(html), 'toast tıklamayı yakalıyor (kapsayıcı none, toast auto)')
 bekle(/prefers-reduced-motion[\s\S]{0,160}\.toast/.test(html), 'prefers-reduced-motion animasyonu kapatıyor')
+// 2 Eyl (#1297 #1299 #1305 #1308 #1310): kapatılabilir bildirim, ömür tavanı, sönen seri rozeti
+bekle(/toastMod === 'onemli' && !vurgulu\) return/.test(ui) && /id="toastmodbtn"/.test(html),
+  '"Yalnız önemli" modu var: sıradan toast ekrana çıkmıyor, ayarlarda düğmesi var')
+bekle(/rec\.dogum \+ this\.toastOmurMs - Date\.now\(\)/.test(ui),
+  'birleştirme süreyi sonsuza dek tazeleyemiyor (toplam ömür tavanı)')
+bekle(/addEventListener\('pointerup'[\s\S]{0,160}?toastKapat\(rec\)/.test(ui),
+  'toast pointerup ile de kapanıyor (mobilde click yutulsa bile)')
+const main = oku('src/main.ts')
+bekle(/state\.comboBosSn >= COMBO_SONME_SN\) \{ state\.combo = 0/.test(main) && /state\.comboBosSn = 0\n/.test(main),
+  'SERİ rozeti servis durunca sönüyor (comboBosSn ≥ COMBO_SONME_SN → combo 0)')
+bekle(/id="combobadge" style="display:none; position:fixed; right:/.test(html) && /id="combobadge"[^>]*z-index:20;/.test(html),
+  'SERİ rozeti ortada değil (sağ sütun), panellerin ALTINDA (z 20 < kart 25)')
 
 // ───────────────────────── GERÇEK TARAYICI ─────────────────────────
 console.log('\n── GERÇEK TARAYICI ──')
@@ -194,6 +206,28 @@ await calis('ekran görüntüsü', () => p.evaluate(() => {
 }))
 await p.waitForTimeout(400)
 writeFileSync(new URL('../../.toast-son-kare.png', import.meta.url), await p.screenshot())
+
+// 7) "YALNIZ ÖNEMLİ" MODU: ayar düğmesine basınca sıradan toast çıkmıyor, 'bad' çıkıyor
+const mod = await calis('yalnız önemli modu', async () => {
+  await p.evaluate(() => {
+    document.querySelectorAll('#toasts .toast').forEach(n => n.remove())
+    document.getElementById('toastmodbtn').click()          // hepsi → onemli (onay toast'ı önemli, görünür)
+    document.querySelectorAll('#toasts .toast').forEach(n => n.remove())
+    window.__toast('Siradan bilgi sessiz', '', true)
+    window.__toast('Kritik uyari gorunur', 'bad', true)
+  })
+  await p.waitForTimeout(200)
+  const r = await p.evaluate(() => {
+    const m = [...document.querySelectorAll('#toasts .toast')].map(n => n.textContent)
+    const dugme = document.getElementById('toastmodbtn').textContent
+    const saklanan = localStorage.getItem('benzinlik-toast')
+    document.getElementById('toastmodbtn').click()          // geri: hepsi
+    return { m, dugme, saklanan }
+  })
+  return r
+})
+bekle(mod.m.length === 1 && /Kritik/.test(mod.m[0]), '"Yalnız önemli" modunda sıradan toast ekrana ÇIKMADI, uyarı çıktı', mod.m.join(' | '))
+bekle(/nemli|mportant/.test(mod.dugme) && mod.saklanan === 'onemli', 'düğme metni ve localStorage tercihi güncellendi', mod.dugme)
 
 bekle(konsolHata.length === 0, 'konsol hatası yok', konsolHata[0] ?? '')
 

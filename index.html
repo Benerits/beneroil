@@ -1252,6 +1252,13 @@
         <div class="row">
           <button id="autopanelbtn" class="btn" style="flex:1; justify-content:center">Otomatik açıl: Açık</button>
         </div>
+        <!-- EKRAN BİLDİRİMLERİ (#1297 #1299 #1305): "sürekli gelen bildirimler kapatılabilmeli".
+             'Yalnız önemli' modunda bilgi mesajları ekrana çıkmaz, zil (gelen kutusu) sayar. -->
+        <label style="margin-top:12px" data-i18n="Ekran bildirimleri (sol alttaki mesajlar)">Ekran bildirimleri (sol alttaki mesajlar)</label>
+        <div class="sd" style="margin-bottom:6px" data-i18n="Kapatınca yalnız hata ve uyarılar görünür; gerisi zil simgesindeki gelen kutusuna düşer.">Kapatınca yalnız hata ve uyarılar görünür; gerisi zil simgesindeki gelen kutusuna düşer.</div>
+        <div class="row">
+          <button id="toastmodbtn" class="btn" style="flex:1; justify-content:center">Bildirimler: Tümü</button>
+        </div>
         <label style="margin-top:12px" data-i18n="Bildirimler (sekme kapalıyken tanker/kumbara haberi)">Bildirimler (sekme kapalıyken tanker/kumbara haberi)</label>
         <div class="row">
           <button id="notifbtn" class="btn" style="flex:1; justify-content:center">Bildirimlere İzin Ver</button>
@@ -1404,7 +1411,7 @@ Sorun / Öneri Bildir
   <!-- müşteri patlaması geri sayımı: rush aktifken görünür (sağ üst, HUD altı) -->
   <!-- top 64→136: HUD'un İKİNCİ satırı (Yakıt Siparişi/İnşaat) ~64-120px bandında —
        rozet butonların üstüne biniyordu (Oğuz), artık o satırın ALTINDA durur -->
-  <div id="rushtimer" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(136px + env(safe-area-inset-top)); z-index:34;
+  <div id="rushtimer" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(136px + env(safe-area-inset-top)); z-index:20;
     align-items:center; gap:8px; padding:8px 14px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:14px;
     color:#fff; background:linear-gradient(135deg,#e0903d,#d64545); border:0; border-bottom:3px solid #a93636;
     border-radius:var(--r-md); box-shadow:var(--shadow); animation:rushpulse 1s ease-in-out infinite">
@@ -1412,15 +1419,18 @@ Sorun / Öneri Bildir
   </div>
   <!-- YOĞUN SAAT (Faz 2.2): her gün 07-09 ve 17-19 doğal yığılma. Promo rozetiyle AYNI
        köşede ama promo varken gizlenir (iki rozet üst üste binmesin). -->
-  <div id="rushhour" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(136px + env(safe-area-inset-top)); z-index:33;
+  <div id="rushhour" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(136px + env(safe-area-inset-top)); z-index:20;
     align-items:center; gap:7px; padding:7px 13px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13.5px;
     color:#fff; background:linear-gradient(135deg,#3f6ea8,#2f5488); border:0; border-bottom:3px solid #24405f;
     border-radius:var(--r-md); box-shadow:var(--shadow)">
     <svg class="ic" style="vertical-align:-3px"><use href="#i-clock"/></svg> <span data-i18n="YOĞUN SAAT">YOĞUN SAAT</span>
   </div>
-  <!-- SERİ (Faz 3.2): hızlı servis çarpanı. Yalnız çarpan 1'in üstündeyken görünür. -->
-  <div id="combobadge" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:calc(136px + env(safe-area-inset-top)); z-index:33;
-    align-items:center; gap:6px; padding:6px 15px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px;
+  <!-- SERİ (Faz 3.2): hızlı servis çarpanı. Yalnız çarpan 1'in üstündeyken görünür.
+       5 geri bildirim (#1308 #1310 …): "ekranın ortasında, menülerin üstünde kalıyor, gitmiyor".
+       Artık SAĞ sütunda (promo/yoğun saat rozetinin altına iner, main.ts konumlar), z-index
+       panellerin ALTINDA (kart 25 / menü 31 örter), ve servis durunca 90 sn'de söner (main.ts). -->
+  <div id="combobadge" style="display:none; position:fixed; right:calc(14px + env(safe-area-inset-right)); top:calc(136px + env(safe-area-inset-top)); z-index:20;
+    align-items:center; gap:6px; padding:5px 12px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13.5px;
     color:#fff; background:linear-gradient(135deg,#3f9c5c,#2e7746); border:0; border-bottom:3px solid #24603a;
     border-radius:99px; box-shadow:var(--shadow)">
     <span data-i18n="SERİ">SERİ</span> <span id="combomult">×1.10</span>

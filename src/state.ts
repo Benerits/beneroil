@@ -754,6 +754,10 @@ export class GameState {
   /** SERİ (combo): hızlı servisler üst üste gelince büyür, kaçan müşteri sıfırlar.
    *  KAYDA GİRMEZ — oturum içi ritim aracı; F5'te sıfırdan başlaması doğru davranış. */
   combo = 0
+  /** Son seri artışından beri geçen gerçek saniye (kayda girmez). Seri, servis DURUNCA
+   *  da sönmeli: eskiden yalnız kaçan müşteri sıfırlıyordu → müdürlü/boş istasyonda
+   *  "×1.50" rozeti sonsuza dek ekranda kalıyordu (#1308 "gitmiyor", #1310). */
+  comboBosSn = 0
   /** oyun-içi saat (0-24), main.ts gün döngüsünden her karede tazeler */
   hourOfDay = 6
   // ── ÖDÜLLÜ REKLAM GÜNLÜK HAKLARI ──
