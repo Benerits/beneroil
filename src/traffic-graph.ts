@@ -82,7 +82,13 @@ export const IN_DEPTH_MAX = 2.6
 
 /** Kuyruk slotları: kapıdan içeri ilk slot ve slot aralığı (araç boyu 2.66 + pay). */
 export const QUEUE_BASE = 3.4
-export const QUEUE_STEP = 2.9
+// KUYRUK ARALIĞI — TELEMETRİYLE BULUNDU, YÜK TESTİYLE SEÇİLDİ (1 Eyl).
+// Canlı olay kayıtları (2.707 olay/19 saat): olayların %96'sı iç içe/yığılma ve en
+// büyük küme tek pompalı gün-1 istasyonunda kuyruk başı sıkışması (22x). Kök: aralık
+// 2,9 - gövde 2,66 = 0,24 pay, tampon tampona. 3,5'e çıkarmak İKİ korkuyu da boşa
+// çıkardı (yük testi): toplam servis 1285→1326 (+%3,2), geri çevrilen 58→35.
+// Yanaşma pürüzsüzleşince slot devri hızlanıyor — dar dizilim gelire de zarar veriyormuş.
+export const QUEUE_STEP = 3.5
 /** MARİNA: süperyat 8.5 birim — tekne kuyruğu araç aralığıyla iç içe girerdi. */
 export const QUEUE_BASE_WATER = 4
 export const QUEUE_STEP_WATER = 9
