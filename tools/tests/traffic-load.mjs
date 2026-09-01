@@ -323,6 +323,9 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   // patlaması ayrı bir kriter olarak aşağıda denetlenir. hardStuckT > 3 hâlâ gerçek kusur.
   const stuck = mgr.cars.filter(c => c.hardStuckT > 3).length
   const blok = { ...(mgr.blokStats ?? { durusSn: 0, muaf: 0 }) } // eski kod fallback (A/B stash koşusu)
+  // BEKÇİ (kalıcı sıkışma sigortası): sağlıklı akışta İKİSİ DE 0. Sıfırdan farklıysa
+  // rota bir yerde varılamayan hedefe çıkıyor demektir — sayı burada GÖRÜNÜR kalmalı.
+  const bekci = { yenidenRota: 0, kurtarma: 0, kurtarmaFaz: {}, ...(mgr.kurtarmaStats ?? {}) }
   if (!quiet) console.log(`${label}: servis=${served} kayıp=${lost} giremeyen=${turnedAway}${highway ? ' rampKayıp=' + rampLost : ''}`
     + ` | buharlaşma=${st.total} | kalıcı sıkışan=${stuck}`
     + ` | ÇAKIŞMA ${cakOrt.toFixed(1)} çift/kare · içiçe ${cakAgirOrt.toFixed(2)} (akış ${icAkisOrt.toFixed(2)} + yerleşim ${icDuranOrt.toFixed(2)})`
@@ -332,7 +335,9 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     + ` · <2.66 ${kuyrukIhlal}/${kuyrukCift} · <2.5 ${kuyrukSert}`
     + ` | ÇIKIŞ çift min ${isFinite(cikMin) ? cikMin.toFixed(2) : '—'} · <2.66 ${cikIhlal}/${cikCift} · duran<2.5 olay ${cikOlay} (anlık ${cikSert})`
     + ` | blok duruş ${blok.durusSn.toFixed(0)}sn muaf ${blok.muaf}`
-    + ` · çıkış duruş ${(blok.cikisDurusSn ?? 0).toFixed(0)}sn muaf ${blok.cikisMuaf ?? 0}`)
+    + ` · çıkış duruş ${(blok.cikisDurusSn ?? 0).toFixed(0)}sn muaf ${blok.cikisMuaf ?? 0}`
+    + ` | BEKÇİ rota ${bekci.yenidenRota} kurtarma ${bekci.kurtarma}`
+    + (bekci.kurtarma ? ` ${JSON.stringify(bekci.kurtarmaFaz)}` : ''))
   const park = { varis: parkVaris, cakisma: pOrnek ? pCakisma / pOrnek : 0,
     agir: pOrnek ? pAgir / pOrnek : 0, disari: pDisari, disariOrnek: pDisariOrnek,
     duranIcice: pDuranIcice, duranMin: pDuranMin, olay: pOlay, zirve: parkZirve }
@@ -345,7 +350,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   return { st, stuck, served, rampLost, laneUse: svcSpawns, cakisma: cakOrt, cakismaAgir: cakAgirOrt,
     icAkis: icAkisOrt, icDuran: icDuranOrt, flow: fl, apronMax, turnedAway, park,
     kuyruk: { cift: kuyrukCift, ihlal: kuyrukIhlal, sert: kuyrukSert, min: kuyrukMin, zirve: kuyrukZirve },
-    cikis: { cift: cikCift, ihlal: cikIhlal, sert: cikSert, olay: cikOlay, min: cikMin }, blok }
+    cikis: { cift: cikCift, ihlal: cikIhlal, sert: cikSert, olay: cikOlay, min: cikMin }, blok, bekci }
 }
 
 let fail = 0
@@ -383,6 +388,12 @@ for (const [n, r] of on) {
     `${kod}: kuyrukta ${r.kuyruk.ihlal}/${r.kuyruk.cift} çift < 2.66 — iç içelik sürüyor`)
   kontrol(r.blok.muaf === 0, `${kod}: 30 sn kilitlenme kapısı hiç gerekmedi (muaf 0)`,
     `${kod}: kilitlenme kapısı ${r.blok.muaf} kez açıldı — blok bir yerde kalıcı kilit üretiyor`)
+  // BEKÇİ SESSİZ KALMALI: sağlıklı yerleşimde hiçbir araç sıkışmaz, dolayısıyla ne
+  // yeniden rota ne kurtarma gerekir. Sıfırdan farkı, rotanın varılamayan bir hedefe
+  // çıktığının kanıtıdır (tools/tests/bekci-check.mjs bunun tersini ölçüyor).
+  kontrol(r.bekci.kurtarma === 0 && r.bekci.yenidenRota === 0,
+    `${kod}: bekçi hiç gerekmedi (yeniden rota 0 · kurtarma 0)`,
+    `${kod}: bekçi çalıştı — yeniden rota ${r.bekci.yenidenRota}, kurtarma ${r.bekci.kurtarma} ${JSON.stringify(r.bekci.kurtarmaFaz)}`)
 }
 
 console.log('--- OTOYOL (ramp/merge) ---')
@@ -446,6 +457,9 @@ kontrol(t8.cikis.olay === 0, `T8: ÇIKIŞTA ≥2 sn süren duran çift < 2.5 YOK
   `T8: çıkışta ${t8.cikis.olay} kez ≥2 sn duran çift < 2.5 — çıkış konveyörü donmuş kuyruk üretiyor`)
 kontrol((t8.blok.cikisMuaf ?? 0) === 0, 'T8: çıkış 30 sn kapısı hiç gerekmedi (cikisMuaf 0)',
   `T8: çıkış kilitlenme kapısı ${t8.blok.cikisMuaf} kez açıldı — blok çıkışta kalıcı kilit üretiyor`)
+kontrol(t8.bekci.kurtarma === 0 && t8.bekci.yenidenRota === 0,
+  'T8: baskı altında bile bekçi hiç gerekmedi (yeniden rota 0 · kurtarma 0)',
+  `T8: bekçi çalıştı — yeniden rota ${t8.bekci.yenidenRota}, kurtarma ${t8.bekci.kurtarma}`)
 
 // ---- T9: OTOPARK YOĞUN ----
 // Oyuncu ekran görüntüsü: park yerleri (beyaz çizgili slotlar) BOŞ dururken araçlar
@@ -491,6 +505,12 @@ console.log('--- T9: OTOPARK YOĞUN (park koridoru pompa sırasının dibinde) -
   kontrol(t9.park.olay === 0,
     `T9: park fazında ≥2 sn süren DURAN çift < 2.15 YOK (anlık ${t9.park.duranIcice} · min ${isFinite(t9.park.duranMin) ? t9.park.duranMin.toFixed(2) : '—'})`,
     `T9: ${t9.park.olay} kez ≥2 sn park çifti < 2.15 — canlı küme lab'da duruyor`)
+  // Bekçi dalında bu çit "kurtarma > 0" idi (park kolu geometri L'siyle bulunamayınca hayalet
+  // çıkış devreye giriyordu). Şerit ağı + A* yedeği (64af362) birleşince ölçüm 0'a düştü:
+  // park koridoruna A* rota buluyor, bekçinin işi kalmıyor. Ölçüm: rota 0 · kurtarma 0.
+  kontrol(t9.bekci.kurtarma === 0 && t9.bekci.yenidenRota === 0,
+    'T9: otoparkta bekçi hiç gerekmedi (A* park koridorunu buluyor · kurtarma 0)',
+    `T9: bekçi devrede — yeniden rota ${t9.bekci.yenidenRota} · kurtarma ${t9.bekci.kurtarma} (A* park kolunu bulamıyor)`)
 }
 
 // ---- T11: BİTİŞİK OTOPARKLAR (canlı parked+parked kümesinin laboratuvar kopyası) ----
@@ -587,6 +607,9 @@ console.log('--- T10: TEK POMPA YOĞUN (gün-1 istasyonu, telemetri kümesinin k
     `T10: kilitlenme kapısı ${t10.blok.muaf} kez açıldı`)
   kontrol(t10.icAkis <= 0.3, `T10: iç içe (AKIŞ) ${t10.icAkis.toFixed(2)} ≤ 0.3`,
     `T10: iç içe (AKIŞ) ${t10.icAkis.toFixed(2)} > 0.3`)
+  kontrol(t10.bekci.kurtarma === 0 && t10.bekci.yenidenRota === 0,
+    'T10: sürekli dolu kuyrukta bile bekçi hiç gerekmedi (yeniden rota 0 · kurtarma 0)',
+    `T10: bekçi çalıştı — yeniden rota ${t10.bekci.yenidenRota}, kurtarma ${t10.bekci.kurtarma}`)
   kontrol(t10.turnedAway > 0, `T10: ${t10.turnedAway} müşteri kapasiteden giremedi (tek pompa, doğal)`,
     'T10: tek pompa yoğun saatte hiç kapasite baskısı üretmedi — senaryo yanlış kurulmuş')
 }

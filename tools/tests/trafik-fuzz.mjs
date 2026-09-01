@@ -13,8 +13,12 @@
 // KULLANIM: npx tsx tools/tests/trafik-fuzz.mjs --n 40 --sure 300 --seed 1 --raporla
 //
 // ÖLÇÜTLER (yerleşim başına):
-//   SIKIŞAN  hareket fazındaki araç, blokT == 0 iken ≥30 sn boyunca <0.12 birim/sn yol aldı
-//            (blokT > 0 = konveyör kuralının BİLEREK durdurduğu araç; o bir kusur değil)
+//   SIKIŞAN  hareket fazındaki araç, blokT == 0 iken ≥36 sn boyunca <0.12 birim/sn yol aldı
+//            (blokT > 0 = konveyör kuralının BİLEREK durdurduğu araç; o bir kusur değil).
+//            36 = bekçinin kurtarma sınırı (30 sn) + sürünme/örnekleme payı (6 sn): bekçi zamanında
+//            kurtardıysa araç sıkışan DEĞİLDİR (kalıcı sıkışma imkânsız garantisi bu),
+//            ama kurtarma sayısı ayrı kalem olarak raporlanır (KURTARMA) — sıfır olması
+//            beklenmez, zorla-* yerleşimleri bilerek yolun üstüne bina diker.
 //   YIĞIN    ≥3 araç birbirine 1.0 birim mesafede ≥5 sn takıldı
 //   İÇİÇE    çift mesafesi <2.15 (gövde 2.66'nın altı) ≥2 sn sürdü — faz çiftine göre
 //   ZOMBİ    SIKIŞAN araç bir kaynağı (kuyruk slotu / pompa slotu / park yeri / tır yeri)
@@ -422,7 +426,10 @@ function gercekYerlesim(dosya) {
 
 // ═══════════════════ 3) KOŞUM + SIKIŞMA DEDEKTÖRLERİ ═══════════════════
 const HAREKET = new Set(['driving', 'toPark', 'leaving'])
-const SIKIS_ESIK = 0.12, SIKIS_SN = 30
+// bekçi 30 sn'de kurtarır (BEKCI_KURTARMA_SN) ama saati "0.5 birim ilerleme yok"tan başlar;
+// 0.12 birim/sn'nin altında SÜRÜNEN araç 0.5 birimi ~4 sn'de alır → bekçi saati bizimkinden
+// 4 sn geç başlayabilir (+1 sn örnekleme). Pay 6: ölçüldü (tohum 28: sürünme 3 sn, kurtarma 33.3 sn'de).
+const SIKIS_ESIK = 0.12, SIKIS_SN = 30, KURTARMA_PAYI = 6
 const YIGIN_MES = 1.0, YIGIN_SN = 5, YIGIN_ADET = 3
 const ICICE_MES = 2.15, ICICE_SN = 2
 
@@ -529,9 +536,10 @@ function kosuYerlesim(L, sure) {
         const yol = Math.hypot(p.x - z.sonX, p.y - z.sonY)
         z.sonX = p.x; z.sonY = p.y
         // blokT > 0 → konveyör kuralı BİLEREK durdurdu; kusur değil, sayaç sıfırlanır
-        if (HAREKET.has(c.phase) && yol < SIKIS_ESIK && (c.blokT ?? 0) === 0) z.sikisT++
+        // hayalet = bekçi kurtardı, araç haritadan çıkıyor: sıkışan değil (KURTARMA kaleminde)
+        if (HAREKET.has(c.phase) && yol < SIKIS_ESIK && (c.blokT ?? 0) === 0 && !c.hayalet) z.sikisT++
         else z.sikisT = 0
-        if (z.sikisT >= SIKIS_SN && !z.bildirildi) {
+        if (z.sikisT >= SIKIS_SN + KURTARMA_PAYI && !z.bildirildi) {
           z.bildirildi = true
           const yk = enYakin(p.x, p.y)
           const kaynak = []
@@ -613,6 +621,8 @@ function kosuYerlesim(L, sure) {
     genisKapi: L.wide, far: L.farOn, isik: !!L.isik,
     sikisan: say('SIKISAN'), zombi: say('ZOMBI'), yigin: say('YIGIN'), icice: say('ICICE'),
     reaktifKacis: Car.reaktifKacis - reaktif0, muaf: mgr.blokStats.muaf,
+    kurtarma: mgr.kurtarmaStats?.kurtarma ?? 0, yenidenRota: mgr.kurtarmaStats?.yenidenRota ?? 0,
+    kurtarmaFaz: { ...(mgr.kurtarmaStats?.kurtarmaFaz ?? {}) },
     blokDurusSn: +mgr.blokStats.durusSn.toFixed(0),
     akis: +mgr.flow.ort.toFixed(3), durmaOrani: +mgr.flow.durmaOrani.toFixed(3),
     buharlasma: mgr.evapStats?.total ?? 0,
@@ -666,8 +676,8 @@ const gecen = ((Date.now() - t0) / 1000).toFixed(1)
 // ---- yerleşim tablosu ----
 console.log(padr('tohum', 12) + padr('aile', 11) + pad('P', 3) + pad('E', 3) + pad('yapı', 5)
   + pad('park', 5) + pad('tır', 4) + pad('doğan', 6) + pad('servis', 7) + pad('kayıp', 6) + pad('giremz', 7)
-  + pad('SIKIŞ', 6) + pad('ZOMBİ', 6) + pad('YIĞIN', 6) + pad('İÇİÇE', 6) + pad('muaf', 5) + pad('akış', 6) + pad('kaçış', 6))
-console.log('─'.repeat(126))
+  + pad('SIKIŞ', 6) + pad('ZOMBİ', 6) + pad('YIĞIN', 6) + pad('İÇİÇE', 6) + pad('muaf', 5) + pad('akış', 6) + pad('kaçış', 6) + pad('KURT', 5))
+console.log('─'.repeat(131))
 for (const r of sonuclar) {
   const kotu = r.sikisan || r.zombi
   const bos = r.dogan < 50
@@ -675,7 +685,7 @@ for (const r of sonuclar) {
     + pad(r.pompa, 3) + pad(r.sarj, 3) + pad(r.yapi, 5) + pad(r.park, 5) + pad(r.tir, 4)
     + pad(r.dogan, 6) + pad(r.served, 7) + pad(r.lost, 6) + pad(r.turnedAway, 7)
     + pad(r.sikisan, 6) + pad(r.zombi, 6) + pad(r.yigin, 6) + pad(r.icice, 6)
-    + pad(r.muaf, 5) + pad((r.akis * 100).toFixed(0) + '%', 6) + pad(r.reaktifKacis, 6))
+    + pad(r.muaf, 5) + pad((r.akis * 100).toFixed(0) + '%', 6) + pad(r.reaktifKacis, 6) + pad(r.kurtarma, 5))
 }
 
 // ---- KATALOG: imzaya göre (faz çifti × en yakın yapı tipi × ünite açısı) ----
@@ -716,7 +726,8 @@ const sapmaLar = sonuclar.filter(r => r.sapma?.length)
 // istasyon çalışmıyor. Ayrı kalem olarak raporlanır, tek başına kapıyı kapatmaz.
 const kisirLar = sonuclar.filter(r => r.dogan >= 50 && r.served === 0)
 console.log(`\nTOPLAM: doğan ${top('dogan')} · servis ${top('served')} · SIKIŞAN ${top('sikisan')} · ZOMBİ ${top('zombi')}`
-  + ` · YIĞIN ${top('yigin')} · İÇİÇE ${top('icice')} · muaf ${top('muaf')} · reaktif kaçış ${top('reaktifKacis')}`)
+  + ` · YIĞIN ${top('yigin')} · İÇİÇE ${top('icice')} · muaf ${top('muaf')} · reaktif kaçış ${top('reaktifKacis')}`
+  + ` · BEKÇİ yeniden rota ${top('yenidenRota')} · KURTARMA ${top('kurtarma')}`)
 console.log(`Koşum süresi ${gecen} sn · sıkışan/zombi üreten yerleşim ${kirikLar.length}/${sonuclar.length}`)
 for (const r of sapmaLar) console.log(`! ${r.seed}: yuva türetmesi kayıtla AYRIŞTI → ${r.sapma.join(' | ')}`)
 if (bosLar.length) console.log(`✗ BOŞ KÜME: ${bosLar.map(r => `${r.seed}(${r.dogan})`).join(', ')} — <50 araç doğdu, bu yerleşimin yeşili SAYILMAZ`)

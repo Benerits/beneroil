@@ -21,6 +21,7 @@
     "test:smoke": "node tools/tests/smoke-oyun.mjs",
     "test:faz": "tsx tools/tests/faz-checks.mjs",
     "test:traffic": "tsx tools/tests/traffic-load.mjs",
+    "test:bekci": "tsx tools/tests/bekci-check.mjs",
     "test:sim": "tsx tools/tests/sim-smoke.mjs",
     "test:wealth": "tsx tools/tests/wealth-check.mjs",
     "test:news": "tsx tools/tests/news-check.mjs",

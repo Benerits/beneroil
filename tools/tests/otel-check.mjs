@@ -70,7 +70,9 @@ bekle(kirli.maintCare > kirliRef.maintCare,
 
 // ── #988 müdür tur sıklığı ──
 const durum = readFileSync(new URL('../../src/state.ts', import.meta.url), 'utf8')
-bekle(/const turSuresi = \[45, 45, 32, 22\]/.test(durum), 'müdür turu seviyeyle hızlanıyor (45/32/22 sn)')
+// 69d4597: tablo `MANAGER_TOUR_SEC` sabitine taşındı (offline toplama da aynı tabloyu okuyor)
+bekle(/MANAGER_TOUR_SEC = \[45, 45, 32, 22\]/.test(durum) && /managerTourSec\(\)/.test(durum),
+  'müdür turu seviyeyle hızlanıyor (45/32/22 sn, tek tablo MANAGER_TOUR_SEC)')
 const turla = lvl => {
   const g = zengin(); g.managerLevel = lvl
   for (const f of Object.keys(g.tanks)) g.tanks[f] = g.fuelCapacity(f)

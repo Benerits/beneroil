@@ -54,8 +54,10 @@ check('30 sn kilitlenme kapısı var (blokMuaf) ve sayacı telemetriye düşüyo
   /blokMuaf = true/.test(cars) && /blokStats/.test(cars))
 check('kural duruşu hardStuckT SAYILMIYOR (bekleme ≠ sıkışma)',
   /this\.hizOrani < 0\.15 && this\.blokFren >= 0\.15\) this\.hardStuckT \+= dt/.test(cars))
+// (tekne kapsam dışı ÇIKARKEN blokT'yi de sıfırlar: bayat sayaç, ilerleme bekçisini
+//  o araç için sonsuza dek dondururdu — bkz. cars.ts "BLOKT BAYAT KALMASIN")
 check('marina bloktan muaf (tekne boyu araç ölçeğinde değil)',
-  /if \(c\.boat\) continue/.test(cars))
+  /if \(c\.boat\) \{ c\.blokT = 0; continue \}/.test(cars))
 
 // ───────────────────────────────────────── 2) HEADLESS SİM
 // traffic-load.mjs'in kurulumunun sadeleşmiş hâli: tek pompa, yoğun giriş.
@@ -210,6 +212,12 @@ console.log('\n== 2c) 30 sn kilitlenme kapısı: elle kurulmuş kalıcı blok ==
   B.phase = 'driving'
   B.setPath([new THREE.Vector3(L.xIn, L.queue[0].y + L.dirY * 5, 0)])
   let durdu = false
+  // VARIŞ ANI YAKALANIR (bitişte değil): B'nin rotası hedefte tükenir ama fikstürde
+  // faz hâlâ 'driving' kalır (onArrive yok). İLERLEME BEKÇİSİ böyle bir aracı 6 sn
+  // sonra kendi kuyruk slotuna yeniden rotalar — oyunda DOĞRU davranış (rotası
+  // tükenmiş 'driving' araç tanımı gereği sıkışmıştır), fikstürde ise B'yi hedeften
+  // geri götürür. İddia "hedefe VARDI" olduğu için varış anında ölçülür.
+  let vardiAn = false
   for (let i = 0; i < 500; i++) {
     mgr.update(0.1)
     A.group.position.set(L.xIn, L.queue[0].y, 0) // A sabitlenir (kuyruk ilerletme dahil hiçbir şey oynatamaz)
@@ -217,8 +225,9 @@ console.log('\n== 2c) 30 sn kilitlenme kapısı: elle kurulmuş kalıcı blok ==
     if (B.waitIndex !== 1) { B.waitIndex = 1; mgr['waitOcc'][1] = B }
     const gap = Math.hypot(B.group.position.x - A.group.position.x, B.group.position.y - A.group.position.y)
     if (i === 100) durdu = gap >= 2.4 && gap <= 3.2 && B.moving
+    if ((B.group.position.y - (L.queue[0].y + L.dirY * 5)) * L.dirY >= -0.5) vardiAn = true
   }
-  const vardi = (B.group.position.y - (L.queue[0].y + L.dirY * 5)) * L.dirY >= -0.5 || !B.moving
+  const vardi = vardiAn
   check('blok B\'yi öndekinin 2.4-3.2 bandında DURDURDU (10. sn kontrolü)', durdu,
     `gap ${Math.hypot(B.group.position.x - A.group.position.x, B.group.position.y - A.group.position.y).toFixed(2)}`)
   check(`kilitlenme kapısı ÇALIŞIYOR: ${mgr.blokStats.muaf} kez açıldı (kasıtlı kilitte açılması ŞART)`,

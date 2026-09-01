@@ -50,6 +50,11 @@ const FIKSTUR = [
     slots: { pump: [[1.8, -2.2], [1.8, 2.2], [1.8, -14], [1.8, -18], [1.8, -18], [1.8, -18]], ev: [] }, yapi: [] } },
   { id: 3, kind: 'sikisma', created_at: 'ornek', payload: { k: 'sikisma', day: 12, loc: 'otoyol', pumps: 2, ev: 1,
     cars: [[8, 4, 'driving', -1, 'fuel']], slots: { pump: [[1.8, -2.2], [1.8, 2.2]], ev: [[1.8, 6.2]] }, yapi: [] } },
+  // 'kurtarma' = bekçi bir aracı kilitten çıkardı (en ağır tür, src/cars.ts BEKCI_*).
+  // Fikstürde de var ki --ornek boru hattı yeni türü kümeleme/replay ile birlikte gezsin.
+  { id: 4, kind: 'kurtarma', created_at: 'ornek', payload: { k: 'kurtarma', day: 58, loc: 'kasaba', pumps: 3, ev: 0,
+    cars: [[2.0, 2.3, 'toPark', -1, 'fuel'], [1.9, -0.1, 'toPark', -1, 'fuel'], [1.9, 0.1, 'leaving', -1, 'fuel']],
+    slots: { pump: [[1.8, -2.2], [1.8, 2.2], [1.8, 6.2]], ev: [] }, yapi: [['parking', 0.4, -0.2, 0]] } },
 ]
 
 async function olaylariGetir() {

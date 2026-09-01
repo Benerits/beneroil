@@ -82,8 +82,11 @@ const yasak = ['softPassT', 'stuckHits', 'recoverStuck', 'dodgeRight', 'evaporat
 for (const y of yasak) bekle(!carsKod.includes(y), `müzakere katmanı geri gelmemiş: ${y}`)
 bekle(/LaneNetwork/.test(cars), 'şerit ağı (LaneNetwork) kullanılıyor')
 bekle(/kuyrukIlerlet/.test(cars), 'kuyruk sabit slotlarda İLERLİYOR (araç slota kayar)')
-bekle(/speedScale = Math\.min\(c\.speedScale, Math\.max\(0\.3/.test(cars),
-  'hız eşitlemesi tabanı 0 DEĞİL (kimse durmaz → kilitlenme imkânsız)')
+// fbcf15e: sabit 0.3 tabanı `taban` değişkenine taşındı — AYNI YÖNDE ve hareket eden
+// öndeki için öndekinin hızına (≥0.15) inebilir, diğer her durumda 0.3. Sıfır asla değil.
+bekle(/speedScale = Math\.min\(c\.speedScale, Math\.max\(taban, forward \/ sep\)\)/.test(cars)
+  && /const taban = ayniYon && o\.hizOrani >= 0\.15 \? Math\.min\(0\.3, o\.hizOrani\) : 0\.3/.test(cars),
+  'hız eşitlemesi tabanı 0 DEĞİL (≥0.15 ya da 0.3; kimse durmaz → kilitlenme imkânsız)')
 const serit = readFileSync(new URL('../../src/traffic-graph.ts', import.meta.url), 'utf8')
 bekle(!/tryAcquire|RESERVE_TTL|waitQ/.test(yorumsuz(serit)), 'rezervasyon defteri silinmiş')
 bekle(/UNIT_CLEAR/.test(serit) && /LANE_SEP/.test(serit), 'şerit ayrıklığı sabitlerle garanti')

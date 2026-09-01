@@ -789,6 +789,11 @@ export class LaneNetwork {
     // dönüyor, sonra yola çıkıyordu. Ekranda kapı ağzında küçük bir "S" kıvrımı,
     // ölçümde gereksiz yol. Her iki yakada da simetrik olarak oluyordu.
     const dOut = L.sideSign * (L.xOut - L.gateX) // kapıdan avlunun içine derinlik
+    // ARAÇ ZATEN YOLDAYSA (kapının yol tarafında) avluya GERİ SOKULMAZ (2 Eyl, fuzz):
+    // T1 yeniden rota yoldaki çıkan aracı buradan geçirince rota giden omurgadan
+    // başlıyor, araç yoldan avluya dönüp kapıdan tekrar çıkıyordu — her 6 sn'de bir,
+    // sonsuz döngü. Yoldaki aracın tek işi kalan yol bacağı.
+    if (L.sideSign * (from.x - L.gateX) < -0.3) return [{ x: L.lane, y: L.dirY * 44 }]
     // DÖNDÜRÜLMÜŞ ÜNİTE: çıkış kolu da gövdenin ucundan dolanır (giriş koluyla aynı kalıp)
     const kol = this.kolBul(L, from)
     const yol: Pt[] = kol && kol.cikis.length > 2

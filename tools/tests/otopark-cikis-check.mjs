@@ -69,7 +69,7 @@ check('çıkışın ayrı 30 sn kapısı defteri var (cikisMuaf/cikisDurusSn)',
 check('karşı akış muafiyeti korunuyor (heading zıtsa blok yok)',
   /od\.x \* dir\.x \+ od\.y \* dir\.y < -0\.3\) continue/.test(carsSrc))
 check('marina çıkış bloğundan da muaf (tekne boyu araç ölçeğinde değil)',
-  /if \(c\.boat\) continue/.test(carsSrc))
+  /if \(c\.boat\) \{ c\.blokT = 0; continue \}/.test(carsSrc))   // bekçi dalı: kapsam dışına çıkan aracın sayacı da sıfırlanır
 // VARSAYILAN OTOPARK KONUMU (1 Eyl, 0-park kök nedeni): 2-yatak ızgarasında eski
 // varsayılan (0.4,−2.0) batı yatağını pompa gövdesinin GÜVENLİ PAYLI zarfına (insideSolid
 // +0.45) sokuyordu — yatak MERKEZİ katı sayılınca hiçbir yanaşma cephesi kurtaramaz,

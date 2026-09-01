@@ -112,6 +112,10 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_sikisan int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_bekleyen int NOT NULL DEFAULT 0`)
   await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_ornek int NOT NULL DEFAULT 0`)
+  // KURTARILAN: kalıcı sıkışmayı kıran son çare sigortasının kaç kez çektiği (cars.ts
+  // bekçisi). SAĞLIKLI SÜRÜMDE 0 OLMALI — sıfırdan farklı bir trend, rota katmanında
+  // araçların varamadığı hedefler kaldığının kanıtıdır.
+  await pool.query(`ALTER TABLE benzinlik_stat_hourly ADD COLUMN IF NOT EXISTS trafik_kurtarilan int NOT NULL DEFAULT 0`)
   // TRAFİK OLAY KAYDI — anomali ANINDA sahnenin tam durumu. Her satır tek başına
   // yeniden kurulabilir bir hata raporudur (istemci: src/trafik-olay.ts, replay
   // kancası: __dbg.kayit.trafikSahnesi). PII YOK: yalnız oyun durumu.
@@ -867,7 +871,7 @@ async function bumpStat(kind) {
 }
 /** Saatlik sayaçlara DEĞER ekler (bumpStat 1 artırır; trafik ölçümü toplam gönderir).
  *  Kolon adları SQL'e enterpole edildiği için yalnız BEYAZ LİSTE geçer. */
-const STAT_TOPLAM_KOLON = new Set(['trafik_icice', 'trafik_sikisan', 'trafik_bekleyen', 'trafik_ornek'])
+const STAT_TOPLAM_KOLON = new Set(['trafik_icice', 'trafik_sikisan', 'trafik_bekleyen', 'trafik_kurtarilan', 'trafik_ornek'])
 async function bumpStatBy(kolonlar) {
   if (!pool) return
   const alanlar = Object.keys(kolonlar).filter(k => STAT_TOPLAM_KOLON.has(k))
@@ -1081,7 +1085,8 @@ async function handleApi(req, res, url) {
           const n = v => Math.max(0, Math.min(1_000_000, Math.round(Number(v) || 0)))
           await bumpStatBy({
             trafik_icice: n(mb.icice), trafik_sikisan: n(mb.sikisan),
-            trafik_bekleyen: n(mb.bekleyen), trafik_ornek: n(mb.ornek),
+            trafik_bekleyen: n(mb.bekleyen), trafik_kurtarilan: n(mb.kurtarilan),
+            trafik_ornek: n(mb.ornek),
           })
         }
         return json(res, 200, { ok: true })
@@ -1100,7 +1105,9 @@ async function handleApi(req, res, url) {
       if (raw === null) return json(res, 413, { error: 'too big' })
       let o = null
       try { o = raw ? JSON.parse(raw) : null } catch { o = null }
-      const KINDS = new Set(['icice', 'sikisma', 'yigilma', 'kuyruk'])
+      // 'kurtarma': bekçi bir aracı kilitten çıkardı (istemci: cars.ts BEKCI_*). En ağır
+      // kayıt türü — sahne, sigortanın çektiği ANI içerir.
+      const KINDS = new Set(['icice', 'sikisma', 'yigilma', 'kuyruk', 'kurtarma'])
       const kind = String((o && o.k) || '')
       if (!o || !KINDS.has(kind)) return json(res, 400, { error: 'kind' })
       const day = Math.max(0, Math.min(1_000_000, Math.round(Number(o.day) || 0)))
