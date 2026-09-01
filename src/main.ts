@@ -2070,11 +2070,16 @@ function removeBuildingVisual(id: string) {
   // kalıyordu (state sayacı düşmüş, görsel duruyor). İki biçim de sahne id'sine çevrilir.
   const pi = unitIndex(id, 'pump')
   const ci = unitIndex(id, 'charger')
-  if (pi !== null) cars.evictSlot('fuel', pi)
-  else if (ci !== null) cars.evictSlot('ev', ci)
+  // ÜNİTELERDE DE "TIKLANAN GİDER" (#1289): state sayacı zaten düştü, yani sahneden
+  // kalkması gereken görsel SON indeks (pump-${state.pumps}); tıklanan ortadaysa
+  // sonuncunun konumu/açısı tıklanan indekse geçer (aşağıdaki sayılabilir-tesis kalıbı).
+  const uniteSon = pi !== null ? state.pumps : ci !== null ? state.evChargers : null
+  const uniteTik = pi ?? ci
+  if (pi !== null) { cars.evictSlot('fuel', pi); cars.evictSlot('fuel', state.pumps) }
+  else if (ci !== null) { cars.evictSlot('ev', ci); cars.evictSlot('ev', state.evChargers) }
   const countable = COUNTABLE[base]?.()
-  const target = pi !== null ? `pump-${pi}`
-    : ci !== null ? `charger-${ci}`
+  const target = pi !== null ? `pump-${uniteSon}`
+    : ci !== null ? `charger-${uniteSon}`
     : (countable !== undefined)
       ? (countable === 0 ? base : `${base}#${countable}`)
       : id
@@ -2085,10 +2090,18 @@ function removeBuildingVisual(id: string) {
   // Çözüm ikisini de korur: görsel olarak son örnek kaldırılır (dizi bütün kalır),
   // ardından TIKLANAN örnek, kaldırılanın konumuna taşınır. Sonuç: ayakta kalan
   // konumlar kümesi = eskisi eksi TIKLANAN nokta. Tam olarak oyuncunun istediği şey.
-  const sonPos = placedPos[target]
+  let sonPos = placedPos[target]
   const sonRot = placedRot[target]
   const sonRect = placedRects.find(r => r.id === target)
   const tiklanan = id.includes('#') ? Number(id.split('#')[1]) : 0
+  // Son ünitenin placedPos'u yoksa (varsayılan yuvada duruyor) konumu SAHNEDEN türet:
+  // placedPos ayak izi MERKEZİDİR, gövde değil (unitBodyPos'un tersi).
+  if (uniteSon !== null && uniteTik !== null && uniteTik < uniteSon && !sonPos) {
+    const b = pi !== null ? world.pumpBase[uniteSon] : world.evBase[uniteSon]
+    const dir = (pi !== null ? world.pumpAngles[uniteSon] : world.evAngles[uniteSon]) ?? 0
+    const off = pi !== null ? 0.9 : 0.5
+    if (b) sonPos = [b.x + Math.cos(dir) * off, b.y + Math.sin(dir) * off]
+  }
 
   world.removeBuildingGroup(target)
   delete placedPos[target]
@@ -2097,7 +2110,19 @@ function removeBuildingVisual(id: string) {
   if (ri >= 0) placedRects.splice(ri, 1)
 
   let yenidenKur = false
-  if (countable !== undefined && Number.isInteger(tiklanan) && tiklanan < countable && sonPos) {
+  const uniteOrtadan = uniteSon !== null && uniteTik !== null && uniteTik < uniteSon
+  if (uniteOrtadan && sonPos) {
+    const kalan = pi !== null ? `pump-${uniteTik}` : `charger-${uniteTik}`
+    world.removeBuildingGroup(kalan)   // tıklanan örneğin görseli de gider; rebuild yeni yerine kurar
+    placedPos[kalan] = sonPos
+    if (sonRot !== undefined) placedRot[kalan] = sonRot; else delete placedRot[kalan]
+    const ki = placedRects.findIndex(r => r.id === kalan)
+    if (sonRect) {
+      const yeni = { ...sonRect, id: kalan }
+      if (ki >= 0) placedRects[ki] = yeni; else placedRects.push(yeni)
+    } else if (ki >= 0) placedRects.splice(ki, 1)
+    yenidenKur = true
+  } else if (countable !== undefined && Number.isInteger(tiklanan) && tiklanan < countable && sonPos) {
     const kalan = tiklanan === 0 ? base : `${base}#${tiklanan}`
     placedPos[kalan] = sonPos
     if (sonRot !== undefined) placedRot[kalan] = sonRot; else delete placedRot[kalan]
@@ -5232,13 +5257,13 @@ ui.onRotate = id => {
   }
   placedRot[id] = yeni
   world.rotateBuilding(id, yeni)
-  // pompa/şarj: açı değişince araç yanaşma noktası da döner
-  if (id.startsWith('pump-')) {
+  // pompa/şarj: açı değişince araç yanaşma noktası da döner. #1306: şarj burada
+  // `addEvCharger` ile EKLENİYORDU (silmeden) → her döndürmede sahnede bir kopya
+  // daha birikiyordu ("kopyasını çıkardı, silinmiyor"). Taşımayla aynı yol (moveX +
+  // açıyla dönen gövde ofseti) kullanılır; sabit −0.9/−0.5 ofset 90°/270°'de yanlıştı.
+  if (id.startsWith('pump-') || id.startsWith('charger-')) {
     const p2 = placedPos[id]
-    if (p2) world.movePump(parseInt(id.slice(5)), new THREE.Vector2(p2[0] - 0.9, p2[1]), yeni)
-  } else if (id.startsWith('charger-')) {
-    const p2 = placedPos[id]
-    if (p2) world.addEvCharger(parseInt(id.slice(8)), new THREE.Vector2(p2[0] - 0.5, p2[1]), yeni)
+    if (p2) applyDynamicMove(id, p2[0], p2[1], yeni)
   }
   golgeTazele()
   Car.solids = hardRects()

@@ -3900,14 +3900,18 @@ export function sellInfo(s: GameState, id: string): { refund: number } | null {
   const base = id.split('#')[0]
   const inst = id.includes('#') ? Number(id.split('#')[1]) : 0
   const half = (c: number) => Math.round(c * SELL_REFUND)
+  // HER ÜNİTE SATILABİLİR (#1289 "7 DC şarjım var, sadece 1'i satılabiliyor"): eskiden
+  // yalnız SON indeks satılıyordu — kart öteki 6'sında Yık düğmesini hiç göstermiyordu.
+  // İade her zaman son kademenin bedelinden (sayaç 1 düşer); hangi örneğin gittiği
+  // main.removeBuildingVisual'da çözülür (tıklanan gider, sonuncunun yeri tıklanana geçer).
   const pi = unitIndex(id, 'pump')
   if (pi !== null) {
-    if (s.pumps <= 1 || pi !== s.pumps - 1) return null // en az 1 pompa kalmalı, sadece sonuncu
+    if (s.pumps <= 1 || pi < 0 || pi >= s.pumps) return null // en az 1 pompa kalmalı
     return { refund: half(PUMP_COSTS[s.pumps - 1]) }
   }
   const ci = unitIndex(id, 'charger')
   if (ci !== null) {
-    if (s.evChargers <= 0 || ci !== s.evChargers - 1) return null
+    if (s.evChargers <= 0 || ci < 0 || ci >= s.evChargers) return null
     return { refund: half(EV_COSTS[s.evChargers - 1]) }
   }
   switch (base) {
@@ -3950,8 +3954,16 @@ export function applySell(s: GameState, id: string): number | null {
   if (!info) return null
   const base = id.split('#')[0]
   s.money += info.refund
-  if (unitIndex(id, 'pump') !== null) { const i = s.pumps - 1; s.pumps--; s.brokenPumps.delete(i); s.autoPumps.delete(i) }
-  else if (unitIndex(id, 'charger') !== null) { const i = s.evChargers - 1; s.evChargers--; s.brokenChargers.delete(i); s.autoChargers.delete(i) }
+  // Ortadaki ünite satılınca SON ünitenin bayrakları (arıza/pompacı) tıklanan indekse
+  // geçer — sahnede de sonuncunun yeri o indekse geçiyor (removeBuildingVisual). Set'ler
+  // indeksle çalıştığı için bu taşıma yapılmazsa pompacı/arıza yanlış üniteye yapışırdı.
+  const tasi = (kume: Set<number>, i: number, son: number) => {
+    if (i !== son) { if (kume.has(son)) kume.add(i); else kume.delete(i) }
+    kume.delete(son)
+  }
+  const pi = unitIndex(id, 'pump'), ci = unitIndex(id, 'charger')
+  if (pi !== null) { const son = s.pumps - 1; s.pumps--; tasi(s.brokenPumps, pi, son); tasi(s.autoPumps, pi, son) }
+  else if (ci !== null) { const son = s.evChargers - 1; s.evChargers--; tasi(s.brokenChargers, ci, son); tasi(s.autoChargers, ci, son) }
   else switch (base) {
     case 'market': s.marketLevel = 0; break
     case 'market2': s.market2Level = 0; break

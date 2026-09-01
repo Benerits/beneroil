@@ -2434,9 +2434,12 @@ export class World {
 
   /** taşıma için: kayıtlı binayı sahneden kaldır */
   removeBuildingGroup(id: string) {
-    const b = this.buildings.find(x => x.id === id)
-    if (!b) return
-    this.scene.remove(b.group as THREE.Group)
+    // AYNI id birden fazla kayıtlıysa (register dedupe yapmaz; #1306 döndürme klonu) HEPSİ
+    // sahneden kalkar — eskiden yalnız ilki kalkıp geri kalanı unregister ile sahipsiz
+    // hayalet olarak sahnede kalıyordu ("kopyası silinmiyor", "taşınmıyor").
+    const list = this.buildings.filter(x => x.id === id)
+    if (!list.length) return
+    for (const b of list) this.scene.remove(b.group as THREE.Group)
     this.unregister(id)
     if (id === 'smr') this.steam = []
     if (id.startsWith('wind')) this.blades = this.blades.filter(x => x.id !== id)
