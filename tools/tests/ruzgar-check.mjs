@@ -150,5 +150,23 @@ check('yıpranma uyarısı sahnede rozet basıyor', /warns\.set\('wind'/.test(ma
 check('vitrin modunda kuruluyor', /'solar', 'wind', 'dieselgen'/.test(main_ts))
 check('i-wind ikonu tanımlı', /id="i-wind"/.test(oku('index.html')))
 
+
+console.log('\n== 9) MAĞAZA SEKMESİ — satır GÖRÜNÜR mü (CATEGORY_MAP) ==')
+// getShopItems'ta satır olması yetmiyor: ui.ts CATEGORY_MAP'te kategorisi yoksa
+// hiçbir sekmede render edilmez (rüzgâr böyle görünmez kalmıştı — mağazada vardı,
+// İnşaat sekmesinde yoktu). Genel kontrol: zengin bir oyuncunun TÜM mağaza satırları
+// ya haritada olmalı ya bilinen önek istisnası (berth_) olmalı.
+const ui_ts = oku('src/ui.ts')
+check("CATEGORY_MAP'te wind: 'enerji' var", /wind: 'enerji'/.test(ui_ts))
+{
+  const blok = ui_ts.slice(ui_ts.indexOf('const CATEGORY_MAP'), ui_ts.indexOf('const catOf'))
+  const anahtarlar = new Set([...blok.matchAll(/([a-zA-Z0-9_]+):\s*'/g)].map(m => m[1]))
+  const zengin = kur(); zengin.money = 99_000_000; zengin.gridLevel = 2
+  const gorunmez = getShopItems(zengin).map(r => r.id)
+    .filter(id => !anahtarlar.has(id) && !id.startsWith('berth_') && !id.startsWith('tankadd-'))
+  check('mağazadaki HİÇBİR satır kategorisiz (görünmez) değil', gorunmez.length === 0,
+    gorunmez.length ? `görünmez: ${gorunmez.join(', ')}` : '')
+}
+
 console.log(`\n${fail === 0 ? '✅' : '❌'} rüzgâr türbini: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail === 0 ? 0 : 1)

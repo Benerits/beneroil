@@ -1181,7 +1181,10 @@ export class World {
     // kanatlar: dönüş hızı rüzgâra orantılı (state.windFactor → main her karede yazar)
     if (this.blades.length) {
       const w = 2.4 * Math.max(0.12, this.windSpin)
-      for (const b of this.blades) b.mesh.rotation.y += w * dt
+      // EKSEN: kanat düğümü KENDİ yerel uzayında döner; modelde rotor düzlemi öne
+      // bakar, göbek ekseni yerel Z'dir. İlk sürüm Y'ye döndürüyordu — kanatlar
+      // pervane gibi değil ATLIKARINCA gibi yalpalıyordu (oyuncu bildirdi).
+      for (const b of this.blades) b.mesh.rotation.z += w * dt
     }
   }
 

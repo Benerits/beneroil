@@ -1341,6 +1341,9 @@ const EN: Record<string, string> = {
     'These are PERMANENT — your new station starts from here, not from zero.',
   'Kasana geçti': 'Credited to your cash',
   'Devraldığın kadro': 'Crew you inherited',
+  'Ortak hat kotası bugün doldu — yarın tazelenir': 'Shared supply line quota is used up for today — it refreshes tomorrow',
+  'Kota Doldu': 'Quota Used',
+  ' · hat kotası: {0}L': ' · line quota left: {0}L',
   '· pompacı': '· pump attendant',
   'Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.':
     'The pump attendant you lost in the handover has been rehired — with nobody on the pump, your shop, cafe, restaurant, car wash and oil change boxes were never filling up.',
@@ -3125,6 +3128,9 @@ const FR: Record<string, string> = {
     'Tout cela est PERMANENT — ta nouvelle station part d’ici, pas de zéro.',
   'Kasana geçti': 'Versé dans ta caisse',
   'Devraldığın kadro': 'Équipe héritée',
+  'Ortak hat kotası bugün doldu — yarın tazelenir': 'Le quota de la ligne partagée est épuisé pour aujourd\'hui — il se renouvelle demain',
+  'Kota Doldu': 'Quota épuisé',
+  ' · hat kotası: {0}L': ' · quota de ligne restant : {0} L',
   '· pompacı': '· pompiste',
   'Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.':
     'Le pompiste perdu lors de la cession a été réembauché — sans personne à la pompe, les tirelires de ta supérette, ton café, ton restaurant, ton lavage auto et ta vidange ne se remplissaient jamais.',

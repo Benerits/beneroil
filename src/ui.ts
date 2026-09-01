@@ -123,14 +123,24 @@ const CATEGORY_MAP: Record<string, string> = {
   // satır getShopItems'ta kalır çünkü buyItem fiyat/kilit bilgisini oradan okur
   widegate: 'istasyon', lamp: 'istasyon', manager: 'ofis', train: 'istasyon',
   insurance: 'istasyon', renew: 'istasyon', fueldock: 'istasyon',
+  // GENEL KONTROLÜN İLK AVI (ruzgar-check §9): bu üçü sekme sisteminden beri HİÇBİR
+  // kategoride değildi — yani mağazadan satın alınamıyordu (git log -S doğruladı:
+  // haritaya hiç eklenmemişler). pumpspeed çekirdek ilerleme kalemi; otel en büyük
+  // pasif tesis; temizlikçi bakım otomasyonu. Kümeler: eğitim/sigorta gibi işletme
+  // kalemleri 'istasyon'da, o yüzden pumpspeed+cleaner oraya; hotel 'tesis'e.
+  pumpspeed: 'istasyon', cleaner: 'istasyon',
   market: 'tesis', market2: 'tesis', toilet: 'tesis', wash: 'tesis', selfwash: 'tesis', oil: 'tesis',
-  coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis', decor: 'tesis',
+  coffee: 'tesis', restaurant: 'tesis', truckpark: 'tesis', decor: 'tesis', hotel: 'tesis',
   // KARŞI YAKA NÜSHALARI (görünmezlik fixi): CATEGORY_MAP'te olmayan id hiçbir sekmeye
   // düşmüyor ve İnşaat'ta HİÇ listelenmiyordu — market2 eklenmiş, kardeşleri unutulmuştu
   toilet2: 'tesis', wash2: 'tesis', oil2: 'tesis', coffee2: 'tesis', restaurant2: 'tesis', truckpark2: 'tesis',
   chandlery: 'tesis', shower: 'tesis', clubhouse: 'tesis', icebait: 'tesis',
   travelift: 'tesis', pumpout: 'tesis', wasteoil: 'tesis', boom: 'tesis',
   grid: 'enerji', battery: 'enerji', evcharger: 'enerji', solar: 'enerji', dieselgen: 'enerji', smr: 'enerji',
+  // DİKKAT: yeni mağaza satırı eklerken buraya kategori YAZMAYI UNUTMA — yoksa satır
+  // hiçbir sekmede görünmez (rüzgâr türbini böyle görünmez kaldı: state'te satır vardı,
+  // İnşaat sekmesinde yoktu). ruzgar-check'teki genel kontrol artık bunu yakalıyor.
+  wind: 'enerji',
 }
 /** berth_* gibi önekli satırlar dahil kategori çözümü */
 const catOf = (id: string): string | undefined =>
@@ -812,10 +822,17 @@ export class UI {
         this.setText(btn, t('Yolda'))
         btn.disabled = true
       } else if (need < 100) {
-        // 2 oyuncu raporu: para yetmeyince de "Dolu" yazıyordu (orderNeed bütçeyle
-        // kırpılıyor) — yanıltıcı. Depoda yer varsa gerçek sebep: PARA.
+        // SEBEP TEŞHİSİ ÜÇ AYRI DURUM — canlı rapor (Oğuz, Çevre Yolu): ortak tedarik
+        // hattının günlük kotası bitince de "Para yetersiz" yazıyordu. Kasada ₺496k
+        // varken üç yakıtta birden "para yok" görmek oyuncuyu deli ediyor; gerçek
+        // sebep kotaydı ve EKRANDA HİÇ görünmüyordu. Öncelik sırası: kota > para > dolu
+        // (kota, para kontrolünden ÖNCE — ikisi birden sıfırsa asıl kilit kotadır).
         const space = cap - lvl
-        if (space >= 100) {
+        const hatKalan = state.supplyRemaining()
+        if (hatKalan < 100 && space >= 100) {
+          this.setText(info, t('Ortak hat kotası bugün doldu — yarın tazelenir'))
+          this.setText(btn, t('Kota Doldu'))
+        } else if (space >= 100) {
           this.setText(info, t('Para yetersiz — alış ₺{0}/L', state.buyPrice(f).toFixed(1)))
           this.setText(btn, t('Para Yok'))
         } else {
@@ -825,8 +842,11 @@ export class UI {
         btn.disabled = true
       } else {
         // oyuncu isteği: sipariş ekranında ALIŞ fiyatı görünsün
+        // hat varsa kalan kota da yazılır — oyuncu duvara TOSLAMADAN görsün
+        const hatK = state.supplyRemaining()
         this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap,
-          need, (state.buyPrice(f) * state.supplierMult()).toFixed(1)))
+          need, (state.buyPrice(f) * state.supplierMult()).toFixed(1))
+          + (isFinite(hatK) ? t(' · hat kotası: {0}L', Math.round(hatK).toLocaleString('tr-TR')) : ''))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }
