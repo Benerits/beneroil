@@ -294,11 +294,14 @@ function labelSprite(text: string): THREE.Sprite {
 /** sarı para rozeti — tıklanınca kasaya toplanır */
 function cashSprite(text: string, id: string): THREE.Sprite {
   const c = document.createElement('canvas')
-  c.width = 320; c.height = 104
+  // genişlik metne göre (ortak kumbara eki uzun) — ölçek aynı oranda büyür, yazı sıkışmaz
+  const olc = c.getContext('2d')!
+  olc.font = '800 52px -apple-system, sans-serif'
+  const w = Math.ceil(olc.measureText(text).width) + 92
+  c.width = Math.max(320, w + 16); c.height = 104
   const ctx = c.getContext('2d')!
   ctx.font = '800 52px -apple-system, sans-serif'
-  const w = ctx.measureText(text).width + 92
-  const x0 = (320 - w) / 2
+  const x0 = (c.width - w) / 2
   ctx.fillStyle = '#e8b62e'
   ctx.beginPath(); ctx.roundRect(x0, 10, w, 84, 42); ctx.fill()
   ctx.strokeStyle = '#a8791a'; ctx.lineWidth = 6; ctx.stroke()
@@ -317,7 +320,7 @@ function cashSprite(text: string, id: string): THREE.Sprite {
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, color: 0xe2e2e2 }))
-  sp.scale.set(2.3, 0.75, 1)
+  sp.scale.set(2.3 * c.width / 320, 0.75, 1)
   sp.userData.cashFor = id
   return sp
 }
@@ -1223,14 +1226,20 @@ export class World {
 
   /** kumbara rozetleri: id → tutar; tıklanınca toplanır */
   syncCash(list: Map<string, number>) {
+    // tür başına ünite sayısı: rozet metni "ortak" ekini yalnız çok üniteli tesiste alır
+    const adet = new Map<string, number>()
+    for (const b of this.buildings) { const k = b.id.split('#')[0]; adet.set(k, (adet.get(k) ?? 0) + 1) }
     for (const b of this.buildings) {
       // Kumbara TÜR bazlı tek kasadır ('selfwash') ama kopya binalar 'selfwash#1' id'li —
       // BASE id ile eşle: rozet TÜM ünitelerde görünür, HERHANGİ birine tıklamak ortak kasayı
       // toplar. ('3 self yıkamadan 1'i para veriyor' şikayetinin fixi — para hep birikiyordu,
       // sadece ilk ünitede gösteriliyordu.)
+      // #1274 (13 hava-su): her ünitede çıplak "₺300" görünce oyuncu 13×300 bekliyor, tek
+      // toplamada ₺300 gelince "3.600 eklenmedi" diyordu. Çok üniteli tesiste rozet
+      // ORTAK olduğunu kendisi söyler; aynı tutarın 13 kez yazılması artık toplanmaz.
       const base = b.id.split('#')[0]
       const amt = list.get(base)
-      const text = amt ? `₺${Math.round(amt)}` : null
+      const text = amt ? ((adet.get(base) ?? 1) > 1 ? `₺${Math.round(amt)} · ${t('ortak')}` : `₺${Math.round(amt)}`) : null
       if (text && b.cashText !== text) {
         if (b.cash) b.group.remove(b.cash)
         b.cash = cashSprite(text, base)

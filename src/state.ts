@@ -2935,6 +2935,9 @@ export class GameState {
   }
 
   private pendingTotal(): number { return Object.values(this.pendingCash).reduce((a, v) => a + (v || 0), 0) }
+  /** Kumbaralarda ŞU AN toplanmayı bekleyen para — toplandığında kasaya girecek tutar
+   *  (collectPending ile aynı prestij çarpanı). facTotal ile KARIŞTIRMA: o ömür boyu ciro. */
+  pendingWaiting(): number { return Math.round(this.pendingTotal() * this.prestigeMult()) }
   /** İŞLETME SERMAYESİ (Oğuz tanımı): tanktaki akaryakıtın SATIŞ fiyatıyla değeri —
    *  stok, satılınca kasaya dönecek para olarak okunur */
   workingCapital(): number { return FUELS.reduce((a, f) => a + this.tanks[f] * this.prices[f], 0) }

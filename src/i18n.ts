@@ -1037,6 +1037,7 @@ const EN: Record<string, string> = {
     'An EV customer COULDN’T REACH the free charger — its approach is blocked, move the building! Rating dropped.',
   'Boş şarj ünitesi ARIZALI — EV müşterisi kaçtı, tamir et! İtibar düştü.':
     'The free charger is BROKEN — an EV customer drove off, repair it! Rating dropped.',
+  'ortak': 'shared',
   'Müşteri tuvalet arıyordu, bulamadı!': 'A customer went looking for a restroom and found none!',
   'Yağ değişimi: +₺{0} kumbarada': 'Oil change: +₺{0} in the piggy bank',
   'Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':
@@ -2733,6 +2734,7 @@ const FR: Record<string, string> = {
     'Un client électrique N’A PAS PU ATTEINDRE la borne libre — l’accès est bloqué, déplace le bâtiment ! La note baisse.',
   'Boş şarj ünitesi ARIZALI — EV müşterisi kaçtı, tamir et! İtibar düştü.':
     'La borne libre est EN PANNE — un client électrique est reparti, répare-la ! La note baisse.',
+  'ortak': 'commune',
   'Müşteri tuvalet arıyordu, bulamadı!': 'Un client cherchait des toilettes et n’en a pas trouvé !',
   'Yağ değişimi: +₺{0} kumbarada': 'Vidange : +₺{0} dans la tirelire',
   'Jeneratör gürültüsünden rahatsız — yarısı kadar şarj isteyecek!':

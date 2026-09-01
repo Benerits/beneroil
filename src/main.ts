@@ -7507,7 +7507,11 @@ function frame() {
     // tesis kumbaralarında bekleyen para ona dahil değil. Oyuncu tesislerin kazandığını
     // görüp raporda bulamayınca "para kayboluyor" diyordu — kayıp yok, para henüz
     // toplanmamıştı. Rakam yalnız bekleyen para varken çıkar; tıklamaya davet eder.
-    const kumbara = Math.round(Object.values(state.facTotal).reduce((a, v) => a + v, 0))
+    // #1300 #1290 (1 Eyl): bu satır facTotal'ı (tesislerin ÖMÜR BOYU cirosu, sıfırlanmaz)
+    // topluyordu → her gün "₺3.925.278 toplanmayı bekliyor" yazıyor, oyuncu o parayı hiçbir
+    // yerde bulamayıp "diğer istasyonların parasını alamıyoruz" diyordu. Bekleyen para
+    // pendingCash'tir (collectPending ne verecekse o).
+    const kumbara = state.pendingWaiting()
     if (kumbara > 0) {
       ui.toast(t('Kumbaralarda ₺{0} toplanmayı bekliyor — bu tutar günün kârına DAHİL DEĞİL, topladığında kasaya girer.',
         kumbara.toLocaleString('tr-TR')), 'good', true)
