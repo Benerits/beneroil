@@ -74,7 +74,8 @@
     "test:vitrin": "tsx tools/tests/vitrin-check.mjs",
     "test:pompaslot": "tsx tools/tests/pompa-slot-check.mjs",
     "test:otoparkcikis": "tsx tools/tests/otopark-cikis-check.mjs",
-    "test:ruzgar": "tsx tools/tests/ruzgar-check.mjs"
+    "test:ruzgar": "tsx tools/tests/ruzgar-check.mjs",
+    "test:trafikfuzz": "tsx tools/tests/trafik-fuzz.mjs --n 40 --sure 300 --seed 1"
   },
   "dependencies": {
     "pg": "^8.22.0",
