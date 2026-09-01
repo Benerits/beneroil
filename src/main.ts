@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, SLOT_MIN_ARA, PARK_YER,
+import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, MARINA_PUMP_X, MARINA_PUMP_Y, TANK_POS, SLOT_MIN_ARA, PARK_YER,
   PUMP_SLOT_OFF, EV_SLOT_OFF } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { uniteKolu } from './traffic-graph'
@@ -4670,6 +4670,11 @@ function arsaSatSor(c: number, r: number) {
     })
 }
 
+/** Rıhtım pompası ayak izinin arazi testinde kıyıya kırpıldığı x (parsel col 0 sınırı 5.0). */
+const RIHTIM_X_MAX = 5.0
+/** Marina pompası su tarafına en çok bu kadar taşabilir (tekne yuvası 6.6'da kalır). */
+const RIHTIM_TASMA_MAX = 6.8
+
 function parcelAt(x: number, y: number): [number, number] | null {
   for (let c = 0; c < PARCEL_COLS.length; c++) for (let r = 0; r < PARCEL_ROWS.length; r++) {
     const [x0, x1] = PARCEL_COLS[c]
@@ -4695,14 +4700,21 @@ function isValidPlacement(p: Rect, skipId: string, grassOk: boolean, rot?: numbe
   // Sahiplik/beton kısıtı aşağıdaki landOk tarafından zaten uygulanır.
   // Karşı Market yalnız KARŞI yakaya kurulabilir (ziyaretler yaka-duyarlı; near'a kurulursa işlevsiz kalırdı)
   if (skipId.endsWith('2') && FAR_ONLY.has(skipId) && p.cx <= ROAD_X) return false
+  // MARİNA İSKELE POMPASI (#1307 "rıhtımdaki tahta zemine pompa konamıyor"): rıhtım
+  // pompası kıyıdan suya TAŞABİLİR (doğu kenarı 6.8'e kadar) — arazi testi kıyıya kırpılır.
+  // Şerit rezervleri (lane) marinada anlamsız (araba yok, tekneler suda sıralanır) ve
+  // erişilebilirlik testi de kara şerit ağına bakar → ikisi de atlanır.
+  const rihtim = state.isMarina && skipId.startsWith('pump-')
+  if (rihtim && p.cx + p.w / 2 > RIHTIM_TASMA_MAX) return false
   for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
-    if (!landOk(p.cx + sx * (p.w / 2 - 0.2), p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
+    const x = p.cx + sx * (p.w / 2 - 0.2)
+    if (!landOk(rihtim ? Math.min(x, RIHTIM_X_MAX) : x, p.cy + sy * (p.d / 2 - 0.2), grassOk)) return false
   }
-  for (const o of fixedObstacles(skipId)) if (overlaps(p, o)) return false
+  for (const o of fixedObstacles(skipId)) if (!(rihtim && o.lane) && overlaps(p, o)) return false
   for (const o of placedRects) if (o.id !== skipId && overlaps(p, o)) return false
   // ÜNİTE KAPISI: pompa/şarj konduğu yerde ARAÇLA ULAŞILABİLİR olmalı. Açı bilinmeden
   // (rot verilmeden) sınanamaz — açı verilmeyen çağrılarda (açılış onarımı) eski davranış.
-  if (rot !== undefined && (skipId.startsWith('pump-') || skipId.startsWith('charger-'))
+  if (rot !== undefined && !rihtim && (skipId.startsWith('pump-') || skipId.startsWith('charger-'))
       && !uniteUlasilabilir(skipId, p.cx, p.cy, rot)) return false
   return true
 }
@@ -5093,6 +5105,7 @@ const COUNTABLE: Record<string, () => number> = {
  *  oyuncu orayı almamışsa oyun sahipsiz araziye kuruyordu) */
 function defaultSlotFree(kind: 'pump' | 'evcharger'): boolean {
   const i = kind === 'pump' ? state.pumps : state.evChargers
+  if (kind === 'pump' && state.isMarina) return marinaRihtimBos(i)
   const tablo = kind === 'pump' ? PUMP_SLOTS_POS : EV_SLOTS_POS
   // TABLO ARTIK 8 GİRİŞLİ: indeks kırpması (Math.min(i,3)) kalktı, taşarsa son giriş.
   // Ayak izi merkezi yuvadan TÜRETİLİR — ilk dört girişte sonuç eskisiyle birebir
@@ -5109,6 +5122,23 @@ function defaultSlotFree(kind: 'pump' | 'evcharger'): boolean {
   }
   const skip = kind === 'pump' ? `pump-${i}` : `charger-${i}`
   for (const o of placedRects) if (o.id !== skip && overlaps(p, o)) return false
+  return true
+}
+
+/** MARİNA: i. iskele pompasının rıhtım yuvası (MARINA_PUMP_Y) kurulabilir mi?
+ *  Kara tablosu burada GEÇERSİZ: gövde rıhtım hattında (x 4.0), ayak izi suya taşar
+ *  (x 6.2 > ada kıyısı 5.3) — o yüzden arazi testi kıyıya KIRPILMIŞ x ile yapılır,
+ *  şerit rezervleri (marinada araba yok) uygulanmaz. Yalnız parsel sahipliği/beton ve
+ *  sahnedeki gerçek yapılar (bina + öteki pompalar) sayılır. */
+function marinaRihtimBos(i: number): boolean {
+  const y = MARINA_PUMP_Y[i]
+  if (y === undefined) return false
+  const p = { cx: MARINA_PUMP_X, cy: y, w: 4.4, d: 4.0 }
+  for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
+    if (!landOk(Math.min(p.cx + sx * (p.w / 2 - 0.2), RIHTIM_X_MAX), p.cy + sy * (p.d / 2 - 0.2), false)) return false
+  }
+  for (const o of placedRects) if (o.id !== `pump-${i}` && overlaps(p, o)) return false
+  for (const o of fixedObstacles(`pump-${i}`)) if (!o.lane && overlaps(p, o)) return false
   return true
 }
 
@@ -5324,9 +5354,12 @@ trafikOlayKur({
   // oturumda hiç artmaz; arttığı an sahnenin tam durumu 'kurtarma' olayı olarak gider.
   kurtarma: () => cars.kurtarmaStats.kurtarma,
 }, !isFullMode && !isPromoMode)
-// VİTRİN MODU DEBUG KANCASI: yalnız ?full=1'de — headless E2E testler (ihale/filo
-// doğrulaması vb.) state'e erişebilsin. Normal oyunda ASLA açılmaz.
-if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
+// VİTRİN MODU DEBUG KANCASI: ?full=1'de ve YEREL geliştirme sunucusunda — headless E2E
+// testler (ihale/filo doğrulaması vb.) state'e erişebilsin. Canlıda (petrol.benerits.com)
+// ASLA açılmaz. Localhost eklendi çünkü marina gibi vitrinin kuramadığı şubeler ancak
+// GERÇEK KAYITLA (misafir save'i) test edilebiliyor (#1280/#1301 marina pompa yeri).
+const dbgAcik = isFullMode || /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+if (dbgAcik) (window as unknown as Record<string, unknown>).__dbg = {
   get state() { return state }, get cars() { return cars }, get world() { return world }, get att() { return attendantFigs },
   /** TRAFİK SAĞLIK SAYAÇLARI tek yerden (testler + canlı teşhis):
    *  blok = konveyör kuralı, bekci = kalıcı sıkışma sigortası (sağlıklıysa 0/0),
@@ -5354,6 +5387,23 @@ if (isFullMode) (window as unknown as Record<string, unknown>).__dbg = {
     rot(n: number) { if (placing) { placing.rot = ((n % 4) + 4) % 4; repositionPlacing(placing.cx, placing.cy) } },
     confirm() { confirmPlacement() },
     cancel() { cancelPlacement() },
+    /** "NEDEN KIRMIZI?" teşhisi: hayaletin bulunduğu noktada hangi kural reddediyor.
+     *  (#1280/#1301 marina "hep kırmızı" — oyuncu boş alan görüyor, sebep görünmüyor) */
+    neden() {
+      if (!placing) return null
+      const odd = placing.rot % 2 === 1
+      const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
+      const arazi: string[] = []
+      for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
+        const x = eff.cx + sx * (eff.w / 2 - 0.2), y = eff.cy + sy * (eff.d / 2 - 0.2)
+        if (!landOk(x, y, placing.grass)) arazi.push(`${x.toFixed(1)},${y.toFixed(1)}`)
+      }
+      const sabit = fixedObstacles(placing.id).filter(o => overlaps(eff, o)).map(o => `${o.cx},${o.cy} ${o.w}x${o.d}${o.lane ? ' şerit' : ''}`)
+      const yapi = placedRects.filter(o => o.id !== placing!.id && overlaps(eff, o)).map(o => o.id)
+      const unite = placing.id.startsWith('pump-') || placing.id.startsWith('charger-')
+      const ulasim = unite ? uniteUlasilabilir(placing.id, eff.cx, eff.cy, placing.rot) : true
+      return { arazi, sabit, yapi, ulasim }
+    },
     /** hayaletin durumu + GÖVDE önizlemesinin DÜNYA konumu (footprint merkezi değil) */
     ghost() {
       if (!placing) return null

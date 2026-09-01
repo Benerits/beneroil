@@ -90,6 +90,17 @@ export const EV_SLOTS_POS = [
   new THREE.Vector3(1.8, 16.4, 0),    // kuzey arsa: varsayılan tuvalet ile SMR arası boşluk
   new THREE.Vector3(-0.6, 20.6, 0),
 ]
+/** MARİNA İSKELE POMPASI VARSAYILAN Y'LERİ (gövde x hep 4.0 = rıhtım hattı).
+ *  İlk iki giriş kara tablosuyla AYNI (−2.2 / 2.2 — mevcut marina kayıtları birebir
+ *  korunur). 3. ve 4. pompa eskiden kara tablosundan y −14 / −18 alıyordu: orası hem
+ *  GÜNEY parsel (marinada satın alınmıyor) hem de yakıt iskelesi / pompout kulübelerinin
+ *  yuvası — üstelik `defaultSlotFree` kara tablosuna bakıp "dolu" deyince oyuncu 4.4×4'lük
+ *  KARA ayak izini adaya sığdırmaya düşüyordu; tek parsel + market + ofis + tank + tuvalet
+ *  ile 0 geçerli nokta kalıyordu (#1280 #1298 #1301 #1303 #1307 — beş oyuncu).
+ *  Yeni: 3./4. pompa rıhtımda ilk ikisinin iki yanına (±6.6) dizilir; yuvalar 4.4 aralıklı
+ *  (SLOT_MIN_ARA 2.8'in üstünde), hepsi ana parsel (y −10..10) içinde. */
+export const MARINA_PUMP_Y = [-2.2, 2.2, -6.6, 6.6]
+export const MARINA_PUMP_X = 4.0
 /** Aynı türden iki ünite yuvasının izin verilen EN KISA mesafesi. Altına düşen çift
  *  yeniden kurulumda ayrıştırılır (main.ts uniteleriAyristir). Araç gövdesi 2.66. */
 export const SLOT_MIN_ARA = 2.8
@@ -2444,7 +2455,9 @@ export class World {
     // gövde x'i 0 diye SABİT yazılı, y ise `[Math.min(index,3)]` ile 3'e KIRPILIYORDU:
     // konumu olmayan 4.,5.,6.,7. pompa aynı (0,−18) noktasında doğup üst üste biniyordu.
     const dv = varsayilanYuva(PUMP_SLOTS_POS, index)
-    const base = at ?? new THREE.Vector2(isWater ? 4.0 : dv.x - PUMP_SLOT_OFF, dv.y)
+    const base = at ?? (isWater
+      ? new THREE.Vector2(MARINA_PUMP_X, MARINA_PUMP_Y[index] ?? dv.y)
+      : new THREE.Vector2(dv.x - PUMP_SLOT_OFF, dv.y))
     // Karşı (yol karşısı) istasyonda araç kapıya BATIDAN yanaşır → araç yuvası pompanın batısında, ünite 180° döner.
     // Charger kalıbı: araç yanaşma slotu AÇIYLA birlikte döner — araç hep nozül tarafına yanaşır.
     const far = base.x > ROAD_X
