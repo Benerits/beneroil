@@ -1331,7 +1331,7 @@ function openOfficePanel() {
         : `<button class="btn sbuy good" id="of-hire-manager">${mL === 0 ? t('Müdür Tut') : t('Yükselt')} · ₺${tl(MANAGER_COSTS[mL])}</button>`
       const fireBtn = mL > 0 ? `<button class="btn sbuy" id="of-fire-manager" style="color:var(--red-dark)">${t('İşten Çıkar')}</button>` : ''
       head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><svg class="ic" style="vertical-align:-3px"><use href="#i-gear"/></svg> <b>${mL === 0 ? t('Müdür') : t('Müdür Sv.{0}', String(mL))}</b>${mL > 0 ? ` <span style="color:var(--muted);font-weight:650">· ${t('yovmiye ₺{0}/gün', String(MANAGER_WAGES[mL]))}</span>` : ''}</span>${btn}${fireBtn}`
-        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('45 sn’de bir tur: kumbaraları toplar + azalan tanklara yakıt siparişi verir; Sv.2 panel temizler; Sv.3 arıza tamir eder ve YAKIT İNDİRİMİ fırsatında tankları fulller. Sen başka şubedeyken şubeyi işletir — günlük net kazancı kasana otomatik yazılır.')}</div></div>`
+        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">${t('{0} sn’de bir tur (Sv.1 45 · Sv.2 32 · Sv.3 22): önce bakım/tamir, sonra kumbara + azalan tanklara yakıt siparişi; Sv.2 panel temizler + türbin bakımı; Sv.3 arıza tamir eder, reaktör bakımı + uranyum siparişi yapar, YAKIT İNDİRİMİ fırsatında tankları fulller. Sen başka şubedeyken şubeyi işletir — günlük net kazancı kasana otomatik yazılır.', String(state.managerTourSec()))}</div></div>`
       // ── MÜDÜR TALİMATLARI (#1145 "müdürün ne yapabileceğine biz karar vermeliyiz") ──
       if (mL > 0) {
         const pol = state.managerPolicy

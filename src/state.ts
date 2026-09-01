@@ -2655,9 +2655,51 @@ export class GameState {
         this.events.push(t('Müdür reaktör bakımını yapamadı — kasada ₺1.500 yok!'))
       }
     }
+    // ── BAKIM/TAMİR, YAKIT SİPARİŞİNDEN ÖNCE (#1239 "Sv.3 müdür arızaları gidermiyor",
+    // #1263 "müdür panelleri temizlemiyor") ── Yakıt siparişi BÜTÇEYE UYUMLU (orderNeed:
+    // kasanın tamamı eksi bir litre) → sipariş önce koşunca müdür her turda kasayı
+    // litreye çevirip ardından ₺300'lük panel / ₺800'lük pompa için parasız kalıyordu;
+    // bu adımlar üstelik SESSİZDİ. Reaktör için yapılan sıralama düzeltmesi (yukarıda,
+    // (b) BÜTÇE SIRASI) aynı gerekçeyle bütün bakım kalemlerine uygulandı: sabit ve ucuz
+    // olan bakım önce, esnek olan yakıt sonra — sipariş zaten kalan paraya uyum sağlar.
+    let cleaned = false
+    let ordered = 0
+    // Sv.2 politikası panel temizliği + TÜRBİN BAKIMI'nı birlikte yürütür: ikisi de
+    // "üretim tesisinin bakımı" işi, oyuncuya iki ayrı anahtar vermek gereksiz.
+    if (this.managerLevel >= 2 && pol.cleanSolar && this.hasWind && this.windWear > 0.35
+        && this.money >= WIND_SERVICE_COST) {
+      this.money -= WIND_SERVICE_COST; this.windWear = 0
+      this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
+    }
+    if (this.managerLevel >= 2 && pol.cleanSolar && this.hasSolar && this.solarDirt > 0.35) {
+      if (this.money >= 300) { this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true }
+      else this.events.push(t('Müdür panelleri temizleyemedi — kasada ₺300 yok!'))
+    }
+    // URANYUM SİPARİŞİ (iki ayrı oyuncu raporu: "müdür uranyum sipariş etmiyor").
+    // Bu da `fixBroken`'dan ÇIKARILDI: kendi talimatı (buyUranium) var, arıza tamiriyle
+    // ilgisi yok. Eskiden tamir kapalıyken uranyum siparişi de duruyordu.
+    if (this.managerLevel >= 3 && pol.buyUranium && this.hasSMR && this.uranium <= 20
+        && !this.uraniumPending && this.money >= URANIUM_COST) {
+      this.money -= URANIUM_COST
+      this.uraniumPending = true
+      this.uraniumEta = URANIUM_ETA
+      ordered++
+    }
+    if (this.managerLevel >= 3 && pol.fixBroken) {
+      let parasiz = false
+      for (const i of [...this.brokenPumps]) {
+        if (this.money < 800) { parasiz = true; break }
+        this.money -= 800; this.brokenPumps.delete(i); fixed++
+      }
+      for (const i of [...this.brokenChargers]) {
+        if (this.money < 1000) { parasiz = true; break }
+        this.money -= 1000; this.brokenChargers.delete(i); fixed++
+      }
+      // sessiz kalma (reaktörle aynı gerekçe): "müdür tamir etmiyor" okunmasın
+      if (parasiz) this.events.push(t('Müdür arızayı tamir edemedi — kasada tamir parası (₺800/₺1.000) yok!'))
+    }
     // YAKIT SİPARİŞİ (Oğuz: "müdür yakıt siparişini versin") — Sv.1'den itibaren:
     // tank %20'nin altına düşen her yakıt için sipariş verir (bütçe elveriyorsa)
-    let ordered = 0
     if (pol.orderFuel) {
       for (const f of FUELS) {
         if (this.tanks[f] >= this.fuelCapacity(f) * pol.fuelAt) continue
@@ -2679,37 +2721,6 @@ export class GameState {
         if (this.tanks[f] < this.fuelCapacity(f) * 0.80 && this.canOrder(f)) {
           if (this.placeOrder(f)) ordered++
         }
-      }
-    }
-    let cleaned = false
-    // Sv.2 politikası panel temizliği + TÜRBİN BAKIMI'nı birlikte yürütür: ikisi de
-    // "üretim tesisinin bakımı" işi, oyuncuya iki ayrı anahtar vermek gereksiz.
-    if (this.managerLevel >= 2 && pol.cleanSolar && this.hasWind && this.windWear > 0.35
-        && this.money >= WIND_SERVICE_COST) {
-      this.money -= WIND_SERVICE_COST; this.windWear = 0
-      this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
-    }
-    if (this.managerLevel >= 2 && pol.cleanSolar && this.hasSolar && this.solarDirt > 0.35 && this.money >= 300) {
-      this.money -= 300; this.solarDirt = 0; this.maintCare = Math.min(1, this.maintCare + 0.1); cleaned = true
-    }
-    // URANYUM SİPARİŞİ (iki ayrı oyuncu raporu: "müdür uranyum sipariş etmiyor").
-    // Bu da `fixBroken`'dan ÇIKARILDI: kendi talimatı (buyUranium) var, arıza tamiriyle
-    // ilgisi yok. Eskiden tamir kapalıyken uranyum siparişi de duruyordu.
-    if (this.managerLevel >= 3 && pol.buyUranium && this.hasSMR && this.uranium <= 20
-        && !this.uraniumPending && this.money >= URANIUM_COST) {
-      this.money -= URANIUM_COST
-      this.uraniumPending = true
-      this.uraniumEta = URANIUM_ETA
-      ordered++
-    }
-    if (this.managerLevel >= 3 && pol.fixBroken) {
-      for (const i of [...this.brokenPumps]) {
-        if (this.money < 800) break
-        this.money -= 800; this.brokenPumps.delete(i); fixed++
-      }
-      for (const i of [...this.brokenChargers]) {
-        if (this.money < 1000) break
-        this.money -= 1000; this.brokenChargers.delete(i); fixed++
       }
     }
     return (collected > 0 || cleaned || fixed > 0 || ordered > 0) ? { collected, cleaned, fixed, ordered } : null
