@@ -14,9 +14,14 @@ import { readFileSync } from 'node:fs'
 let hata = 0
 const bekle = (k, ad, ek = '') => { console.log(`${k ? '✅' : '❌'} ${ad}${ek ? ' · ' + ek : ''}`); if (!k) hata++ }
 const cars = readFileSync(new URL('../../src/cars.ts', import.meta.url), 'utf8')
+// Kesişim testi ARTIK yol-bul.ts'te: rota temizliğinin "temiz" dediğiyle yol bulucunun
+// "temiz" dediği ölçüt TEK KOPYA olmalı (ayrılırsa doğrulama katmanı sessizce yalan söyler).
+const yolbul = readFileSync(new URL('../../src/yol-bul.ts', import.meta.url), 'utf8')
 
 console.log('── KOD ──')
-bekle(/function segmentDikdortgeniKesiyor/.test(cars), 'segment/dikdörtgen kesişim testi var')
+bekle(/export function segmentDikdortgeniKesiyor/.test(yolbul), 'segment/dikdörtgen kesişim testi var (yol-bul.ts)')
+bekle(!/^function segmentDikdortgeniKesiyor/m.test(cars) && /import \{[^}]*segmentDikdortgeniKesiyor[^}]*\} from '\.\/yol-bul'/.test(cars),
+  'cars.ts kendi kopyasını tutmuyor, yol-bul.ts\'ten alıyor (tek ölçüt)')
 bekle(/function rotayiTemizle/.test(cars), 'rota temizleyici var')
 bekle(/tur < [1-9]\b/.test(cars), 'yineleme SINIRLI (sonsuz döngü yok)')
 bekle(/if \(!Car\.solids\.length \|\| yol\.length < 2\) return yol/.test(cars),
@@ -55,13 +60,36 @@ bekle(/car\.cikisYolu = temizRota/.test(cars), 'çıkış rotası pompaya VARIRK
 bekle(/function rotaPadi/.test(cars) && /isTruck \? 1\.35/.test(cars),
   'pay araç genişliğine göre (tır daha geniş)')
 
+// ── YOL BULUCU (A*) BAĞLANTISI ──
+// Sezgisel temizlik çözemediğinde eskiden SESSİZCE kirli rota dönüyordu. Artık her
+// bacak doğrulanır, kirli kalan bacak gerçek yol buluculla değiştirilir; o da
+// bulamazsa ölçüme (rotaKopukSayac) düşer.
+console.log('\n── YOL BULUCU BAĞLANTISI ──')
+bekle(/function rotayiDogrula/.test(cars), 'rota doğrulama katmanı var (her bacak denetleniyor)')
+bekle(/rotayiDogrula\(kaba, pad\)/.test(cars), 'temizRota sezgiselin çıktısını DOĞRULUYOR')
+bekle(/static rotaKopukSayac/.test(cars) && /rotaKopuk = false/.test(cars),
+  'çözülemeyen rota SESSİZ değil (rotaKopuk + sayaç)')
+bekle(/yolBul\(pos, hedef, rotaPadi\(this\)\)/.test(cars),
+  'reaktif kaçış artık A* yeniden planlama (14 aday sezgiseli yok)')
+bekle(!/for \(const r of \[2\.2, 3\.6\]\)/.test(cars),
+  'eski 14 aday kaçış sezgiseli SİLİNMİŞ')
+bekle(/engelleriAyarla\(Car\._solids, Car\.solidSurum\)/.test(cars),
+  'yol bulucu ızgarası Car.solids ile besleniyor')
+bekle(/export function yolBul/.test(yolbul) && /export function erisilebilir/.test(yolbul),
+  'yol-bul.ts yolBul() + erisilebilir() sunuyor')
+bekle(/blok\[cy \* NX \+ nx\] \|\| blok\[ny \* NX \+ cx\]/.test(yolbul),
+  'A* köşe kesme YASAK (çapraz adımda iki dik komşu da açık olmalı)')
+
 // ── davranış: kesişim matematiği doğru mu ──
 console.log('\n── KESİŞİM MATEMATİĞİ ──')
 // YALNIZ kesişim fonksiyonunu al (THREE gerektirmez) — gövdesi kapanınca kes.
-const bas = cars.indexOf('function segmentDikdortgeniKesiyor')
-const src = cars.slice(bas, cars.indexOf('\n}\n', bas) + 3)
+const bas = yolbul.indexOf('export function segmentDikdortgeniKesiyor')
+const src = yolbul.slice(bas, yolbul.indexOf('\n}\n', bas) + 3)
 const js = src
+  .replace(/^export /, '')
+  .replace(/: *\[number, number\]\[\]/g, '')
   .replace(/: *number/g, '').replace(/: *boolean/g, '')
+  .replace(/: *Dikdortgen/g, '')
   .replace(/: *\{[^}]*\}/g, '')
 const kesisiyor = new Function(js + '; return segmentDikdortgeniKesiyor')()
 
