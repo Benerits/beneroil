@@ -194,6 +194,13 @@ const olay = await import('../../src/trafik-olay.ts')
     check('sıkışma: 44 sn hareketsizlikte olay YOK', g.length === 0, String(g.length))
     sur(2)
     check('sıkışma: 45 sn sonra olay gitti', g.length === 1 && g[0].govde.k === 'sikisma', JSON.stringify(g.map(x => x.govde.k)))
+    check('sıkışma: olay TETİKLEYEN aracı işaretliyor (hedef=[0])', JSON.stringify(g[0]?.govde.hedef) === '[0]', JSON.stringify(g[0]?.govde.hedef))
+  }
+  // 3d'') hedef işareti — iç içe: süren çiftin İKİ üyesi, seyirci araç değil
+  {
+    const g = kur(() => [araba(7, 30, 30, 'driving'), araba(1, 0, 0), araba(2, 1, 0)])
+    sur(3)
+    check('iç içe: hedef süren çiftin iki üyesi (seyirci hariç)', JSON.stringify(g[0]?.govde.hedef) === '[1,2]', JSON.stringify(g[0]?.govde.hedef))
   }
   {
     const g = kur(() => [araba(1, 3, 3, 'atPump')])

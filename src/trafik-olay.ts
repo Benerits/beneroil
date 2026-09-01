@@ -37,6 +37,9 @@ export interface TrafikOlay {
   cars: OlayAracSatiri[]
   slots: { pump: [number, number][]; ev: [number, number][] }
   yapi: OlayYapiSatiri[]
+  /** TETİKLEYEN araçların `cars` içindeki indeksleri (sıkışan araçlar / süren iç içe çiftin
+   *  iki üyesi). Analiz bunu okumadan önce "hangi araç?" sorusu tahminle cevaplanıyordu. */
+  hedef?: number[]
 }
 
 export interface OlayAraci {
@@ -190,14 +193,16 @@ function olcum(araclar: OlayAraci[], adim: number) {
   }
   for (const k of [...iciceSure.keys()]) if (!buNabiz.has(k)) iciceSure.delete(k)
   let iciceSurdu = false
+  const hedefId = new Set<number>()
   for (const k of buNabiz) {
     const su = (iciceSure.get(k) ?? 0) + adim
     iciceSure.set(k, su)
-    if (su >= ICICE_SURE) iciceSurdu = true
+    if (su >= ICICE_SURE) { iciceSurdu = true; for (const t of k.split('|')) hedefId.add(Number(t)) }
   }
 
   // ── kalıcı sıkışma ──
   let sikisan = 0
+  const sikisanId = new Set<number>()
   const goruldu = new Set<number>()
   for (let i = 0; i < gorunur.length; i++) {
     const c = gorunur[i]
@@ -212,7 +217,7 @@ function olcum(araclar: OlayAraci[], adim: number) {
     else {
       const sn = onceki.sn + adim
       durgun.set(id, { x: onceki.x, y: onceki.y, sn })
-      if (sn >= SIKISMA_SURE) sikisan++
+      if (sn >= SIKISMA_SURE) { sikisan++; sikisanId.add(id) }
     }
   }
   for (const k of [...durgun.keys()]) if (!goruldu.has(k)) durgun.delete(k)
@@ -246,11 +251,15 @@ function olcum(araclar: OlayAraci[], adim: number) {
     : yigilma ? 'yigilma'
     : kuyruk ? 'kuyruk'
     : null
-  if (tur) olayGonder(tur, gorunur)
+  if (tur) {
+    const idler = tur === 'sikisma' ? sikisanId : tur === 'icice' ? hedefId : null
+    const hedef = idler ? gorunur.map((c, i) => idler.has(c.id) ? i : -1).filter(i => i >= 0) : []
+    olayGonder(tur, gorunur, hedef)
+  }
 }
 
 /** kapı bekçisi: tavan + aralık + aynı tür tekrarı. Geçerse snapshot'ı yollar. */
-function olayGonder(tur: OlayTuru, araclar: OlayAraci[]): boolean {
+function olayGonder(tur: OlayTuru, araclar: OlayAraci[], hedef: number[] = []): boolean {
   if (!aktif) return false
   if (gonderilen >= OTURUM_TAVANI) return false
   if (gecenSn - sonOlayT < OLAY_ARALIK_SN) return false
@@ -268,6 +277,7 @@ function olayGonder(tur: OlayTuru, araclar: OlayAraci[]): boolean {
       ev: c.evSlots().map(v => [yuvarla(v.x), yuvarla(v.y)] as [number, number]),
     },
     yapi: c.yapi(),
+    hedef,
   }
   sonOlayT = gecenSn
   gonderilen++
