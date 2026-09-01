@@ -3233,7 +3233,20 @@ export class World {
     // 2'sini kullanıyordu. Şerit ağı artık kapalı slota araç göndermiyor (kilitlenme yok)
     // ama boş durmaları da kayıp. Varsayılan güneye alındı; pompa hattıyla 0.5 birim boşluk.
     // ESKİ KAYITLAR ETKİLENMEZ: taşınmış otoparkın konumu placedPos'tan gelir (pos dolu).
-    const at = pos ?? new THREE.Vector2(0.4, -2.0)
+    //
+    // İKİNCİ TAŞIMA (1 Eyl, 2-yatak ızgarasıyla ÖLÇÜLDÜ): (0.4,−2.0) varsayılanında
+    // batı yatağı x=−0.85'e düşüyor — pompa-0 gövdesinin GÜVENLİ PAYLI zarfının
+    // (insideSolid: gövde 0.75 + 0.45 pay = |x|<1.2) İÇİNDE. Yatak MERKEZİ katı
+    // sayıldığından hiçbir yanaşma açısı/cephe onu kurtaramaz (iki cephe de denendi,
+    // arka koridor da pompa zarfını kesiyor) → şerit ağı yatağı doğru şekilde eliyor,
+    // varsayılan otopark TEK yatakla kalıyordu (canlı ölçüm: parkLanesOf=1, park eden 0).
+    // Aynı kalıp: varsayılan GÜNEYE taşındı (0.4,−5.6) — pad pompa-0 gövdesinin (alt
+    // sınır y=−3.9) altına iner, İKİ yatak da arka cepheden (güney koridoru) açılır;
+    // yataklar pompa ARAÇ yuvasından (1.8,−2.2) 3.5 birim uzakta, iç içe görüntü yok.
+    // (Canlı A/B ölçümü: (0.4,−5.6) → 2 şerit, eş zamanlı 2 park ✓; eski (0.4,−2.0) →
+    //  1 şerit. 8 pompalı salt-varsayılan kayıtta pompa-4 gövdesi (0,−6.2) batı yatağı
+    //  yine kapatır — o yerleşimde pompa fiilen pedin dibinde durur, eleme dürüsttür.)
+    const at = pos ?? new THREE.Vector2(0.4, -5.6)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(PARK_PAD_W, 3.1), lam(0x6b7480))
     pad.position.z = 0.02

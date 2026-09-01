@@ -8,8 +8,11 @@
  *   A) OTOPARK: aynı otoparkın komşu çizgili yerleri 1,25 birim arayla (iki park etmiş
  *      araç KALICI <2.15'te — canlı parked+parked kümesinin imzası) + KOMŞU otoparkların
  *      uç noktaları 1,45'e kadar düşüyor, toPark araçları neredeyse aynı noktaya sürüyor.
- *      FIX: nokta havuzu tekliği — TÜM otoparkların noktaları tek havuzda, birbirine
- *      < 2.8 düşen nokta ELENİR (taşınmaz; pompa-slot fixinin eleme varyantı).
+ *      FIX (iki katman): 1) ızgara görsel dürüstlüğe çekildi (PARK_YER=2 x 2,5 — meşru
+ *      yerleşim artık kendiliğinden temiz), 2) nokta havuzu tekliği — TÜM otoparkların
+ *      noktaları tek havuzda, birbirine < eşik düşen nokta ELENİR (taşınmaz; legacy/bozuk
+ *      yerleşimin sigortası). Ayrıca varsayılan otopark konumu pompa zarfından çıkarıldı
+ *      (0-park kök nedeni — aşağıda kaynak denetimi).
  *   B) ÇIKIŞ: giden omurga kolonunda leaving araçları birbirinin içinden akıyordu
  *      (lab min 0.00). FIX: konveyör kuralının çıkış aynası — aynı xOut kolonundaki
  *      öndekine < 3.0'da orantılı fren, 2.2 tam duruş, 2.55 ayrık-zaman tabanı,
@@ -67,10 +70,22 @@ check('karşı akış muafiyeti korunuyor (heading zıtsa blok yok)',
   /od\.x \* dir\.x \+ od\.y \* dir\.y < -0\.3\) continue/.test(carsSrc))
 check('marina çıkış bloğundan da muaf (tekne boyu araç ölçeğinde değil)',
   /if \(c\.boat\) continue/.test(carsSrc))
+// VARSAYILAN OTOPARK KONUMU (1 Eyl, 0-park kök nedeni): 2-yatak ızgarasında eski
+// varsayılan (0.4,−2.0) batı yatağını pompa gövdesinin GÜVENLİ PAYLI zarfına (insideSolid
+// +0.45) sokuyordu — yatak MERKEZİ katı sayılınca hiçbir yanaşma cephesi kurtaramaz,
+// şerit ağı yatağı doğru şekilde eler, otopark TEK yatak kalırdı. Varsayılan pompa
+// sırasının altına taşındı; iki yatak da arka cepheden açılır (canlı A/B ile ölçüldü).
+check('varsayılan otopark konumu pompa zarfının dışında (0.4,−5.6)',
+  /pos \?\? new THREE\.Vector2\(0\.4, -5\.6\)/.test(worldSrc))
 
 // ───────────────────────────────────────── 2) HAVUZ TEKLİĞİ (saf geometri)
-console.log('\n== 2) Nokta havuzu tekliği: bitişik ve döndürülmüş lotlar ==')
-const PARK_YER = 4, PARK_ARALIK = 1.25, PARK_PAD_W = PARK_YER * PARK_ARALIK
+console.log('\n== 2) Nokta havuzu tekliği: bitişik / döndürülmüş / legacy üst üste lotlar ==')
+// SABİTLER KAYNAKTAN (1 Eyl): helper'da 4x1.25 kopyası kalmıştı; ızgara 2x2.5'e geçince
+// sentetik yerleşim eski ızgarayı sürüyordu — artık gerçek üreticinin sabitlerinden türer.
+const stateSrc = readFileSync(new URL('../../src/state.ts', import.meta.url), 'utf8')
+const PARK_YER = Number(stateSrc.match(/export const PARK_YER = (\d+)/)[1])
+const PARK_ARALIK = Number(worldSrc.match(/export const PARK_ARALIK = ([\d.]+)/)[1])
+const PARK_PAD_W = PARK_YER * PARK_ARALIK
 const parkYerX = i => -PARK_PAD_W / 2 + PARK_ARALIK * (i + 0.5)
 function parkLot(id, cx, cy, rot = 0) {
   const c = Math.cos(rot), s = Math.sin(rot)
@@ -88,27 +103,34 @@ const enYakinCift = spots => {
   return m
 }
 {
-  // bitişik iki lot (footprint 5.2 → merkezler 5.2 arayla): uç noktalar 1.45'e düşer
-  const ham = [...parkLot('parking', -2.4, 0), ...parkLot('parking#1', 2.8, 0)]
-  check(`HAM havuzda çakışma GERÇEKTEN var (en yakın çift ${enYakinCift(ham).toFixed(2)} < ${PARK_NOKTA_AYRIK})`,
-    enYakinCift(ham) < PARK_NOKTA_AYRIK, 'senaryo hazardı üretmiyor — çit anlamsız')
-  const suzgec = parkHavuzuAyikla(ham)
-  check(`bitişik lotlar: ${ham.length} → ${suzgec.length} nokta, en yakın çift ${enYakinCift(suzgec).toFixed(2)} ≥ ${PARK_NOKTA_AYRIK}`,
-    suzgec.length > 0 && enYakinCift(suzgec) >= PARK_NOKTA_AYRIK)
+  // MEŞRU bitişik iki lot (footprint 5.2 → merkezler 5.2 arayla): 2x2.5 ızgarada uçlar
+  // 2.7 birim — eşiğin ÜSTÜNDE, eleme DOKUNMAZ (rozet tam kapasiteyi gösterir).
+  // (Eski 4x1.25 ızgarada uçlar 1.45'e düşüyordu; o hazard ızgara değişikliğiyle kalktı.)
+  const bitisik = [...parkLot('parking', -2.4, 0), ...parkLot('parking#1', 2.8, 0)]
+  const suzgec = parkHavuzuAyikla(bitisik)
+  check(`meşru bitişik lotlar: ${bitisik.length} noktanın ${suzgec.length}'ü kaldı (hiçbiri elenmedi), en yakın çift ${enYakinCift(suzgec).toFixed(2)} ≥ ${PARK_NOKTA_AYRIK}`,
+    suzgec.length === bitisik.length && enYakinCift(suzgec) >= PARK_NOKTA_AYRIK)
+  // TEK lot: 2.5 aralıklı iki yatak eşiğin üstünde — eleme lot içine de DOKUNMAZ
+  const tek = parkHavuzuAyikla(parkLot('parking', 0.4, -5.6))
+  check(`tek lot: ${PARK_YER} yatağın ${tek.length}'ü havuzda (${enYakinCift(tek).toFixed(2)} ara) — rozet gerçek sayıyı gösterir`,
+    tek.length === PARK_YER && enYakinCift(tek) >= PARK_NOKTA_AYRIK)
   // DÖNDÜRÜLMÜŞ komşu (90°): dik açıyla dayanmış lotların uçları da havuzda teklenir
   const dik = [...parkLot('parking', 0, 0), ...parkLot('parking#1', 3.4, 2.6, Math.PI / 2)]
   const dikS = parkHavuzuAyikla(dik)
   check(`döndürülmüş komşu: ${dik.length} → ${dikS.length} nokta, en yakın ${enYakinCift(dikS).toFixed(2)} ≥ ${PARK_NOKTA_AYRIK}`,
     dikS.length > 0 && enYakinCift(dikS) >= PARK_NOKTA_AYRIK)
-  // TEK lot da teklenir: 1.25 aralıklı komşu çizgili yerler canlı parked+parked kümesinin
-  // kaynağıydı — havuz tek lotta da <2.15 çifti imkânsız kılar (2 uç nokta kalır)
-  const tek = parkHavuzuAyikla(parkLot('parking', 0.4, -2.0))
-  check(`tek lot: 4 → ${tek.length} nokta (uçlar, ${enYakinCift(tek).toFixed(2)} ara) — rozet gerçek sayıyı gösterir`,
-    tek.length === 2 && enYakinCift(tek) >= PARK_NOKTA_AYRIK)
+  // LEGACY/BOZUK YERLEŞİM (üst üste binmiş lot — eski onarım artığı/bozuk kayıt):
+  // eleme artık meşru yerleşimin değil BUNUN sigortası. Çapraz uçlar 0.1'e düşer.
+  const legacy = [...parkLot('parking', -1.3, 0), ...parkLot('parking#1', 1.3, 0)]
+  check(`legacy üst üste lotlarda çakışma GERÇEKTEN var (en yakın ${enYakinCift(legacy).toFixed(2)} < ${PARK_NOKTA_AYRIK})`,
+    enYakinCift(legacy) < PARK_NOKTA_AYRIK, 'senaryo hazardı üretmiyor — çit anlamsız')
+  const legacyS = parkHavuzuAyikla(legacy)
+  check(`legacy çift elemeyle teklendi: ${legacy.length} → ${legacyS.length}, en yakın ${enYakinCift(legacyS).toFixed(2)} ≥ ${PARK_NOKTA_AYRIK}`,
+    legacyS.length > 0 && enYakinCift(legacyS) >= PARK_NOKTA_AYRIK)
   // DETERMİNİZM: aynı girdi → aynı havuz (greedy, bina sırası + indeks)
-  const s2 = parkHavuzuAyikla(ham)
+  const s2 = parkHavuzuAyikla(legacy)
   check('eleme deterministik (aynı girdi → aynı kimlik kümesi)',
-    suzgec.map(s => s.id).join() === s2.map(s => s.id).join())
+    legacyS.map(s => s.id).join() === s2.map(s => s.id).join())
 }
 
 // ───────────────────────────────────────── 3) HEADLESS SİM
@@ -250,10 +272,17 @@ check('kalıcı sıkışan 0 · buharlaşma 0', a.stuck === 0 && a.evap === 0, `
 check('30 sn kapıları doğal akışta hiç açılmadı (muaf 0 · cikisMuaf 0)',
   a.muaf === 0 && a.cikisMuaf === 0, `muaf ${a.muaf} · çıkış ${a.cikisMuaf}`)
 
-console.log('\n== 3b) Kanıt koşusu: eleme OLMADAN aynı senaryo hazardı üretiyor ==')
-const ham = kosu(300, { parking: lotlar })
-check(`elemesiz koşuda ≥2 sn'lik DURAN park çifti olayı VAR (${ham.pOlay} olay · anlık ${ham.pDuranIcice}, min ${ham.pDuranMin.toFixed(2)}) — ölçüm hazardı görüyor`,
+console.log('\n== 3b) Kanıt koşusu: LEGACY üst üste lotlar, eleme OLMADAN hazard üretiyor ==')
+// Meşru bitişik lotlar 2x2.5 ızgarada zaten temiz — hazard, üst üste binmiş legacy
+// çiftiyle (çapraz uçlar 0.1; bozuk kayıt/onarım artığı) ve eleme KAPALIYKEN sürülür.
+const legacyLotlar = [...parkLot('parking', -1.3, 8.5), ...parkLot('parking#1', 1.3, 8.5)]
+const ham = kosu(300, { parking: legacyLotlar })
+check(`elemesiz legacy koşuda ≥2 sn'lik DURAN park çifti olayı VAR (${ham.pOlay} olay · anlık ${ham.pDuranIcice}, min ${ham.pDuranMin.toFixed(2)}) — ölçüm hazardı görüyor`,
   ham.pOlay > 10, `elemesiz bile temiz (olay ${ham.pOlay}) — senaryo hazard üretmiyor, çit anlamsız`)
+const legacyTemiz = kosu(120, { parking: parkHavuzuAyikla(legacyLotlar) })
+check(`aynı bozuk yerleşim ELEMEYLE temiz (olay ${legacyTemiz.pOlay} · park eden ${legacyTemiz.parkVaris}) — sigorta işliyor`,
+  legacyTemiz.pOlay === 0 && legacyTemiz.parkVaris > 0,
+  `elemeli legacy: olay ${legacyTemiz.pOlay} · park ${legacyTemiz.parkVaris}`)
 check(`eleme park eden sayısını DÜŞÜRMEDİ sayılır: havuzlu ${a.parkVaris} ≥ kullanılabilir kapasitenin doyumu`,
   a.parkVaris >= 10, `havuzlu park eden ${a.parkVaris}`)
 

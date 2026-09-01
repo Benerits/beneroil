@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, SLOT_MIN_ARA } from './world'
+import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, SLOT_MIN_ARA, PARK_YER } from './world'
 import { Car, CarManager, Tanker } from './cars'
 import { UI, BuildingCard } from './ui'
 import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
@@ -6398,7 +6398,7 @@ function buildingCard(id: string): BuildingCard | null {
         icon: 'i-parking', name: t('Otopark'),
         desc: t('Servisi biten müşteriler buraya park edip market, tuvalet, kahveci ve restoranı gezer.'),
         stats: (() => {
-          const cap = world.getParkingSpots().length || 4
+          const cap = world.getParkingSpots().length || PARK_YER
           const occ = Math.min(cars.cars.filter(c => c.phase === 'parked' || c.phase === 'toPark').length, cap)
           return [['Kapasite', t('{0} araç', cap)], ['Doluluk', `${occ}/${cap}`]]
         })(),

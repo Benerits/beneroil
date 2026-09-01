@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 let hata = 0
 const bekle = (k, ad, ek = '') => { console.log(`${k ? '✅' : '❌'} ${ad}${ek ? ' · ' + ek : ''}`); if (!k) hata++ }
 const oku = f => readFileSync(new URL('../../' + f, import.meta.url), 'utf8')
-const world = oku('src/world.ts'), cars = oku('src/cars.ts'), main = oku('src/main.ts')
+const world = oku('src/world.ts'), cars = oku('src/cars.ts'), main = oku('src/main.ts'), state = oku('src/state.ts')
 
 // ── araç genişlikleri koddan okunur (kaynak: cars.ts SPEC tablosu) ──
 const genislikler = [...cars.matchAll(/width:\s*([\d.]+)/g)].map(m => Number(m[1])).filter(w => w > 0.5 && w < 3)
@@ -35,7 +35,9 @@ bekle(/const lx = parkYerX\(i\)/.test(world), 'trafik park noktaları parkYerX()
 bekle(!/-1\.53 \+ i \* 1\.02/.test(world), 'eski elle yazılmış aralık kalmamış')
 
 // ── pad ve footprint aralıkla tutarlı ──
-const yer = Number((world.match(/export const PARK_YER = (\d+)/) || [])[1] || 0)
+// PARK_YER state.ts'e taşındı (world→state import döngüsü) — world re-export eder
+const yer = Number((state.match(/export const PARK_YER = (\d+)/) || [])[1] || 0)
+bekle(yer >= 2, `PARK_YER kaynaktan okundu (${yer})`)
 const padW = yer * aralik
 bekle(/export const PARK_PAD_W = PARK_YER \* PARK_ARALIK/.test(world),
   `pad genişliği aralıktan türüyor (${yer} yer × ${aralik} = ${padW.toFixed(1)})`)

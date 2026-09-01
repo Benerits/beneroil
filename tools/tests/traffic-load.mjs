@@ -27,9 +27,15 @@ const ROAD_X = 7.9
 // (oyun sahibi: "gerekirse birbirinin içinden geçsinler"). Bu yüzden eski A/B (açık vs
 // kapalı) kıyası anlamsızlaştı; onun yerine iç içe geçme AKIŞ/YERLEŞİM olarak ayrıştırılıp
 // ölçülüyor. FORCE_COLLIDE değişkeni artık davranışı değiştirmez, koşum yine geçmelidir.
-// OTOPARK YERLEŞİMİ (T9) — oyundaki world.getParkingSpots() ile AYNI türetme:
-// 4 slot yerel x ekseninde dizili, yanaşma noktası (stage) yerel +Y'de 2.4 birim ötede.
-const PARK_YER = 4, PARK_ARALIK = 1.25, PARK_PAD_W = PARK_YER * PARK_ARALIK
+// OTOPARK YERLEŞİMİ (T9/T11) — oyundaki world.getParkingSpots() ile AYNI türetme.
+// SABİTLER KAYNAK KODDAN OKUNUR (1 Eyl): helper'da 4x1.25 kopyası kalmıştı; ızgara
+// 2x2.5'e geçince test ESKİ ızgarayı sürüyordu (T9 kırmızısının yarısı buydu) —
+// sentetik yerleşim artık gerçek üreticinin sabitlerinden türer, ayrışamaz.
+const __worldSrc = readFileSync(new URL('../../src/world.ts', import.meta.url), 'utf8')
+const __stateSrc = readFileSync(new URL('../../src/state.ts', import.meta.url), 'utf8')
+const PARK_YER = Number(__stateSrc.match(/export const PARK_YER = (\d+)/)[1])
+const PARK_ARALIK = Number(__worldSrc.match(/export const PARK_ARALIK = ([\d.]+)/)[1])
+const PARK_PAD_W = PARK_YER * PARK_ARALIK
 const parkYerX = i => -PARK_PAD_W / 2 + PARK_ARALIK * (i + 0.5)
 function parkLot(THREE, id, cx, cy, rot = 0) {
   const c = Math.cos(rot), s = Math.sin(rot)
@@ -89,7 +95,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   // komşu araç çifti bu şartı KALICI doldurur; ölçüt o olayın birebir lab kopyası.
   // Anlık tekil kareler (yol üstünden geçen toPark aracının dönüş karesi gibi) manevradır,
   // kuyruk ölçütündeki "yanaşma anı" ayrımının aynısı — anlık sayaç bilgi için tutulur.
-  let pDuranIcice = 0, pDuranMin = Infinity, pOlay = 0
+  let pDuranIcice = 0, pDuranMin = Infinity, pOlay = 0, parkZirve = 0
   // ── ÇIKIŞ KONVEYÖRÜ ÖLÇÜMÜ: giden omurga (xOut) kolonundaki leaving çiftleri ──
   // Kuyruk ölçümünün aynası: DURAN çift < 2.5, 2 sn SÜRERSE olay (konveyör 2.55 taban
   // verir; park-çıkışından omurgaya KATILAN araç öndeki trafiğin 2.5 penceresine bir-iki
@@ -213,6 +219,8 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     for (const k of [...cikSurek.keys()]) if (!aktifCik.has(k)) cikSurek.delete(k)
     // ── OTOPARK: park fazındaki DURAN çiftler (her karede; olay = 2 sn süren çift) ──
     if (parking) {
+      const suAnParkli = mgr.cars.filter(c => c.phase === 'parked').length
+      if (suAnParkli > parkZirve) parkZirve = suAnParkli
       const pk = mgr.cars.filter(c => (c.phase === 'parked' || c.phase === 'toPark') && duruyor(c))
       for (let a = 0; a < pk.length; a++) for (let b = a + 1; b < pk.length; b++) {
         const d = Math.hypot(pk[a].group.position.x - pk[b].group.position.x,
@@ -327,9 +335,9 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     + ` · çıkış duruş ${(blok.cikisDurusSn ?? 0).toFixed(0)}sn muaf ${blok.cikisMuaf ?? 0}`)
   const park = { varis: parkVaris, cakisma: pOrnek ? pCakisma / pOrnek : 0,
     agir: pOrnek ? pAgir / pOrnek : 0, disari: pDisari, disariOrnek: pDisariOrnek,
-    duranIcice: pDuranIcice, duranMin: pDuranMin, olay: pOlay }
+    duranIcice: pDuranIcice, duranMin: pDuranMin, olay: pOlay, zirve: parkZirve }
   if (!quiet && parking) {
-    console.log(`   ↳ OTOPARK: park eden ${park.varis} | çakışma ${park.cakisma.toFixed(2)} çift/kare`
+    console.log(`   ↳ OTOPARK: park eden ${park.varis} (aynı anda zirve ${park.zirve}) | çakışma ${park.cakisma.toFixed(2)} çift/kare`
       + ` · iç içe ${park.agir.toFixed(2)} | slot DIŞINDA park ${park.disari}/${park.disariOrnek}`
       + ` | DURAN çift <2.15: olay ${park.olay} · anlık ${park.duranIcice} (min ${isFinite(park.duranMin) ? park.duranMin.toFixed(2) : '—'})`
       + ` | kullanılabilir şerit ${mgr.graph.parkLanesOf?.('near').length ?? '-'}/${parkSpots.length}`)
@@ -454,20 +462,26 @@ kontrol((t8.blok.cikisMuaf ?? 0) === 0, 'T8: çıkış 30 sn kapısı hiç gerek
 //  gövdesinin içindeydi, araç oraya asla varamıyor ama slotu da bırakmıyordu.)
 console.log('--- T9: OTOPARK YOĞUN (park koridoru pompa sırasının dibinde) ---')
 {
-  // 6 pompa, otopark tam pompa hattının yanında (oyundaki varsayılan yerleşimin dar hâli)
+  // 6 pompa, otopark pompa sırasının HEMEN dibinde (oyundaki varsayılan yerleşimin dar
+  // hâli — canlı varsayılan taşımasıyla aynı geometri: yataklar pompa bandının ALTINDA,
+  // koridor arka cepheden). 2-yatak ızgarasında (0.4,−0.2) konumu batı yatağı pompa
+  // zarfının içine sokuyordu (ölçüldü: tek şerit, canlıdaki 0-park kırmızısının kopyası) —
+  // lot, yatakların İKİSİ de meşru olacak şekilde sıranın dibine (0.4,−8.5) alındı.
   // NOKTA HAVUZU (1 Eyl): oyundaki world.getParkingSpots() artık parkHavuzuAyikla'dan
   // geçer — test yerleşimi de aynı süzgeçten geçmeli (lab, oyunun kopyası).
   const t9 = run('T9 otopark · 6 pompa · trafik ×1.6', {
     pumps: 6, evs: 2, far: false, wide: true, entryMul: 1.2, pullMul: 1.6,
-    parking: parkHavuzuAyikla(parkLot(THREE, 'parking', 0.4, -0.2)), parkChance: 0.75,
+    parking: parkHavuzuAyikla(parkLot(THREE, 'parking', 0.4, -8.5)), parkChance: 0.75,
   })
   kontrol(t9.stuck === 0, 'T9: kalıcı sıkışan 0 (park kuyruğu kilitlenmedi)', `T9: kalıcı sıkışan ${t9.stuck}`)
   kontrol(t9.st.total === 0, 'T9: buharlaşma 0', `T9: buharlaşma ${t9.st.total}`)
-  // PARK EDEN TABANI 35 (fix öncesi ölçüm): nokta havuzu elemesi park eden sayısını
-  // DÜŞÜRMEMELİ — T9'da eleme öncesi de kullanılabilir şerit 2 idi (2'si pompa
-  // gövdesiyle kapalıydı), eleme aynı 2 açık noktayı bırakır.
-  kontrol(t9.park.varis >= 35, `T9: ${t9.park.varis} araç park etti (taban 35 — eleme kapasite düşürmedi)`,
-    `T9: park eden ${t9.park.varis} < 35 — nokta havuzu elemesi kapasiteyi yedi`)
+  // İKİ YATAK DA GERÇEKTEN İŞLİYOR (1 Eyl kırmızısının çiti): kümülatif ≥ 20 VE aynı
+  // anda ≥ 2 park etmiş araç görülmüş olmalı — tek yatak sağ kalsa kümülatif yine dolar,
+  // zirve 2'ye ÇIKAMAZ; bu çift, "yatak feda edildi" gerilemesini tek başına yakalar.
+  kontrol(t9.park.varis >= 20, `T9: ${t9.park.varis} araç park etti (taban 20)`,
+    `T9: park eden ${t9.park.varis} < 20 — yataklar ölü ya da atama kilitli`)
+  kontrol(t9.park.zirve >= 2, `T9: aynı anda ${t9.park.zirve} araç parktaydı (iki yatak da canlı)`,
+    `T9: aynı anda en çok ${t9.park.zirve} — ikinci yatak hiç kullanılamadı`)
   kontrol(t9.park.disari === 0, 'T9: park eden her araç KENDİ çizgili yerinde (slot dışı 0)',
     `T9: ${t9.park.disari}/${t9.park.disariOrnek} örnekte araç slotunun dışında durdu`)
   kontrol(t9.park.agir <= 0.3, `T9: otoparkta iç içe ${t9.park.agir.toFixed(2)} ≤ 0.3 (eski mimari 2.06)`,
@@ -481,15 +495,17 @@ console.log('--- T9: OTOPARK YOĞUN (park koridoru pompa sırasının dibinde) -
 
 // ---- T11: BİTİŞİK OTOPARKLAR (canlı parked+parked kümesinin laboratuvar kopyası) ----
 // Canlı faz analizi (400 olay, <2.15 çift dağılımı): kuyruk fixlerinden SONRA kalan en
-// büyük kütle parked+parked (240) + toPark+toPark (124). Lab'da yeniden üretimi: oyuncu
-// 2 otoparkı YAN YANA koyar (footprint 5.2 → merkezler 5.2 arayla), tesis ziyareti yoğun.
-// ELEMESİZ ÖLÇÜM (aynı tohum, aşağıdaki kanıt koşusu): park fazında DURAN çift <2.15 =
-// 7261 kare-çift — kütlenin gövdesi AYNI otoparkın komşu çizgili yerleri (1.25 aralık,
-// canlı parked+parked kümesinin birebir imzası), kalanı lotlar-arası toPark çakışması
-// (ölçülen min 0.31). Nokta havuzu elemesiyle İKİSİ de sıfırlanmalı.
+// büyük kütle parked+parked (240) + toPark+toPark (124). Kütlenin gövdesi 1,25 aralıklı
+// ESKİ ızgaraydı — o kaynak 2x2,5 ızgarasıyla (görsel dürüstlük) kökten kalktı: meşru
+// yerleşimde (footprint 5,2 → merkezler ≥5,2) komşu lot uçları 2,7 ≥ eşik. Havuz elemesi
+// artık MEŞRU yerleşimin değil, LEGACY/BOZUK yerleşimin sigortası: üst üste binmiş lot
+// (eski onarım artığı, bozuk kayıt) noktaları hâlâ <2,4'e sokabilir — kanıt koşusu
+// aşağıda tam bunu sürüyor (merkezler 2,6: ham min 0,1 → eleme sonrası ≥ eşik).
 console.log('--- T11: BİTİŞİK OTOPARKLAR (2 lot yan yana, yoğun tesis trafiği) ---')
 {
-  const bitisik = [...parkLot(THREE, 'parking', -2.4, -0.2), ...parkLot(THREE, 'parking#1', 2.8, -0.2)]
+  // Lotlar kuzey bandında (cy 8.2): pompa zarflarından uzak — 4 yatağın 4'ü de meşru,
+  // "aynı anda ≥2" ölçümü dolu kümede yapılır (pompa dibi baskısının laboratuvarı T9'da).
+  const bitisik = [...parkLot(THREE, 'parking', -2.4, 8.2), ...parkLot(THREE, 'parking#1', 2.8, 8.2)]
   // 1) HAVUZ TEKLİĞİ: elemeden geçen havuzda hiçbir çift PARK_NOKTA_AYRIK'tan yakın değil
   const havuz = parkHavuzuAyikla(bitisik)
   let enYakin = Infinity
@@ -506,6 +522,8 @@ console.log('--- T11: BİTİŞİK OTOPARKLAR (2 lot yan yana, yoğun tesis trafi
   kontrol(t11.st.total === 0, 'T11: buharlaşma 0', `T11: buharlaşma ${t11.st.total}`)
   kontrol(t11.park.varis >= 30, `T11: ${t11.park.varis} araç park etti (ölçüm dolu kümede)`,
     `T11: park eden ${t11.park.varis} < 30 — küme boş, iddia geçersiz`)
+  kontrol(t11.park.zirve >= 2, `T11: aynı anda ${t11.park.zirve} araç parktaydı (bitişik lotlar birlikte işliyor)`,
+    `T11: aynı anda en çok ${t11.park.zirve} — lotlar sırayla bile dolmuyor`)
   kontrol(t11.park.disari === 0, 'T11: slot dışında park 0', `T11: ${t11.park.disari} örnekte slot dışı`)
   kontrol(t11.park.olay === 0,
     `T11: park fazında ≥2 sn süren DURAN çift < 2.15 YOK (anlık ${t11.park.duranIcice} · min ${isFinite(t11.park.duranMin) ? t11.park.duranMin.toFixed(2) : '—'})`,
@@ -516,12 +534,23 @@ console.log('--- T11: BİTİŞİK OTOPARKLAR (2 lot yan yana, yoğun tesis trafi
   kontrol(t11.cikis.olay === 0,
     `T11: çıkışta ≥2 sn süren duran çift < 2.5 YOK (${t11.cikis.cift} çift-karede anlık ${t11.cikis.sert} · min ${isFinite(t11.cikis.min) ? t11.cikis.min.toFixed(2) : '—'})`,
     `T11: çıkışta ${t11.cikis.olay} kez ≥2 sn duran çift < 2.5`)
-  // 2) KANIT KOŞUSU (elemesiz, sessiz): senaryo fix olmadan GERÇEKTEN hazardı üretiyor —
-  // boş/etkisiz senaryodan geçen iddia yasak. Eleme kapatılınca duran çift patlamalı.
-  const ham = run('T11-ham', { ...ayar, parking: bitisik, quiet: true })
+  // 2) KANIT KOŞUSU (elemesiz + LEGACY üst üste lot, sessiz): eleme fix'i olmadan hazard
+  // GERÇEKTEN üretiliyor — boş/etkisiz senaryodan geçen iddia yasak. Meşru bitişik lotlar
+  // yeni ızgarada zaten temiz (uçlar 2,7); hazard, üst üste binmiş legacy çifti (merkezler
+  // 2,6 → çapraz uçlar 0,1) + eleme KAPALI ile sürülür. Eleme AÇIK aynı bozuk yerleşimi
+  // teklik havuzuna indirger (t11c) — sigorta işliyor.
+  // legacy çift KULLANILABİLİR bölgede olmalı (pompa zarfına gömülü yatak zaten şerit
+  // alamaz ve hazard üretemez) — kuzeyde, çapraz uçlar 0,1 birim: ham koşuda iki araç
+  // neredeyse aynı noktaya park eder.
+  const legacy = [...parkLot(THREE, 'parking', -1.3, 8.5), ...parkLot(THREE, 'parking#1', 1.3, 8.5)]
+  const ham = run('T11-ham', { ...ayar, parking: legacy, quiet: true })
   kontrol(ham.park.olay > 10,
-    `T11: eleme OLMADAN aynı senaryo ${ham.park.olay} kez ≥2 sn'lik duran çift olayı üretiyor (anlık ${ham.park.duranIcice}, min ${ham.park.duranMin.toFixed(2)}) — ölçüm hazardı görüyor`,
+    `T11: eleme OLMADAN legacy üst üste lotlar ${ham.park.olay} kez ≥2 sn'lik duran çift olayı üretiyor (anlık ${ham.park.duranIcice}, min ${ham.park.duranMin.toFixed(2)}) — ölçüm hazardı görüyor`,
     `T11: elemesiz koşu bile temiz (olay ${ham.park.olay}) — senaryo hazardı üretmiyor, çit anlamsız`)
+  const t11c = run('T11-legacy-elemeli', { ...ayar, parking: parkHavuzuAyikla(legacy), quiet: true })
+  kontrol(t11c.park.olay === 0 && t11c.park.varis > 0,
+    `T11: aynı bozuk yerleşim ELEMEYLE temiz (olay 0 · park eden ${t11c.park.varis}) — sigorta işliyor`,
+    `T11: elemeli legacy koşuda olay ${t11c.park.olay} / park eden ${t11c.park.varis}`)
   // 3) DETERMİNİZM: aynı tohum, aynı senaryo → aynı sayaçlar (trafik-load tohumu)
   const t11b = run('T11-tekrar', { ...ayar, parking: havuz, quiet: true })
   kontrol(t11.served === t11b.served && t11.park.varis === t11b.park.varis
