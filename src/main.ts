@@ -21,7 +21,7 @@ import {
   // ŞUBE ÇİFTLEME: kopya şubeler (otoyol-2 vb.) — tema/sahne TABAN id'den, ekonomi
   // türetilmiş temadan gelir (bkz. state.ts themeFor / BRANCH_COPIES).
   ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor, SUPPLY_LINE_QUOTA,
-  SAYAC_KUMBARA_MAX,
+  SAYAC_KUMBARA_MAX, TEKIL_KUMBARA,
 } from './state'
 // ŞUBE AĞI HARİTASI: yatırım tahtası (Ofis › Şubeler + HUD şube menüsünden açılır).
 // Saf DOM modülü — state okur, aksiyonu buradaki MEVCUT akışlara geri çağırır.
@@ -2149,7 +2149,14 @@ function removeBuildingVisual(id: string) {
   // yani 5 hava-su ünitesi aynı kumbarayı paylaşıyor. Buradaki koşulsuz silme, oyuncu
   // 5 üniteden BİRİNİ satınca beşinin birikmiş parasını da siliyordu: ₺600 iade alıp
   // ₺2.400 kaybetmek mümkündü. Artık tür tamamen kalkmadıkça kumbaraya dokunulmuyor.
-  if (countable === undefined || countable === 0) {
+  if (TEKIL_KUMBARA.has(base)) {
+    // TEKİL KUMBARA: görseli kalkan SON ünitenin (target) birikmiş parası yok olmasın —
+    // ayakta kalan ilk üniteye aktarılır; tür tamamen kalkınca silinir.
+    const kalanId = countable && countable > 0 ? (target === base ? `${base}#1` : base) : null
+    const para = state.pendingCash[target] ?? 0
+    delete state.pendingCash[target]; delete state.facLost[target]
+    if (kalanId && para > 0) state.pendingCash[kalanId] = (state.pendingCash[kalanId] ?? 0) + para
+  } else if (countable === undefined || countable === 0) {
     delete state.pendingCash[id]; delete state.pendingCash[target]
     delete state.facLost[id]; delete state.facLost[target]
   }
@@ -2560,15 +2567,20 @@ function vehicleServices(car: Car): number {
     state.addPending(oilId, m, t('Yağ değişimi')); d += 0.25
     ui.toast(t('Yağ değişimi: +₺{0} kumbarada', m), 'good')
   }
-  if (car.wantsAir && state.hasAirWater && anyOnSide('airwater')) {
-    // adet çarpanı: çok üniteli istasyonda aynı anda birden çok araç kullanır.
-    // TAVAN KUMBARA ÖLÇEĞİNE BAĞLI (sabit 6 DEĞİL): kumbara tavanı ünite sayısıyla
-    // büyüyecek şekilde düzeltilince buradaki sabit 6 geride kaldı ve yorumun iddia
-    // ettiği "aynı tavan" hizası bozuldu — kumbara 12 üniteye kadar ölçeklenirken
-    // gelir 6'da duruyordu, yani 7. hava-su ünitesi tam parasına satılıp ₺0 kazandırıyordu.
-    // İkisi tek sabitten türetiliyor ki bir daha sessizce ayrışmasınlar.
-    const m = Math.round(10 + Math.random() * 10) * Math.min(SAYAC_KUMBARA_MAX, state.airWaterCount)
-    state.addPending('airwater', m, 'Hava-su'); d += 0.1
+  if (car.wantsAir && state.hasAirWater) {
+    // HER ÜNİTE KENDİ KUMBARASINA (2 Eyl, Oğuz): eskiden tek araç ₺10-20 × adet ödüyor ve
+    // hepsi 'airwater' ortak kasasına yazılıyordu; her ünitenin üstünde AYNI rakam
+    // görünüyor, oyuncu 13×₺300 bekleyip ₺300 alıyordu (#1274). Şimdi aracın YAKASINDAKİ
+    // her ünite kendi ₺10-20'sini kendi kumbarasına atar — toplam gelir aynı ölçekte
+    // (adet × ₺10-20), ama rozetler artık tek tek doğru. Eski 12 ünite tavanı da kalktı:
+    // 13. ünite de 1. kadar kazanır.
+    let n = 0
+    for (const uid of state.airWaterUnitIds()) {
+      const b = world.buildings.find(x => x.id === uid)
+      if (!b || (b.group.position.x > ROAD_X) !== (car.station === 'far')) continue
+      state.addPending(uid, Math.round(10 + Math.random() * 10), 'Hava-su'); n++
+    }
+    if (n) d += 0.1
   }
   return d
 }
@@ -3471,7 +3483,8 @@ function applyAwayEarnings(offSecRaw: number): number {
   if (state.hasTruckPark2) gains.push(['truckpark2', t('Karşı tır parkı'), 125 / 45])
   if (state.hasSelfWash) gains.push(['selfwash', t('Self yıkama'), (45 / 35) * state.selfWashCount])
   if (state.hasWash) gains.push(['wash', t('Oto yıkama'), 1.4])
-  if (state.hasAirWater) gains.push(['airwater', t('Hava-Su'), 0.5 * state.airWaterCount])
+  // hava-su TEKİL kumbara: her ünite kendi anahtarına (tavan ünite başına 250)
+  if (state.hasAirWater) for (const uid of state.airWaterUnitIds()) gains.push([uid, t('Hava-Su'), 0.5])
   const mudur = state.offlineManagerRun(gains, offSec, Math.max(0, OFFLINE_BUDGET - offlineYazilan))
   if (mudur.collected > 0) {
     offlineYazilan += mudur.collected
@@ -6681,11 +6694,14 @@ function buildingCard(id: string): BuildingCard | null {
         stats: [[t('Adet'), `${state.lampCount}`]],
       }
     case 'airwater': {
-      const n = Math.min(6, Math.max(1, state.airWaterCount))
+      // Eski kart "₺60-120" gibi ADET çarpımlı aralık yazıyordu (üstelik 6'da kesilmiş,
+      // gelir 12'ye kadar ölçeklenirken — metin↔formül ayrışması). Şimdi ünite başına
+      // gerçek aralık: her gelen araç bu üniteye ₺10-20 bırakır.
+      const n = Math.max(1, state.airWaterCount)
       return {
-        icon: 'i-air', name: state.airWaterCount > 1 ? t('Hava-Su Ünitesi (×{0} — ortak kumbara)', state.airWaterCount) : t('Hava-Su Ünitesi'),
-        desc: t('Lastik havası ve su. Küçük gelir ama müşteri çeker. Üniteler ortak kumbarada biriktirir, gelir adetle artar.'),
-        stats: [['Hizmet', `₺${10 * n}-${20 * n}`], [t('Kullanım'), '~%20']],
+        icon: 'i-air', name: n > 1 ? t('Hava-Su Ünitesi ({0})', n) : t('Hava-Su Ünitesi'),
+        desc: t('Lastik havası ve su. Küçük gelir ama müşteri çeker. Her ünitenin KENDİ kumbarası var: gelen her araç her üniteye ₺10-20 bırakır.'),
+        stats: [[t('Hizmet'), t('₺10-20 / araç / ünite')], [t('Kullanım'), '~%20'], [t('Adet'), `${n}`]],
       }
     }
     case 'selfwash': {
@@ -7186,7 +7202,7 @@ function handleClick(e: PointerEvent) {
         audio.cash()
         // çok üniteli tesiste kumbara ORTAKTIR (gelir zaten adetle çarpılır) — bunu söyle,
         // yoksa oyuncu "3 üniteden sadece 1'i kazanıyor" sanıyor (13 feedback)
-        const cnt = COUNTABLE[cashFor]?.() ?? 0
+        const cnt = TEKIL_KUMBARA.has(cashFor.split('#')[0]) ? 0 : (COUNTABLE[cashFor]?.() ?? 0)
         ui.toast(cnt > 1 ? t('+₺{0} toplandı! ({1} ünitenin ortak kumbarası — gelir ×{1})', amt, cnt)
           : t('+₺{0} toplandı!', amt), 'good', true)
         persist()

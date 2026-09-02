@@ -79,12 +79,29 @@ for (const aralik of [60, 300, 600]) {
 
 // A3 — kumbara tavanı gelirle AYNI oranda (sınıf yorumunun kendi kuralı)
 const capOf = (alan, id, n) => { const s = new GameState(); s[alan] = n; return s.pendingCap(id) }
-for (const [alan, id] of [['selfWashCount', 'selfwash'], ['airWaterCount', 'airwater'], ['parkingCount', 'parking']]) {
+for (const [alan, id] of [['selfWashCount', 'selfwash'], ['parkingCount', 'parking']]) {
   const c1 = capOf(alan, id, 1)
   check(`${id}: kumbara tavanı ${SAYAC_KUMBARA_MAX} üniteye kadar doğrusal (₺${c1} → ₺${capOf(alan, id, SAYAC_KUMBARA_MAX)})`,
     capOf(alan, id, SAYAC_KUMBARA_MAX) === c1 * SAYAC_KUMBARA_MAX)
   check(`${id}: tavan suistimal freniyle sınırlı (${SAYAC_KUMBARA_MAX} üstü büyümüyor)`,
     capOf(alan, id, SAYAC_KUMBARA_MAX + 40) === capOf(alan, id, SAYAC_KUMBARA_MAX))
+}
+
+// A3b — HAVA-SU TEKİL KUMBARA (2 Eyl): anahtar ünite başına ('airwater#k'), tavan ünite
+//       başına SABİT; toplam kapasite (pendingCapTotal) adetle doğrusal, 12 freni yok.
+{
+  const s = new GameState(); s.airWaterCount = 5
+  check(`hava-su: ünite tavanı sabit (₺${s.pendingCap('airwater')} = ₺${s.pendingCap('airwater#4')})`,
+    s.pendingCap('airwater') === s.pendingCap('airwater#4'))
+  check('hava-su: ünite anahtarları adet kadar', s.airWaterUnitIds().join() === 'airwater,airwater#1,airwater#2,airwater#3,airwater#4')
+  const tek = new GameState(); tek.airWaterCount = 1
+  const on3 = new GameState(); on3.airWaterCount = 13
+  check(`hava-su: toplam kapasite adetle doğrusal, 13 ünitede de (₺${on3.pendingCapTotal()} = 13 × ₺${tek.pendingCapTotal()})`,
+    on3.pendingCapTotal() === 13 * tek.pendingCapTotal())
+  // ciro raporu TÜR bazında: ünite anahtarına yazılan para facTotal['airwater']'da toplanır
+  s.addPending('airwater#3', 15, 'Hava-su'); s.addPending('airwater', 15, 'Hava-su')
+  check('hava-su: ünite kumbaraları ayrı, ciro raporu tek kalemde',
+    s.pendingCash['airwater#3'] === 15 && s.pendingCash['airwater'] === 15 && s.facTotal['airwater'] === 30 && !s.facTotal['airwater#3'])
 }
 
 // A4 — SUNUCU SENKRONU: istemci sert tavanı (cap×3) sunucu clamp'ini aşmamalı

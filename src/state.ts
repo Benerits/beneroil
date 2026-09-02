@@ -337,6 +337,14 @@ export const LAMP_REP_MAX_COUNT = Math.ceil(LAMP_REP_CAP / LAMP_REP_PER)  // = 8
  *  ⚠️ server/index.js pendingCash clamp'i buradan türetilir — biri değişirse ikisi de
  *  değişmeli, yoksa meşru oyuncunun kumbarası kayıtta kırpılır ("param gitti"). */
 export const SAYAC_KUMBARA_MAX = 12
+/** TEKİL KUMBARALI TESİSLER — ünitelerin HER BİRİ kendi kumbarasında biriktirir
+ *  ('airwater', 'airwater#1', …), tür başına tek ortak kasa yok. (2 Eyl, Oğuz:
+ *  "hava-suya ödeme gelince hepsinin üzerinde ortak para yazıyor, her biri tekil kazanç
+ *  sağlamalı"; #1274 "13 ünitede ₺300 görüp 3.900 bekledim, 300 geldi".) Self yıkama ve
+ *  otopark hâlâ ortak kasada. Sunucu clamp'i anahtar başına olduğundan etkilenmez. */
+export const TEKIL_KUMBARA: ReadonlySet<string> = new Set(['airwater'])
+/** 'airwater#3' → 'airwater' — kumbara/rapor anahtarını tesis türüne indirger */
+export const kumbaraTuru = (id: string) => id.split('#')[0]
 /** Otopark yer sayısı — ÇİZİM (world), park noktası (traffic) ve MAĞAZA METNİ aynı
  *  sabitten okur. Burada (state) durur çünkü world zaten state'ten import ediyor;
  *  tersi döngü olurdu. 4→2: 1,25 aralık araçları fiziksel bindiriyordu (1 Eyl). */
@@ -2837,7 +2845,7 @@ export class GameState {
    *  market seviyeyle, self-yıkama/hava-su/otopark adetle; tek-seviyeli tesisler
    *  gelir düzeylerine göre sabit. Böylece geliştirilen market daha çok biriktirir. */
   pendingCap(id: string): number {
-    switch (id) {
+    switch (kumbaraTuru(id)) {
       case 'market': return 600 * Math.max(1, this.marketLevel)                          // gelir ×level → cap ×level
       case 'market2': return 600 * Math.max(1, this.market2Level)                        // karşı market — aynı ölçek
       case 'toilet2': return 500 * Math.max(1, this.toilet2Level)
@@ -2855,7 +2863,9 @@ export class GameState {
       // Tavan artık gelirle aynı doğrusal ölçekte; SAYAC_KUMBARA_MAX yalnız suistimal
       // freni (sunucu pendingCash clamp'i bununla senkron tutulur).
       case 'selfwash': return 400 * Math.min(SAYAC_KUMBARA_MAX, Math.max(1, this.selfWashCount))
-      case 'airwater': return 250 * Math.min(SAYAC_KUMBARA_MAX, Math.max(1, this.airWaterCount))
+      // HAVA-SU TEKİL KUMBARA: anahtar ünite başına ('airwater#k'), tavan da ünite başına.
+      // Toplam kapasite yine adetle doğrusal (pendingCapTotal adetle çarpar).
+      case 'airwater': return 250
       case 'parking': return 300 * Math.min(SAYAC_KUMBARA_MAX, Math.max(1, this.parkingCount))
       case 'truckpark': return 1200   // pasif yüksek kazanan
       case 'truckpark2': return 1200
@@ -2896,8 +2906,11 @@ export class GameState {
     // rakip baskısı TEK NOKTADAN uygulanır: her çağrı yerine tek tek eklemek yerine
     // gelir kapısında kesiliyor, böylece yeni tesis eklenince unutulmuyor.
     amt = amt * this.rivalFacMult(id)
-    this.facDaily[id] = (this.facDaily[id] ?? 0) + amt
-    this.facTotal[id] = (this.facTotal[id] ?? 0) + amt
+    // CİRO RAPORU TÜR BAZINDA: tekil kumbaralı ünite ('airwater#3') kendi kasasına yazar
+    // ama bina kartı/ofis "Hava-Su" cirosunu tek kalemde görsün.
+    const tur = kumbaraTuru(id)
+    this.facDaily[tur] = (this.facDaily[tur] ?? 0) + amt
+    this.facTotal[tur] = (this.facTotal[tur] ?? 0) + amt
     const cap = this.pendingCap(id)
     const hard = cap * 3
     const cur = this.pendingCash[id] ?? 0
@@ -2947,9 +2960,14 @@ export class GameState {
         || (id === 'hotel' && this.hasHotel)
         || (id === 'selfwash' && this.selfWashCount > 0)
         || (id === 'airwater' && this.airWaterCount > 0) || (id === 'parking' && this.parkingCount > 0)
-      if (has) v += this.pendingCap(id)
+      if (has) v += this.pendingCap(id) * (id === 'airwater' ? Math.max(1, this.airWaterCount) : 1)
     }
     return v
+  }
+
+  /** hava-su ünite kumbara anahtarları: 'airwater', 'airwater#1', … (kurulu adet kadar) */
+  airWaterUnitIds(): string[] {
+    return Array.from({ length: Math.max(0, this.airWaterCount) }, (_, i) => i === 0 ? 'airwater' : `airwater#${i}`)
   }
 
   private pendingTotal(): number { return Object.values(this.pendingCash).reduce((a, v) => a + (v || 0), 0) }
@@ -3212,10 +3230,10 @@ export function getShopItems(s: GameState): ShopRow[] {
   // Oyuncu tam parayı ödeyip karşılığında sıfır alıyordu; mağaza metni bunu söylemediği
   // için hata da fark edilmiyordu. Kurulum hâlâ serbest, ama getirinin nerede durduğu
   // artık satırın üstünde yazıyor (kilidin/tavanın NEDENİ her zaman görünsün ilkesi).
+  // HAVA-SU: gelir tavanı KALKTI (2 Eyl) — her ünite kendi kumbarasına biriktirir, gelen
+  // her araç her üniteye ₺10-20 bırakır; 13. ünite de 1. kadar kazanır.
   row('airwater', 'i-air', s.airWaterCount ? t('Hava-Su Ünitesi ({0})', s.airWaterCount) : t('Hava-Su Ünitesi'), '+₺10-20',
-    s.airWaterCount >= SAYAC_KUMBARA_MAX
-      ? t('Lastik havası ve su — gelir tavanına ulaştın ({0} ünite), yeni ünite kazanç eklemez.', SAYAC_KUMBARA_MAX)
-      : t('Lastik havası ve su — ucuz ama müşteri çeker (gelir {0} üniteye kadar büyür)', SAYAC_KUMBARA_MAX),
+    t('Lastik havası ve su — ucuz ama müşteri çeker. Her ünitenin KENDİ kumbarası var; gelen her araç her üniteye ₺10-20 bırakır.'),
     AIRWATER_COST, null)
   row('lamp', 'i-star', s.lampCount ? t('Sokak Lambası ({0})', s.lampCount) : t('Sokak Lambası'), t('+itibar'),
     s.lampCount >= LAMP_REP_MAX_COUNT

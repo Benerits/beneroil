@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { t } from './i18n'
 import { StaticLib, fitModel } from './models'
-import { PARCEL_COLS, PARCEL_ROWS, FuelType, PARK_YER } from './state'
+import { PARCEL_COLS, PARCEL_ROWS, FuelType, PARK_YER, TEKIL_KUMBARA } from './state'
 export { PARK_YER }
 import { LocationTheme, activeTheme } from './themes'
 import type { Kit } from './kits'
@@ -1280,11 +1280,13 @@ export class World {
       // toplamada ₺300 gelince "3.600 eklenmedi" diyordu. Çok üniteli tesiste rozet
       // ORTAK olduğunu kendisi söyler; aynı tutarın 13 kez yazılması artık toplanmaz.
       const base = b.id.split('#')[0]
-      const amt = list.get(base)
-      const text = amt ? ((adet.get(base) ?? 1) > 1 ? `₺${Math.round(amt)} · ${t('ortak')}` : `₺${Math.round(amt)}`) : null
+      // TEKİL KUMBARA (hava-su): rozet ünitenin KENDİ anahtarından okunur, "ortak" eki yok.
+      const tekil = TEKIL_KUMBARA.has(base)
+      const amt = tekil ? list.get(b.id) : list.get(base)
+      const text = amt ? ((!tekil && (adet.get(base) ?? 1) > 1) ? `₺${Math.round(amt)} · ${t('ortak')}` : `₺${Math.round(amt)}`) : null
       if (text && b.cashText !== text) {
         if (b.cash) b.group.remove(b.cash)
-        b.cash = cashSprite(text, base)
+        b.cash = cashSprite(text, tekil ? b.id : base)
         b.cash.position.z = b.labelZ + 0.85
         b.group.add(b.cash)
         b.cashText = text

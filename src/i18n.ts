@@ -582,6 +582,11 @@ const EN: Record<string, string> = {
   'Self Yıkama (×{0} — ortak kumbara)': 'Self Wash (×{0} — shared piggy bank)',
   'Lastik havası ve su. Küçük gelir ama müşteri çeker. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
     'Tire air and water. Small income but attracts customers. Units share one piggy bank; income scales with count.',
+  'Lastik havası ve su. Küçük gelir ama müşteri çeker. Her ünitenin KENDİ kumbarası var: gelen her araç her üniteye ₺10-20 bırakır.':
+    'Tire air and water. Small income but attracts customers. Each unit has its OWN piggy bank: every arriving car leaves ₺10-20 at every unit.',
+  'Lastik havası ve su — ucuz ama müşteri çeker. Her ünitenin KENDİ kumbarası var; gelen her araç her üniteye ₺10-20 bırakır.':
+    'Tire air and water — cheap but draws customers. Each unit has its OWN piggy bank; every arriving car leaves ₺10-20 at every unit.',
+  '₺10-20 / araç / ünite': '₺10-20 / car / unit', 'Hizmet': 'Service',
   'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
     'Cars wash themselves in the bays; foam and water sell automatically. Units share one piggy bank; income scales with count.',
   'Müşteri paneli (kapalıyken yalnız araca tıklayınca açılır)': 'Customer panel (when off, opens only when you tap a car)',
@@ -2164,6 +2169,11 @@ const FR: Record<string, string> = {
   'Self Yıkama (×{0} — ortak kumbara)': 'Lavage self (×{0} — tirelire commune)',
   'Lastik havası ve su. Küçük gelir ama müşteri çeker. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
     'Air pour les pneus et eau. Petits revenus, mais ça attire les clients. Les unités partagent une tirelire ; les revenus montent avec le nombre.',
+  'Lastik havası ve su. Küçük gelir ama müşteri çeker. Her ünitenin KENDİ kumbarası var: gelen her araç her üniteye ₺10-20 bırakır.':
+    'Air pour les pneus et eau. Petits revenus, mais ça attire les clients. Chaque unité a SA PROPRE tirelire : chaque voiture laisse ₺10-20 à chaque unité.',
+  'Lastik havası ve su — ucuz ama müşteri çeker. Her ünitenin KENDİ kumbarası var; gelen her araç her üniteye ₺10-20 bırakır.':
+    'Air pour les pneus et eau — pas cher mais attire les clients. Chaque unité a SA PROPRE tirelire ; chaque voiture laisse ₺10-20 à chaque unité.',
+  '₺10-20 / araç / ünite': '₺10-20 / voiture / unité', 'Hizmet': 'Service',
   'Araçlar bölmelere girip kendileri yıkar; köpük ve su otomatik satılır. Üniteler ortak kumbarada biriktirir, gelir adetle artar.':
     'Les voitures se lavent seules dans les box ; mousse et eau se vendent automatiquement. Les unités partagent une tirelire ; les revenus montent avec le nombre.',
   'Müşteri paneli (kapalıyken yalnız araca tıklayınca açılır)':
