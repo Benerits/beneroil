@@ -461,10 +461,14 @@ function resize() {
   camera.updateProjectionMatrix()
 }
 window.addEventListener('resize', resize)
+// ZOOM SINIRLARI tek yerde: tekerlek ve pinch aynı aralığı kullanır. Alt sınır 0,62 → 0,52
+// (2 Eyl, Oğuz): "tam istasyonu göremiyorum, %20 kadar daha uzaklaşabilelim" — büyümüş
+// istasyon (karşı yaka + marina) 0,62'de kadraja sığmıyordu.
+const ZOOM_MIN = 0.52, ZOOM_MAX = 2.6
 window.addEventListener('wheel', e => {
   // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
   if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar')) return
-  camera.zoom = Math.min(2.6, Math.max(0.62, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
+  camera.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, camera.zoom * Math.exp(-e.deltaY * 0.0012)))
   camera.updateProjectionMatrix()
 }, { passive: true })
 
@@ -481,7 +485,7 @@ window.addEventListener('touchmove', e => {
     e.preventDefault()
     const d = touchDist(e.touches)
     if (pinchStartDist > 0) {
-      camera.zoom = Math.min(2.6, Math.max(0.62, pinchStartZoom * (d / pinchStartDist)))
+      camera.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinchStartZoom * (d / pinchStartDist)))
       camera.updateProjectionMatrix()
     }
   }
