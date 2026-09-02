@@ -96,9 +96,13 @@ export const ICICE_MESAFE = 2.15
  *  (servis şeridi 5.6 ↔ transit 7, enine 1.4, aynı hızda → SÜREKLİ) ve 1.4 aralıkla park
  *  etmiş araçları "iç içe" sayıyordu — saatlik iç içe olaylarının 3/4'ü buydu. Enine 1.4
  *  > 1.2: gövdeler değmiyor, oyuncu üst üste görmüyor. */
-/** 2.66 değil 2.5: konveyör tabanı BLOK_TABAN=2.55 (cars.ts) — tasarımın izin verdiği
- *  aralık olay olmasın; en uzun gövdede 0.1'lik tampon teması gözle görülmez. */
-export const ARAC_BOY = 2.5
+/** 2.66 değil 2.15: tasarımın "tam duruş" aralığı BLOK_DUR=2.2 (cars.ts) — ardışık
+ *  araçlar kural gereği 2.2'de durabilir, o aralık olay olmasın (eski dairesel eşikle
+ *  de değildi). Canlı 1033 bundle'ı: 2.5 ile ilk 11 olayın 4'ü 2.2–2.5 aralıklı düzenli
+ *  kolon takipçisiydi. Lab'ın "gözle üst üste" ölçütü 1.6 (traffic-load) — 2.15 onun
+ *  üstünde bir pay bırakır; 1.6–2.15 arası "burun buruna" sayılır, kolon dışı yola
+ *  katılan çiftlerin (kapsam dışı) izini sürmek için. */
+export const ARAC_BOY = 2.15
 /** 1.2 değil 1.0: gelen/giden omurgalar tasarım gereği LANE_SEP=1.05 aralıkla yan yana
  *  akar (traffic-graph.ts); duran kuyruk + yanında bekleyen giden araç olay olmasın. */
 export const ARAC_EN = 1.0
