@@ -461,10 +461,10 @@ function resize() {
   camera.updateProjectionMatrix()
 }
 window.addEventListener('resize', resize)
-// ZOOM SINIRLARI tek yerde: tekerlek ve pinch aynı aralığı kullanır. Alt sınır 0,62 → 0,52
+// ZOOM SINIRLARI tek yerde: tekerlek ve pinch aynı aralığı kullanır. Alt sınır 0,62 → 0,52 → 0,48 (ikinci adım, Oğuz 2 Eyl)
 // (2 Eyl, Oğuz): "tam istasyonu göremiyorum, %20 kadar daha uzaklaşabilelim" — büyümüş
 // istasyon (karşı yaka + marina) 0,62'de kadraja sığmıyordu.
-const ZOOM_MIN = 0.52, ZOOM_MAX = 2.6
+const ZOOM_MIN = 0.48, ZOOM_MAX = 2.6
 window.addEventListener('wheel', e => {
   // UI panellerinin üzerindeyken oyuna zoom geçirme (modal içinde scroll serbest)
   if ((e.target as HTMLElement).closest?.('.backdrop, .modal, #panel, #infocard, .hud, .navbar')) return
