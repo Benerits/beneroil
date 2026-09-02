@@ -207,6 +207,22 @@ const olay = await import('../../src/trafik-olay.ts')
     sur(3)
     check('iç içe: hedef süren çiftin iki üyesi (seyirci hariç)', JSON.stringify(g[0]?.govde.hedef) === '[1,2]', JSON.stringify(g[0]?.govde.hedef))
   }
+  // 3d''') iç içe YÖNLÜ ölçüm: yönü bilinen çiftte ayak izi (2.66 × 1.2) esas alınır
+  {
+    const yonlu = (id, x, y, hx, hy) => ({ ...araba(id, x, y, 'driving'), hx, hy })
+    const g = kur(() => [yonlu(1, 0, 0, 1, 0), yonlu(2, 0, 1.4, 1, 0)])
+    sur(5)
+    check('iç içe: yan yana şerit (enine 1.4, aynı yön) olay DEĞİL', g.length === 0, JSON.stringify(g.map(x => x.govde.k)))
+    const h = kur(() => [yonlu(1, 0, 0, 1, 0), yonlu(2, 2.0, 0.2, 1, 0)])
+    sur(3)
+    check('iç içe: aynı şeritte boyuna 2.0 (< 2.66) olay', h.length === 1 && h[0].govde.k === 'icice', JSON.stringify(h.map(x => x.govde.k)))
+    const k = kur(() => [yonlu(1, 0, 0, 1, 0), yonlu(2, 1.5, 0, 0, 1)])
+    sur(3)
+    check('iç içe: dik kesişen çift (birinin çerçevesinde) olay', k.length === 1 && k[0].govde.k === 'icice', JSON.stringify(k.map(x => x.govde.k)))
+    const m = kur(() => [araba(1, 0, 0, 'driving'), araba(2, 0, 1.4, 'driving')])
+    sur(3)
+    check('iç içe: yönsüz çiftte dairesel 2.15 eşiği korunur', m.length === 1 && m[0].govde.k === 'icice', JSON.stringify(m.map(x => x.govde.k)))
+  }
   {
     const g = kur(() => [araba(1, 3, 3, 'atPump')])
     sur(120)

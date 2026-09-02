@@ -58,6 +58,9 @@ export interface OlayAraci {
    *  kilitlenme yine yakalanır: 30 sn sonra muafiyet freni bırakır, blokT sıfırlanır
    *  ve hâlâ kıpırdamayan araç sayaca döner. */
   frenli?: boolean
+  /** yön (birim vektör; group.rotation.z'den). Yoksa çift dairesel eşikle ölçülür. */
+  hx?: number
+  hy?: number
 }
 
 export interface OlayBaglam {
@@ -81,8 +84,24 @@ export interface OlayBaglam {
   kurtarma: () => number
 }
 
-/** İÇ İÇE eşiği: merkez mesafesi bunun altındaki çift gözle üst üste görünür. */
+/** İÇ İÇE eşiği (yön bilinmiyorsa): merkez mesafesi bunun altındaki çift üst üste sayılır. */
 export const ICICE_MESAFE = 2.15
+/** Araç ayak izi (cars.ts CAR_SPECS: front+rear ≈ 2.66, width ≤ 1.2). Yönü bilinen çiftte
+ *  ölçüm YÖNLÜ: boyuna < ARAC_BOY ve enine < ARAC_EN (iki aracın çerçevesinden birinde).
+ *  Neden (2 Eyl, canlı 0853 bundle'ı): dairesel 2.15 eşiği yan yana şeritteki araçları
+ *  (servis şeridi 5.6 ↔ transit 7, enine 1.4, aynı hızda → SÜREKLİ) ve 1.4 aralıkla park
+ *  etmiş araçları "iç içe" sayıyordu — saatlik iç içe olaylarının 3/4'ü buydu. Enine 1.4
+ *  > 1.2: gövdeler değmiyor, oyuncu üst üste görmüyor. */
+export const ARAC_BOY = 2.66
+export const ARAC_EN = 1.2
+function ustUste(a: OlayAraci, b: OlayAraci): boolean {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const cerceve = (hx: number, hy: number) =>
+    Math.abs(dx * hx + dy * hy) < ARAC_BOY && Math.abs(dx * hy - dy * hx) < ARAC_EN
+  const aY = a.hx != null && a.hy != null, bY = b.hx != null && b.hy != null
+  if (!aY && !bY) return dx * dx + dy * dy < ICICE_MESAFE * ICICE_MESAFE
+  return (aY && cerceve(a.hx!, a.hy!)) || (bY && cerceve(b.hx!, b.hy!))
+}
 /** iç içe durumu bu kadar SÜRERSE olay sayılır (anlık kesişme değil) */
 export const ICICE_SURE = 2
 /** hareketsizlik eşiği (sn) — bu süre boyunca yer değiştirmeyen SÜRÜŞ fazındaki araç */
@@ -192,8 +211,7 @@ function olcum(araclar: OlayAraci[], adim: number) {
   let iciceCift = 0
   for (let i = 0; i < gorunur.length; i++) {
     for (let j = i + 1; j < gorunur.length; j++) {
-      const dx = gorunur[i].x - gorunur[j].x, dy = gorunur[i].y - gorunur[j].y
-      if (dx * dx + dy * dy >= ICICE_MESAFE * ICICE_MESAFE) continue
+      if (!ustUste(gorunur[i], gorunur[j])) continue
       iciceCift++
       const a = gorunur[i].id, b = gorunur[j].id
       buNabiz.add(a < b ? `${a}|${b}` : `${b}|${a}`)
