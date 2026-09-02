@@ -358,6 +358,20 @@ function warnSprite(text: string, maintId: string): THREE.Sprite {
 }
 
 /** hafif benekli zemin dokusu (AI dokusu yüklenemezse yedek) */
+/** BETON KAROSU (#1236 "arazi satın alındığında 2 arazi birleşmiyor görsel olarak"):
+ *  beton dokusu düzlem başına 0..1 UV ile döşeniyordu — istasyon lotu (11.5×20) ile
+ *  satın alınan parsel (11.5×14) aynı materyali FARKLI ölçekte ve fazda gösteriyor,
+ *  sınırda bir dikiş görünüyordu. Beton düzlemlerinin UV'si DÜNYA koordinatından
+ *  türetilir: bitişik lotlarda desen kesintisiz devam eder. 4.6 birim = eski istasyon
+ *  lotu ölçeği (11.5 / 2.5 tekrar) — mevcut görünüm korunur. */
+const BETON_KARO = 4.6
+function dunyaUvBeton(geom: THREE.PlaneGeometry, cx: number, cy: number) {
+  const pos = geom.attributes.position, uv = geom.attributes.uv
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, (cx + pos.getX(i)) / BETON_KARO, (cy + pos.getY(i)) / BETON_KARO)
+  uv.needsUpdate = true
+  return geom
+}
+
 function noiseTex(base: string, specks: [string, number][], repeat: number): THREE.Texture {
   const size = 256
   const c = document.createElement('canvas')
@@ -572,8 +586,10 @@ export class World {
     const th = this.theme
     const grassMat = aiGround(th.ground.grass, 146, 159,
       noiseTex(th.ground.grassTint, [['#79a25e', 900], ['#93bd77', 900], ['#' + th.palette.vegetation.toString(16).padStart(6, '0'), 300]], 30))
-    this.concreteMat = aiGround(th.ground.concrete, 2.5, 4.5,
-      noiseTex(th.ground.concreteTint, [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 8))
+    // beton UV'si dünya koordinatında (dunyaUvBeton) → tekrar 1; prosedürel yedek 3.2
+    // (eski 8 tekrar / 2.5 karo = aynı benek sıklığı)
+    this.concreteMat = aiGround(th.ground.concrete, 1, 1,
+      noiseTex(th.ground.concreteTint, [['#8d949c', 700], ['#a8afb7', 700], ['#7e858d', 200]], 3.2))
     const roadMat = aiGround(th.ground.road, 1.5, 84,
       noiseTex(th.ground.roadTint, [['#555c66', 800], ['#3f454c', 800], ['#606874', 200]], 6))
 
@@ -678,7 +694,7 @@ export class World {
       kerb.position.set(ROAD_X - 3.1, 0, 0.018); s.add(kerb)
     }
 
-    const lot = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 20), this.concreteMat)
+    const lot = new THREE.Mesh(dunyaUvBeton(new THREE.PlaneGeometry(11.5, 20), -0.75, 0), this.concreteMat)
     lot.position.set(-0.75, 0, 0.015)
     lot.receiveShadow = true
     s.add(lot)
@@ -741,7 +757,7 @@ export class World {
       // imzası); diğerlerinde beton payla kapatılır.
       const asfaltBasi = ROAD_X - roadW / 2
       if (th.id !== 'kasaba' && asfaltBasi > 5.0) {
-        const pay = new THREE.Mesh(new THREE.PlaneGeometry(asfaltBasi - 5.0 + 0.12, 220), this.concreteMat)
+        const pay = new THREE.Mesh(dunyaUvBeton(new THREE.PlaneGeometry(asfaltBasi - 5.0 + 0.12, 220), (5.0 + asfaltBasi) / 2, 0), this.concreteMat)
         pay.position.set((5.0 + asfaltBasi) / 2, 0, 0.014)
         pay.receiveShadow = true
         s.add(pay)
@@ -1299,7 +1315,7 @@ export class World {
   }
 
   private makeApron(y: number, x = 5.5) {
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(1.3, this.wideGates ? 6.2 : 3.4), this.concreteMat)
+    const apron = new THREE.Mesh(dunyaUvBeton(new THREE.PlaneGeometry(1.3, this.wideGates ? 6.2 : 3.4), x, y), this.concreteMat)
     apron.position.set(x, y, 0.014)
     apron.receiveShadow = true
     this.scene.add(apron)
@@ -2244,7 +2260,7 @@ export class World {
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]
     const w = x1 - x0, d = y1 - y0
-    const lot = new THREE.Mesh(new THREE.PlaneGeometry(w, d), this.concreteMat)
+    const lot = new THREE.Mesh(dunyaUvBeton(new THREE.PlaneGeometry(w, d), (x0 + x1) / 2, (y0 + y1) / 2), this.concreteMat)
     lot.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.015)
     lot.receiveShadow = true
     this.scene.add(lot)
