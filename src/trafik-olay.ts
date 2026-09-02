@@ -278,6 +278,12 @@ function olcum(araclar: OlayAraci[], adim: number) {
   }
 }
 
+/** index.html `<meta name="surum">` (vite.config surumMeta). Testlerde (DOM yok) tanımsız. */
+function surumDamgasi(): string | undefined {
+  if (typeof document === 'undefined') return undefined
+  return document.querySelector('meta[name="surum"]')?.getAttribute('content') ?? undefined
+}
+
 /** kapı bekçisi: tavan + aralık + aynı tür tekrarı. Geçerse snapshot'ı yollar. */
 function olayGonder(tur: OlayTuru, araclar: OlayAraci[], hedef: number[] = []): boolean {
   if (!aktif) return false
@@ -298,8 +304,7 @@ function olayGonder(tur: OlayTuru, araclar: OlayAraci[], hedef: number[] = []): 
     },
     yapi: c.yapi(),
     hedef,
-    // typeof: tsx ile çalışan testlerde define yok — tanımsız kimlik ReferenceError atardı
-    v: typeof __SURUM__ === 'string' ? __SURUM__ : undefined,
+    v: surumDamgasi(),
   }
   sonOlayT = gecenSn
   gonderilen++

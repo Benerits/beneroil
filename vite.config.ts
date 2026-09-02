@@ -4,12 +4,20 @@ import { execSync } from 'node:child_process'
 /** SÜRÜM DAMGASI — trafik olayları hangi bundle'dan geldiğini söyler. Dağıtımdan sonra
  *  saatlerce açık kalan eski sekmeler eski kodun hatasını yeni kodun hanesine yazıyordu;
  *  damga olmadan ikisi ayrılamıyordu. Docker imajında .git yok → zaman damgası tek başına
- *  da ayırt eder, sha varsa eklenir. */
+ *  da ayırt eder, sha varsa eklenir.
+ *  index.html META'sına yazılır, bundle'a DEĞİL: bundle'a gömülünce her derleme farklı
+ *  hash üretiyordu ve "yerel hash == canlı hash" dağıtım doğrulaması ölmüştü. */
 function surumDamgasi() {
   let sha = ''
   try { sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* .git yok */ }
   const t = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
   return sha ? `${t}-${sha}` : t
+}
+function surumMeta(): Plugin {
+  return {
+    name: 'surum-meta',
+    transformIndexHtml: html => html.replace('<head>', `<head>\n    <meta name="surum" content="${surumDamgasi()}">`),
+  }
 }
 
 /**
@@ -54,14 +62,13 @@ export default defineConfig(({ mode }) => {
   const meta = mode === 'meta'
   return {
     base: meta ? './' : '/',
-    plugins: meta ? [metaHtml()] : [],
+    plugins: meta ? [metaHtml(), surumMeta()] : [surumMeta()],
     build: {
       target: 'es2022', // top-level await (model preload, main-meta) için
       outDir: meta ? 'dist-meta' : 'dist',
       emptyOutDir: true,
     },
     esbuild: { target: 'es2022' },
-    define: { __SURUM__: JSON.stringify(surumDamgasi()) },
     server: {
       // /api hedefi: env ile ayarlanabilir (varsayılan lokal node). Uzak backend'e karşı
       // geliştirmek için: API_TARGET=https://petrol-dev.benerits.com npm run dev
