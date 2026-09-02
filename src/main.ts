@@ -4837,7 +4837,7 @@ function showReserves(skipId: string) {
   const g = new THREE.Group()
   for (const o of fixedObstacles(skipId)) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.d),
-      new THREE.MeshBasicMaterial({ color: 0xe8862e, transparent: true, opacity: 0.13, depthWrite: false }))
+      new THREE.MeshBasicMaterial({ color: 0xe8862e, transparent: true, opacity: o.lane ? 0.2 : 0.13, depthWrite: false }))
     m.position.set(o.cx, o.cy, 0.045)
     g.add(m)
   }
@@ -5040,6 +5040,39 @@ function repositionPlacing(x: number, y: number) {
   }
   placing.planeMat.color.setHex(placing.valid ? 0x37c97e : 0xec5b5b)
   placing.planeMat.opacity = placing.valid ? 0.22 : 0.34
+}
+/** "NEDEN KIRMIZI?" — OYUNCUYA SÖYLENEN sebep (#1228 #1230 #1285 #1295). ✓'ya basınca
+ *  tek bir genel cümle çıkıyordu: "sahipli ve betonlu alana koy". Karşı yakada BETONLU
+ *  arsasına hava-su koymaya çalışan oyuncu bunu okuyup "betonlu alana koymama rağmen
+ *  konmuyor" yazdı — gerçek sebep şerit rezervi ya da arsa sınırından taşan köşeydi ve
+ *  hiçbir yerde görünmüyordu. Artık reddeden kural adıyla söylenir. Öncelik: somut olan
+ *  önce (yapı > sabit rezerv > şerit > arazi > ulaşım). __dbg.place.neden() ile aynı kurallar. */
+function yerlesimNedeni(): string {
+  if (!placing) return ''
+  const odd = placing.rot % 2 === 1
+  const eff = { cx: placing.cx, cy: placing.cy, w: odd ? placing.d : placing.w, d: odd ? placing.w : placing.d }
+  const yapi = placedRects.find(o => o.id !== placing!.id && overlaps(eff, o))
+  if (yapi) {
+    const ad = world.buildings.find(b => b.id === yapi.id)?.name ?? yapi.id
+    return t('Buraya yerleştirilemez — {ad} ile çakışıyor. Biraz kaydır.').replace('{ad}', ad)
+  }
+  const sabit = fixedObstacles(placing.id).filter(o => overlaps(eff, o))
+  if (sabit.some(o => !o.lane)) return t('Buraya yerleştirilemez — tank/ofis/tabela ya da pompa rezervine çakışıyor.')
+  if (sabit.length) return t('Buraya yerleştirilemez — turuncu araç şeridine (kuyruk/giriş-çıkış yolu) çakışıyor. Şeritten uzağa kaydır.')
+  let disari = false, sahipsiz = false, betonsuz = false
+  for (const sx of [-1, 0, 1]) for (const sy of [-1, 0, 1]) {
+    const x = eff.cx + sx * (eff.w / 2 - 0.2), y = eff.cy + sy * (eff.d / 2 - 0.2)
+    const pc = parcelAt(x, y)
+    if (!pc) disari = true
+    else if (!state.owns(pc[0], pc[1])) sahipsiz = true
+    else if (!placing.grass && !state.isPaved(pc[0], pc[1])) betonsuz = true
+  }
+  if (sahipsiz) return t('Buraya yerleştirilemez — yapının bir köşesi SAHİPSİZ arsaya taşıyor. Önce o arsayı satın al.')
+  if (betonsuz) return t('Buraya yerleştirilemez — yapının bir köşesi BETONSUZ arsaya taşıyor. Önce arsayı betonla.')
+  if (disari) return t('Buraya yerleştirilemez — yapının bir köşesi arsa sınırının dışına taşıyor. İçeri doğru kaydır.')
+  if (placing.id.startsWith('pump-') || placing.id.startsWith('charger-'))
+    return t('Araç bu üniteye ulaşamaz — önünü kapatan yapıyı taşı ya da üniteyi döndür.')
+  return t('Buraya yerleştirilemez — kırmızıysa başka yere taşı.')
 }
 /** pompa/şarj hayaleti karşı yakadaysa 180° döner (kurulumdaki far-flip ile birebir) */
 function placingFarFlip(): boolean {
@@ -5820,7 +5853,7 @@ connectLive()
     })
     document.getElementById('mv-ok')?.addEventListener('click', () => {
       if (placing && placing.valid) confirmPlacement()
-      else ui.toast(t('Buraya yerleştirilemez — kırmızıysa başka yere taşı.'), 'bad')
+      else ui.toast(yerlesimNedeni(), 'bad')
     })
     document.getElementById('mv-cancel')?.addEventListener('click', () => cancelPlacement())
   }
@@ -7068,7 +7101,7 @@ window.addEventListener('pointerup', e => {
       if (pt) repositionPlacing(pt.x, pt.y)
       if (placing && Math.abs(placing.cx - prevX) + Math.abs(placing.cy - prevY) > 0.5) return
       if (placing.valid) confirmPlacement()
-      else ui.toast('Buraya yerleştiremezsin — sahipli ve betonlu alana koy.', 'bad')
+      else ui.toast(yerlesimNedeni(), 'bad')
     }
     return
   }

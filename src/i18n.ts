@@ -110,6 +110,13 @@ const EN: Record<string, string> = {
   // ŞERİT AĞI: erişilemez ünite (araç kolu katı cisimle kapalı)
   "Araç bu üniteye ulaşamaz — önünü kapatan yapıyı taşı ya da üniteyi döndür.":
     "Cars can't reach this unit — move the building blocking it, or rotate the unit.",
+  // "NEDEN KIRMIZI?" — ✓'ya basınca reddeden kuralın adı (#1228 #1230 #1285 #1295)
+  "Buraya yerleştirilemez — {ad} ile çakışıyor. Biraz kaydır.": "Can't place here — overlaps {ad}. Nudge it a bit.",
+  "Buraya yerleştirilemez — tank/ofis/tabela ya da pompa rezervine çakışıyor.": "Can't place here — overlaps the tank/office/sign or a pump reserve.",
+  "Buraya yerleştirilemez — turuncu araç şeridine (kuyruk/giriş-çıkış yolu) çakışıyor. Şeritten uzağa kaydır.": "Can't place here — overlaps the orange vehicle lane (queue / gate path). Move it away from the lane.",
+  "Buraya yerleştirilemez — yapının bir köşesi SAHİPSİZ arsaya taşıyor. Önce o arsayı satın al.": "Can't place here — a corner of the building spills onto UNOWNED land. Buy that lot first.",
+  "Buraya yerleştirilemez — yapının bir köşesi BETONSUZ arsaya taşıyor. Önce arsayı betonla.": "Can't place here — a corner of the building spills onto UNPAVED land. Pave the lot first.",
+  "Buraya yerleştirilemez — yapının bir köşesi arsa sınırının dışına taşıyor. İçeri doğru kaydır.": "Can't place here — a corner of the building sticks out past the lot boundary. Move it inward.",
   "Araç bu üniteye ulaşamıyor — önündeki yapıyı taşı":
     "Cars can't reach this unit — move the building in front of it",
   "ARAÇ ULAŞAMIYOR": "NO CAR ACCESS",
@@ -1661,6 +1668,13 @@ const FR: Record<string, string> = {
   // ŞERİT AĞI: erişilemez ünite (araç kolu katı cisimle kapalı)
   "Araç bu üniteye ulaşamaz — önünü kapatan yapıyı taşı ya da üniteyi döndür.":
     "Les voitures ne peuvent pas atteindre cette unité — déplace le bâtiment qui bloque, ou pivote l'unité.",
+  // "NEDEN KIRMIZI?" — ✓'ya basınca reddeden kuralın adı (#1228 #1230 #1285 #1295)
+  "Buraya yerleştirilemez — {ad} ile çakışıyor. Biraz kaydır.": "Impossible de placer ici — chevauche {ad}. Décale-le un peu.",
+  "Buraya yerleştirilemez — tank/ofis/tabela ya da pompa rezervine çakışıyor.": "Impossible de placer ici — chevauche la cuve, le bureau, l'enseigne ou la réserve d'une pompe.",
+  "Buraya yerleştirilemez — turuncu araç şeridine (kuyruk/giriş-çıkış yolu) çakışıyor. Şeritten uzağa kaydır.": "Impossible de placer ici — chevauche la voie orange (file d'attente / accès). Éloigne-le de la voie.",
+  "Buraya yerleştirilemez — yapının bir köşesi SAHİPSİZ arsaya taşıyor. Önce o arsayı satın al.": "Impossible de placer ici — un coin du bâtiment déborde sur un terrain NON POSSÉDÉ. Achète d'abord ce terrain.",
+  "Buraya yerleştirilemez — yapının bir köşesi BETONSUZ arsaya taşıyor. Önce arsayı betonla.": "Impossible de placer ici — un coin du bâtiment déborde sur un terrain NON BÉTONNÉ. Bétonne d'abord le terrain.",
+  "Buraya yerleştirilemez — yapının bir köşesi arsa sınırının dışına taşıyor. İçeri doğru kaydır.": "Impossible de placer ici — un coin du bâtiment dépasse la limite du terrain. Décale-le vers l'intérieur.",
   "Araç bu üniteye ulaşamıyor — önündeki yapıyı taşı":
     "Les voitures ne peuvent pas atteindre cette unité — déplace le bâtiment devant elle",
   "ARAÇ ULAŞAMIYOR": "ACCÈS VOITURE IMPOSSIBLE",
