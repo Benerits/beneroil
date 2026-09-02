@@ -120,6 +120,13 @@ const turler = {}
 olaylar.forEach(o => turler[o.kind] = (turler[o.kind] || 0) + 1)
 console.log('TÜR DAĞILIMI:', Object.entries(turler).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}=${n}`).join('  '))
 
+// sürüm dağılımı: dağıtımdan sonra açık kalan ESKİ sekmeler yeni kodun hanesine yazılmasın
+// ('?' = damgasız eski bundle). Tür × sürüm birlikte basılır ki "hangi tür hangi kodda" görülsün.
+const surumler = {}
+olaylar.forEach(o => { const v = o.payload.v || '?'; (surumler[v] ??= {})[o.kind] = (surumler[v][o.kind] || 0) + 1 })
+console.log('SÜRÜM DAĞILIMI:', Object.entries(surumler).sort((a, b) => a[0].localeCompare(b[0]))
+  .map(([v, t]) => `${v}{${Object.entries(t).map(([k, n]) => `${k}=${n}`).join(' ')}}`).join('  '))
+
 // küme: tür × yerleşim imzası — aynı düzenden gelen olaylar tek sorundur
 const kume = new Map()
 for (const o of olaylar) {

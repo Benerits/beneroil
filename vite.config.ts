@@ -1,4 +1,16 @@
 import { defineConfig, type Plugin } from 'vite'
+import { execSync } from 'node:child_process'
+
+/** SÜRÜM DAMGASI — trafik olayları hangi bundle'dan geldiğini söyler. Dağıtımdan sonra
+ *  saatlerce açık kalan eski sekmeler eski kodun hatasını yeni kodun hanesine yazıyordu;
+ *  damga olmadan ikisi ayrılamıyordu. Docker imajında .git yok → zaman damgası tek başına
+ *  da ayırt eder, sha varsa eklenir. */
+function surumDamgasi() {
+  let sha = ''
+  try { sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* .git yok */ }
+  const t = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+  return sha ? `${t}-${sha}` : t
+}
 
 /**
  * mode=meta → Facebook Instant Games bundle'ı (tek kaynak, ayrı hedef).
@@ -49,6 +61,7 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
     },
     esbuild: { target: 'es2022' },
+    define: { __SURUM__: JSON.stringify(surumDamgasi()) },
     server: {
       // /api hedefi: env ile ayarlanabilir (varsayılan lokal node). Uzak backend'e karşı
       // geliştirmek için: API_TARGET=https://petrol-dev.benerits.com npm run dev

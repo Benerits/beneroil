@@ -40,6 +40,8 @@ export interface TrafikOlay {
   /** TETİKLEYEN araçların `cars` içindeki indeksleri (sıkışan araçlar / süren iç içe çiftin
    *  iki üyesi). Analiz bunu okumadan önce "hangi araç?" sorusu tahminle cevaplanıyordu. */
   hedef?: number[]
+  /** istemci bundle damgası (vite `__SURUM__`). Dağıtım sonrası eski/yeni kodu ayırır. */
+  v?: string
 }
 
 export interface OlayAraci {
@@ -296,6 +298,8 @@ function olayGonder(tur: OlayTuru, araclar: OlayAraci[], hedef: number[] = []): 
     },
     yapi: c.yapi(),
     hedef,
+    // typeof: tsx ile çalışan testlerde define yok — tanımsız kimlik ReferenceError atardı
+    v: typeof __SURUM__ === 'string' ? __SURUM__ : undefined,
   }
   sonOlayT = gecenSn
   gonderilen++
