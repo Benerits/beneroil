@@ -5653,6 +5653,8 @@ if (dbgAcik) (window as unknown as Record<string, unknown>).__dbg = {
   // SİNEMATİK KAMERA (video stüdyosu için — yalnız vitrin modunda): pürüzsüz zoom/pan
   cine: {
     getCam() { return { x: camX, y: camY, zoom: camera.zoom } },
+    /** Dünya noktasının ekrandaki yeri (NDC, −1..1): kadraj kurarken "türbin ortada mı" ölçmek için */
+    proj(x: number, y: number, z: number) { const v = new THREE.Vector3(x, y, z).project(camera); return { x: v.x, y: v.y } },
     setCam(x: number, y: number, zoom?: number) {
       camX = x; camY = y
       if (typeof zoom === 'number') camera.zoom = Math.min(2.6, Math.max(0.4, zoom))

@@ -581,6 +581,121 @@ const SENARYOLAR = {
       await bekle(p, 2000)
     },
   },
+  // 7b) RÜZGÂR GÜLÜ v2 — ÇIKIŞ SONRASI PROMO (2 Eyl, Oğuz: "rüzgar gülü için de promo, videosunu isterim")
+  //
+  //    v1 (31 Ağu) çıkış DUYURUSUYDU: tek türbin, sabit kamera, HUD açık, bina kartı CSS'le
+  //    gizlendiği için hiç görünmedi. v2'de elimizde GERÇEK SAYI var: 36 saatte 94 istasyon
+  //    371 türbin dikti (prod, toplam). Kurgu: gece → uyuyan panel / dönen türbin karşıtlığı
+  //    (2 sn hook) → geri çekilince 4 türbinlik tarla + sayı → bina kartı (gerçek üretim)
+  //    → "Sen kaç tane diktin?" (yanıt çağrısı) → marka. HUD kapalı, 13,6 sn.
+  ruzgar2: {
+    ad: '07-ruzgar-gulu-v2',
+    save: { money: 9_500_000, day: 118, reputation: 4.9, pumps: 8, evChargers: 4,
+            marketLevel: 3, managerLevel: 3, hasWash: true, hasOil: true,
+            activeLoc: 'kasaba', unlockedLocs: ['kasaba'],
+            tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
+    isinma: 20000,
+    async oyna(p) {
+      // ── sahne: gece, HUD yok, 3 türbin (ilki vitrinden; 2'si oyunun kendi yerleştirme
+      //    akışıyla dikilir — hayalet yeşilse onaylanır, yani gerçekten kurulabilir yerler) ──
+      const kurulan = await p.evaluate(() => {
+        const s = document.createElement('style')
+        s.id = 'vo-sahne'
+        s.textContent = '#panel{display:none !important}#toasts{display:none !important}.hud,#navbar,#sheettabs{display:none !important}#vo h1{white-space:pre-line}'
+        document.head.appendChild(s)
+        const d = window.__dbg
+        d.saat(0.75)
+        const w0 = d.world.buildings.find(b => b.id === 'wind')
+        if (!w0) return -1
+        const bx = w0.group.position.x, by = w0.group.position.y
+        // vitrin türbini kuzeybatı parselde (col 1,row 0); batıdaki parsel (2,0) alınıp
+        // iki türbin daha dikilir. Sayılabilir yapı N'inci örnek 'wind#N' ile başlatılır.
+        d.kayit.arsaAl(2, 0, false)
+        let n = 0
+        for (const [x, y] of [[bx - 5.5, by], [bx - 12.5, by], [bx - 12.5, by + 6], [bx - 5.5, by + 6]]) {
+          if (n >= 2) break
+          const once = d.state.windCount
+          d.place.start(`wind#${once}`); d.place.at(x, y)
+          const r = d.place.neden()
+          if (r && !r.arazi.length && !r.sabit.length && !r.yapi.length) d.place.confirm(); else d.place.cancel()
+          if (d.state.windCount > once) n++
+        }
+        d.state.windWear = 0.08
+        // KADRAJ ÖLÇEREK: ortografik kamerada ekran ofseti dünya ofsetinin doğrusal
+        // fonksiyonu → iki sonda ile 2×2 çöz, hedef nokta istenen NDC'ye otursun.
+        const hedefKam = (P, nx, ny, zoom) => {
+          const c = d.cine.getCam()
+          d.cine.setCam(c.x, c.y, zoom)
+          const p0 = d.cine.proj(P.x, P.y, P.z)
+          d.cine.setCam(c.x + 1, c.y, zoom); const p1 = d.cine.proj(P.x, P.y, P.z)
+          d.cine.setCam(c.x, c.y + 1, zoom); const p2 = d.cine.proj(P.x, P.y, P.z)
+          d.cine.setCam(c.x, c.y, c.zoom)
+          const a = p1.x - p0.x, b = p2.x - p0.x, cc = p1.y - p0.y, dd = p2.y - p0.y
+          const det = a * dd - b * cc
+          const ex = nx - p0.x, ey = ny - p0.y
+          return { x: c.x + (ex * dd - b * ey) / det, y: c.y + (a * ey - cc * ex) / det, zoom }
+        }
+        const turbinler = d.world.buildings.filter(b => /^wind/.test(b.id)).map(b => b.group.position)
+        const orta = { x: turbinler.reduce((t, q) => t + q.x, 0) / turbinler.length, y: turbinler.reduce((t, q) => t + q.y, 0) / turbinler.length }
+        window.__rk = {
+          hub: { x: bx, y: by, z: 6.4 },      // ilk türbinin göbeği (direk 8,4 birim)
+          tarla: { x: orta.x, y: orta.y, z: 3 },
+          hedefKam,
+          kes(P, nx, ny, zoom) { const k = hedefKam(P, nx, ny, zoom); d.cine.setCam(k.x, k.y, k.zoom) },
+          git(P, nx, ny, zoom, ms) {
+            const k = hedefKam(P, nx, ny, zoom), c = d.cine.getCam(), t0 = performance.now()
+            const e = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+            const tik = () => {
+              const f = e(Math.min(1, (performance.now() - t0) / ms))
+              d.cine.setCam(c.x + (k.x - c.x) * f, c.y + (k.y - c.y) * f, c.zoom + (k.zoom - c.zoom) * f)
+              if (f < 1) requestAnimationFrame(tik)
+            }
+            tik()
+          },
+        }
+        return n
+      })
+      if (kurulan < 0) throw new Error('vitrinde türbin yok')
+      console.log(`   ek türbin dikildi: ${kurulan}`)
+
+      // 0,0 → 2,4  HOOK: dönen türbin göbeği kadrajın ortasında, gerçek sayı
+      await p.evaluate(() => {
+        window.__rk.kes(window.__rk.hub, 0, 0.05, 1.3)
+        window.__vo.yaz('GERÇEK SAYI', '36 saatte 94 istasyon\n371 türbin dikti.', '')
+      })
+      await bekle(p, 2400)
+
+      // 2,4 → 4,8  NEDEN: güneş gece üretmez, türbin üretir (gece sahnesi kanıt)
+      await p.evaluate(() => window.__vo.yaz('GECE 02:30', 'Güneş uyur.\nTürbin uyumaz.', ''))
+      await bekle(p, 2400)
+
+      // 4,8 → 8,0  GERİ ÇEKİL: türbin tarlası + istasyon
+      await p.evaluate(() => { window.__rk.git(window.__rk.tarla, 0, 0.1, 0.62, 2200); window.__vo.sil() })
+      await bekle(p, 800)
+      await p.evaluate(() => window.__vo.yazAlt('Gece vardiyasının faturasını\nartık türbin öder', ''))
+      await bekle(p, 2400)
+
+      // 8,0 → 10,4  BİNA KARTI: gerçek üretim/rüzgâr/yıpranma
+      await p.evaluate(() => { window.__dbg.sec('wind'); window.__vo.sil() })
+      await bekle(p, 500)
+      await p.evaluate(() => window.__vo.yazAlt('Rüzgâr değişken —\nbazen tam güç, bazen yarım', ''))
+      await bekle(p, 1900)
+
+      // 10,4 → 12,0  SORU (yanıt çağrısı)
+      await p.evaluate(() => {
+        window.__dbg.sec(''); document.getElementById('infocard')?.classList.remove('show')
+        window.__rk.git(window.__rk.hub, 0, 0.05, 1.0, 1400)
+        window.__vo.sil()
+      })
+      await bekle(p, 300)
+      await p.evaluate(() => window.__vo.yaz('', 'Sen kaç tane diktin?', ''))
+      await bekle(p, 1500)
+
+      // 12,0 → 13,6  MARKA
+      await p.evaluate(() => window.__vo.yaz('BENELOIL', 'Rüzgâr Gülü', 'beneloil.com'))
+      await bekle(p, 1600)
+    },
+  },
   // 7) RÜZGÂR TÜRBİNİ — YENİ ÖZELLİK DUYURUSU ("Rüzgâr enerjisi çağı!")
   //
   //    Hook, türbinin OYUNDAKİ FARKI: güneş gece üretmiyor, türbin üretiyor.

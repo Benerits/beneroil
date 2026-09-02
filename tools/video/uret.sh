@@ -23,6 +23,8 @@ uret performans 4-performans       patlama.wav      muzik-2-hicaz.wav
 uret bilgi      5-bilgi-kutulari   para.wav         muzik-tam.wav
 # harita v3 (2 Eyl): hook = başarım çanı ("tek istasyon" → geri çekil), müzik = pentatonik (sakin, harita)
 uret harita2    6-sube-agi-haritasi-v3  basarim.wav  muzik-1-pentatonik.wav
+# rüzgâr gülü v2 (2 Eyl): hook = inşaat sesi (türbin dikilir), müzik = majör (aydınlık)
+uret ruzgar2    7-ruzgar-gulu-v2        insaat.wav   muzik-4-major.wav
 
 echo; echo "✓ hazır: $CIKTI"
 ls -lh "$CIKTI"
