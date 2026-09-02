@@ -34,7 +34,7 @@ bekle(/p\.id === 'sign' \|\| p\.id\.startsWith\('lamp'\)\) continue/.test(main),
 bekle(/placing\.id\.startsWith\('lamp'\)\) \{/.test(main) && /const kenar = !asfalt && asfaltMesafe <= 1\.5/.test(main), 'lamba yerleştirme: dekoratif kenar kuralı')
 const lampFn = world.slice(world.indexOf('buildStreetLamp(pos?'), world.indexOf('private lampPoolAl'))
 bekle(!/new THREE\.PointLight/.test(lampFn) && /this\.lampPoolAl\(regId/.test(lampFn), 'buildStreetLamp yeni PointLight yaratmıyor, havuzdan alıyor')
-bekle(/static readonly LAMP_POOL = 6/.test(world), 'havuz boyu 6')
+bekle(/static readonly LAMP_POOL = 10/.test(world), 'havuz boyu 10 (6 oyuncu + 4 dekor — beton-tekrar-check)')
 
 // ── CANLI: kasaba, tabela (3,-20) açı 1, 1 lamba kurulu ──
 const kur = () => {
@@ -132,7 +132,8 @@ const isik = await p.evaluate(() => {
 })
 bekle(isik.lampCount === 4, '3 lamba daha alındı (toplam 4)', `${isik.lampCount}`)
 bekle(isik.seri.every(n => n === isik.seri[0]), 'ışık sayısı satın alma boyunca SABİT', isik.seri.join('→'))
-bekle(isik.havuz.filter(Boolean).length === 4 && new Set(isik.havuz.filter(Boolean)).size === 4, 'havuzda 4 lamba, her biri farklı sahip', JSON.stringify(isik.havuz))
+const oyuncu = h => h.filter(x => x && x.startsWith('lamp'))
+bekle(oyuncu(isik.havuz).length === 4 && new Set(oyuncu(isik.havuz)).size === 4, 'havuzda 4 oyuncu lambası, her biri farklı sahip (dekor lambalar ayrı)', JSON.stringify(isik.havuz))
 
 console.log('\n── CANLI 4: taşıma + satış ışığı serbest bırakır; yeniden yükleme aynı sayıyı verir ──')
 const tasi = await p.evaluate(() => {
@@ -148,7 +149,7 @@ const tasi = await p.evaluate(() => {
   return { n0, n1, n2, h1, h2 }
 })
 bekle(tasi.n0 === tasi.n1 && tasi.n1 === tasi.n2, 'taşıma + reload sonrası ışık sayısı sabit', `${tasi.n0}/${tasi.n1}/${tasi.n2}`)
-bekle(tasi.h1.filter(Boolean).length === 4 && tasi.h2.filter(Boolean).length === 4, 'havuz taşıma ve reload sonrası 4 sahipli', JSON.stringify(tasi.h2))
+bekle(oyuncu(tasi.h1).length === 4 && oyuncu(tasi.h2).length === 4, 'havuz taşıma ve reload sonrası 4 oyuncu lambası', JSON.stringify(tasi.h2))
 
 bekle(hatalar.length === 0, 'sayfa hatası yok', hatalar.join(' | '))
 await b.close()

@@ -35,6 +35,12 @@ export const LANE_NEAR = 6.95
 export const LANE_FAR = 8.85
 /** Karşı (yol karşısı) istasyonun kapı x'i — near kapı 4.2'nin ROAD_X etrafında aynası (15.8-4.2). */
 export const FAR_GATE_X = 11.6
+/** ZEMİN DECAL MERDİVENİ (#1279 "beton otoparkların üstünde gözüküyor"): parsel betonu
+ *  0.015, derz çizgileri 0.02 — otopark/tır parkı pedleri de 0.02'deydi; y=±5k derzine
+ *  denk gelen ped derzle AYNI z'de z-fight ediyor, beton çizgisi pedin üstünden geçiyordu.
+ *  Ped ve ped çizgileri derzin üstüne alındı (0.02 fark 16-bit derinlikte bile güvenli). */
+export const PED_Z = 0.04
+export const PED_CIZGI_Z = 0.05
 /**
  * POMPA / ŞARJ VARSAYILAN ARAÇ YUVALARI — 8 AYRI NOKTA (ölçülmüş yığılma fixi).
  *
@@ -503,7 +509,7 @@ export class World {
   private lampPool: { light: THREE.PointLight; owner: string | null }[] = []
   /** temanın gerçek asfalt genişliği (yerleştirme: lamba asfalta dikilmesin) */
   roadW = 4.6
-  static readonly LAMP_POOL = 6
+  static readonly LAMP_POOL = 10 // 6 oyuncu + 4 dekoratif (kurucu ±5.5, parsel 0,0/0,2 ±20)
   private steam: { mesh: THREE.Mesh; offset: number; drift: number; bx: number; by: number; bz: number }[] = []
   private steamT = 0
   /** RÜZGÂR TÜRBİNİ kanatları — update()'te döner. Hız state'ten gelen rüzgâra bağlı;
@@ -1486,7 +1492,7 @@ export class World {
   }
 
   // sokak lambaları izlenir → kapı (giriş/çıkış) üzerine gelince kaldırılabilir
-  private lamps: { x: number; y: number; group: THREE.Group; bulbMat: THREE.Material; light: THREE.PointLight }[] = []
+  private lamps: { x: number; y: number; group: THREE.Group; bulbMat: THREE.Material; owner: string }[] = []
   private placeLamp(x: number, y: number) {
     const lg = new THREE.Group()
     if (this.statics?.lamp) {
@@ -1503,13 +1509,16 @@ export class World {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), bulbMat)
     bulb.position.set(x + 0.6, y, 3.0)
     lg.add(bulb)
-    this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner: 'lamp' })
-    const light = new THREE.PointLight(0xffd9a0, 0, 18, 1.7)
-    light.position.set(x + 0.6, y, 3.2)
-    lg.add(light)
-    this.nightLights.push(light)
+    const owner = `dekor:${x},${y}`
+    // IŞIK HAVUZDAN (#1279 turu): dekoratif lambalar da yeni PointLight ekliyordu →
+    // parsel 0,0/0,2 betonu ve kapı taşıma (removeLampNear) her seferinde ışık
+    // sayısını değiştirip TÜM shader'ları yeniden derletiyordu (arsa alınca donma).
+    // Havuz sahibi konumdan türetilir; aynı yere tekrar dikilirse (rebuildFromState)
+    // eski ışık serbest kalır, sayı sabit kalır.
+    this.lampPoolAl(owner, x + 0.6, y, 3.2) // önce havuz (eski sahibi + ampulünü düşürür), sonra ampul kaydı
+    this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner })
     this.scene.add(lg)
-    this.lamps.push({ x, y, group: lg, bulbMat, light })
+    this.lamps.push({ x, y, group: lg, bulbMat, owner })
   }
 
   /** kapı yerleştirilen y'ye yakın sokak lambasını kaldır (giriş/çıkış üstünde lamba kalmasın) */
@@ -1517,8 +1526,7 @@ export class World {
     this.lamps = this.lamps.filter(l => {
       if (Math.abs(l.y - y) > dy) return true
       this.scene.remove(l.group)
-      this.nightMats = this.nightMats.filter(m => m.mat !== l.bulbMat)
-      this.nightLights = this.nightLights.filter(li => li !== l.light)
+      this.lampPoolBirak(l.owner) // ampul materyali + havuz ışığı birlikte düşer
       return false
     })
   }
@@ -2137,6 +2145,7 @@ export class World {
   /** beton derzleri: hepsi YOLA DİK (x ekseni boyunca), dünya gridine hizalı —
    *  komşu betonlarda çizgi aynı hizada devam eder, bütünlük bozulmaz */
   private paveJoints(x0: number, x1: number, y0: number, y1: number) {
+    // derz z = 0.02 — üstüne oturan pedler PED_Z'de (bkz. sabit)
     const SPACING = 5
     const yStart = Math.ceil((y0 + 0.5) / SPACING) * SPACING
     for (let y = yStart; y <= y1 - 0.5; y += SPACING) {
@@ -2166,8 +2175,15 @@ export class World {
   }
 
   /** satın alınan (henüz betonsuz) arsayı ahşap kazık + ip sınırla işaretle */
+  /** betonu dökülmüş parseller — paveParcel iki kez çağrılınca ikinci kez lot/derz/
+   *  bordür/lamba EKLEMEZ. rebuildFromState her ünite satışında aynı World üstünde
+   *  yeniden koşuyor (main.ts ui.onSell) → eskiden her satışta beton katman katman
+   *  biniyor, 0,0/0,2'ye ikinci sokak lambası dikiliyordu. */
+  private pavedLots = new Set<string>()
   markOwned(c: number, r: number) {
     if (!PARCEL_COLS[c] || !PARCEL_ROWS[r]) return // sınır dışı parsel: crash koruması
+    const key = `${c},${r}`
+    if (this.ownedMarks.has(key) || this.pavedLots.has(key)) return // zaten işaretli/betonlu
     const [x0, x1] = PARCEL_COLS[c]
     const [y0, y1] = PARCEL_ROWS[r]
     // CLAIM ANINDA dekor kalkar (eskiden yalnız betonda kalkıyordu — satın alınmış
@@ -2217,6 +2233,8 @@ export class World {
       this.scene.remove(mark)
       this.ownedMarks.delete(`${c},${r}`)
     }
+    if (this.pavedLots.has(`${c},${r}`)) return
+    this.pavedLots.add(`${c},${r}`)
     {
       const [dx0, dx1] = PARCEL_COLS[c]
       const [dy0, dy1] = PARCEL_ROWS[r]
@@ -2549,7 +2567,7 @@ export class World {
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), new THREE.MeshLambertMaterial({
       color: 0x2f8fd6, transparent: true, opacity: 0.28,
     }))
-    pad.position.set(1.1, 0, 0.025)
+    pad.position.set(1.1, 0, PED_Z)
     g.add(pad)
     box(1.0, 1.6, 0.14, 0xc7ccd1, 0, 0, 0.07, g)
     box(0.35, 0.55, 1.5, 0xf0f0ec, 0, 0, 0.85, g)
@@ -2959,12 +2977,12 @@ export class World {
     const at = pos ?? (regId === 'truckpark2' ? new THREE.Vector2(16.5, -4.5) : new THREE.Vector2(-12.5, -4.5))
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 5.6), lam(0x565e66))
-    pad.position.z = 0.02
+    pad.position.z = PED_Z
     pad.receiveShadow = true
     g.add(pad)
     for (let i = 0; i < 4; i++) {
       const line = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 0.12), lam(0xe8e4d8))
-      line.position.set(0, -2.1 + i * 1.4, 0.03)
+      line.position.set(0, -2.1 + i * 1.4, PED_CIZGI_Z)
       g.add(line)
     }
     const sign = canvasPanel(2.6, 0.55, 420, 84, (ctx, w, h) => {
@@ -3109,7 +3127,7 @@ export class World {
       case 'wasteoil': {                                   // atık yağ toplama
         ad = t('ATIK YAĞ')
         const pad = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.6), lam(0x8b8577))
-        pad.position.z = 0.02; pad.receiveShadow = true; g.add(pad)
+        pad.position.z = PED_Z; pad.receiveShadow = true; g.add(pad)
         for (const [dx, dy] of [[-0.8, -0.6], [0.1, -0.6], [-0.8, 0.6], [0.1, 0.6]] as [number, number][])
           cyl(0.36, 1.1, 0x3c6b3f, dx, dy, 0.55, 'z', g)   // varil dizisi
         box(0.12, 2.6, 1.0, 0xb9b2a2, 1.5, 0, 0.5, g)      // sızıntı seti
@@ -3296,13 +3314,13 @@ export class World {
     const at = pos ?? new THREE.Vector2(0.4, -5.6)
     const g = new THREE.Group()
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(PARK_PAD_W, 3.1), lam(0x6b7480))
-    pad.position.z = 0.02
+    pad.position.z = PED_Z
     pad.receiveShadow = true
     g.add(pad)
     // çizgili park yerleri — aralık PARK_ARALIK, araç genişliğinden geniş (bkz. sabit)
     for (let i = 0; i <= PARK_YER; i++) {
       const line = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 2.8), lam(0xe8e4d8))
-      line.position.set(-PARK_PAD_W / 2 + i * PARK_ARALIK, 0, 0.03)
+      line.position.set(-PARK_PAD_W / 2 + i * PARK_ARALIK, 0, PED_CIZGI_Z)
       g.add(line)
     }
     for (let i = 0; i < PARK_YER; i++) {
@@ -3389,8 +3407,10 @@ export class World {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), bulbMat)
     bulb.position.set(0.6, 0, 3.0)
     g.add(bulb)
-    this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner: regId })
+    // ÖNCE havuz (lampPoolAl → lampPoolBirak aynı sahibin eski ampul materyalini de siler),
+    // SONRA ampul kaydı — ters sırada yeni ampul gece hiç yanmıyordu.
     this.lampPoolAl(regId, at.x + 0.6, at.y, 3.2) // havuzdan ışık (yeni PointLight EKLENMEZ)
+    this.nightMats.push({ mat: bulbMat, day: 0.05, night: 1.3, owner: regId })
     g.position.set(at.x, at.y, 0)
     this.scene.add(g)
     this.register(regId, t('SOKAK LAMBASI'), g, 3.4)
@@ -3538,7 +3558,7 @@ export class World {
     // sarı-siyah tehlike şeridi (yerde çember)
     const tape = new THREE.Mesh(new THREE.RingGeometry(2.4, 2.62, 24),
       new THREE.MeshLambertMaterial({ color: 0xe0b13e }))
-    tape.position.z = 0.02
+    tape.position.z = PED_Z
     g.add(tape)
     // radyasyon uyarı tabelası
     const sign = canvasPanel(1.2, 0.8, 240, 160, (ctx, w, h) => {
