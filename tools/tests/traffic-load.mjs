@@ -104,6 +104,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   let cikCift = 0, cikSert = 0, cikIhlal = 0, cikMin = Infinity, cikOlay = 0
   let agizCift = 0, agizIhlal = 0, agizMin = Infinity
   let korCift = 0, korIhlal = 0, korAgir = 0, korMin = Infinity
+  let yolCift = 0, yolIhlal = 0, yolAgir = 0, yolMin = Infinity
   let carSeq = 0
   const cikSurek = new Map(), parkSurek = new Map()
   const cid = c => (c.__cid ??= ++carSeq)
@@ -254,6 +255,29 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
           console.log(`  [KORİDOR ${label} ${(i / 10).toFixed(1)}s d=${d.toFixed(2)}]\n      ${iz(A)}\n      ${iz(B)}`)
       }
     }
+    // ── YOL ŞERİDİ (2 Eyl canlı 1054/1133): şerit kolonunda AYNI yöne seyreden transit/
+    // leaving çiftleri. Canlıda kalan en büyük sınıf: transit+transit 1.4–2.0 (öndeki
+    // yavaşlayınca orantılı takip 0.9'a kadar sokuluyordu), leaving+transit 1.2–2.2
+    // (kapıdan 0.15'le katılanın dibine). Ölçüt: boyuna < 2.15 = canlı iç içe; < 1.5 ağır.
+    for (const st of far ? ['near', 'far'] : ['near']) {
+      const L = mgr.graph.get(st)
+      if (!L) continue
+      const q = mgr.cars.filter(c => c.lane === st && !c.boat && c.moving
+        && (c.phase === 'transit' || c.phase === 'leaving') && Math.abs(c.group.position.x - L.lane) <= 0.6)
+      for (let a = 0; a < q.length; a++) for (let b = a + 1; b < q.length; b++) {
+        const A = q[a], B = q[b]
+        const da = A.headingDir(), db = B.headingDir()
+        if (!da || !db || da.x * db.x + da.y * db.y < 0.7) continue
+        const d = Math.abs(A.group.position.y - B.group.position.y)
+        if (d > 6) continue
+        yolCift++
+        if (d < yolMin) yolMin = d
+        if (d < 2.15) yolIhlal++
+        if (d < 1.5) yolAgir++
+        if (IZ && d < IZ && (globalThis.__izY = (globalThis.__izY ?? 0) + 1) <= 3)
+          console.log(`  [YOL ${label} ${(i / 10).toFixed(1)}s d=${d.toFixed(2)}]\n      ${iz(A)}\n      ${iz(B)}`)
+      }
+    }
     // ── KAPI AĞZI (2 Eyl canlı): kapıdan ÇIKMIŞ ama şeride henüz KATILMAMIŞ leaving
     // araçlar — omurga kolonu ölçümünün kör noktası. Canlı yığılma olaylarında (#4999,
     // #5016) kapı ağzında 0.8–1.1 aralıkla leaving dizisi vardı. Kural kapsamı xOut kolonu
@@ -393,6 +417,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     + ` · <2.66 ${kuyrukIhlal}/${kuyrukCift} · <2.5 ${kuyrukSert}`
     + ` | ÇIKIŞ çift min ${isFinite(cikMin) ? cikMin.toFixed(2) : '—'} · <2.66 ${cikIhlal}/${cikCift} · duran<2.5 olay ${cikOlay} (anlık ${cikSert})`
     + ` | KORİDOR çift min ${isFinite(korMin) ? korMin.toFixed(2) : '—'} · <2.15 ${korIhlal}/${korCift} · <1.0 ${korAgir}`
+    + ` | YOL çift min ${isFinite(yolMin) ? yolMin.toFixed(2) : '—'} · <2.15 ${yolIhlal}/${yolCift} · <1.5 ${yolAgir}`
     + ` | KAPI AĞZI çift min ${isFinite(agizMin) ? agizMin.toFixed(2) : '—'} · <1.8 ${agizIhlal}/${agizCift}`
     + ` | blok duruş ${blok.durusSn.toFixed(0)}sn muaf ${blok.muaf}`
     + ` · çıkış duruş ${(blok.cikisDurusSn ?? 0).toFixed(0)}sn muaf ${blok.cikisMuaf ?? 0}`
@@ -412,11 +437,20 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     kuyruk: { cift: kuyrukCift, ihlal: kuyrukIhlal, sert: kuyrukSert, min: kuyrukMin, zirve: kuyrukZirve },
     cikis: { cift: cikCift, ihlal: cikIhlal, sert: cikSert, olay: cikOlay, min: cikMin },
     koridor: { cift: korCift, ihlal: korIhlal, agir: korAgir, min: korMin },
+    yol: { cift: yolCift, ihlal: yolIhlal, agir: yolAgir, min: yolMin },
     agiz: { cift: agizCift, ihlal: agizIhlal, min: agizMin }, blok, bekci }
 }
 
 let fail = 0
 const kontrol = (ok, iyi, kotu) => { if (ok) console.log(`✓ ${iyi}`); else { console.log(`✗ ${kotu}`); fail++ } }
+// ── YOL ŞERİDİ ÇİTİ (2 Eyl, canlı 1054/1133 transit+transit 1.4–2.0 · leaving+transit 1.2–2.2):
+// takip kuralı orantı → ARALIK (2.2 altına inmez), katılım boşluğu sabit pencere → boşluk
+// kabulü, katılım kapsamı 0.6 → 1.1 (takip kuralının yanal kapsamıyla aynı; iki kural
+// aynı anda işlemez). Kapsamsız ölçüm (seed 1): T2 58/2561, T8 199/7346, T10 172/5954,
+// <1.5: 31/94/73. Kalan: yoğun akışta kolona 1.1 kala tam hız katılım (min 1.37, geçici).
+const yolCiti = (kod, r, pay) => kontrol(r.yol.agir <= pay && r.yol.ihlal <= Math.max(pay, r.yol.cift * 0.005),
+  `${kod}: YOL ŞERİDİNDE aynı yönlü çift < 2.15 ${r.yol.ihlal}/${r.yol.cift} · < 1.5 ${r.yol.agir} (min ${isFinite(r.yol.min) ? r.yol.min.toFixed(2) : '—'})`,
+  `${kod}: yol şeridinde ${r.yol.ihlal} çift-kare < 2.15 · ${r.yol.agir} < 1.5 (min ${r.yol.min.toFixed(2)}) — takip/katılım kuralı geriledi`)
 
 // ESKİ MİMARİNİN ÖLÇÜLMÜŞ TABANI (rezervasyon grafiği, aynı tohum, aynı yerleşim):
 // T1 servis 223 · T2 388 · T3 332 — buharlaşma 0, kalıcı sıkışan 0, içiçe 0.2/0.4/0.0
@@ -439,6 +473,7 @@ for (const [n, r] of on) {
     `${kod}: iç içe (AKIŞ) ${r.icAkis.toFixed(2)} > 0.3 — şeritler ayrık değil`)
   kontrol(r.flow.ort >= 0.75, `${kod}: akış hızı %${(r.flow.ort * 100).toFixed(0)} (akıcı)`,
     `${kod}: akış hızı %${(r.flow.ort * 100).toFixed(0)} — araçlar sürünüyor`)
+  yolCiti(kod, r, 2)
   // KONVEYÖR (hedef metrik): kuyrukta ardışık çift hiçbir karede < 2.5 değil,
   // < 2.66 (gövde boyu) çift ~0 — görsel iç içelik bitti. Asıl laboratuvar T10'da;
   // burada regresyon çiti (T1-T3'te kuyruk nadir oluşur, boş küme geçer sayılmaz diye
@@ -528,6 +563,7 @@ kontrol(t8.bekci.kurtarma === 0 && t8.bekci.yenidenRota === 0,
 // kapı ağzını da alınca: 0. Ölçüm dolu kümede olmalı.
 kontrol(t8.agiz.cift >= 100, `T8: kapı ağzı ölçümü DOLU kümede (${t8.agiz.cift} çift-kare)`,
   `T8: kapı ağzı hiç dolmadı (${t8.agiz.cift}) — boş kümeden geçen iddia YASAK`)
+yolCiti('T8', t8, 5)
 kontrol(t8.agiz.ihlal === 0, `T8: KAPI AĞZINDA < 1.8 çift YOK (min ${t8.agiz.min.toFixed(2)}, kapsamsız 161/333 · min 0.49)`,
   `T8: kapı ağzında ${t8.agiz.ihlal}/${t8.agiz.cift} çift < 1.8 (min ${t8.agiz.min.toFixed(2)}) — çıkış bacağında üst üste binme geri geldi`)
 
@@ -584,6 +620,7 @@ console.log('--- T9: OTOPARK YOĞUN (park koridoru pompa sırasının dibinde) -
   // KORİDOR KİLİTLENMESİ (2 Eyl, canlı #5815 d=0.00): iki yatağın aracı aynı anda park
   // koridoruna çıkıp aynı noktada kolona kadar üst üste giderdi — konveyör kapsamı (d)
   // koridor/kol aracını kavşak kuralına aldı. Ölçüm: koridor kapsamı olmadan seed 3 min 0.00.
+  yolCiti('T9', t9, 5)
   kontrol(t9.koridor.agir === 0,
     `T9: park koridorunda aynı yönlü çift < 1.0 YOK (${t9.koridor.cift} çift-karede min ${isFinite(t9.koridor.min) ? t9.koridor.min.toFixed(2) : '—'}, kapsamsız min 0.00)`,
     `T9: koridorda ${t9.koridor.agir} kare < 1.0 (min ${t9.koridor.min.toFixed(2)}) — koridor kilitlenmesi geri geldi`)
@@ -632,6 +669,7 @@ console.log('--- T11: BİTİŞİK OTOPARKLAR (2 lot yan yana, yoğun tesis trafi
     `T11: çıkışta ${t11.cikis.olay} kez ≥2 sn duran çift < 2.5`)
   // Bitişik lotlarda koridora giriş anı: arkadaki koridor aracının 1.0 önüne çıkan lot
   // aracı geçici birleşme (arkadaki durur, açılır). Kapsamsız ölçüm 32 kare; kapsamlı 1–2.
+  yolCiti('T11', t11, 5)
   kontrol(t11.koridor.agir <= 5,
     `T11: koridorda aynı yönlü çift < 1.0 en çok geçici (${t11.koridor.agir} kare / ${t11.koridor.cift}, min ${isFinite(t11.koridor.min) ? t11.koridor.min.toFixed(2) : '—'}; kapsamsız 32 kare)`,
     `T11: koridorda ${t11.koridor.agir} kare < 1.0 (min ${t11.koridor.min.toFixed(2)}) — koridor birleşmesi kilitleniyor`)
@@ -679,6 +717,7 @@ console.log('--- T10: TEK POMPA YOĞUN (gün-1 istasyonu, telemetri kümesinin k
   kontrol(t10.kuyruk.sert === 0,
     `T10: DURAN kuyruk çiftinde < 2.5 HİÇBİR karede yok (tüm çiftlerde min ${isFinite(t10.kuyruk.min) ? t10.kuyruk.min.toFixed(2) : '—'}, konveyörsüz 0.03)`,
     `T10: ${t10.kuyruk.sert} karede DURAN çift < 2.5 (min ${t10.kuyruk.min.toFixed(2)}) — 22x küme lab kopyasında hâlâ iç içe`)
+  yolCiti('T10', t10, 5)
   kontrol(t10.agiz.ihlal === 0, `T10: kapı ağzında < 1.8 çift YOK (${t10.agiz.cift} çift-kare, kapsamsız 81/146)`,
     `T10: kapı ağzında ${t10.agiz.ihlal}/${t10.agiz.cift} çift < 1.8 — çıkış bacağında üst üste binme`)
   kontrol(t10.kuyruk.ihlal <= t10.kuyruk.cift * 0.01,

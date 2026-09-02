@@ -1865,7 +1865,16 @@ export class CarManager {
         const od = o.headingDir()
         const ayniYon = od ? od.x * dir.x + od.y * dir.y > 0.5 : false
         const taban = ayniYon && o.hizOrani >= 0.15 ? Math.min(0.3, o.hizOrani) : 0.3
-        c.speedScale = Math.min(c.speedScale, Math.max(taban, forward / sep))
+        // ORANTI DEĞİL, ARALIK (2 Eyl, canlı 1054/1133: transit+transit 1.4–2.0, leaving+
+        // transit 1.2–2.2): eski `forward / sep` öndekinin hızıyla ORANTILI aralığa
+        // oturuyordu — 0.35'e yavaşlamış öndekinin 0.9 arkasına, kapıdan 0.15'le sürünerek
+        // katılanın 0.4 arkasına kadar sokuluyordu. Şimdi hız, aralığın ARAÇ BOYU (2.2 =
+        // BLOK_DUR) üstündeki payıyla ölçeklenir: aralık 2.2'ye inince taban hıza düşer,
+        // taban = öndekinin hızı olduğundan aralık orada SABİTLENİR (ölçüm: T8/T9 ÇIKIŞ
+        // ve KORİDOR min'leri değişmez, yol çiftleri ≥2.2). Kilitlenmezlik aynen: taban
+        // hiç 0 değil, DURAN/karşı öndeki için 0.3.
+        const bos = sep - 0.4
+        c.speedScale = Math.min(c.speedScale, Math.max(taban, (forward - bos) / (sep - bos)))
       }
     }
     this.yolaKatilimBoslugu()
@@ -2223,15 +2232,27 @@ export class CarManager {
       const hedef = c.hedefNokta
       if (!hedef) continue
       const cp = c.group.position
-      // güncel bacak şeride katılım bacağı mı: hedef şerit kolonunda, araç henüz değil
-      if (Math.abs(hedef.x - L.lane) > 0.3 || Math.abs(cp.x - L.lane) < 0.6) continue
+      // güncel bacak şeride katılım bacağı mı: hedef şerit kolonunda, araç henüz değil.
+      // Kapsam sınırı 1.1 = takip kuralının yanal kapsamı (lx²+ly² ≤ 1.21): dışındayken
+      // transit bu aracı görmez → araç sürünür, transit geçer; içine girince transit onu
+      // öndeki sayar ve ARALIK kuralıyla takip eder → araç tam hızla katılır. Eski 0.6
+      // sınırında 0.6–1.1 bandında İKİ kural aynı anda işliyordu: araç 0.15'le sürünür,
+      // arkadaki transit de onu 0.15'le kopyalar — karşılıklı sürünme, aralık 1.5'te
+      // donuyordu (ölçüldü T1: YOL min 1.50; canlı leaving+transit 1.2–2.2 sınıfı).
+      if (Math.abs(hedef.x - L.lane) > 0.3 || Math.abs(cp.x - L.lane) < 1.1) continue
       let yaklasan = false
+      // BOŞLUK KABULÜ (2 Eyl): sabit −1..7 penceresi yerine "katıldığımda arkamdaki
+      // transit kaç birim geride kalır": ikisi de tam hızla, transit s − dc geride biter.
+      // < sep+pay (3.2) kalacaksa sürün, yoksa git. Sabit 7 penceresi kolona 2 birim kala
+      // bile sürünüyordu → transit dibine yetişip onu kopyalıyordu. Servis etkisi 6 tohum
+      // ortalamasında gürültü sınırında (T1 307→301, T3 455→452).
+      const dc = Math.hypot(hedef.x - cp.x, hedef.y - cp.y)
       for (const o of this.neighbors(L.lane, hedef.y, 2)) {
         if (o === c || o.phase !== 'transit' || o.lane !== c.lane) continue
         if (Math.abs(o.group.position.x - L.lane) > 0.6) continue
-        // katılım noktasına akış yönünde uzaklık: −1..7 penceresi (≈1 sn yol)
+        // katılım noktasına akış yönünde uzaklık (eksi = noktayı az önce geçmiş)
         const s = (hedef.y - o.group.position.y) * L.dirY
-        if (s > -1 && s < 7) { yaklasan = true; break }
+        if (s > -1 && s < dc + 3.2) { yaklasan = true; break }
       }
       if (yaklasan) { c.speedScale = Math.min(c.speedScale, 0.15); this.blokStats.katilimYavas++ }
     }
