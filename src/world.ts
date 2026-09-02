@@ -2897,10 +2897,13 @@ export class World {
     box(0.3, 4.6, 2.4, 0x8fb8d8, 1.85, 0, 1.2, g)
     box(0.3, 4.6, 2.4, 0x8fb8d8, -1.85, 0, 1.2, g)
     box(4.0, 4.6, 0.28, 0x2f6fed, 0, 0, 2.62, g)
-    const arch = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 4.4, 20, 1, true, 0, Math.PI),
+    // TONOZ GERÇEKTEN TÜNELİN ÜSTÜNDE (#1249 "yıkamaların çatıları gitmiş"): eski yarım
+    // silindir (θ 0..π + rotation.z π/2) tünelin +y ucuna yan yatmış bir kapaktı — yakın
+    // yakada arkada kaldığı için "çatı" gibi okunuyordu, karşı yakada 180° dönünce öne,
+    // girişin altına düşüp kayboldu. Şimdi eksen y (tünel yönü), kavis +z'ye: iki yakada aynı.
+    const arch = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 4.4, 20, 1, true, -Math.PI / 2, Math.PI),
       new THREE.MeshLambertMaterial({ color: 0x7ec8e3, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }))
     arch.position.z = 2.55
-    arch.rotation.z = Math.PI / 2
     arch.scale.set(1, 1, 0.45)
     g.add(arch)
     // dalga şeridi duvarlarda

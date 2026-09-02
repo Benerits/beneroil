@@ -2208,8 +2208,16 @@ if (!LIGHT) {
   composer.addPass(new OutputPass())
   composer.setSize(window.innerWidth, window.innerHeight)
 }
-/** Tek kare çiz. Composer varsa post-processing zinciri, yoksa doğrudan render. */
+/** Tek kare çiz. Composer varsa post-processing zinciri, yoksa doğrudan render.
+ *  60 FPS TAVANI (#1249 "MacBook Air çok ısınıyor"): 120 Hz ekranlarda (ProMotion) rAF
+ *  saniyede 120 kere çağrılıyor, bloom zinciri de her seferinde çalışıyordu — GPU iki kat
+ *  iş, gözle fark yok. Simülasyon (state/cars) yine her rAF'ta ilerler; yalnız ÇİZİM en
+ *  fazla ~60/sn. 60 Hz ekranda kareler 16,7 ms arayla gelir → hiçbir kare atlanmaz. */
+let sonCizim = 0
 function renderFrame() {
+  const now = performance.now()
+  if (now - sonCizim < 15.5) return
+  sonCizim = now
   if (composer) composer.render()
   else renderer.render(world.scene, camera)
 }
