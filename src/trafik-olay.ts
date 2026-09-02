@@ -230,13 +230,19 @@ function olcum(araclar: OlayAraci[], adim: number) {
   }
   for (const k of [...durgun.keys()]) if (!goruldu.has(k)) durgun.delete(k)
 
-  // ── yığılma: 3 birimlik daire içinde >= 4 araç ──
+  // ── yığılma: 3 birimlik daire içinde >= 4 SÜRÜŞ fazında araç ──
+  // Yalnız sürüş fazları (2 Eyl): canlı yığılma olaylarının yarıdan fazlası duran araçtı —
+  // otoparkta 2.5 aralıkla park etmiş 3 araç + park eden 1, ya da kuyruk (waiting) +
+  // yanından geçen transit. Hepsi tasarım gereği yakın; olay "hareket eden araçlar üst
+  // üste yığıldı" demeli. Bundle 202609020818 sonrası yığılma oranı bu yüzden düşer —
+  // taban karşılaştırmasında (trafik-analiz / Monitor) iç içe kalemine bak, o değişmedi.
   let yigilma = false
-  for (let i = 0; i < gorunur.length && !yigilma; i++) {
+  const suren = gorunur.filter(c => SURUS_FAZLARI.has(c.phase))
+  for (let i = 0; i < suren.length && !yigilma; i++) {
     let n = 1
-    for (let j = 0; j < gorunur.length; j++) {
+    for (let j = 0; j < suren.length; j++) {
       if (i === j) continue
-      const dx = gorunur[i].x - gorunur[j].x, dy = gorunur[i].y - gorunur[j].y
+      const dx = suren[i].x - suren[j].x, dy = suren[i].y - suren[j].y
       if (dx * dx + dy * dy <= YIGILMA_YARICAP * YIGILMA_YARICAP) n++
     }
     if (n >= YIGILMA_ADET) yigilma = true

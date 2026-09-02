@@ -185,7 +185,7 @@ const olay = await import('../../src/trafik-olay.ts')
       tik++
       return (Math.floor(tik / 100) % 2 === 0)
         ? [araba(1, 0, 0), araba(2, 1, 0)]
-        : [araba(3, 20, 20), araba(4, 21, 20), araba(5, 20, 21), araba(6, 21, 21)]
+        : [araba(3, 20, 20, 'driving'), araba(4, 21, 20, 'driving'), araba(5, 20, 21, 'driving'), araba(6, 21, 21, 'driving')]
     })
     sur(1500)
     check('oturum tavanı: en fazla 6 olay gitti', olaylar(g).length <= 6 && olaylar(g).length > 0, String(olaylar(g).length))
@@ -231,10 +231,20 @@ const olay = await import('../../src/trafik-olay.ts')
   {
     // dört araç bir aracın 3 birimlik çevresinde; ikili mesafeler 2.4 (> 2.15) →
     // iç içe DEĞİL, yalnız yığılma tetiklenmeli
-    const g = kur(() => [araba(1, 0, 0), araba(2, 2.4, 0), araba(3, -2.4, 0), araba(4, 0, 2.4)])
+    const g = kur(() => [araba(1, 0, 0, 'driving'), araba(2, 2.4, 0, 'leaving'), araba(3, -2.4, 0, 'toPark'), araba(4, 0, 2.4, 'driving')])
     sur(3)
-    check('yığılma: 3 birimlik dairede 4 araç olay üretti',
+    check('yığılma: 3 birimlik dairede 4 SÜREN araç olay üretti',
       g.length === 1 && g[0].govde.k === 'yigilma', JSON.stringify(g.map(x => x.govde.k)))
+  }
+  // 3e') yığılma yalnız sürüş fazlarını sayar: park etmiş / kuyrukta bekleyen / transit
+  //      araçlar tasarım gereği yakındır (otopark 2.5 aralık, kuyruk + yanından geçen şerit)
+  {
+    const g = kur(() => [araba(1, 0, 0, 'toPark'), araba(2, 2.4, 0, 'parked'), araba(3, -2.4, 0, 'parked'), araba(4, 0, 2.4, 'parked')])
+    sur(3)
+    check('yığılma: park etmiş araçlar sayılmıyor (1 süren + 3 parked → olay YOK)', g.length === 0, JSON.stringify(g.map(x => x.govde.k)))
+    const h = kur(() => [araba(1, 0, 0, 'driving'), araba(2, 2.4, 0), araba(3, -2.4, 0), araba(4, 0, 2.4, 'transit')])
+    sur(3)
+    check('yığılma: kuyruk (waiting) + transit sayılmıyor', h.length === 0, JSON.stringify(h.map(x => x.govde.k)))
   }
 
   // 3f) kuyruk: slotlar dolu + giremeyen artıyor
