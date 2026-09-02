@@ -2306,7 +2306,7 @@ export class CarManager {
       const cp = c.group.position
       const dir = c.headingDir()
       if (!dir) continue
-      let agizda = false
+      let agizda = false, koridorda = false
       if (cikista) {
         // ÇIKIŞ KAPSAMI: (a) GİDEN omurga (xOut) kolonunda omurga yönünde seyreden araç,
         // (b) KAPI AĞZI (2 Eyl): kapıdan çıkmış, şeride henüz katılmamış araç. (b) yoktu —
@@ -2323,7 +2323,19 @@ export class CarManager {
         // kolondaki aracın üstüne dönüyordu (ölçüldü: T11 ÇIKIŞ kolon min 0.00/0.01).
         const h = c.hedefNokta
         const katilan = !!h && Math.abs(h.x - L.xOut) <= 0.6 && Math.hypot(h.x - cp.x, h.y - cp.y) <= BLOK_MESAFE + CAR_SPEED * dt
-        if (!agizda && !katilan && (Math.abs(cp.x - L.xOut) > 0.6 || Math.abs(dir.y) < 0.7)) { c.blokT = 0; continue }
+        if (!agizda && !katilan && (Math.abs(cp.x - L.xOut) > 0.6 || Math.abs(dir.y) < 0.7)) {
+          // (d) İSTASYON İÇİ GİDEN BACAK (2 Eyl, canlı #5815): otopark çıkış koridorunda /
+          // pompa kolunda kolona doğru seyreden araç da kapsamdadır — ama YALNIZ kavşak
+          // kuralıyla (aşağıda `koridorda`: geometrik öndeki kuralı bu araç için işlemez).
+          // Yoktu: iki lotun aracı aynı anda koridora çıkıp aynı hedefe kilit adımda
+          // sürüyordu, ikisi tam aynı noktada (-3.7,18.6) kolona kadar üst üste (1054
+          // bundle'ı: 12 iç içe olayının 5'i koridor/kol çiftleri, biri 0.00). Yoldaki
+          // (hedefi şeritte olan) araç kapsam DIŞI kalır: transit kopyalama kuralıyla
+          // çakışmasın. Kilitlenmezlik: kavşak sırası mesafe + kimlikle kesin, uzak
+          // araç zaten fren penceresine girmez (boşluk = min(kavşağa kalan, kuş uçuşu)).
+          if (!h || Math.abs(h.x - L.lane) <= 0.6) { c.blokT = 0; continue }
+          koridorda = true
+        }
       } else {
         const omurgada = Math.abs(cp.x - L.xIn) <= 0.6
         // KAPSAM: kuyruk üyesi (slota giden/kayan) her yerde; YAKIT pompası yolcusu YALNIZ
@@ -2382,6 +2394,7 @@ export class CarManager {
             }
             continue
           }
+          if (koridorda) continue // koridor/kol aracı için yalnız kavşak kuralı
           const oKolonda = Math.abs(o.group.position.x - L.xOut) <= 0.6
           if (!oKolonda && !this.kapiAgzinda(o, L)) continue
           agizCifti = agizda || !oKolonda

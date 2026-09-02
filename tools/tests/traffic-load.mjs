@@ -103,6 +103,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   // çıkmış (yola katılmış) araç ölçüme girmez — kural kapsamı da aynı.
   let cikCift = 0, cikSert = 0, cikIhlal = 0, cikMin = Infinity, cikOlay = 0
   let agizCift = 0, agizIhlal = 0, agizMin = Infinity
+  let korCift = 0, korIhlal = 0, korAgir = 0, korMin = Infinity
   let carSeq = 0
   const cikSurek = new Map(), parkSurek = new Map()
   const cid = c => (c.__cid ??= ++carSeq)
@@ -230,6 +231,29 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
       }
     }
     for (const k of [...cikSurek.keys()]) if (!aktifCik.has(k)) cikSurek.delete(k)
+    // ── KORİDOR/KOL (2 Eyl canlı #5815): kolon DIŞINDA, henüz yola çıkmamış, AYNI yöne
+    // seyreden leaving çiftleri (otopark çıkış koridoru, pompa kolu). Canlı 1054 bundle'ı:
+    // iki lotun aracı aynı anda koridora çıkıp tam aynı noktada (d=0.00) kolona kadar
+    // kilit adımda sürdü — kolon ölçümü bunu görmez (kolona girince kavşak kuralı ayırır).
+    // Ölçüt: canlı iç içe (boyuna < 2.15) eşdeğeri; d < 1.0 "içine girmiş".
+    for (const st of far ? ['near', 'far'] : ['near']) {
+      const L = mgr.graph.get(st)
+      if (!L) continue
+      const q = mgr.cars.filter(c => c.station === st && c.phase === 'leaving' && c.moving
+        && Math.abs(c.group.position.x - L.xOut) >= 0.6 && L.sideSign * (c.group.position.x - L.gateX) > 0.3)
+      for (let a = 0; a < q.length; a++) for (let b = a + 1; b < q.length; b++) {
+        const A = q[a], B = q[b]
+        const da = A.headingDir(), db = B.headingDir()
+        if (!da || !db || da.x * db.x + da.y * db.y < 0.7) continue
+        const d = Math.hypot(A.group.position.x - B.group.position.x, A.group.position.y - B.group.position.y)
+        korCift++
+        if (d < korMin) korMin = d
+        if (d < 2.15) korIhlal++
+        if (d < 1.0) korAgir++
+        if (IZ && d < IZ && (globalThis.__izK = (globalThis.__izK ?? 0) + 1) <= 3)
+          console.log(`  [KORİDOR ${label} ${(i / 10).toFixed(1)}s d=${d.toFixed(2)}]\n      ${iz(A)}\n      ${iz(B)}`)
+      }
+    }
     // ── KAPI AĞZI (2 Eyl canlı): kapıdan ÇIKMIŞ ama şeride henüz KATILMAMIŞ leaving
     // araçlar — omurga kolonu ölçümünün kör noktası. Canlı yığılma olaylarında (#4999,
     // #5016) kapı ağzında 0.8–1.1 aralıkla leaving dizisi vardı. Kural kapsamı xOut kolonu
@@ -368,6 +392,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     + ` | KUYRUK zirve ${kuyrukZirve} · çift min ${isFinite(kuyrukMin) ? kuyrukMin.toFixed(2) : '—'}`
     + ` · <2.66 ${kuyrukIhlal}/${kuyrukCift} · <2.5 ${kuyrukSert}`
     + ` | ÇIKIŞ çift min ${isFinite(cikMin) ? cikMin.toFixed(2) : '—'} · <2.66 ${cikIhlal}/${cikCift} · duran<2.5 olay ${cikOlay} (anlık ${cikSert})`
+    + ` | KORİDOR çift min ${isFinite(korMin) ? korMin.toFixed(2) : '—'} · <2.15 ${korIhlal}/${korCift} · <1.0 ${korAgir}`
     + ` | KAPI AĞZI çift min ${isFinite(agizMin) ? agizMin.toFixed(2) : '—'} · <1.8 ${agizIhlal}/${agizCift}`
     + ` | blok duruş ${blok.durusSn.toFixed(0)}sn muaf ${blok.muaf}`
     + ` · çıkış duruş ${(blok.cikisDurusSn ?? 0).toFixed(0)}sn muaf ${blok.cikisMuaf ?? 0}`
@@ -386,6 +411,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     icAkis: icAkisOrt, icDuran: icDuranOrt, flow: fl, apronMax, turnedAway, park,
     kuyruk: { cift: kuyrukCift, ihlal: kuyrukIhlal, sert: kuyrukSert, min: kuyrukMin, zirve: kuyrukZirve },
     cikis: { cift: cikCift, ihlal: cikIhlal, sert: cikSert, olay: cikOlay, min: cikMin },
+    koridor: { cift: korCift, ihlal: korIhlal, agir: korAgir, min: korMin },
     agiz: { cift: agizCift, ihlal: agizIhlal, min: agizMin }, blok, bekci }
 }
 
@@ -555,6 +581,12 @@ console.log('--- T9: OTOPARK YOĞUN (park koridoru pompa sırasının dibinde) -
   kontrol(t9.bekci.kurtarma === 0 && t9.bekci.yenidenRota === 0,
     'T9: otoparkta bekçi hiç gerekmedi (A* park koridorunu buluyor · kurtarma 0)',
     `T9: bekçi devrede — yeniden rota ${t9.bekci.yenidenRota} · kurtarma ${t9.bekci.kurtarma} (A* park kolunu bulamıyor)`)
+  // KORİDOR KİLİTLENMESİ (2 Eyl, canlı #5815 d=0.00): iki yatağın aracı aynı anda park
+  // koridoruna çıkıp aynı noktada kolona kadar üst üste giderdi — konveyör kapsamı (d)
+  // koridor/kol aracını kavşak kuralına aldı. Ölçüm: koridor kapsamı olmadan seed 3 min 0.00.
+  kontrol(t9.koridor.agir === 0,
+    `T9: park koridorunda aynı yönlü çift < 1.0 YOK (${t9.koridor.cift} çift-karede min ${isFinite(t9.koridor.min) ? t9.koridor.min.toFixed(2) : '—'}, kapsamsız min 0.00)`,
+    `T9: koridorda ${t9.koridor.agir} kare < 1.0 (min ${t9.koridor.min.toFixed(2)}) — koridor kilitlenmesi geri geldi`)
 }
 
 // ---- T11: BİTİŞİK OTOPARKLAR (canlı parked+parked kümesinin laboratuvar kopyası) ----
@@ -598,6 +630,11 @@ console.log('--- T11: BİTİŞİK OTOPARKLAR (2 lot yan yana, yoğun tesis trafi
   kontrol(t11.cikis.olay === 0,
     `T11: çıkışta ≥2 sn süren duran çift < 2.5 YOK (${t11.cikis.cift} çift-karede anlık ${t11.cikis.sert} · min ${isFinite(t11.cikis.min) ? t11.cikis.min.toFixed(2) : '—'})`,
     `T11: çıkışta ${t11.cikis.olay} kez ≥2 sn duran çift < 2.5`)
+  // Bitişik lotlarda koridora giriş anı: arkadaki koridor aracının 1.0 önüne çıkan lot
+  // aracı geçici birleşme (arkadaki durur, açılır). Kapsamsız ölçüm 32 kare; kapsamlı 1–2.
+  kontrol(t11.koridor.agir <= 5,
+    `T11: koridorda aynı yönlü çift < 1.0 en çok geçici (${t11.koridor.agir} kare / ${t11.koridor.cift}, min ${isFinite(t11.koridor.min) ? t11.koridor.min.toFixed(2) : '—'}; kapsamsız 32 kare)`,
+    `T11: koridorda ${t11.koridor.agir} kare < 1.0 (min ${t11.koridor.min.toFixed(2)}) — koridor birleşmesi kilitleniyor`)
   // 2) KANIT KOŞUSU (elemesiz + LEGACY üst üste lot, sessiz): eleme fix'i olmadan hazard
   // GERÇEKTEN üretiliyor — boş/etkisiz senaryodan geçen iddia yasak. Meşru bitişik lotlar
   // yeni ızgarada zaten temiz (uçlar 2,7); hazard, üst üste binmiş legacy çifti (merkezler
