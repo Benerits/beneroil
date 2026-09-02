@@ -21,6 +21,8 @@ uret dondur     2-dondurme         insaat.wav       muzik-1-pentatonik.wav
 uret otopark    3-otopark-bugu     hata.wav         muzik-3-nihavend.wav
 uret performans 4-performans       patlama.wav      muzik-2-hicaz.wav
 uret bilgi      5-bilgi-kutulari   para.wav         muzik-tam.wav
+# harita v3 (2 Eyl): hook = başarım çanı ("tek istasyon" → geri çekil), müzik = pentatonik (sakin, harita)
+uret harita2    6-sube-agi-haritasi-v3  basarim.wav  muzik-1-pentatonik.wav
 
 echo; echo "✓ hazır: $CIKTI"
 ls -lh "$CIKTI"

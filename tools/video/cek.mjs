@@ -403,6 +403,184 @@ const SENARYOLAR = {
       await bekle(p, 2700)
     },
   },
+  // 6b) ŞUBE AĞI HARİTASI — v3 "HARİTA KAMERASI" (2 Eyl, Oğuz: "daha önce yapmıştık
+  //     ama hoşuma gitmedi… haritayı ön planda güzel şekilde göstererek").
+  //
+  //    v2'NİN SORUNU (kareler ölçüldü): harita YATAY bir modal, video DİKEY; harita
+  //    karenin ortasında ufak bir şerit, düğümler 40 px, sağ panel karenin üçte birini
+  //    yiyor, üst/alt koyu boşluk. "Ön planda" değildi — ekranın %30'uydu.
+  //
+  //    v3: modal yok, panel yok, HUD yok. SVG haritanın KENDİSİ kadrajı doldurur ve
+  //    viewBox ile üstünde GERÇEK bir kamera gezer: tek düğüme yakın plan → geri
+  //    çekilip ağın açılması (düğümler sırayla belirir, hatlar çizilir) → 4 sert
+  //    kesmeyle şube şube yakın plan → tam ağ + soru → 1,8 sn oynanış → marka.
+  //
+  //    HOOK (kendi Twitter verimizden): lansman tweet'ini sattıran şey "tek pompadan
+  //    imparatorluğa" büyüme kurgusuydu (330 beğeni → %31,5 kayıt). Aynı kurgu haritaya
+  //    taşındı: "Tek istasyon." → geri çekil → "9 şubelik ağ." Ortalama izleme 12,8 sn;
+  //    ilk 1,2 sn'de ekranda tek şey var: senin istasyonun, kocaman. Kapanıştaki soru
+  //    ("Sıradaki parayı hangi şubeye koyarsın?") yanıt çağrısıdır — algoritma yanıtı sever.
+  //
+  //    ALTYAZILAR GERÇEK: şube kesmelerindeki metin düğümün kendi <text>'inden okunur
+  //    (etiket + alt satır), yani "₺… mn", "6★", "₺…/gün" oyunun hesapladığı sayılardır.
+  harita2: {
+    ad: '06-sube-agi-haritasi-v3',
+    save: { money: 8_400_000, day: 140, reputation: 4.9, pumps: 8, evChargers: 4,
+            marketLevel: 3, managerLevel: 3, hasWash: true, hasOil: true, hasCoffee: true,
+            hasRestaurant: true, hasTruckPark: true, solarCount: 3,
+            unlockedLocs: ['kasaba', 'cevreyolu', 'otoyol'], activeLoc: 'kasaba',
+            tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
+    isinma: 22000,
+    async oyna(p) {
+      // ── sahne: 5 açık şube (bir ORTAK HAT kurulu olsun: otoyol↔otoyol-2), müdürlü
+      //    şubeler ("müdür yok" yerine ₺/gün yazsın), marka 6★ (metropol "açılabilir") ──
+      await p.evaluate(() => {
+        const d = window.__dbg
+        const st = d?.state
+        if (st) {
+          st.unlockedLocs = ['kasaba', 'cevreyolu', 'otoyol', 'marina', 'otoyol-2']
+          st.brandStars = 6
+          const sn = (f) => ({ f, tanks: {}, tankCounts: {}, prices: {}, pendingCash: {} })
+          st.locSnapshots['cevreyolu'] = sn({ managerLevel: 2, pumps: 6, evChargers: 2, marketLevel: 2, hasWash: true, hasCoffee: true })
+          st.locSnapshots['otoyol'] = sn({ managerLevel: 3, pumps: 8, evChargers: 4, marketLevel: 3, hasRestaurant: true, hasTruckPark: true })
+          st.locSnapshots['otoyol-2'] = sn({ managerLevel: 2, pumps: 6, evChargers: 2, marketLevel: 2, hasCoffee: true })
+          st.locSnapshots['marina'] = sn({ managerLevel: 2, pumps: 4, marketLevel: 2, hasRestaurant: true })
+        }
+        const s = document.createElement('style')
+        s.textContent = '#panel{display:none !important}#infocard{display:none !important}#toasts{display:none !important}'
+        document.head.appendChild(s)
+        // "müşteri kaçtı" kenar flaşı (ekranFlasi) harita üstüne pembe vinyet basıyordu →
+        // var olanı söndür, sonradan yaratılırsa da söndür
+        const flasSondur = () => [...document.body.children].forEach(e =>
+          { if (e instanceof HTMLElement && e.style.boxShadow.includes('90px')) e.style.display = 'none' })
+        flasSondur()
+        new MutationObserver(flasSondur).observe(document.body, { childList: true })
+      })
+
+      // ── HARİTA KAMERASI: modal/HUD iner, SVG kadrajı doldurur, viewBox'ı biz sürüyoruz ──
+      const kameraKur = async () => p.evaluate(() => {
+        document.getElementById('locbtn')?.click()
+        document.querySelector('#locmenu button[data-qloc="__harita"]')?.click()
+        const tam = document.createElement('style')
+        tam.id = 'vo-sinema'
+        tam.textContent = `
+          .hud, #navbar, #sheettabs, #h-side, #h-chips, #h-legend, #mapwrap .mhead { display:none !important }
+          #vo .top { top:70px !important; background:linear-gradient(180deg, rgba(34,48,60,.86) 0%, rgba(34,48,60,.6) 60%, rgba(34,48,60,0) 100%) !important }
+          #mapwrap { position:fixed !important; inset:0 !important; padding:0 !important; background:#f1ebdb !important }
+          #mapwrap .modal { position:fixed !important; inset:0 !important; width:100vw !important; max-width:100vw !important;
+                            height:100vh !important; max-height:100vh !important; border-radius:0 !important; border:0 !important; overflow:hidden !important }
+          #mapwrap .mbody, #mapwrap .hleft, #mapwrap .hboard { position:absolute !important; inset:0 !important; padding:0 !important;
+                            margin:0 !important; border:0 !important; border-radius:0 !important; display:block !important; overflow:hidden !important }
+          #hmap { position:absolute !important; inset:0 !important; width:100vw !important; height:100vh !important; aspect-ratio:auto !important }
+          #vo h1 { white-space:pre-line }
+          #hmap .hn { transform-box:fill-box; transform-origin:center; transition:opacity .28s ease, transform .5s cubic-bezier(.2,1.4,.4,1) }
+          #hmap .hn.vo-gizli { opacity:0; transform:scale(.55) }
+          #hmap .hl { transition:opacity .6s ease } #hmap .hl.vo-gizli { opacity:0 }`
+        document.head.appendChild(tam)
+        const svg = document.getElementById('hmap')
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid slice')
+        // kâğıt kadrajın dışına da uzasın (geri çekilince boşluk/karanlık görünmesin)
+        const NS = 'http://www.w3.org/2000/svg'
+        const arkaKur = () => {
+          if (svg.querySelector('.vo-arka')) return
+          const arka = document.createElementNS(NS, 'g')
+          arka.setAttribute('class', 'vo-arka')
+          arka.innerHTML = '<rect x="-3000" y="-3000" width="7000" height="7000" class="hz-paper"/>'
+            + '<rect x="-3000" y="-3000" width="7000" height="7000" fill="url(#hz-dots)"/>'
+          const zemin = svg.querySelector('.hz')
+          if (zemin) svg.insertBefore(arka, zemin); else svg.prepend(arka)
+        }
+        arkaKur()
+        // kamera: hedefe yumuşak geçiş (ease-in-out) ya da anında kesme
+        const K = { x: 0, y: 0, w: 1000, hedef: null }
+        const uygula = () => svg.setAttribute('viewBox', `${K.x} ${K.y} ${K.w} ${K.w * 1.25}`)
+        const ease = (t) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+        const tik = () => {
+          if (K.hedef) {
+            const h = K.hedef, t = Math.min(1, (performance.now() - h.t0) / h.ms), e = ease(t)
+            K.x = h.x0 + (h.x - h.x0) * e; K.y = h.y0 + (h.y - h.y0) * e; K.w = h.w0 + (h.w - h.w0) * e
+            if (t >= 1) K.hedef = null
+          }
+          uygula(); arkaKur(); requestAnimationFrame(tik)   // gün dönerse SVG yeniden kurulur; kâğıt geri gelsin
+        }
+        requestAnimationFrame(tik)
+        window.__hk = {
+          // merkez (cx,cy) + genişlik w → viewBox
+          kes(cx, cy, w) { K.hedef = null; K.x = cx - w / 2; K.y = cy - w * 1.25 / 2; K.w = w; uygula() },
+          git(cx, cy, w, ms) { K.hedef = { x0: K.x, y0: K.y, w0: K.w, x: cx - w / 2, y: cy - w * 1.25 / 2, w, t0: performance.now(), ms } },
+          dugum(id) {
+            const n = svg.querySelector(`.hn[data-hloc="${id}"]`)
+            const et = [...(n?.querySelectorAll('text') ?? [])].map(e => (e.textContent || '').trim())
+            return { label: et[et.length - 2] || '', sub: et[et.length - 1] || '' }
+          },
+        }
+      })
+
+      await kameraKur()
+      // 0,0 → 1,2  YAKIN PLAN: senin istasyonun, kocaman. Diğer her şey gizli.
+      await p.evaluate(() => {
+        const svg = document.getElementById('hmap')
+        svg.querySelectorAll('.hn').forEach(n => { if (n.getAttribute('data-hloc') !== 'kasaba') n.classList.add('vo-gizli') })
+        svg.querySelectorAll('.hl').forEach(l => l.classList.add('vo-gizli'))
+        window.__hk.kes(198, 262, 250)
+        window.__vo.yaz('ŞUBE AĞI', 'Tek istasyon.', '')
+      })
+      await bekle(p, 1200)
+
+      // 1,2 → 4,2  GERİ ÇEKİL: ağ açılır — düğümler kasabaya uzaklık sırasıyla belirir
+      await p.evaluate(() => {
+        window.__hk.git(500, 330, 900, 2400)
+        const sira = ['cevreyolu', 'marina', 'cevreyolu-2', 'metropol', 'marina-2', 'otoyol', 'otoyol-2', 'metropol-2']
+        sira.forEach((id, i) => setTimeout(() => {
+          document.querySelector(`#hmap .hn[data-hloc="${id}"]`)?.classList.remove('vo-gizli')
+        }, 350 + i * 210))
+        setTimeout(() => document.querySelectorAll('#hmap .hl').forEach(l => l.classList.remove('vo-gizli')), 1500)
+      })
+      await bekle(p, 1300)
+      await p.evaluate(() => window.__vo.yaz('ŞUBE AĞI', '…şimdi 9 şubelik\nbir ağ.', ''))
+      await bekle(p, 1700)
+
+      // 4,2 → 8,2  SERT KESMELER: şube şube yakın plan, altyazı düğümün KENDİ yazısı
+      const kesmeler = [
+        ['marina',   128, 452, 'Yakıt buraya gemiyle gelir'],
+        ['otoyol-2', 822, 213, 'Otoyol ile ORTAK tedarik hattı'],
+        ['metropol', 606, 398, 'Marka yıldızıyla açılır'],
+        ['cevreyolu', 404, 158, 'Müdür senin yerine işletir'],
+      ]
+      for (const [id, cx, cy, not] of kesmeler) {
+        await p.evaluate(([id, cx, cy, not]) => {
+          window.__hk.kes(cx, cy + 20, 300)
+          const d = window.__hk.dugum(id)
+          window.__vo.sil()
+          window.__vo.yazAlt(d.label.toLocaleUpperCase('tr') + (d.sub ? ' · ' + d.sub : ''), not)
+        }, [id, cx, cy, not])
+        await bekle(p, 1000)
+      }
+
+      // 8,2 → 10,6  TAM AĞ + SORU (yanıt çağrısı)
+      await p.evaluate(() => {
+        window.__hk.kes(500, 330, 900)
+        window.__vo.sil()
+      })
+      await bekle(p, 250)
+      await p.evaluate(() => window.__vo.yaz('', 'Sıradaki parayı\nhangi şubeye koyarsın?', ''))
+      await bekle(p, 2150)
+
+      // 10,6 → 12,4  OYNANIŞ: harita kapanır, dolu istasyon — "bu ne oyunu?" cevabı
+      await p.evaluate(() => {
+        document.getElementById('vo-sinema')?.remove()
+        document.getElementById('mapwrap')?.classList.remove('show')
+        window.__dbg.cine?.setCam?.(0, 4, 1.25)
+        window.__vo.yaz('', 'Her şube gerçek\nbir istasyon', '')
+      })
+      await bekle(p, 1800)
+
+      // 12,4 → 14,4  MARKA: tam ağ
+      await kameraKur()
+      await p.evaluate(() => { window.__hk.kes(500, 330, 900); window.__vo.yaz('BENELOIL', 'Şube Ağı', 'beneloil.com') })
+      await bekle(p, 2000)
+    },
+  },
   // 7) RÜZGÂR TÜRBİNİ — YENİ ÖZELLİK DUYURUSU ("Rüzgâr enerjisi çağı!")
   //
   //    Hook, türbinin OYUNDAKİ FARKI: güneş gece üretmiyor, türbin üretiyor.
