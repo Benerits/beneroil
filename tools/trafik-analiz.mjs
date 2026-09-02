@@ -24,7 +24,8 @@ const ORNEK = process.argv.includes('--ornek')
 
 // ── prod DB erişimi: container adı SABİT DEĞİL, her seferinde bulunur (bkz. bellek notu) ──
 function sqlCek(sql) {
-  const ssh = (cmd) => execFileSync('ssh', ['ubuntu@5.135.142.214', cmd], { encoding: 'utf8' })
+  // maxBuffer: 48 saatlik snapshot dökümü 1 MB varsayılanı aşıyor (ENOBUFS, ölçüldü).
+  const ssh = (cmd) => execFileSync('ssh', ['ubuntu@5.135.142.214', cmd], { encoding: 'utf8', maxBuffer: 64e6 })
   const db = ssh("sudo -n docker ps --format '{{.Names}}' | grep '^benzinlik-db-o27xlv' | head -1").trim()
   if (!db) throw new Error('DB container bulunamadı')
   writeFileSync('/tmp/_ta.sql', sql)
@@ -100,7 +101,8 @@ async function replay(olay) {
 }
 
 // ── ana akış ──
-const olaylar = await olaylariGetir()
+// --replay tek olayı kimliğiyle çeker (48 saatlik dökümü boşuna indirme).
+const olaylar = REPLAY && !ORNEK ? [] : await olaylariGetir()
 if (REPLAY) {
   const o = olaylar.find(x => String(x.id) === String(REPLAY)) ??
     (ORNEK ? null : (() => { const raw = sqlCek(`SELECT id, kind, created_at, payload FROM benzinlik_trafficlog WHERE id=${Number(REPLAY)};`)

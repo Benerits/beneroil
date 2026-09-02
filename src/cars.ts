@@ -2249,6 +2249,38 @@ export class CarManager {
     return p.x > lo && p.x < hi
   }
 
+  /** İki aracın ROTA KAVŞAĞI ve her birinin kavşağa İMZALI mesafesi. Kavşak: sonraki
+   *  noktaları aynıysa o nokta; birinin sonraki noktası öbürünün ŞU ANKİ parçası (konum→
+   *  hedef, GERİYE BLOK_MESAFE uzatılmış) üzerindeyse o nokta. Geriye uzatma: kavşağı az
+   *  önce geçmiş araç da öndekidir — mesafesi eksi çıkar, arkadakinin boşluğu "kavşağa
+   *  kalan + öbürünün geçtiği" olur, yani rota boyu gerçek aralık (ölçüldü: T11 kolon,
+   *  sıradan gelen araç 0.3 önce geçmiş kolon aracının üstüne dönüyordu, min 0.00).
+   *  İkisi de tutuyorsa sözlük sırasına göre küçüğü — iki araç da AYNI noktayı ve aynı
+   *  sayıları bulsun (simetri şart; yoksa ikisi de kendini önde sayar). */
+  private kavsak(cp: THREE.Vector3, ch: THREE.Vector3 | null, op: THREE.Vector3, oh: THREE.Vector3 | null): { kc: number, ko: number } | null {
+    if (!ch || !oh) return null
+    const kucuk = ch.x < oh.x || (ch.x === oh.x && ch.y < oh.y)
+    if (Math.abs(ch.x - oh.x) < 0.3 && Math.abs(ch.y - oh.y) < 0.3) {
+      const J = kucuk ? ch : oh
+      return { kc: Math.hypot(J.x - cp.x, J.y - cp.y), ko: Math.hypot(J.x - op.x, J.y - op.y) }
+    }
+    // n noktasının a→b parçası üzerindeki imzalı konumu (a'dan itibaren; parça dışı → null)
+    const uzerinde = (n: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): number | null => {
+      const sx = b.x - a.x, sy = b.y - a.y, L = Math.hypot(sx, sy)
+      if (L < 0.05) return null
+      const t = ((n.x - a.x) * sx + (n.y - a.y) * sy) / L
+      if (t < -BLOK_MESAFE || t > L) return null
+      const px = a.x + sx * t / L, py = a.y + sy * t / L
+      return Math.hypot(n.x - px, n.y - py) <= 0.3 ? t : null
+    }
+    const tO = uzerinde(ch, op, oh)   // c'nin hedefi o'nun parçasında → kavşak ch
+    const tC = uzerinde(oh, cp, ch)   // o'nun hedefi c'nin parçasında → kavşak oh
+    const chSec = tO !== null && (tC === null || kucuk)
+    if (chSec) return { kc: Math.hypot(ch.x - cp.x, ch.y - cp.y), ko: tO! }
+    if (tC !== null) return { kc: tC, ko: Math.hypot(oh.x - op.x, oh.y - op.y) }
+    return null
+  }
+
   private konveyorBlok(dt: number) {
     for (const c of this.cars) {
       c.blokFren = 1
@@ -2284,7 +2316,14 @@ export class CarManager {
         // çiftlerinin %48'i < 1.8, min 0.49). Kilitlenmezlik: kapı ağzındaki öndeki HİÇ
         // durmaz (katılım kuralı sürünmeyi garanti eder), şeride girince kümeden çıkar.
         agizda = this.kapiAgzinda(c, L)
-        if (!agizda && (Math.abs(cp.x - L.xOut) > 0.6 || Math.abs(dir.y) < 0.7)) { c.blokT = 0; continue }
+        // (c) KOLONA KATILAN (2 Eyl): sonraki noktası kolon üzerinde ve pencere içindeyse
+        // (pompa kolundan / otopark sırasından yatay yanaşan araç) kapsamdadır — yalnız
+        // kavşak kuralı işler (geometrik kural için kolon araçları yanaldır, dokunmaz).
+        // Yoktu: katılan araç kolona girene dek görünmezdi, girdiği an ileri<0.2 → muaf →
+        // kolondaki aracın üstüne dönüyordu (ölçüldü: T11 ÇIKIŞ kolon min 0.00/0.01).
+        const h = c.hedefNokta
+        const katilan = !!h && Math.abs(h.x - L.xOut) <= 0.6 && Math.hypot(h.x - cp.x, h.y - cp.y) <= BLOK_MESAFE + CAR_SPEED * dt
+        if (!agizda && !katilan && (Math.abs(cp.x - L.xOut) > 0.6 || Math.abs(dir.y) < 0.7)) { c.blokT = 0; continue }
       } else {
         const omurgada = Math.abs(cp.x - L.xIn) <= 0.6
         // KAPSAM: kuyruk üyesi (slota giden/kayan) her yerde; YAKIT pompası yolcusu YALNIZ
@@ -2309,6 +2348,40 @@ export class CarManager {
         let agizCifti = false
         if (cikista) {
           if (o.phase !== 'leaving') continue
+          // ORTAK HEDEF NOKTASI (2 Eyl): iki leaving aracın SONRAKİ rota noktası aynıysa
+          // sıra geometriyle değil ROTAYLA belirlenir — noktaya kalan yolu kısa olan
+          // öndedir, fark < pencere ise arkadaki frenler. Neden: pompa kolundan/otopark
+          // çıkışından giden kolona KATILAN araç kolon dışındayken kapsam dışıydı,
+          // kolondaki araç da onu kolona girene dek öndeki saymıyordu → aynı anda
+          // giren iki araç yan yana (ileri < 0.2, muaf) kalıyor, aynı hedefe kilit
+          // adımda sürüp KALICI üst üste biniyordu (ölçüldü: T11 kapı ağzı min 0.00
+          // 140 sn boyunca; canlı #5367 iki araç tam (2.7,21)'de). Kesin sıralama
+          // (eşitlikte yaratılış kimliği) → çevrim imkânsız, koni/yön şartı gereksiz.
+          // Bu çift için geometrik kural ÇALIŞMAZ (aynı çifte iki kural = çevrim kapısı).
+          // KAVŞAK GENELLEMESİ (2 Eyl, T11 kolon min 0.01): ortak nokta yalnız "aynı sonraki
+          // nokta" değil — bir aracın SONRAKİ noktası öbürünün ŞU ANKİ parçası (konum→hedef)
+          // ÜZERİNDEYSE de aynı kavşaktır. Ölçüldü: otopark sırasından (x=…→4.5,11.6) gelen
+          // araç pompa kolonundan (4.5,2.5→14) çıkan aracın parçasına dik giriyor; katılana
+          // dek hedefleri farklı, kolona girdiği an ileri<0.2 (yan yana muaf) → üst üste.
+          // Her iki taraf da AYNI kavşak noktasını seçmeli ki sıralama simetrik olsun:
+          // adaylar sabit sırayla toplanır, birden fazlaysa sözlük sırasına göre en küçüğü.
+          const op = o.group.position
+          const kv = this.kavsak(cp, c.hedefNokta, op, o.hedefNokta)
+          if (kv) {
+            const fark = kv.kc - kv.ko
+            const onde = fark > 0.02 || (fark > -0.02 && c.group.id > o.group.id)
+            if (onde) {
+              // BOŞLUK: öndeki kavşağı geçtiyse rota boyu aralık (kalan + geçtiği). Henüz
+              // geçmediyse "kavşağa kalan" ile "kuş uçuşu"nun küçüğü — kavşağa DUR tabanından
+              // yakın gelinmez, öndekine de sokulunmaz. ETA farkı (kc−ko) DEĞİL: dik katılımda
+              // o fark kolona 2.7 uzaktaki aracı pompa başında durduruyordu, sonraki müşteri
+              // slota giremiyordu (ölçüldü: T10 servis 144 → 129). Aynı hatta (kuş uçuşu =
+              // kc−ko) eski davranış birebir kalır.
+              const g = kv.ko <= 0 ? fark : Math.min(kv.kc, Math.hypot(op.x - cp.x, op.y - cp.y))
+              if (g < gap) gap = g
+            }
+            continue
+          }
           const oKolonda = Math.abs(o.group.position.x - L.xOut) <= 0.6
           if (!oKolonda && !this.kapiAgzinda(o, L)) continue
           agizCifti = agizda || !oKolonda

@@ -142,8 +142,18 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   const busy = new Map()
   const steps = minutes * 60 * 10
   const seen = new WeakSet()
+  const IZ = Number(process.env.AGIZ_IZ) || 0
+  const yol = c => c.path.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' > ')
+  const iz = c => { const p = c.group.position, h = c.headingDir(), n = c.hedefNokta
+    return `#${cid(c)} (${p.x.toFixed(2)},${p.y.toFixed(2)}) yön=${h ? h.x.toFixed(2) + ',' + h.y.toFixed(2) : '-'} hedef=${n ? n.x.toFixed(1) + ',' + n.y.toFixed(1) : '-'} muaf=${c.blokMuaf} blokT=${c.blokT.toFixed(1)} hız=${c.speedScale.toFixed(2)} mov=${c.moving} yol[${yol(c)}]\n        geçmiş: ${(c.__hist ?? []).join(' → ')}` }
   for (let i = 0; i < steps; i++) {
     mgr.update(0.1)
+    // İZ (AGIZ_IZ=<eşik>): her aracın faz geçmişi tutulur; kapı ağzı / çıkış kolonu çiftleri
+    // eşiğin altına inince iki aracın konum+rota+geçmişi basılır. Teşhis aracı, ölçümü etkilemez.
+    if (IZ) for (const c of mgr.cars) {
+      const k = c.phase + '/' + (c.parkLane ? 'P' : '-') + '/' + c.slotIndex + '/' + c.waitIndex
+      if (c.__ph !== k) { c.__ph = k; (c.__hist ??= []).push(`${(i / 10).toFixed(1)}s ${k} (${c.group.position.x.toFixed(1)},${c.group.position.y.toFixed(1)}) mov=${c.moving} yol[${yol(c)}]`) }
+    }
     if (service) for (const c of mgr.cars) {
       if (seen.has(c)) continue
       seen.add(c)
@@ -207,6 +217,8 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
         cikCift++
         if (d < cikMin) cikMin = d
         if (d < 2.66) cikIhlal++
+        if (IZ && d < IZ && (globalThis.__izC = (globalThis.__izC ?? 0) + 1) <= 3)
+          console.log(`  [KOLON ${label} ${(i / 10).toFixed(1)}s d=${d.toFixed(2)}]\n      ${iz(A)}\n      ${iz(B)}`)
         if (d < 2.5 && duruyor(A) && duruyor(B)) {
           cikSert++
           const key = cid(A) < cid(B) ? `${cid(A)}|${cid(B)}` : `${cid(B)}|${cid(A)}`
@@ -235,6 +247,8 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
         agizCift++
         if (d < agizMin) agizMin = d
         if (d < 1.8) agizIhlal++
+        if (IZ && d < IZ && (globalThis.__izN = (globalThis.__izN ?? 0) + 1) <= 3)
+          console.log(`  [AĞIZ ${label} ${(i / 10).toFixed(1)}s d=${d.toFixed(2)}]\n      ${iz(agiz[a])}\n      ${iz(agiz[b])}`)
       }
     }
     // ── OTOPARK: park fazındaki DURAN çiftler (her karede; olay = 2 sn süren çift) ──

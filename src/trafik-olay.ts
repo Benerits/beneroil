@@ -40,7 +40,7 @@ export interface TrafikOlay {
   /** TETİKLEYEN araçların `cars` içindeki indeksleri (sıkışan araçlar / süren iç içe çiftin
    *  iki üyesi). Analiz bunu okumadan önce "hangi araç?" sorusu tahminle cevaplanıyordu. */
   hedef?: number[]
-  /** istemci bundle damgası (vite `__SURUM__`). Dağıtım sonrası eski/yeni kodu ayırır. */
+  /** istemci bundle damgası (`<meta name="surum">`, index.html — dağıtım hash·saat). Dağıtım sonrası eski/yeni kodu ayırır. */
   v?: string
 }
 

@@ -544,7 +544,14 @@ export class LaneNetwork {
   private parkLanes(g: StationGeom, blocked?: (x: number, y: number) => boolean): ParkLane[] {
     const parks = g.parks ?? []
     if (!parks.length) return []
-    const bos = (x: number, y: number) => !blocked || !blocked(x, y)
+    // SAHA SINIRI DA ENGELDİR (2 Eyl): koridor noktası çit hattının (gateX) yol tarafına
+    // düşemez. Kapının dibine kurulan otoparkın çıkış koridoru (d0 + PARK_AISLE_SEP) çiti
+    // aşıp bordürün ötesine çıkıyordu; exitPath o noktayı "araç zaten yolda" sayıp yola
+    // ÇAPRAZ çiziyor, araç çitten geçip kapı bacağını kesiyordu (ölçüldü: T11 kapı ağzı
+    // 99/869 çift < 1.8, iki araç 0.4 aralıkla yan yana sürünüyor). Eşik exitPath'in
+    // "yolda" ölçütüyle (0.3) aynı hizada — ağız o dalın HEMEN içinde kalır.
+    const icerde = (x: number) => (g.sideSign < 0 ? g.gateX - x : x - g.gateX) >= -0.25
+    const bos = (x: number, y: number) => icerde(x) && (!blocked || !blocked(x, y))
     /** iki nokta arası hat temiz mi (nokta nokta tara) */
     const hatBos = (a: Pt, b: Pt) => {
       const len = Math.hypot(b.x - a.x, b.y - a.y)
@@ -585,9 +592,19 @@ export class LaneNetwork {
         const inOff = side * d0
         const outOff = side * (d0 + PARK_AISLE_SEP)
         const tMin = sirali[0].t - PARK_END_PAD, tMax = sirali[sirali.length - 1].t + PARK_END_PAD
-        const uclar = [tMin, tMax].map(t => ({
-          t, gir: kaydir(p0, t, inOff), cik: kaydir(p0, t, outOff),
-        })).filter(e => bos(e.gir.x, e.gir.y) && bos(e.cik.x, e.cik.y))
+        // AĞIZ ÇİTİ AŞIYORSA İÇERİ ÇEKİLİR, KAPATILMAZ (2 Eyl): kapatınca lot uzak ağzı
+        // kullanıyor, exitPath oradan giden omurgaya {xOut, from.y} ile döndüğünde aynı
+        // koridor satırını GERİ katediyordu — ağza giden araçla omurgaya dönen araç aynı
+        // çizgide burun buruna (ölçüldü: T11 çıkış kolonu min 0.00, 1048/5670 çift < 2.66).
+        // Ağız, son slotun dibine (0.4) kadar slotlara doğru kayar; yer yoksa o uç düşer.
+        const uclar = [tMin, tMax].map(t0 => {
+          const yon = t0 === tMin ? 1 : -1
+          const sinir = t0 === tMin ? sirali[0].t - 0.4 : sirali[sirali.length - 1].t + 0.4
+          let t = t0
+          while ((yon > 0 ? t < sinir : t > sinir)
+            && !(icerde(kaydir(p0, t, inOff).x) && icerde(kaydir(p0, t, outOff).x))) t += yon * PARK_TARAMA
+          return { t, yon, gir: kaydir(p0, t, inOff), cik: kaydir(p0, t, outOff) }
+        }).filter(e => bos(e.gir.x, e.gir.y) && bos(e.cik.x, e.cik.y))
         if (!uclar.length) continue
         // Koridor ORTADAN kapalı olabilir (oyuncu otoparkı pompa sırasının dibine kurmuş).
         // Her uçtan koridoru tarayıp NEREYE KADAR açık olduğunu bul; slot yalnız kendi
@@ -595,14 +612,14 @@ export class LaneNetwork {
         // ayırdığı için karşılıklı iki araç aynı koridor parçasına HİÇ giremez.
         const menzil = uclar.map(e => {
           let ok = e.t
-          const yon = e.t === tMin ? 1 : -1
+          const yon = e.yon // uç kaydırılmış olabilir: yön t'den değil, uçtan okunur
           for (let s = 0; s <= (tMax - tMin) / PARK_TARAMA; s++) {
             const t = e.t + yon * s * PARK_TARAMA
             const gp = kaydir(p0, t, inOff), cp = kaydir(p0, t, outOff)
             if (!bos(gp.x, gp.y) || !bos(cp.x, cp.y)) break
             ok = t
           }
-          return { ...e, ok, yon }
+          return { ...e, ok }
         })
         // Koridor BAŞTAN SONA açıksa tek ağız kullanılır (kapıya yakın olan): tek yönlü
         // akış en yalın hâliyle korunur. Kapalıysa her uç kendi tarafına hizmet eder.
