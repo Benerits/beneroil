@@ -7302,10 +7302,19 @@ function frame() {
     lpg: state.tanks.lpg / state.fuelCapacity('lpg'),
   })
 
+  // İYİ HABERLER (#1284 "Yaya müşteri geldi… kırmızı olduğu için bir şey yanlış sanırım"):
+  // varsayılan kırmızı; bu üçü ciro/teslimat/onarım haberidir, yeşil basılır.
+  const iyiHaber = [
+    t('Yaya müşteri alışveriş yaptı (yol karşısından geldi)'),
+    t('Uranyum teslim edildi — reaktör tam güçte!'),
+    t('Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.'),
+  ]
   for (const msg of state.events.splice(0)) {
     if (msg.includes(t('Başarım'))) {
       ui.toast(msg, 'good', true)
       audio.achieve()
+    } else if (iyiHaber.some(h => msg.startsWith(h))) {
+      ui.toast(msg, 'good')
     } else if (msg.includes('FIRSAT')) {
       ui.toast(msg, 'good', true) // yakıt indirimi / müşteri patlaması = iyi haber
       notifyIfHidden(msg, 'firsat')
