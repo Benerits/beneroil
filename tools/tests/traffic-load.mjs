@@ -102,6 +102,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   // kare düşebilir — o bir katılma manevrası, donmuş iç içe kuyruk değil). Kolon dışına
   // çıkmış (yola katılmış) araç ölçüme girmez — kural kapsamı da aynı.
   let cikCift = 0, cikSert = 0, cikIhlal = 0, cikMin = Infinity, cikOlay = 0
+  let agizCift = 0, agizIhlal = 0, agizMin = Infinity
   let carSeq = 0
   const cikSurek = new Map(), parkSurek = new Map()
   const cid = c => (c.__cid ??= ++carSeq)
@@ -217,6 +218,25 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
       }
     }
     for (const k of [...cikSurek.keys()]) if (!aktifCik.has(k)) cikSurek.delete(k)
+    // ── KAPI AĞZI (2 Eyl canlı): kapıdan ÇIKMIŞ ama şeride henüz KATILMAMIŞ leaving
+    // araçlar — omurga kolonu ölçümünün kör noktası. Canlı yığılma olaylarında (#4999,
+    // #5016) kapı ağzında 0.8–1.1 aralıkla leaving dizisi vardı. Kural kapsamı xOut kolonu
+    // olduğundan buradaki araç hiçbir şeyi beklemiyor. Her karede tüm çiftler.
+    for (const st of far ? ['near', 'far'] : ['near']) {
+      const L = mgr.graph.get(st)
+      if (!L) continue
+      const agiz = mgr.cars.filter(c => c.station === st && c.phase === 'leaving'
+        && (c.group.position.y - L.gateOutY) * L.dirY > -0.5
+        && (c.group.position.y - L.gateOutY) * L.dirY < 9
+        && Math.abs(c.group.position.x - L.lane) > 0.6)
+      for (let a = 0; a < agiz.length; a++) for (let b = a + 1; b < agiz.length; b++) {
+        const d = Math.hypot(agiz[a].group.position.x - agiz[b].group.position.x,
+                             agiz[a].group.position.y - agiz[b].group.position.y)
+        agizCift++
+        if (d < agizMin) agizMin = d
+        if (d < 1.8) agizIhlal++
+      }
+    }
     // ── OTOPARK: park fazındaki DURAN çiftler (her karede; olay = 2 sn süren çift) ──
     if (parking) {
       const suAnParkli = mgr.cars.filter(c => c.phase === 'parked').length
@@ -334,6 +354,7 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
     + ` | KUYRUK zirve ${kuyrukZirve} · çift min ${isFinite(kuyrukMin) ? kuyrukMin.toFixed(2) : '—'}`
     + ` · <2.66 ${kuyrukIhlal}/${kuyrukCift} · <2.5 ${kuyrukSert}`
     + ` | ÇIKIŞ çift min ${isFinite(cikMin) ? cikMin.toFixed(2) : '—'} · <2.66 ${cikIhlal}/${cikCift} · duran<2.5 olay ${cikOlay} (anlık ${cikSert})`
+    + ` | KAPI AĞZI çift min ${isFinite(agizMin) ? agizMin.toFixed(2) : '—'} · <1.8 ${agizIhlal}/${agizCift}`
     + ` | blok duruş ${blok.durusSn.toFixed(0)}sn muaf ${blok.muaf}`
     + ` · çıkış duruş ${(blok.cikisDurusSn ?? 0).toFixed(0)}sn muaf ${blok.cikisMuaf ?? 0}`
     + ` | BEKÇİ rota ${bekci.yenidenRota} kurtarma ${bekci.kurtarma}`
@@ -350,7 +371,8 @@ function run(label, { pumps, evs, far, wide, minutes = 10, quiet = false, highwa
   return { st, stuck, served, rampLost, laneUse: svcSpawns, cakisma: cakOrt, cakismaAgir: cakAgirOrt,
     icAkis: icAkisOrt, icDuran: icDuranOrt, flow: fl, apronMax, turnedAway, park,
     kuyruk: { cift: kuyrukCift, ihlal: kuyrukIhlal, sert: kuyrukSert, min: kuyrukMin, zirve: kuyrukZirve },
-    cikis: { cift: cikCift, ihlal: cikIhlal, sert: cikSert, olay: cikOlay, min: cikMin }, blok, bekci }
+    cikis: { cift: cikCift, ihlal: cikIhlal, sert: cikSert, olay: cikOlay, min: cikMin },
+    agiz: { cift: agizCift, ihlal: agizIhlal, min: agizMin }, blok, bekci }
 }
 
 let fail = 0
@@ -460,6 +482,14 @@ kontrol((t8.blok.cikisMuaf ?? 0) === 0, 'T8: çıkış 30 sn kapısı hiç gerek
 kontrol(t8.bekci.kurtarma === 0 && t8.bekci.yenidenRota === 0,
   'T8: baskı altında bile bekçi hiç gerekmedi (yeniden rota 0 · kurtarma 0)',
   `T8: bekçi çalıştı — yeniden rota ${t8.bekci.yenidenRota}, kurtarma ${t8.bekci.kurtarma}`)
+// KAPI AĞZI (2 Eyl canlı yığılma olaylarının %60'ı): kapıdan çıkmış, şeride katılmamış
+// leaving çiftleri. KAPSAMSIZ ölçüm (aynı tohum): 161/333 çift < 1.8, min 0.49 — yola
+// katılım boşluğu öndekini 0.15'e düşürünce arkası üstüne biniyordu. Konveyör kapsamı
+// kapı ağzını da alınca: 0. Ölçüm dolu kümede olmalı.
+kontrol(t8.agiz.cift >= 100, `T8: kapı ağzı ölçümü DOLU kümede (${t8.agiz.cift} çift-kare)`,
+  `T8: kapı ağzı hiç dolmadı (${t8.agiz.cift}) — boş kümeden geçen iddia YASAK`)
+kontrol(t8.agiz.ihlal === 0, `T8: KAPI AĞZINDA < 1.8 çift YOK (min ${t8.agiz.min.toFixed(2)}, kapsamsız 161/333 · min 0.49)`,
+  `T8: kapı ağzında ${t8.agiz.ihlal}/${t8.agiz.cift} çift < 1.8 (min ${t8.agiz.min.toFixed(2)}) — çıkış bacağında üst üste binme geri geldi`)
 
 // ---- T9: OTOPARK YOĞUN ----
 // Oyuncu ekran görüntüsü: park yerleri (beyaz çizgili slotlar) BOŞ dururken araçlar
@@ -598,6 +628,8 @@ console.log('--- T10: TEK POMPA YOĞUN (gün-1 istasyonu, telemetri kümesinin k
   kontrol(t10.kuyruk.sert === 0,
     `T10: DURAN kuyruk çiftinde < 2.5 HİÇBİR karede yok (tüm çiftlerde min ${isFinite(t10.kuyruk.min) ? t10.kuyruk.min.toFixed(2) : '—'}, konveyörsüz 0.03)`,
     `T10: ${t10.kuyruk.sert} karede DURAN çift < 2.5 (min ${t10.kuyruk.min.toFixed(2)}) — 22x küme lab kopyasında hâlâ iç içe`)
+  kontrol(t10.agiz.ihlal === 0, `T10: kapı ağzında < 1.8 çift YOK (${t10.agiz.cift} çift-kare, kapsamsız 81/146)`,
+    `T10: kapı ağzında ${t10.agiz.ihlal}/${t10.agiz.cift} çift < 1.8 — çıkış bacağında üst üste binme`)
   kontrol(t10.kuyruk.ihlal <= t10.kuyruk.cift * 0.01,
     `T10: kuyrukta < 2.66 oranı %${(100 * t10.kuyruk.ihlal / Math.max(1, t10.kuyruk.cift)).toFixed(2)} ≤ %1 (konveyörsüz %2.5)`,
     `T10: kuyrukta ${t10.kuyruk.ihlal}/${t10.kuyruk.cift} çift < 2.66 — görsel iç içelik sürüyor`)

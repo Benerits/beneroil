@@ -29,6 +29,11 @@ const DECISION_Y = -26 // yakın şeritte istasyona girme kararının verildiği
  * akıyordu (lab ölçümü: leaving çifti min 0.00). Aynı kalıp DAR kapsamla çıkışa
  * uygulandı: yalnız leaving fazı + aynı xOut kolonu; kapıdan çıkmış (yolda) araçlar
  * hariç. Zincirin başı her zaman serbest aktığı için kilitlenme yine üretilemez.
+ * KAPI AĞZI DA KAPSAMDA (2 Eyl): "kapıdan çıkmış hariç" kör noktaydı — yola katılım
+ * boşluğu kuralı kapı ağzındaki öndekini 0.15'e düşürünce arkası üstüne biniyordu
+ * (canlı yığılma olaylarının %60'ı; lab T8 161/333 çift < 1.8). Kapsam: xOut–şerit
+ * bandı; öndeki yalnız 45° koni + aynı yön (farklı rotadan yan yana gelen iki araç
+ * karşılıklı beklemesin — ölçüldü, T11 muaf 6). Bkz. konveyorBlok/kapiAgzinda.
  * Canlı telemetri gerekçesi (2.707 olay/19 saat): olayların %96'sı iç içe+yığılma,
  * en büyük küme (22x) tek pompalı gün-1 istasyonunda kuyruk başı; replay #2647'de
  * 4 bekleyen + 1 serviste burun buruna. Kök: slotlar arası geçişte mesafe kapısı yoktu.
@@ -2232,6 +2237,18 @@ export class CarManager {
     }
   }
 
+  /** kapı ağzı: çıkış kapısını geçmiş (akış yönünde), şeride henüz katılmamış leaving araç */
+  /** X bandı ŞART: yalnız xOut kolonu ile şerit arasındaki bacak. Bant olmadan kapı
+   *  hizasındaki otoparktan çıkan araçlar da kümeye giriyor, dik açıyla karşılaşan iki
+   *  araç birbirini bekleyip 30 sn kapısını açıyordu (ölçüldü: T11 çıkış muaf 6). */
+  private kapiAgzinda(c: Car, L: { gateOutY: number; dirY: number; lane: number; xOut: number }): boolean {
+    const p = c.group.position
+    const s = (p.y - L.gateOutY) * L.dirY
+    if (s <= -0.5 || s >= 9 || Math.abs(p.x - L.lane) <= 0.6) return false
+    const lo = Math.min(L.xOut, L.lane) - 0.6, hi = Math.max(L.xOut, L.lane) + 0.6
+    return p.x > lo && p.x < hi
+  }
+
   private konveyorBlok(dt: number) {
     for (const c of this.cars) {
       c.blokFren = 1
@@ -2257,12 +2274,17 @@ export class CarManager {
       const cp = c.group.position
       const dir = c.headingDir()
       if (!dir) continue
+      let agizda = false
       if (cikista) {
-        // ÇIKIŞ KAPSAMI DAR: yalnız GİDEN omurga (xOut) kolonunda, omurga yönünde
-        // seyreden araç frenler. Kapıdan çıkıp yola katılan (kolon dışı) ve koldan
-        // omurgaya DÖNMEKTE olan (yatay seyir) araçlar kapsam dışı — giriş tarafındaki
-        // "arm'de blok yok" kuralının (kural 3) aynası.
-        if (Math.abs(cp.x - L.xOut) > 0.6 || Math.abs(dir.y) < 0.7) { c.blokT = 0; continue }
+        // ÇIKIŞ KAPSAMI: (a) GİDEN omurga (xOut) kolonunda omurga yönünde seyreden araç,
+        // (b) KAPI AĞZI (2 Eyl): kapıdan çıkmış, şeride henüz katılmamış araç. (b) yoktu —
+        // koldan omurgaya DÖNEN (yatay seyir) araçla birlikte kapsam dışıydı. Canlı yığılma
+        // olaylarının (#4999, #5016) %60'ı buradaydı: yola katılım boşluğu kuralı öndekini
+        // 0.15'e düşürünce arkadakiler onu beklemeden üstüne biniyordu (lab: T8 kapı ağzı
+        // çiftlerinin %48'i < 1.8, min 0.49). Kilitlenmezlik: kapı ağzındaki öndeki HİÇ
+        // durmaz (katılım kuralı sürünmeyi garanti eder), şeride girince kümeden çıkar.
+        agizda = this.kapiAgzinda(c, L)
+        if (!agizda && (Math.abs(cp.x - L.xOut) > 0.6 || Math.abs(dir.y) < 0.7)) { c.blokT = 0; continue }
       } else {
         const omurgada = Math.abs(cp.x - L.xIn) <= 0.6
         // KAPSAM: kuyruk üyesi (slota giden/kayan) her yerde; YAKIT pompası yolcusu YALNIZ
@@ -2272,14 +2294,24 @@ export class CarManager {
         // (ölçüldü: T8 tanı koşusunda durusSn'nin büyük kalemi buydu).
         if (c.waitIndex < 0 && !(c.slotIndex >= 0 && c.kind === 'fuel' && omurgada && Math.abs(dir.y) >= 0.7)) { c.blokT = 0; continue }
       }
+      // PENCERE ≥ TABAN + BİR ADIM (2 Eyl): 3.0 − 2.55 = 0.45, tam hız adımı ise 7·dt —
+      // dt ≥ 0.065'te (yük testi 0.1; canlıda düşük fps) DURAN öndekine 3.06'dan tek
+      // karede 2.36'ya iniliyordu: pencere dışındaki araç frensiz, adım kırpması hiç
+      // çalışmıyordu (ölçüldü: T8 tohum 2/3 "konveyör kapısı delik"). Pencere adım
+      // boyuyla büyür; kırpma o kareyi 2.55'te durdurur.
+      const pencere = Math.max(BLOK_MESAFE, BLOK_TABAN + CAR_SPEED * dt)
       let gap = Infinity
       for (const o of this.neighbors(cp.x, cp.y, 1)) {
         if (o === c || o.phase === 'gone' || o.station !== c.station || o.boat) continue
         // öndeki olarak yalnız AYNI hattın araçları: girişte kuyruk üyeleri + omurgadaki
         // yolcular (atPump kendi kolunda UNIT_CLEAR kadar ayrıktır, bloğa girmez — kural 3);
         // çıkışta yalnız aynı xOut kolonundaki leaving araçlar (çapraz akış muaf kalır).
+        let agizCifti = false
         if (cikista) {
-          if (o.phase !== 'leaving' || Math.abs(o.group.position.x - L.xOut) > 0.6) continue
+          if (o.phase !== 'leaving') continue
+          const oKolonda = Math.abs(o.group.position.x - L.xOut) <= 0.6
+          if (!oKolonda && !this.kapiAgzinda(o, L)) continue
+          agizCifti = agizda || !oKolonda
         } else {
           if (o.phase !== 'driving' && o.phase !== 'waiting') continue
           if (o.waitIndex < 0 && !(o.slotIndex >= 0 && Math.abs(o.group.position.x - L.xIn) <= 0.6)) continue
@@ -2290,20 +2322,26 @@ export class CarManager {
         if (od && od.x * dir.x + od.y * dir.y < -0.3) continue
         const dx = o.group.position.x - cp.x, dy = o.group.position.y - cp.y
         const ileri = dx * dir.x + dy * dir.y
-        if (ileri < 0.2 || ileri > BLOK_MESAFE) continue
+        if (ileri < 0.2 || ileri > pencere) continue
         // yanal pencere 1.2: slota ÇAPRAZ yanaşan araçların (banket katılımı) izdüşümü
         // 0.9'u aşabiliyordu — ölçüldü: aynı anda katılan iki araç 2.2'ye sokuluyordu.
         // Öndeki kümesi zaten yalnız kuyruk/omurga araçları; komşu kolonlar (çıkış 1.05,
         // transit şeridi 1.37) öndeki KAPSAMINA girmediği için pencere onlara değmez.
         const lx = dx - dir.x * ileri, ly = dy - dir.y * ileri
         if (lx * lx + ly * ly > 1.44) continue
+        // KAPI AĞZI ÇİFTİ: farklı rotalardan (kapı bacağı / otopark çıkışı) gelen iki araç
+        // yan yana 0.9 aralıkla birbirini "öndeki" sayıp KARŞILIKLI bekliyordu (ölçüldü:
+        // T11 çıkış muaf 6, min 0.00). Öndeki yalnız 45° koni içinde (ileri ≥ yanal) VE
+        // aynı yöne seyreden (dot > 0.3) araçtır — iki koşul birlikte karşılıklı bekleme
+        // geometrisini imkânsız kılar (koni karşılıklıysa rotalar ≥ 90° ayrışır, dot ≤ 0).
+        if (agizCifti && (ileri * ileri < lx * lx + ly * ly || !od || od.x * dir.x + od.y * dir.y < 0.3)) continue
         if (ileri < gap) gap = ileri
       }
-      if (gap < BLOK_MESAFE) {
+      if (gap < pencere) {
         // yumuşak fren: 3.0'da tam hız → 2.2'de sıfır, mesafeyle orantılı. Ek olarak
         // adım kırpılır: ayrık zaman adımı öndekine BLOK_TABAN'dan fazla yaklaştıramaz
         // (kaba dt tek karede eşiğin altına taşırmasın — ardışık çift 2.5'in altına inmez).
-        const oran = Math.max(0, (gap - BLOK_DUR) / (BLOK_MESAFE - BLOK_DUR))
+        const oran = Math.min(1, Math.max(0, (gap - BLOK_DUR) / (BLOK_MESAFE - BLOK_DUR)))
         const adimSiniri = dt > 0 ? Math.max(0, gap - BLOK_TABAN) / (CAR_SPEED * dt) : oran
         const f = Math.min(oran, adimSiniri)
         c.blokFren = f
