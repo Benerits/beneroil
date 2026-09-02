@@ -134,11 +134,11 @@ const olay = await import('../../src/trafik-olay.ts')
       evSlots: () => [{ x: 1.8, y: 5.7 }],
       yapi: () => [['pump-0', 0.9, -2.2, 0], ['pump-1', 0.9, 2.2, 0]],
       gun: () => 42, loc: () => 'kasaba', pompa: () => 2, sarj: () => 1,
-      kuyrukDolu: () => kuyruk, giremeyen: () => giremeyenN,
+      kuyrukDolu: () => kuyruk, giremeyen: () => giremeyenN, kurtarma: () => kurtarmaN,
     }, aktif, (url, govde) => gonderilen.push({ url, govde }))
     return gonderilen
   }
-  let kuyruk = false, giremeyenN = 0
+  let kuyruk = false, giremeyenN = 0, kurtarmaN = 0
   // VARSAYILAN FAZ 'waiting': kuyrukta duran araç HAREKETSİZ olması GEREKEN fazdadır,
   // yani sıkışma tetikleyicisini kirletmez. Sıkışma testi fazı açıkça 'driving' verir.
   const araba = (id, x, y, phase = 'waiting') => ({ id, x, y, phase, slotIndex: 0, kind: 'fuel' })
@@ -213,6 +213,9 @@ const olay = await import('../../src/trafik-olay.ts')
     const g = kur(() => [yonlu(1, 0, 0, 1, 0), yonlu(2, 0, 1.4, 1, 0)])
     sur(5)
     check('iç içe: yan yana şerit (enine 1.4, aynı yön) olay DEĞİL', g.length === 0, JSON.stringify(g.map(x => x.govde.k)))
+    const g2 = kur(() => [yonlu(1, 0, 0, 0, 1), yonlu(2, 1.05, 0.3, 0, 1)])
+    sur(5)
+    check('iç içe: gelen/giden omurga (LANE_SEP 1.05) yan yana duran çift olay DEĞİL', g2.length === 0, JSON.stringify(g2.map(x => x.govde.k)))
     const h = kur(() => [yonlu(1, 0, 0, 1, 0), yonlu(2, 2.0, 0.2, 1, 0)])
     sur(3)
     check('iç içe: aynı şeritte boyuna 2.0 (< 2.66) olay', h.length === 1 && h[0].govde.k === 'icice', JSON.stringify(h.map(x => x.govde.k)))
@@ -245,9 +248,9 @@ const olay = await import('../../src/trafik-olay.ts')
 
   // 3e) yığılma: 3 birimlik dairede 4 araç (iç içe olmadan)
   {
-    // dört araç bir aracın 3 birimlik çevresinde; ikili mesafeler 2.4 (> 2.15) →
+    // dört araç bir aracın 2.4 birimlik çevresinde; ikili mesafeler 2.3 (> 2.15) →
     // iç içe DEĞİL, yalnız yığılma tetiklenmeli
-    const g = kur(() => [araba(1, 0, 0, 'driving'), araba(2, 2.4, 0, 'leaving'), araba(3, -2.4, 0, 'toPark'), araba(4, 0, 2.4, 'driving')])
+    const g = kur(() => [araba(1, 0, 0, 'driving'), araba(2, 2.3, 0, 'leaving'), araba(3, -2.3, 0, 'toPark'), araba(4, 0, 2.3, 'driving')])
     sur(3)
     check('yığılma: 3 birimlik dairede 4 SÜREN araç olay üretti',
       g.length === 1 && g[0].govde.k === 'yigilma', JSON.stringify(g.map(x => x.govde.k)))
@@ -255,12 +258,17 @@ const olay = await import('../../src/trafik-olay.ts')
   // 3e') yığılma yalnız sürüş fazlarını sayar: park etmiş / kuyrukta bekleyen / transit
   //      araçlar tasarım gereği yakındır (otopark 2.5 aralık, kuyruk + yanından geçen şerit)
   {
-    const g = kur(() => [araba(1, 0, 0, 'toPark'), araba(2, 2.4, 0, 'parked'), araba(3, -2.4, 0, 'parked'), araba(4, 0, 2.4, 'parked')])
+    const g = kur(() => [araba(1, 0, 0, 'toPark'), araba(2, 2.3, 0, 'parked'), araba(3, -2.3, 0, 'parked'), araba(4, 0, 2.3, 'parked')])
     sur(3)
     check('yığılma: park etmiş araçlar sayılmıyor (1 süren + 3 parked → olay YOK)', g.length === 0, JSON.stringify(g.map(x => x.govde.k)))
-    const h = kur(() => [araba(1, 0, 0, 'driving'), araba(2, 2.4, 0), araba(3, -2.4, 0), araba(4, 0, 2.4, 'transit')])
+    const h = kur(() => [araba(1, 0, 0, 'driving'), araba(2, 2.3, 0), araba(3, -2.3, 0), araba(4, 0, 2.3, 'transit')])
     sur(3)
     check('yığılma: kuyruk (waiting) + transit sayılmıyor', h.length === 0, JSON.stringify(h.map(x => x.govde.k)))
+    // konveyör tabanında (2.55) düzgün akan kolon + 1.05 yanındaki giriş kolonu yığılma değil
+    const y = (id, x, yy, hx, hy, phase) => ({ ...araba(id, x, yy, phase), hx, hy })
+    const m = kur(() => [y(1, 2.7, 0, 0, 1, 'leaving'), y(2, 2.7, 2.6, 0, 1, 'leaving'), y(3, 2.7, -2.6, 0, 1, 'leaving'), y(4, 1.65, 0.5, 0, 1, 'driving')])
+    sur(3)
+    check('yığılma: 2.6 aralıklı kolon + yan kolon aracı olay DEĞİL', m.length === 0, JSON.stringify(m.map(x => x.govde.k)))
   }
 
   // 3f) kuyruk: slotlar dolu + giremeyen artıyor
@@ -272,6 +280,19 @@ const olay = await import('../../src/trafik-olay.ts')
     check('kuyruk: slotlar dolu + giremeyen artınca olay gitti',
       g.length === 1 && g[0].govde.k === 'kuyruk', JSON.stringify(g.map(x => x.govde.k)))
     kuyruk = false; giremeyenN = 0
+  }
+
+  // 3f') kurtarma: sayaç artınca olay gider ve HAYALET araç hedef olarak işaretlenir
+  //      (#5649 canlı olayı hedef [] geldi → kilidin yeri bulunamadı)
+  {
+    kurtarmaN = 0
+    const g = kur(() => [araba(1, 0, 0), { ...araba(2, 6, 6, 'leaving'), hayalet: true }, araba(3, 9, 9)])
+    sur(1)
+    kurtarmaN = 1
+    sur(1)
+    check('kurtarma: sayaç artınca olay gitti', g.length === 1 && g[0].govde.k === 'kurtarma', JSON.stringify(g.map(x => x.govde.k)))
+    check('kurtarma: hedef = hayalet (kurtarılan) araç (hedef=[1])', JSON.stringify(g[0]?.govde.hedef) === '[1]', JSON.stringify(g[0]?.govde.hedef))
+    kurtarmaN = 0
   }
 
   // 3g) VİTRİN MODU: hiçbir istek çıkmıyor

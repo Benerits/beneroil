@@ -5446,7 +5446,7 @@ trafikOlayKur({
   cars: () => cars.cars.map(c => ({
     id: aracKimligi(c), x: c.group.position.x, y: c.group.position.y,
     phase: c.phase as string, slotIndex: c.slotIndex, kind: c.kind as string,
-    frenli: c.blokT > 0,
+    frenli: c.blokT > 0, hayalet: c.hayalet || undefined,
     hx: Math.cos(c.group.rotation.z), hy: Math.sin(c.group.rotation.z),
   })),
   pumpSlots: () => world.pumpSlots.slice(0, state.pumps),

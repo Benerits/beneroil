@@ -58,6 +58,10 @@ export interface OlayAraci {
    *  kilitlenme yine yakalanır: 30 sn sonra muafiyet freni bırakır, blokT sıfırlanır
    *  ve hâlâ kıpırdamayan araç sayaca döner. */
   frenli?: boolean
+  /** BEKÇİ tarafından kurtarılmış (Car.hayalet): kaynakları bırakılmış, çıkışa tam hız
+   *  giden araç. Kurtarma olayında `hedef` olarak işaretlenir — kilidin NEREDE olduğu
+   *  ancak bu araçla anlaşılır (#5649: hedef [] → kurtarılan araç bulunamadı). */
+  hayalet?: boolean
   /** yön (birim vektör; group.rotation.z'den). Yoksa çift dairesel eşikle ölçülür. */
   hx?: number
   hy?: number
@@ -92,8 +96,12 @@ export const ICICE_MESAFE = 2.15
  *  (servis şeridi 5.6 ↔ transit 7, enine 1.4, aynı hızda → SÜREKLİ) ve 1.4 aralıkla park
  *  etmiş araçları "iç içe" sayıyordu — saatlik iç içe olaylarının 3/4'ü buydu. Enine 1.4
  *  > 1.2: gövdeler değmiyor, oyuncu üst üste görmüyor. */
-export const ARAC_BOY = 2.66
-export const ARAC_EN = 1.2
+/** 2.66 değil 2.5: konveyör tabanı BLOK_TABAN=2.55 (cars.ts) — tasarımın izin verdiği
+ *  aralık olay olmasın; en uzun gövdede 0.1'lik tampon teması gözle görülmez. */
+export const ARAC_BOY = 2.5
+/** 1.2 değil 1.0: gelen/giden omurgalar tasarım gereği LANE_SEP=1.05 aralıkla yan yana
+ *  akar (traffic-graph.ts); duran kuyruk + yanında bekleyen giden araç olay olmasın. */
+export const ARAC_EN = 1.0
 function ustUste(a: OlayAraci, b: OlayAraci): boolean {
   const dx = b.x - a.x, dy = b.y - a.y
   const cerceve = (hx: number, hy: number) =>
@@ -108,8 +116,11 @@ export const ICICE_SURE = 2
 export const SIKISMA_SURE = 45
 /** hareketsiz sayılmak için kare başına izin verilen en büyük yer değiştirme (birim) */
 const SIKISMA_TOLERANS = 0.12
-/** yığılma: bu yarıçaptaki daire içinde ... */
-export const YIGILMA_YARICAP = 3
+/** yığılma: bu yarıçaptaki daire içinde ... — KONVEYÖR TABANININ ALTINDA (cars.ts
+ *  BLOK_TABAN 2.55): 2.55 aralıkla düzgün akan kolon yığılma değildir. 3'tü: 8 pompalı
+ *  istasyonda 2.7 aralıklı çıkış kolonu + 1.05 yanındaki giriş kolonu her nabızda 4'ü
+ *  buluyordu (0853 bundle'ında 22 olayın 22'si bu, hepsi düzenli akış). */
+export const YIGILMA_YARICAP = 2.4
 /** ... bu kadar araç varsa olay */
 export const YIGILMA_ADET = 4
 /** SÜRÜŞ fazları — atPump/parked/waiting HAREKETSİZ OLMASI GEREKEN fazlardır, sayılmaz.
@@ -296,7 +307,10 @@ function olcum(araclar: OlayAraci[], adim: number) {
     : kuyruk ? 'kuyruk'
     : null
   if (tur) {
-    const idler = tur === 'sikisma' ? sikisanId : tur === 'icice' ? hedefId : null
+    const idler = tur === 'sikisma' ? sikisanId
+      : tur === 'icice' ? hedefId
+      : tur === 'kurtarma' ? new Set(gorunur.filter(c => c.hayalet).map(c => c.id))
+      : null
     const hedef = idler ? gorunur.map((c, i) => idler.has(c.id) ? i : -1).filter(i => i >= 0) : []
     olayGonder(tur, gorunur, hedef)
   }
