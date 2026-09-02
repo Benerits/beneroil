@@ -1920,6 +1920,8 @@ async function handleVs(req, res, url) {
       return json(res, 200, { data: rows.rows })
     }
     if (url === '/vs/v1/engagement' && req.method === 'GET') {
+      // Sayısal alanlar ::numeric ile okunur: kayıtta kwh gibi alanlar ondalıklı gelebiliyor
+      // ("59067.93…"), ::int bunu 22P02 ile patlatıp panelin tamamını 500'e düşürüyordu (2 Eyl).
       const agg = await pool.query(`
         SELECT
           coalesce(avg(sessions), 0)::float AS spu,
@@ -1931,15 +1933,15 @@ async function handleVs(req, res, url) {
           count(*) FILTER (WHERE last_seen_at > created_at + interval '1 day')::int AS d1,
           count(*) FILTER (WHERE last_seen_at > created_at + interval '7 day')::int AS d7,
           count(*) FILTER (WHERE last_seen_at > created_at + interval '30 day')::int AS d30,
-          coalesce(sum((save->'s'->'stats'->>'served')::int), 0)::int AS served,
-          coalesce(sum((save->'s'->'stats'->>'kwh')::int), 0)::int AS kwh,
+          coalesce(sum((save->'s'->'stats'->>'served')::numeric), 0)::bigint AS served,
+          coalesce(sum((save->'s'->'stats'->>'kwh')::numeric), 0)::bigint AS kwh,
           coalesce(sum((save->'s'->'stats'->>'revenue')::numeric), 0)::bigint AS revenue,
-          coalesce(round(avg((save->'s'->>'day')::int)), 0)::int AS avg_day,
-          coalesce(max((save->'s'->>'day')::int), 0)::int AS max_day,
+          coalesce(round(avg((save->'s'->>'day')::numeric)), 0)::int AS avg_day,
+          coalesce(max((save->'s'->>'day')::numeric), 0)::int AS max_day,
           coalesce(sum((save->'s'->'stats'->'liters'->>'benzin')::numeric), 0)::bigint AS l_benzin,
           coalesce(sum((save->'s'->'stats'->'liters'->>'dizel')::numeric), 0)::bigint AS l_dizel,
           coalesce(sum((save->'s'->'stats'->'liters'->>'lpg')::numeric), 0)::bigint AS l_lpg,
-          count(*) FILTER (WHERE (save->'s'->>'evChargers')::int > 0)::int AS ev_stations,
+          count(*) FILTER (WHERE (save->'s'->>'evChargers')::numeric > 0)::int AS ev_stations,
           count(*) FILTER (WHERE (save->'s'->>'hasSMR')::boolean)::int AS nuclear_stations,
           coalesce(round(avg((save->'s'->>'reputation')::numeric), 2), 0)::float AS avg_rep
         FROM benzinlik_player`)
