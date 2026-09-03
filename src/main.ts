@@ -6169,6 +6169,7 @@ if (auth.loggedIn()) document.getElementById('authgate')?.remove()
     const off = applyAwayEarnings(offSec) // guard'lar fonksiyonun içinde
     if (off > 0) offerOffline2x(off, offSec)   // reklam v2 #2: dönüş başına 1, tutar sunucuda kesilir
   }
+  hediyeRituelBaslat()                           // reklam v2.1 #9: günlük hediye, gecikmeli (tickAdOffer)
 
   // ---- DEVİR RAPORU: yenilemenin diğer ucu ----
   // Devir sayfayı yeniliyor; oyuncu boş arsaya düşünce "ne kazandım?" boşluğu doğuyordu.
@@ -6857,6 +6858,19 @@ let adSyncT = 0                          // sunucu durumu periyodik tazeleme
 const tamirTeklifEdildi = new Set<string>()   // 'pump-3' → bu arıza için teklif çıktı (arıza başına 1)
 let offlineTeklifVerildi = false          // dönüş başına 1
 let kurtarmaKontrolT = 0                  // battın-kurtarma koşulu 20 sn'de bir bakılır
+/** Strateji v2.1 (3 Eyl 2026) zamanlama sabitleri — gerekçe: docs/REKLAM-STRATEJI.md */
+const AD_GUN2X_SURE = 90            // gün sonu 2× teklifi ~yarım oyun günü kalır (22 sn kaçırılıyordu); ısrar yok, süresi dolunca iner
+const AD_OFFLINE2X_SURE = 60
+const AD_HEDIYE_SURE = 60
+const AD_IZLEME_NEFESI = 60         // izlenen videodan sonra yeni OTOMATİK teklif için nefes (yorgunluk + eCPM); Ofis paneli bundan muaf
+const AD_HEDIYE_GECIKME = 12        // oturum açılışında hediye teklifi için bekleme (offline raporu/devir önce görünsün)
+const PARA_TEKLIFLERI: ReadonlySet<PlacementId> = new Set<PlacementId>(['gun2x', 'offline2x', 'hediye'])
+const ACIL_TEKLIFLER: ReadonlySet<PlacementId> = new Set<PlacementId>(['tamir', 'tanker', 'kurtarma'])
+/** Ekrandaki uzun ömürlü PARA teklifi, acil bir EFEKT teklifi (tamir/tanker/kurtarma) gelince askıya alınır;
+ *  acil teklif inince kalan süresiyle geri gelir. Bilet 15 dk yaşar, kullanılmayan bilet tavan yemez. */
+let askidaTeklif: { offer: AdOffer; kalan: number } | null = null
+let hediyeBekliyor = false                // oturum açılışında bir kez günlük hediye teklifi
+let hediyeGecikmeT = AD_HEDIYE_GECIKME
 
 const reklamAktif = () => !isFullMode && !isPromoMode
 const tlx = (n: number) => Math.round(n).toLocaleString('tr-TR')
@@ -6874,12 +6888,20 @@ function adEtiket(o: AdOffer): string {
       : t('Pompa #{0} tamirini bitir · {1}', (o.unit?.i ?? 0) + 1, bedel(o.id))
     case 'tanker': return t('{0} tankeri hemen gelsin · {1}', t(FUEL_LABEL[o.fuel ?? 'benzin']), bedel(o.id))
     case 'kurtarma': return t('Acil nakit: +₺{0} · {1}', tlx(o.amount), bedel(o.id))
+    case 'hediye': return t('Günlük hediye: +₺{0} · {1}', tlx(o.amount), bedel(o.id))
     default: return t('Reklam İzle')
   }
 }
 function teklifKapat() {
   adOffer = null; teklifT = 0
   adBtn.style.display = 'none'; adBtn.disabled = false
+  // askıda bekleyen para teklifi (gün2×/offline2×/hediye) kalan süresiyle geri gelir
+  const a = askidaTeklif; askidaTeklif = null
+  if (a && a.kalan > 3 && reklamAktif() && canOffer(a.offer.id, state.adUse)) {
+    adOffer = a.offer; teklifT = a.kalan
+    adBtnLabel.textContent = adEtiket(a.offer)
+    adBtn.style.display = 'flex'; adBtn.disabled = false
+  }
 }
 /**
  * Sahne teklifi. Para yerleşiminde ÖNCE sunucudan bilet alınır: tutar bütçeyle kesilmiş
@@ -6887,8 +6909,12 @@ function teklifKapat() {
  * (SSV hesapsız olmaz) — onun yerine kayıt teşviki. Dönüş: teklif ekrana geldiyse true.
  */
 async function teklifGoster(id: PlacementId, o: { amount?: number; meta?: Record<string, unknown> | null; fuel?: FuelType; unit?: AdUnit; sure: number }): Promise<boolean> {
-  if (!reklamAktif() || adBusy || adOffer || adCooldown > 0) return false
+  if (!reklamAktif() || adBusy) return false
+  // acil efekt teklifi, ekrandaki uzun ömürlü para teklifini ASKIYA alır (kaybetmez); diğer çakışmalar reddedilir
+  const askiyaAl = !!adOffer && ACIL_TEKLIFLER.has(id) && PARA_TEKLIFLERI.has(adOffer.id) && !askidaTeklif
+  if ((adOffer && !askiyaAl) || (adCooldown > 0 && !askiyaAl)) return false
   if (!canOffer(id, state.adUse)) return false
+  if (askiyaAl && adOffer) { askidaTeklif = { offer: adOffer, kalan: teklifT }; adOffer = null; teklifT = 0 }
   // PREMİUM ("Reklamları kaldır"): A/B yerleşimleri buton bile göstermeden OTOMATİK uygulanır
   // (tavanlar sunucuda yine geçerli — bilet/claim'den geçer, video yok)
   if (isPremium() && PLACEMENTS[id].premium === 'auto') {
@@ -6905,6 +6931,7 @@ async function teklifGoster(id: PlacementId, o: { amount?: number; meta?: Record
     amount = ticket.amount
     if (adOffer) return false          // istek sürerken başka teklif çıktı
   }
+  if (adOffer) return false            // efekt yerleşimi: askı sırasında başka teklif çıkmış olabilir
   adOffer = { id, amount, meta: o.meta ?? null, ticket, fuel: o.fuel, unit: o.unit }
   adBtnLabel.textContent = adEtiket(adOffer)
   adBtn.style.display = 'flex'; adBtn.disabled = false
@@ -6923,6 +6950,9 @@ function odulUygula(id: PlacementId, amount: number, meta: Record<string, unknow
     case 'kurtarma':
       state.money += amount
       ui.toast(t('Acil nakit geldi: +₺{0} — tanker sipariş et ve toparlan!', tlx(amount)), 'good'); break
+    case 'hediye':
+      state.money += amount
+      ui.toast(t('Günlük hediye kumbarası açıldı: +₺{0}!', tlx(amount)), 'good'); break
     case 'tamir': {
       const u = o?.unit ?? (meta && typeof meta.kind === 'string' ? { kind: meta.kind as 'pump' | 'charger', i: Number(meta.i) || 0 } : null)
       if (u && state.adTamirHizlandir(u.kind, u.i)) {
@@ -7008,24 +7038,25 @@ adBtn.addEventListener('click', async () => {
   if (!o || adBusy) return
   adBtn.disabled = true
   await reklamCalistir(o.id, { amount: o.amount, meta: o.meta, ticket: o.ticket, offer: o })
-  // teklif tek seferlik: sonucu ne olursa olsun buton iner, aynı an için ısrar yok
+  // teklif tek seferlik: sonucu ne olursa olsun buton iner, aynı an için ısrar yok.
+  // Nefes 60 sn (v2.1): art arda otomatik teklif yorgunluk yapar, aynı kullanıcıya sık gösterim eCPM düşürür.
   teklifKapat()
-  adCooldown = 20
+  adCooldown = AD_IZLEME_NEFESI
 })
 // geç gelen ödüller (SSV gecikti, oyuncu ekranı kapatmıştı): senkron pending'i yakalayınca uygula
 onLateGrant((id, amount, meta) => odulUygula(id, amount, meta))
 
-/** #1 gün sonu 2× — net kâr; teklif 22 sn görünür (kaçarsa kaçar, ısrar yok) */
+/** #1 gün sonu 2× — net kâr; teklif ~yarım oyun günü görünür (v2.1: 22 sn kaçırılıyordu), acil teklif gelirse askıya alınır */
 function offerGun2x(net: number) {
   if (net <= 0) return
   if (adLocalMode()) return           // misafir: para ödülü yok (sunucu hesabı şart), kayıt teşviki zaten gün sonunda var
-  void teklifGoster('gun2x', { amount: Math.round(net), meta: { day: state.day }, sure: 22 })
+  void teklifGoster('gun2x', { amount: Math.round(net), meta: { day: state.day }, sure: AD_GUN2X_SURE })
 }
 /** #2 offline kazanç 2× — dönüş başına 1 */
 function offerOffline2x(total: number, offSec: number) {
   if (offlineTeklifVerildi || adLocalMode()) return
   offlineTeklifVerildi = true
-  void teklifGoster('offline2x', { amount: Math.round(total), meta: { offSec: Math.round(offSec) }, sure: 30 })
+  void teklifGoster('offline2x', { amount: Math.round(total), meta: { offSec: Math.round(offSec) }, sure: AD_OFFLINE2X_SURE })
 }
 /** #4 tanker hızlandır — sipariş yola çıkınca / tank boşalınca tanker yoldaysa */
 function teklifTanker(f: FuelType) {
@@ -7035,6 +7066,11 @@ function teklifTanker(f: FuelType) {
 }
 /** #3 tamiri hızlandır — ödenmiş, süren tamir; Murphy arızasında (kasa boşken) TEKLİF YOK */
 function tamirTeklifleriniTara() {
+  // buton doluysa (başka efekt teklifi / video oynuyor / nefes) arızayı İŞARETLEME — sonraki taramada teklif edilir.
+  // Eskiden önce işaretleniyordu: buton meşgulse tamir teklifi sessizce kayboluyordu. Para teklifi askıya alınabilir, engel değil.
+  if (adBusy) return
+  if (adOffer && !(PARA_TEKLIFLERI.has(adOffer.id) && !askidaTeklif)) return
+  if (!adOffer && adCooldown > 0) return
   for (const k of Object.keys(state.repairs)) {
     if (tamirTeklifEdildi.has(k)) continue
     const m = /^(pump|charger)-(\d+)$/.exec(k); if (!m) continue
@@ -7061,9 +7097,25 @@ function kurtarmaKontrol() {
   if (tutar <= 0) return
   void teklifGoster('kurtarma', { amount: tutar, meta: { day: state.day, money: Math.round(state.money) }, sure: 60 })
 }
+/** #9 günlük hediye kumbarası — istenen tutar: dünkü net kârın çeyreği (en az ₺500); sunucu tepe gelirin 40 sn'si ve bütçeyle keser */
+function hediyeTutari(): number {
+  const son = state.salesLog.length ? (state.salesLog[state.salesLog.length - 1].profit ?? 0) : 0
+  return Math.max(500, Math.round(Math.max(0, son) * 0.25))
+}
+/** oturum açılışında çağrılır; teklif ~12 sn sonra, sahne boşken çıkar */
+function hediyeRituelBaslat() { hediyeBekliyor = !adLocalMode(); hediyeGecikmeT = AD_HEDIYE_GECIKME }
+function offerHediye(sure = AD_HEDIYE_SURE): Promise<boolean> {
+  if (adLocalMode()) return Promise.resolve(false)     // para ödülü hesap ister (SSV)
+  return teklifGoster('hediye', { amount: hediyeTutari(), meta: { day: state.day }, sure })
+}
 function tickAdOffer(dt: number) {
   if (!reklamAktif()) return
   if (adCooldown > 0) adCooldown -= dt
+  // günlük hediye: oturum açılışında bir kez, sahne boşken (offline/devir raporu önce görünsün)
+  if (hediyeBekliyor) {
+    hediyeGecikmeT -= dt
+    if (hediyeGecikmeT <= 0 && !adOffer && !adBusy && adCooldown <= 0) { hediyeBekliyor = false; void offerHediye() }
+  }
   if (adSyncT > 0) { adSyncT -= dt; if (adSyncT <= 0) { adSyncT = 600; if (auth.loggedIn()) syncAdState(true) } }
   else adSyncT = 600
   if (adOffer) {
@@ -7092,8 +7144,10 @@ function renderReklamPaneli() {
       + `<button class="btn sbuy warn ad-run" data-ad="${id}" ${acik ? '' : 'disabled'}><svg class="ic"><use href="#i-star"/></svg><span>${isPremium() ? t('Kullan') : t('İzle')}</span></button></div>`
   }
   const trafikGizle = kuyrukDoluMu() ? t('kuyruk dolu — önce servis') : state.trafikBoostActive ? t('sürüyor') : null
+  const hediyeGizle = adLocalMode() ? t('hesap gerekli') : askidaTeklif?.offer.id === 'hediye' || adOffer?.id === 'hediye' ? t('teklif sahnede') : null
   el.innerHTML =
-      satir('premium', 'i-star', state.isMarina ? t('Süperyat çağır') : t('Premium müşteri çağır'), t('büyük sipariş, hemen gelir'), null)
+      (adLocalMode() ? '' : satir('hediye', 'i-coin', t('Günlük hediye kumbarası'), t('günde 1 · tutar sahne butonunda yazar'), hediyeGizle))
+    + satir('premium', 'i-star', state.isMarina ? t('Süperyat çağır') : t('Premium müşteri çağır'), t('büyük sipariş, hemen gelir'), null)
     + satir('trafik', 'i-fuel', t('Trafiği artır'), t('{0} sn daha çok müşteri', GameState.TRAFIK_BOOST_SN), trafikGizle)
     + satir('event', 'i-coin', state.promo ? t('Fırsatı uzat') : t('Fırsat başlat'), t('60 sn müşteri patlaması / yarı fiyat yakıt'), null)
     + (adLocalMode() && !auth.loggedIn() ? `<div class="sd" style="margin-top:6px">${t('Para ödülleri (gün sonu 2×, offline 2×, acil nakit) yalnız hesaplı oyunculara — kaydol.')}</div>` : '')
@@ -7103,7 +7157,14 @@ document.getElementById('of-reklam')?.addEventListener('click', async e => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('.ad-run'); if (!b || b.disabled) return
   const id = b.dataset.ad as PlacementId
   b.disabled = true
-  await reklamCalistir(id, { meta: { loc: state.activeLoc } })
+  if (id === 'hediye') {
+    // para yerleşimi: önce bilet (tutar sunucuda kesilir), sahne butonu NET tutarı yazar — panelden doğrudan video açılmaz
+    hediyeBekliyor = false
+    const ok = await offerHediye()
+    if (!ok) ui.toast(canOffer('hediye', state.adUse) ? t('Hediye şu an verilemiyor — biraz sonra tekrar dene.') : t('Bugünlük hediyeni aldın.'), '')
+  } else {
+    await reklamCalistir(id, { meta: { loc: state.activeLoc } })
+  }
   renderReklamPaneli()
 })
 

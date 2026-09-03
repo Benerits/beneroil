@@ -1936,7 +1936,7 @@ async function handleVs(req, res, url) {
     }
     if (url === '/vs/v1/stats-hourly' && req.method === 'GET') {
       const rows = await pool.query(`
-        SELECT to_char(hour, 'HH24:00') AS label, visits, signups, logins, guests
+        SELECT to_char(hour, 'HH24:00') AS label, visits, signups, logins, guests, ad_views, session_minutes
         FROM benzinlik_stat_hourly WHERE hour > now() - interval '24 hours' ORDER BY hour`)
       return json(res, 200, { data: rows.rows })
     }

@@ -36,6 +36,9 @@ export const PLACEMENT_DEFAULTS = {
   trafik:    { kind: 'effect', cap: 2, premium: 'novideo', desc: 'Trafiği artır' },
   // D. Kurtarma
   kurtarma:  { kind: 'money',  cap: 1, premium: 'novideo', desc: 'Battın — acil nakit', weekCap: 2 },
+  // E. Günlük ritüel (3 Eyl 2026, strateji v2.1): oturum açılışında bir kez "hediye kumbarası".
+  // Tycoon'da ödüllü gösterimin en büyük dilimi günlük ritüeldir; bizde ritüel yalnız gün2×/offline2× idi.
+  hediye:    { kind: 'money',  cap: 1, premium: 'auto',    desc: 'Günlük hediye kumbarası' },
 }
 const PLACEMENT_IDS = Object.keys(PLACEMENT_DEFAULTS)
 const MONEY_IDS = PLACEMENT_IDS.filter(k => PLACEMENT_DEFAULTS[k].kind === 'money')
@@ -44,6 +47,8 @@ const TICKET_TTL_MS = 15 * 60_000     // bilet 15 dk içinde kullanılmazsa öl�
 const NOFILL_DAY_CAP = 2              // "reklam yoktu ama ödül ver" yolu — istemci yalanı sınırlı kalsın
 const KURTARMA_MAX = 12_000           // en pahalı asgari tanker siparişi ~9.3k (500 L × 14.3 ₺ × 1.3)
 const CREDIT_MAX = 50_000_000
+/** Strateji v2.1 hedefleri (3 Eyl 2026) — /vs/v1/ads bunları kpi'nin yanında döner ki panel kırmızı/yeşil boyayabilsin. */
+export const HEDEFLER = { viewsPerActivePerDay: 2.5, optInRate: 0.35, completeRate: 0.55, softDailyMaxPerPlayer: 8 }
 const EVENTS = new Set(['offer', 'skip', 'start', 'complete', 'abort', 'nofill', 'error', 'revenue', 'reward', 'ssv'])
 
 export function mergePlacements(...layers) {
@@ -69,6 +74,7 @@ export function moneyCap(placement, rate, requested, elapsedSec) {
   if (placement === 'gun2x') return Math.min(req, Math.round(rate * 160))               // en fazla bir oyun günü tepe geliri
   if (placement === 'offline2x') return Math.min(req, Math.round(rate * Math.min(Math.max(60, elapsedSec), 8 * 3600)))
   if (placement === 'kurtarma') return Math.min(req, KURTARMA_MAX)
+  if (placement === 'hediye') return Math.min(req, Math.round(rate * 40))                // çeyrek oyun günü tepe geliri (küçük, ritüel)
   return 0
 }
 /** AppLovin S2S: event_token = sha1(event_id + Event Key). Sabit zamanlı karşılaştırma. */
@@ -368,8 +374,29 @@ export function createReklam({ pool, SECRET, json, readBody, rateLimit, clientIp
       const o = out[r.placement]; if (!o) continue
       o.granted = r.n; o.amount = Number(r.amount) || 0; o.players = r.players; o.nofill = Math.max(o.nofill, r.nofill)
     }
+    // HEDEF TAKİBİ (strateji v2.1): izlenme/aktif oyuncu, opt-in oranı, ARPDAU. Aktif = pencerede
+    // last_seen_at olan kayıtlı oyuncu; opt-in = pencerede ≥1 ödül alan. Hepsi toplam, e-posta yok.
+    let activePlayers = 0, optInPlayers = 0
+    try {
+      const a = await pool.query(`SELECT count(*)::int AS n FROM benzinlik_player WHERE last_seen_at > now() - ($1 || ' days')::interval`, [String(d)])
+      activePlayers = a.rows[0]?.n || 0
+      const o = await pool.query(`SELECT count(DISTINCT email)::int AS n FROM benzinlik_ad_day WHERE day > CURRENT_DATE - $1::int AND placement <> '_gain' AND n > 0`, [d])
+      optInPlayers = o.rows[0]?.n || 0
+    } catch { /* tablo yoksa sıfır */ }
+    const tot = { offer: 0, start: 0, complete: 0, granted: 0, revenueUsd: 0, amount: 0 }
+    for (const o of Object.values(out)) for (const k of Object.keys(tot)) tot[k] += o[k] || 0
+    const oran = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 1000 : null)
+    const kpi = {
+      activePlayers, optInPlayers,
+      optInRate: oran(optInPlayers, activePlayers),                 // hedef ≥ 0.35
+      viewsPerActive: oran(tot.granted, activePlayers),             // pencere boyunca; hedef günlük ≥ 2.5 → 7 günde ≥ 17.5
+      viewsPerActivePerDay: oran(tot.granted, activePlayers * d),   // hedef ≥ 2.5
+      completeRate: oran(tot.complete, tot.offer),                  // hedef ≥ 0.55
+      arpdauUsd: oran(tot.revenueUsd, activePlayers * d),
+      viewsPerDay: oran(tot.granted, d), revenuePerDayUsd: oran(tot.revenueUsd, d),
+    }
     const cfg = await config()
-    return { days: d, ratio: cfg.ratio, placements: out, config: cfg.placements }
+    return { days: d, ratio: cfg.ratio, placements: out, config: cfg.placements, totals: tot, kpi, targets: HEDEFLER }
   }
 
   /** /api/ads/* yönlendirme. true dönerse istek işlendi. */

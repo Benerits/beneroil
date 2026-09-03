@@ -21,7 +21,7 @@ import { adsEnabled, adsPlatform, adsProvider, isPremium, onAdRevenue, rewardedR
 import { api, loggedIn } from './auth'
 import { isInstantGames } from './platform'
 
-export type PlacementId = 'gun2x' | 'offline2x' | 'tamir' | 'tanker' | 'event' | 'premium' | 'trafik' | 'kurtarma'
+export type PlacementId = 'gun2x' | 'offline2x' | 'tamir' | 'tanker' | 'event' | 'premium' | 'trafik' | 'kurtarma' | 'hediye'
 export type PlacementKind = 'money' | 'effect'
 /** Sunucu server/reklam.js PLACEMENT_DEFAULTS ile BİREBİR (id + tür + varsayılan tavan). */
 export const PLACEMENTS: Record<PlacementId, { kind: PlacementKind; cap: number; premium: 'auto' | 'novideo' }> = {
@@ -33,6 +33,7 @@ export const PLACEMENTS: Record<PlacementId, { kind: PlacementKind; cap: number;
   premium:   { kind: 'effect', cap: 3, premium: 'novideo' },
   trafik:    { kind: 'effect', cap: 2, premium: 'novideo' },
   kurtarma:  { kind: 'money',  cap: 1, premium: 'novideo' },
+  hediye:    { kind: 'money',  cap: 1, premium: 'auto' },      // günlük ritüel: oturum açılışında bir kez (v2.1)
 }
 export const PLACEMENT_IDS = Object.keys(PLACEMENTS) as PlacementId[]
 

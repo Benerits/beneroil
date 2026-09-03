@@ -69,6 +69,14 @@ function fakePool() {
     if (S.startsWith('UPDATE benzinlik_ad_ticket SET event_id=$2')) { const t = db.tickets.find(t => t.id === p[0]); if (t && !t.event_id) t.event_id = p[1]; return { rows: [], rowCount: 1 } }
     if (S.startsWith("UPDATE benzinlik_ad_ticket SET status='expired'")) { const t = db.tickets.find(t => t.id === p[0]); if (t) t.status = 'expired'; return { rows: [], rowCount: 1 } }
     if (S.startsWith('SELECT id, placement, amount, meta FROM benzinlik_ad_ticket')) return { rows: db.tickets.filter(t => t.email === p[0] && t.status === 'verified') }
+    if (S.startsWith('SELECT placement, event, count(*)::int AS n')) return { rows: db.events || [] }
+    if (S.startsWith('SELECT placement, sum(n)::int AS n, sum(amount)::bigint AS amount')) {
+      const g = {}
+      for (const r of db.day) { if (r.placement === '_gain') continue; const o = (g[r.placement] ||= { placement: r.placement, n: 0, amount: 0, nofill: 0, emails: new Set() }); o.n += r.n; o.amount += r.amount; o.nofill += r.nofill; o.emails.add(r.email) }
+      return { rows: Object.values(g).map(o => ({ ...o, players: o.emails.size })) }
+    }
+    if (S.startsWith('SELECT count(*)::int AS n FROM benzinlik_player WHERE last_seen_at')) return { rows: [{ n: db.activePlayers ?? 0 }] }
+    if (S.startsWith('SELECT count(DISTINCT email)::int AS n FROM benzinlik_ad_day')) return { rows: [{ n: new Set(db.day.filter(r => r.placement !== '_gain' && r.n > 0).map(r => r.email)).size }] }
     throw new Error('sahte pool bilmiyor: ' + S.slice(0, 80))
   }
   return { db, today, query: q }
@@ -170,6 +178,8 @@ console.log('T5 bütçe (reklam parası ≤ %30 aktif kazanç)')
   ok(moneyCap('offline2x', 600, 1e9, 3600) === 2_160_000, 'offline2x tavan rate×geçen süre')
   ok(moneyCap('kurtarma', 600, 1e9, 0) === 12_000, 'kurtarma tavan 12k')
   ok(moneyCap('tamir', 600, 1e9, 0) === 0, 'efekt yerleşimi para vermez')
+  ok(moneyCap('hediye', 600, 1e9, 0) === 24_000, 'hediye tavan rate×40 (çeyrek oyun günü)')
+  ok(moneyCap('hediye', 600, 500, 0) === 500, 'hediye: istenen tavanın altındaysa istenen verilir')
   // 8 gün önceki kazanç bütçeye sayılmaz
   const h2 = harness(); seed(h2, { noAds: true }); gain(h2, 1_000_000, 8)
   t = (await call(h2, 'POST', '/api/ads/ticket', { placement: 'gun2x', amount: 1000 })).data
@@ -231,6 +241,22 @@ console.log('T9 uzaktan ayar')
   ok(!t.ok && t.reason === 'disabled', 'kapalı yerleşim bilet vermez')
   const m = mergePlacements({ tamir: { cap: 999 } }, { tamir: { enabled: false } })
   ok(m.tamir.cap === 50 && m.tamir.enabled === false && m.event.cap === PLACEMENT_DEFAULTS.event.cap, 'mergePlacements: cap ≤ 50, katmanlar sırayla ezer')
+}
+
+console.log('T12 rapor: KPI + hedefler (strateji v2.1) — yalnız toplam, e-posta yok')
+{
+  const h = harness(); seed(h); gain(h, 100_000)
+  h.pool.db.activePlayers = 10
+  h.pool.db.day.push({ email: 'x@y.z', day: h.pool.today, placement: 'gun2x', n: 3, amount: 900, nofill: 0 })
+  h.pool.db.day.push({ email: 'q@y.z', day: h.pool.today, placement: 'hediye', n: 1, amount: 500, nofill: 0 })
+  h.pool.db.events = [{ placement: 'gun2x', event: 'offer', n: 8, rev: 0 }, { placement: 'gun2x', event: 'complete', n: 4, rev: 0 }, { placement: 'gun2x', event: 'revenue', n: 4, rev: '0.05' }]
+  const r = await h.r.summary(7)
+  ok(r.targets && r.targets.viewsPerActivePerDay === 2.5 && r.targets.optInRate === 0.35, 'hedefler raporda')
+  ok(r.kpi.activePlayers === 10 && r.kpi.optInPlayers === 2 && r.kpi.optInRate === 0.2, 'opt-in = ödül alan tekil / aktif (' + JSON.stringify(r.kpi) + ')')
+  ok(r.totals.granted === 4 && r.kpi.viewsPerActive === 0.4 && r.kpi.viewsPerActivePerDay === Math.round(4 / 70 * 1000) / 1000, 'izlenme/aktif ve /gün')
+  ok(r.kpi.completeRate === 0.5 && Math.abs(r.totals.revenueUsd - 0.05) < 1e-9, 'tamamlama = complete/offer; gelir toplanır')
+  ok(r.placements.hediye && r.placements.hediye.granted === 1 && r.placements.hediye.amount === 500, 'hediye yerleşimi raporda')
+  ok(!JSON.stringify(r).includes('@'), 'raporda e-posta YOK')
 }
 
 console.log(fails ? `\n${fails} HATA` : '\nTÜM TESTLER GEÇTİ')

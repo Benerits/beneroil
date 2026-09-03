@@ -184,13 +184,44 @@ console.log('\n── YAPILMAYACAKLAR ve sözleşmeler ──')
   // sunucu ↔ istemci yerleşim listesi birebir
   const srvIds = [...reklam_js.matchAll(/^\s{2}(\w+):\s*\{ kind:/gm)].map(m => m[1])
   const cliIds = [...reklam_ts.matchAll(/^\s{2}(\w+):\s*\{ kind:/gm)].map(m => m[1])
-  bekle(srvIds.length === 8 && JSON.stringify(srvIds) === JSON.stringify(cliIds), 'sunucu/istemci yerleşim listeleri birebir', `${srvIds.join(',')} | ${cliIds.join(',')}`)
+  bekle(srvIds.length === 9 && JSON.stringify(srvIds) === JSON.stringify(cliIds), 'sunucu/istemci yerleşim listeleri birebir', `${srvIds.join(',')} | ${cliIds.join(',')}`)
   for (const id of srvIds) {
     const sv = new RegExp(`^\\s{2}${id}:\\s*\\{ kind:\\s*'(\\w+)',\\s*cap: (\\d+)`, 'm').exec(reklam_js)
     const cl = new RegExp(`^\\s{2}${id}:\\s*\\{ kind:\\s*'(\\w+)',\\s*cap: (\\d+)`, 'm').exec(reklam_ts)
     bekle(sv && cl && sv[1] === cl[1] && sv[2] === cl[2], `yerleşim ${id}: tür/tavan aynı`, `${sv?.[1]}/${sv?.[2]} vs ${cl?.[1]}/${cl?.[2]}`)
   }
   bekle(/ad_views/.test(reklam_ts), 'izlenen reklam ad_views metriğine yazılıyor')
+}
+
+console.log('\n── STRATEJİ v2.1 (3 Eyl 2026): zamanlama, askıya alma, günlük hediye ──')
+{
+  // 1) gün sonu 2× artık 22 sn'de kaçmıyor: ~yarım oyun günü (≥ 60 sn) görünür; offline2x ≥ 45 sn
+  const sabit = (ad) => Number((new RegExp(`const ${ad} = (\\d+)`).exec(main_ts) || [])[1])
+  bekle(sabit('AD_GUN2X_SURE') >= 60 && sabit('AD_GUN2X_SURE') <= 120, 'gün2× teklif süresi 60–120 sn', `${sabit('AD_GUN2X_SURE')} sn`)
+  bekle(sabit('AD_OFFLINE2X_SURE') >= 45, 'offline2× teklif süresi ≥ 45 sn', `${sabit('AD_OFFLINE2X_SURE')} sn`)
+  bekle(/teklifGoster\('gun2x'[^\n]*sure: AD_GUN2X_SURE/.test(main_ts) && /teklifGoster\('offline2x'[^\n]*sure: AD_OFFLINE2X_SURE/.test(main_ts), 'süre sabitleri gerçekten kullanılıyor')
+  bekle(!/sure: 22\b/.test(main_ts), 'eski 22 sn sabiti kalmadı')
+  // 2) izlenen videodan sonra nefes ≥ 45 sn (yorgunluk/eCPM); zaman aşımı ve premium-otomatik kısa kalır
+  bekle(sabit('AD_IZLEME_NEFESI') >= 45 && /teklifKapat\(\)\n\s*adCooldown = AD_IZLEME_NEFESI/.test(main_ts), 'izleme sonrası nefes ≥ 45 sn', `${sabit('AD_IZLEME_NEFESI')} sn`)
+  bekle(/adCooldown = 10/.test(main_ts) && /adCooldown = 5/.test(main_ts), 'zaman aşımı (10) ve premium-otomatik (5) kısa nefes korunuyor')
+  // 3) askıya alma: acil efekt teklifi para teklifini kaybettirmez, kapanınca kalan süreyle geri gelir
+  bekle(/askidaTeklif = \{ offer: adOffer, kalan: teklifT \}/.test(main_ts), 'acil teklif (tamir/tanker/kurtarma) para teklifini ASKIYA alır')
+  bekle(/ACIL_TEKLIFLER[\s\S]*'tamir', 'tanker', 'kurtarma'/.test(main_ts) && /PARA_TEKLIFLERI[\s\S]*'gun2x', 'offline2x', 'hediye'/.test(main_ts), 'askıya alma yalnız acil efekt → para teklifi yönünde')
+  bekle(/function teklifKapat\(\)[\s\S]{0,700}a\.kalan > 3[\s\S]{0,200}canOffer\(a\.offer\.id, state\.adUse\)[\s\S]{0,120}adOffer = a\.offer; teklifT = a\.kalan/.test(main_ts), 'kapanışta askıdaki teklif kalan süresiyle geri gelir (tavan yeniden kontrol edilir)')
+  // 4) tamir taraması: buton meşgulse arıza İŞARETLENMEZ (teklif kaybolmaz)
+  bekle(/function tamirTeklifleriniTara\(\) \{[\s\S]{0,900}if \(adBusy\) return[\s\S]{0,600}tamirTeklifEdildi\.add\(k\)/.test(main_ts), 'tamir teklifi: meşgul buton → işaretleme yok, sonraki taramada tekrar denenir')
+  // 5) günlük hediye: hesaplı oyuncuya günde 1, oturum açılışında gecikmeli, tutar dinamik (kârın çeyreği, ≥ ₺500), panelden de erişilir
+  bekle(/hediye:\s*\{ kind: 'money',\s*cap: 1/.test(reklam_ts) && /hediye:\s*\{ kind: 'money',\s*cap: 1/.test(reklam_js), 'hediye yerleşimi iki tarafta da para/günde 1')
+  bekle(/placement === 'hediye'\) return Math\.min\(req, Math\.round\(rate \* 40\)\)/.test(reklam_js), 'sunucu hediyeyi tepe gelirin 40 sn\'siyle keser (SABİT TUTAR DEĞİL)')
+  bekle(/function hediyeTutari[\s\S]{0,200}Math\.max\(500, Math\.round\(Math\.max\(0, son\) \* 0\.25\)\)/.test(main_ts), 'istemci tutarı = dünkü kârın %25\'i, en az ₺500')
+  bekle(/if \(adLocalMode\(\)\) return Promise\.resolve\(false\)/.test(main_ts), 'misafire hediye teklifi yok (para ödülü hesap ister)')
+  bekle(sabit('AD_HEDIYE_GECIKME') >= 8 && /hediyeGecikmeT <= 0 && !adOffer && !adBusy && adCooldown <= 0/.test(main_ts), 'hediye gecikmeli ve sahne boşken çıkar (offline raporunu ezmez)', `${sabit('AD_HEDIYE_GECIKME')} sn`)
+  bekle(/case 'hediye': return t\('Günlük hediye: \+₺\{0\} · \{1\}'/.test(main_ts) && /case 'hediye':\n\s*state\.money \+= amount/.test(main_ts), 'hediye etiketi net tutarı yazar, ödül kasaya gider')
+  bekle(/satir\('hediye', 'i-coin'/.test(main_ts) && /if \(id === 'hediye'\) \{[\s\S]{0,300}offerHediye\(\)/.test(main_ts), 'Ofis paneli hediye satırı: doğrudan video değil, bilet → sahne butonu (tutar görünür)')
+  // 6) hedefler tek yerde ve rapor uçta
+  bekle(/export const HEDEFLER = \{ viewsPerActivePerDay: 2\.5, optInRate: 0\.35, completeRate: 0\.55, softDailyMaxPerPlayer: 8 \}/.test(reklam_js), 'hedefler: 2,5 izlenme/aktif/gün · opt-in %35 · tamamlama %55 · yumuşak tavan 8')
+  const capToplam = [...reklam_js.matchAll(/^\s{2}\w+:\s*\{ kind:\s*'\w+',\s*cap: (\d+)/gm)].reduce((a, m) => a + Number(m[1]), 0)
+  bekle(capToplam <= 30, 'yerleşim tavanları toplamı ≤ 30/gün (sert üst sınır)', `${capToplam}`)
 }
 
 console.log(hata ? `\n❌ ${hata} HATA` : '\n✅ TÜM TESTLER GEÇTİ')
