@@ -1,0 +1,129 @@
+{
+  "name": "benerits-patron-molada",
+  "seconds": 38,
+  "trimStart": 0.4,
+  "warmupMs": 6000,
+  "musicSeed": 23,
+  "steps": [
+    {
+      "do": "eval",
+      "js": "const d=window.__dbg,s=d.state; for(const f of ['benzin','dizel','lpg']) s.tanks[f]=s.fuelCapacity(f); for(let i=0;i<s.pumps;i++) s.autoPumps.add(i); for(let i=0;i<s.evChargers;i++) s.autoChargers.add(i); s.battery=s.batteryCapacity; for(const c of [...d.cars.cars]) if(!c.guest&&c.phase!=='transit') d.cars.releaseCar(c); const ease=k=>k<.5?2*k*k:-1+(4-2*k)*k; window.__camTo=(x,y,z,ms)=>new Promise(r=>{const c=d.cine.getCam(),t0=performance.now();const f=()=>{const k=Math.min(1,(performance.now()-t0)/ms),e=ease(k);d.cine.setCam(c.x+(x-c.x)*e,c.y+(y-c.y)*e,c.zoom+(z-c.zoom)*e);k<1?requestAnimationFrame(f):r()};f()}); window.__follow=(id,z,maxMs,dy)=>new Promise(r=>{const t0=performance.now();const f=()=>{const c=d.cars.cars.find(c=>c.guest?.id===id);const cam=d.cine.getCam();if(c){const p=c.group.position;d.cine.setCam(cam.x+(p.x-cam.x)*.12,cam.y+((p.y+(dy||0))-cam.y)*.12,cam.zoom+(z-cam.zoom)*.08)}const done=!c||c.phase==='atPump'||performance.now()-t0>maxMs;done?r():requestAnimationFrame(f)};f()}); window.__camToCar=(id,z,ms,dy)=>{const c=d.cars.cars.find(c=>c.guest?.id===id);if(!c)return Promise.resolve();const p=c.group.position;return window.__camTo(p.x,p.y+(dy||0),z,ms)};"
+    },
+    {
+      "do": "overlay",
+      "kind": "wm",
+      "text": "beneloil.com",
+      "dur": 60
+    },
+    {
+      "do": "eval",
+      "js": "return window.__camTo(6.5,-32,1.5,900)"
+    },
+    {
+      "do": "overlay",
+      "kind": "hook",
+      "text": "patron istasyona\ngeldi ⛽",
+      "dur": 3.6
+    },
+    {
+      "do": "eval",
+      "js": "window.__dbg.benerits('burak'); return window.__follow('burak',1.7,9500,0.6)"
+    },
+    {
+      "do": "eval",
+      "js": "return window.__camToCar('burak',2.0,900,0.6)"
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "Burak — BENERITS'in patronu. Siyah EV, sadece şarj alır.",
+      "dur": 3.4
+    },
+    {
+      "do": "wait",
+      "ms": 3000
+    },
+    {
+      "do": "overlay",
+      "kind": "badge",
+      "text": "bahşiş: +₺10.000",
+      "dur": 3.2
+    },
+    {
+      "do": "wait",
+      "ms": 3400
+    },
+    {
+      "do": "eval",
+      "js": "return window.__camToCar('burak',2.6,1100,0.6)"
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "sonra mola veriyor. ünite dolu. gönderemiyorsun.",
+      "dur": 3.6
+    },
+    {
+      "do": "wait",
+      "ms": 3800
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "\"Beş dakikaya çıkıyorum kardeşim.\"",
+      "dur": 3.0
+    },
+    {
+      "do": "wait",
+      "ms": 3200
+    },
+    {
+      "do": "eval",
+      "js": "return window.__camTo(6.5,-32,1.5,900)"
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "Oğuz da geliyor: beyaz sedan, normalin 2 katı yakıt",
+      "dur": 3.4
+    },
+    {
+      "do": "eval",
+      "js": "window.__dbg.benerits('oguz'); return window.__follow('oguz',1.9,9500,0.6)"
+    },
+    {
+      "do": "wait",
+      "ms": 1800
+    },
+    {
+      "do": "overlay",
+      "kind": "badge",
+      "text": "bahşiş: +₺5.000",
+      "dur": 3.0
+    },
+    {
+      "do": "wait",
+      "ms": 3200
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "işler kötü gidiyorsa daha sık uğruyorlar 🙂",
+      "dur": 3.2
+    },
+    {
+      "do": "wait",
+      "ms": 3400
+    },
+    {
+      "do": "endcard",
+      "title": "BENELOIL",
+      "sub": "beneloil.com — tarayıcıda, kurulum yok",
+      "dur": 0
+    },
+    {
+      "do": "wait",
+      "ms": 3200
+    }
+  ]
+}

@@ -194,8 +194,9 @@ for (const step of RECIPE.steps ?? []) {
       await page.evaluate(sec => { window.__dbg.state.promo = { type: 'cheapFuel', until: Date.now() + sec * 1000 } }, step.sec ?? 60)
       break
     case 'money': await page.evaluate(m => { window.__dbg.state.money = m }, step.amount ?? 1_000_000); break
-    case 'eval': // serbest kanca: tarif JS'i sayfada yeni Function olarak koşulur (çok satır güvenli)
-      await page.evaluate(code => { new Function(code)() }, step.js); break
+    case 'eval': // serbest kanca: tarif JS'i sayfada yeni Function olarak koşulur (çok satır güvenli).
+      // Promise dönerse BEKLENİR (kamera takibi / "araç varana dek" gibi süreli sahneler için).
+      await page.evaluate(code => { const r = new Function(code)(); return r && typeof r.then === 'function' ? r.then(() => undefined) : undefined }, step.js); break
     case 'overlay': {
       const n = await page.evaluate(sp => { window.__overlay(sp); return document.querySelectorAll('.ov').length }, step)
       console.log('[overlay]', step.kind, '→ DOM .ov sayısı:', n)
