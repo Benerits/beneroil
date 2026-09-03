@@ -22,7 +22,7 @@ globalThis.localStorage = {
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'tr' }, configurable: true })
 import { readFileSync } from 'node:fs'
 const st = await import('../../src/state.ts')
-const { GameState, hydrateState, serializeState, BENERITS_GUESTS, BENERITS_TALEP_KAT, BENERITS_BAHSIS_MIN, BENERITS_BAHSIS_MAX,
+const { GameState, hydrateState, serializeState, BENERITS_GUESTS, BENERITS_TALEP_KAT, BENERITS_BAHSIS_MAX, BENERITS_SANS_DAR, BENERITS_DAR_KASA,
   BENERITS_ILK_GUN, BENERITS_ARA_GUN, BENERITS_SANS } = st
 
 let hata = 0
@@ -46,7 +46,8 @@ console.log('── MİSAFİR TANIMLARI ──')
   bekle(typeof g.burak.molaSn === 'number' && g.burak.molaSn >= 30 && g.burak.molaSn <= 90, 'Patron molası 30–90 sn', String(g.burak.molaSn))
   bekle(g.burak.quote.includes('çıkıyorum kardeşim'), 'Patron repliği: "…çıkıyorum kardeşim"')
   bekle(BENERITS_TALEP_KAT === 2, 'talep katı 2 (normal arabanın 2 katı)')
-  bekle(BENERITS_BAHSIS_MIN === 8000 && BENERITS_BAHSIS_MAX === 10000, 'bahşiş 8–10k')
+  bekle(g.oguz.bahsis === 5000 && g.cagan.bahsis === 5000 && g.burak.bahsis === 10000, 'sabit bahşiş: Oğuz/Çağan 5.000, Burak 10.000 (Oğuz, 3 Eyl 2026)')
+  bekle(BENERITS_BAHSIS_MAX === Math.max(...Object.values(g).map(x => x.bahsis)), 'BAHSIS_MAX = en yüksek sabit bahşiş')
   // Kenney boya karesi her modelde tanımlı (cam/lastik boyanmaz, gövde boyanır)
   const paint = cars_ts.match(/export const KENNEY_PAINT[^=]*=\s*\{([^}]*\}[^}]*\}[^}]*\}[^}]*)\}/)?.[1] ?? ''
   for (const m of ['sedan', 'van', 'race-future']) bekle(paint.includes(m), `Kenney boya karesi tanımlı: ${m}`)
@@ -55,6 +56,7 @@ console.log('── MİSAFİR TANIMLARI ──')
 console.log('── ZAR: nadir, aralıklı, koşullu ──')
 {
   const s = new GameState()
+  s.money = 1_000_000 // işler iyi: normal şans
   s.day = 1
   bekle(s.beneritsRoll(true, 0) === null, `gün < ${BENERITS_ILK_GUN}: gelmez`)
   s.day = BENERITS_ILK_GUN
@@ -97,13 +99,27 @@ console.log('── ZAR: nadir, aralıklı, koşullu ──')
 console.log('── BAHŞİŞ ve DEFTER ──')
 {
   const s = new GameState()
-  bekle(s.beneritsBahsis(0) === 8000 && s.beneritsBahsis(1) === 10000, 'bahşiş uçları 8.000 / 10.000')
-  let ok = true
-  for (let i = 0; i < 200; i++) { const b = s.beneritsBahsis(); if (b < 8000 || b > 10000 || b % 100 !== 0) ok = false }
-  bekle(ok, 'bahşiş 8–10k arası ve yüzlüğe yuvarlı')
+  bekle(s.beneritsBahsis(BENERITS_GUESTS.oguz) === 5000 && s.beneritsBahsis(BENERITS_GUESTS.burak) === 10000, 'beneritsBahsis misafirin sabit bahşişini verir')
+  // "işler kötü" → daha sık: kasa dar ya da son kapanan gün zararda
+  s.money = 1_000_000; s.salesLog = []
+  bekle(!s.beneritsIslerKotu, 'işler iyi: kasa dolu, gün kaydı yok')
+  s.money = BENERITS_DAR_KASA
+  bekle(s.beneritsIslerKotu, 'kasa dar → işler kötü')
+  s.money = 1_000_000; s.salesLog = [{ day: 3, rev: 900, profit: -250 }, { day: 4, rev: 300 }]
+  bekle(s.beneritsIslerKotu, 'son gün-sonu kaydı zararda → işler kötü (sonraki satış satırı profit taşımaz, atlanır)')
+  s.salesLog.push({ day: 4, rev: 2000, profit: 400 })
+  bekle(!s.beneritsIslerKotu, 'son gün kârda → işler iyi')
+  {
+    const pIyi = 1 - Math.pow(1 - BENERITS_SANS, 65), pDar = 1 - Math.pow(1 - BENERITS_SANS_DAR, 65)
+    bekle(pDar > 0.85 && pDar > pIyi * 1.6, 'işler kötüyken günlük ihtimal ~%90 (en az 1,6×)', `iyi ${pIyi.toFixed(2)} → dar ${pDar.toFixed(2)}`)
+    const z = new GameState(); z.day = 10; z.money = 1_000_000
+    bekle(z.beneritsRoll(true, BENERITS_SANS + 0.001) === null, 'işler iyiyken normal şans')
+    z.money = 0
+    bekle(!!z.beneritsRoll(true, BENERITS_SANS + 0.001), 'işler kötüyken yüksek şans devrede')
+  }
   const para0 = s.money, ciro0 = s.stats.revenue
-  s.beneritsBahsisAl(9000)
-  bekle(s.money === para0 + 9000 && s.stats.revenue === ciro0 + 9000 && s.benerits.tips === 9000, 'beneritsBahsisAl: kasa + ciro + defter')
+  s.beneritsBahsisAl(10000)
+  bekle(s.money === para0 + 10000 && s.stats.revenue === ciro0 + 10000 && s.benerits.tips === 10000, 'beneritsBahsisAl: kasa + ciro + defter')
   const ev0 = s.events.length
   s.beneritsGeldi(BENERITS_GUESTS.oguz)
   bekle(s.benerits.visits === 1 && s.benerits.seen.includes('oguz') && s.events.length === ev0, 'beneritsGeldi: ziyaret + seen (events\'e yazmaz → tek toast)')
@@ -177,7 +193,7 @@ console.log('── OYUN AKIŞI (main.ts) ──')
   // finishSale bahşişi
   const fs = main_ts.slice(main_ts.indexOf('function finishSale('), main_ts.indexOf('function wrongFuel('))
   bekle(/if \(car\.guest && revenue0 > 0\) \{/.test(fs), 'finishSale: misafir bahşiş bloğu')
-  bekle(/const oran = car\.filledValue >= car\.demandAmount - 10 \? 1 : car\.filledValue >= car\.demandAmount \* 0\.5 \? 0\.5 : 0/.test(fs), 'tam depo → tam bahşiş, yarım → yarısı, eksik → yok')
+  bekle(/if \(car\.guest && revenue0 > 0\) \{\s*const tip = state\.beneritsBahsis\(car\.guest\)/.test(fs) && !fs.includes('Depo yarım kaldı'), 'her tamamlanan satışta sabit bahşiş (yarım depo cezası yok)')
   bekle(/revenue \+= tip\s*\n\s*state\.benerits\.tips \+= tip/.test(fs), 'bahşiş revenue\'ya biner (tek kapı) + deftere yazılır')
   bekle(/car\.guest\.quote\), 'good', false, true\)/.test(fs), 'bahşiş toast\'ında replik, ÖNEMLİ')
   // EV / Patron

@@ -3044,19 +3044,14 @@ function finishSale(car: Car) {
     score -= 0.6 // eksik dolum: sessiz, sadece memnuniyet düşer
   }
 
-  // BENERITS BAHŞİŞİ: depo tamsa ₺8-10k, yarıdan fazlaysa yarısı, eksikse yok. Yüzlüğe
-  // yuvarlı; revenue'ya biner (kasa/istatistik/günlük ciro tek kapıdan), deftere ayrıca yazılır.
+  // BENERITS BAHŞİŞİ: her tamamlanan satışta SABİT (Oğuz/Çağan ₺5.000) — Oğuz: "her biri bahşiş
+  // verildi diye". revenue'ya biner (kasa/istatistik/günlük ciro tek kapıdan), deftere ayrıca yazılır.
   if (car.guest && revenue0 > 0) {
-    const oran = car.filledValue >= car.demandAmount - 10 ? 1 : car.filledValue >= car.demandAmount * 0.5 ? 0.5 : 0
-    const tip = Math.round(state.beneritsBahsis() * oran / 100) * 100
-    if (tip > 0) {
-      revenue += tip
-      state.benerits.tips += tip
-      score += 1
-      ui.toast(t('BENERITS {0} bahşiş bıraktı: +₺{1} — "{2}"', car.guest.name, tip.toLocaleString('tr-TR'), car.guest.quote), 'good', false, true)
-    } else {
-      ui.toast(t('BENERITS {0}: "Depo yarım kaldı ya..." — bahşiş yok.', car.guest.name), 'bad')
-    }
+    const tip = state.beneritsBahsis(car.guest)
+    revenue += tip
+    state.benerits.tips += tip
+    score += 1
+    ui.toast(t('BENERITS {0} bahşiş bıraktı: +₺{1} — "{2}"', car.guest.name, tip.toLocaleString('tr-TR'), car.guest.quote), 'good', false, true)
   }
   // pompacı satışı: gelirin TAMAMI kasaya girer (kesinti yok). Oyuncu yalnızca bahşişten
   // feragat eder. Pozitif toast göster — eskiden sadece kesinti görünüp "hep zarar" sanılıyordu.
@@ -3259,7 +3254,7 @@ function tickEvCharging(dt: number) {
       if (c.guest) {
         // PATRON: sağlam bahşiş + ZORUNLU mola. Ünite molaSn boyunca dolu kalır; GÖNDER
         // çalışmaz (ui.onDismiss), personel de uğurlamaz. Tesis varsa yürüyerek gezer.
-        const tip = state.beneritsBahsis()
+        const tip = state.beneritsBahsis(c.guest)
         state.beneritsBahsisAl(tip)
         comboIlerlet(c, revenue)
         ui.toast(t('BENERITS PATRON bahşiş bıraktı: +₺{0}', tip.toLocaleString('tr-TR')), 'good', false, true)

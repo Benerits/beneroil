@@ -260,18 +260,19 @@ export interface BeneritsGuest {
   color: number
   /** araç uğurlanırken/bahşişte sahnede düşen replik */
   quote: string
+  /** sabit bahşiş (₺) — Oğuz: "Oğuz/Çağan 5k, Burak 10k bıraksın" (3 Eyl 2026) */
+  bahsis: number
   /** yalnız PATRON: şarj sonrası molada kaldığı saniye — o süre içinde gönderilemez */
   molaSn?: number
 }
 export const BENERITS_GUESTS: Record<BeneritsId, BeneritsGuest> = {
-  oguz:  { id: 'oguz',  name: 'Oğuz',  title: 'BENERITS Şirket Aracı', kind: 'fuel', model: 'sedan',       color: 0xf3f3ee, quote: 'Eline sağlık, istasyon uçmuş!' },
-  cagan: { id: 'cagan', name: 'Çağan', title: 'BENERITS Şirket Aracı', kind: 'fuel', model: 'van',         color: 0x9fd47f, quote: 'Fıstık yeşili yakıyor değil mi?' },
-  burak: { id: 'burak', name: 'Burak', title: 'BENERITS PATRON',       kind: 'ev',   model: 'race-future', color: 0x15171a, quote: 'Beş dakikaya çıkıyorum kardeşim.', molaSn: 45 },
+  oguz:  { id: 'oguz',  name: 'Oğuz',  title: 'BENERITS Şirket Aracı', kind: 'fuel', model: 'sedan',       color: 0xf3f3ee, quote: 'Eline sağlık, istasyon uçmuş!', bahsis: 5000 },
+  cagan: { id: 'cagan', name: 'Çağan', title: 'BENERITS Şirket Aracı', kind: 'fuel', model: 'van',         color: 0x9fd47f, quote: 'Fıstık yeşili yakıyor değil mi?', bahsis: 5000 },
+  burak: { id: 'burak', name: 'Burak', title: 'BENERITS PATRON',       kind: 'ev',   model: 'race-future', color: 0x15171a, quote: 'Beş dakikaya çıkıyorum kardeşim.', molaSn: 45, bahsis: 10000 },
 }
 /** talep çarpanı: "normal arabanın 2 katı" */
 export const BENERITS_TALEP_KAT = 2
-/** bahşiş aralığı (₺) — sunucu anti-cheat kovası 260k, 10k rahat sığar */
-export const BENERITS_BAHSIS_MIN = 8000
+/** en yüksek sabit bahşiş (₺) — sunucu anti-cheat kovası 260k, rahat sığar */
 export const BENERITS_BAHSIS_MAX = 10000
 /** ilk ziyaret için asgari gün; günde EN FAZLA bir misafir (ARA_GUN=1 → ertesi gün yine gelebilir) */
 export const BENERITS_ILK_GUN = 2
@@ -279,6 +280,10 @@ export const BENERITS_ARA_GUN = 1
 /** araç başına doğum olasılığı — kullanıcı isteği (3 Eyl 2026): "her gün %50 ihtimalle biri gelsin".
  *  Gün ~65 yakın-yaka araç → P(en az bir) = 1-(1-p)^65 ≈ %50 için p ≈ 0,0106. */
 export const BENERITS_SANS = 0.0106
+/** "adamın işleri kötü gidiyorsa daha sık gelelim" (Oğuz, 3 Eyl 2026): kasa ≤ DAR_KASA ya da dün
+ *  zarar → P(en az bir) ≈ %90 (p ≈ 0,035). Yine günde en fazla bir misafir. */
+export const BENERITS_SANS_DAR = 0.035
+export const BENERITS_DAR_KASA = 4000  // START_MONEY 5000: sıfır oyun "kötü" sayılmaz, ilk harcamalardan sonra sayılır
 
 /** Müşteri segmenti tanımı (lategame raporu Katman 1c) — activeSegments() üretir, Car kullanır. */
 export interface CarSegment {
@@ -825,7 +830,7 @@ export class GameState {
     if (this.isMarina) return null
     if (this.day < BENERITS_ILK_GUN) return null
     if (this.day - this.benerits.lastDay < BENERITS_ARA_GUN) return null
-    if (rnd >= BENERITS_SANS) return null
+    if (rnd >= (this.beneritsIslerKotu ? BENERITS_SANS_DAR : BENERITS_SANS)) return null
     const havuz = (Object.values(BENERITS_GUESTS) as BeneritsGuest[]).filter(g => g.kind !== 'ev' || evOk)
     if (!havuz.length) return null
     // ilk kez görülmeyen misafir öncelikli: üçünü de tanıştır, sonra rastgele
@@ -834,10 +839,17 @@ export class GameState {
     this.benerits.lastDay = this.day   // doğum anında damgala: aynı gün ikinci gelmesin
     return secim
   }
-  /** ₺8-10k arası, yüzlüğe yuvarlı bahşiş */
-  beneritsBahsis(rnd = Math.random()): number {
-    return Math.round((BENERITS_BAHSIS_MIN + rnd * (BENERITS_BAHSIS_MAX - BENERITS_BAHSIS_MIN)) / 100) * 100
+  /** "işler kötü" — dostlar sıkışan istasyona daha sık uğrar: kasa dar ya da son kapanan gün zararda */
+  get beneritsIslerKotu(): boolean {
+    if (this.money <= BENERITS_DAR_KASA) return true
+    for (let i = this.salesLog.length - 1; i >= 0; i--) {
+      const p = this.salesLog[i].profit
+      if (typeof p === 'number') return p < 0   // gün sonu kaydı (satış/sözleşme satırlarında profit yok)
+    }
+    return false
   }
+  /** misafirin sabit bahşişi (Oğuz/Çağan 5.000, Burak 10.000) */
+  beneritsBahsis(g: BeneritsGuest): number { return g.bahsis }
   /** misafir sahneye vardı: defteri işle (bahşiş ayrıca beneritsBahsisAl ile) */
   beneritsGeldi(g: BeneritsGuest) {
     this.benerits.visits++
