@@ -45,5 +45,16 @@ const age = (c) => (T - c)/gun, seen = (c,l) => (l-c)/gun
 check('1 günden yeni hesap D1 hesabına GİRMEZ', age(T-0.5*gun) < 1)
 check('7. günde dönen oyuncu D7 sayılır', seen(T-10*gun, T-3*gun) >= 7)
 check('3. günde bırakan oyuncu D7 sayılmaz', seen(T-10*gun, T-7*gun) < 7)
+
+// /vs/v1/engagement SÖZLEŞMESİ (3 Eyl): sosyal medya skill'i (beneloil-social, fetch_metrics.py)
+// milestone eşiklerini bu satır adlarından okur; ad değişirse skill "yok" der, rakam uydurmaz ama kör kalır.
+console.log('\n== /vs/v1/engagement: skill\'in okuduğu satırlar ==')
+const eng = src.slice(src.indexOf("url === '/vs/v1/engagement'"), src.indexOf("url.startsWith('/vs/v1/ads')"))
+for (const ad of ['KAYITLI OYUNCU · toplam', 'AKTIF · son 24 saat', 'AKTIF · son 7 gun', 'AKTIF · son 30 gun',
+  'MISAFIR · toplam', 'MISAFIR→KAYIT · toplam', 'toplam_musteri_servisi', 'satilan_benzin_L', 'satilan_dizel_L',
+  'satilan_lpg_L', 'toplam_ciro_TL', 'en_ileri_oyun_gunu', 'nukleer_reaktorlu_istasyon', 'sorun_bildirimi'])
+  check(`engagement satırı var: ${ad}`, eng.includes(`'${ad}'`))
+check('active7d/active30d SQL\'de hesaplanıyor', /interval '7 day'\)::int AS active7d/.test(eng) && /interval '30 day'\)::int AS active30d/.test(eng))
+check('engagement e-posta/isim döndürmüyor (aggregate-only)', !/email|\bname\b|avatar/.test(eng))
 console.log(`\nSONUÇ: ${pass} geçti, ${fail} kaldı`)
 process.exit(fail?1:0)

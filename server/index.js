@@ -1950,6 +1950,8 @@ async function handleVs(req, res, url) {
           count(*) FILTER (WHERE last_seen_at > now() - interval '5 min')::int AS active5m,
           count(*) FILTER (WHERE last_seen_at > now() - interval '1 hour')::int AS active1h,
           count(*) FILTER (WHERE last_seen_at > now() - interval '1 day')::int AS active1d,
+          count(*) FILTER (WHERE last_seen_at > now() - interval '7 day')::int AS active7d,
+          count(*) FILTER (WHERE last_seen_at > now() - interval '30 day')::int AS active30d,
           count(*) FILTER (WHERE created_at > now() - interval '1 day')::int AS new1d,
           count(*) FILTER (WHERE last_seen_at > created_at + interval '1 day')::int AS d1,
           count(*) FILTER (WHERE last_seen_at > created_at + interval '7 day')::int AS d7,
@@ -1983,9 +1985,14 @@ async function handleVs(req, res, url) {
         sessionsPerUser: Math.round(a.spu * 10) / 10,
         retention: { d1: pct(a.d1), d7: pct(a.d7), d30: pct(a.d30) },
         topEvents: [
+          // KAYITLI toplam + WAU/MAU (3 Eyl): sosyal medya skill'i milestone eşiklerini
+          // (her 1.000 kayıtlı) buradan doğrular — /vs/v1/users kişisel veri taşıdığı için kullanılmaz.
+          { event: 'KAYITLI OYUNCU · toplam', count: Number(a.total) },
           { event: 'AKTIF · su an (5dk)', count: Number(a.active5m) },
           { event: 'AKTIF · son 1 saat', count: Number(a.active1h) },
           { event: 'AKTIF · son 24 saat', count: Number(a.active1d) },
+          { event: 'AKTIF · son 7 gun', count: Number(a.active7d) },
+          { event: 'AKTIF · son 30 gun', count: Number(a.active30d) },
           { event: 'ZIYARET · son 24 saat', count: Number(v.v24) },
           { event: 'MISAFIR · su an oynuyor', count: guestOnlineCount() },
           { event: 'MISAFIR · yeni son 24 saat', count: Number(v.g24) },
