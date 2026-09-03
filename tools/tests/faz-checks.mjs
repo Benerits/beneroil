@@ -784,7 +784,10 @@ console.log('== 21) Müdür + personel eğitimi (rapor §7 #5, #7) ==')
   // Sv.3: arıza tamiri
   buyM(m, 'manager'); m.managerT = 0; m.brokenChargers.add(1)
   res = m.managerTick(50)
-  check('Sv.3 arızaları tamir etti', m.managerLevel === 3 && m.brokenPumps.size === 0 && m.brokenChargers.size === 0)
+  // REKLAM v2 (#3): tamir SÜRE ALIR — müdür parayı öder ve sayacı başlatır; ünite 60-120 sn sonra çalışır
+  check('Sv.3 arızaların tamirini başlattı (ödendi, sayaç çalışıyor)', m.managerLevel === 3 && m.repairLeft('pump', 0) > 0 && m.repairLeft('charger', 1) > 0)
+  m.tickRepairs(GameState.REPAIR_MAX_SN + 1)
+  check('Sv.3 tamirler süre dolunca bitti', m.brokenPumps.size === 0 && m.brokenChargers.size === 0)
   check('Sv.3 sonrası müdür MAKS', shopM(m).find(x => x.id === 'manager').status === 'maxed')
   // parası yoksa tamir etmez (borca sokmaz)
   const p2 = new GameState(); p2.managerLevel = 3; p2.money = 100; p2.brokenPumps.add(0)

@@ -2661,8 +2661,21 @@ export class CarManager {
     this.cars.push(car)
   }
 
-  private spawnTransit(lane: 'near' | 'far') {
-    const boatSeg = this.pickBoat()
+  /**
+   * PREMİUM MÜŞTERİ ÇAĞIR (ödüllü reklam #6): giriş ZORUNLU bir VIP doğar — karada VIP
+   * araç, marinada segment listesindeki en büyük tekne (süperyat varsa o). Nakit değil
+   * fırsat: parayı yine servis ederek kazanırsın. Su şubesinde tekne segmenti yoksa false.
+   */
+  spawnPremium(): boolean {
+    const segs = this.opts.boats?.() ?? []
+    if (this.opts.waterOnly?.() && !segs.length) return false
+    const seg = segs.find(b => b.id === 'superyat') ?? (segs.length ? segs.reduce((a, b) => (b.max > a.max ? b : a)) : null)
+    this.spawnTransit('near', { premium: true, boatSeg: seg })
+    return true
+  }
+
+  private spawnTransit(lane: 'near' | 'far', force?: { premium: boolean; boatSeg: CarSegment | null }) {
+    const boatSeg = force ? force.boatSeg : this.pickBoat()
     // MARİNA: denizin ortasına ARABA GELMEZ. Su şubesinde tekne segmenti yoksa
     // (henüz yakıt iskelesi kurulmadıysa) hiçbir şey doğmaz — eskiden pickBoat null
     // dönünce kod arabaya düşüyordu ve deniz haritasında araba beliriyordu.
@@ -2672,7 +2685,7 @@ export class CarManager {
     // Tekne varsa TUTAR da o segmentten gelir: tek elemanlı liste veriyoruz ki Car'ın
     // kendi zarı model ile parayı AYRIŞTIRMASIN (jet ski süperyat parası ödemesin).
     const segs = boatSeg ? [{ ...boatSeg, share: 1 }] : (this.opts.segments?.() ?? null)
-    const vipOl = !boat && Math.random() < (this.opts.vipChance?.() ?? 0)
+    const vipOl = !boat && (force?.premium || Math.random() < (this.opts.vipChance?.() ?? 0))
     const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), segs, boat, this.opts.patienceMult?.() ?? 1, vipOl)
     car.lane = lane
     car.phase = 'transit'
@@ -2688,7 +2701,7 @@ export class CarManager {
       // önlemek için vardı ve arz eğrisini de sessizce kısıyordu.
       car.wantsEnter = Math.random() < this.opts.entryChance()
       // VIP yoldan geçip gitmez: nadir olduğu için oyuncu teklifi hiç görmezdi.
-      if (car.vip) car.wantsEnter = true
+      if (car.vip || force?.premium) car.wantsEnter = true
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
       // SU ŞUBESİ: transit de SERVİS şeridini kullanır (Oğuz: "yanaşma yerinden
       // tekneler dümdüz geçmesin") — LANE_NEAR (6.95) iskelenin dibinden geçiyordu.

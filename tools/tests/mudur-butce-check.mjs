@@ -37,7 +37,8 @@ console.log('\n── 1) ₺2.500 kasa: eskiden hepsi yakıta gidiyordu ──')
 {
   const s = kur(2500)
   const r = s.managerTick(999)
-  bekle(s.brokenPumps.size === 0, 'iki pompa da tamir edildi (₺1.600)', `kalan arıza ${s.brokenPumps.size}`)
+  // REKLAM v2: tamir süre alır — ödeme anında, ünite sayaç bitince çalışır
+  bekle(s.repairLeft('pump', 0) > 0 && s.repairLeft('pump', 1) > 0, 'iki pompanın da tamiri başlatıldı (₺1.600 ödendi)', `kalan arıza ${s.brokenPumps.size}`)
   bekle(s.solarDirt === 0, 'panel temizlendi (₺300)')
   bekle(r && r.fixed === 2 && r.cleaned, 'rapor: fixed=2, cleaned', JSON.stringify(r))
   bekle(!s.orders.benzin.pending && s.money === 600, 'kalan ₺600 100 litreye yetmiyor → sipariş yok, para duruyor', `kasa ₺${s.money}`)
@@ -49,7 +50,7 @@ console.log('\n── 2) ₺1.100 kasa: panel + bir pompa, ikinci pompa için pa
   const s = kur(1100)
   s.managerTick(999)
   bekle(s.solarDirt === 0, 'panel temizlendi (₺300)')
-  bekle(s.brokenPumps.size === 1, 'bir pompa tamir edildi (₺800)', `kalan ${s.brokenPumps.size}`)
+  bekle(Object.keys(s.repairs).length === 1, 'bir pompanın tamiri başlatıldı (₺800)', `süren ${Object.keys(s.repairs).length}`)
   const ev = s.events.join(' | ')
   bekle(/tamir edemedi/.test(ev), 'ikinci tamir atlandı → olay yazıldı', ev)
   bekle(!s.orders.benzin.pending && s.money === 0, 'kasa ₺0 → sipariş yok', `kasa ₺${s.money}`)

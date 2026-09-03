@@ -110,7 +110,11 @@ check('sanitizeSave ile push yolu AYNI tavanı kullanıyor',
   check('tek şubede taban değişmedi (mevcut denge korunuyor)', cap(1) === ALLOW_BURST)
   check('kova sınırsız büyümüyor (5 şube tavanı)', cap(9) === cap(5))
 }
-check('kabul edilen artış kovadan DÜŞÜLÜYOR', /bucket = Math\.max\(0, bucket - gain\)/.test(src))
+// 3 Eyl 2026: reklam kredisi (ad_credit) kazançtan ÖNCE tüketilir, kalan kovadan düşer
+check('kabul edilen artış kovadan DÜŞÜLÜYOR', /bucket = Math\.max\(0, bucket - \(gain - creditUsed\)\)/.test(src))
+check('reklam kredisi kovanın ÜSTÜNE ekleniyor ve önce tüketiliyor',
+  /: bucket \+ credit0/.test(src) && /creditUsed = Math\.min\(credit0, gain\)/.test(src))
+check('reklam kredisi DB\'de ATOMİK düşülüyor (save yarışı ödülü ezmesin)', /ad_credit=GREATEST\(0, ad_credit - \$4\)/.test(src))
 check('kova her push\'ta save\'e yazılıyor', /clean\.s\._ab = \{ t: nowMs/.test(src))
 check('kırpma ve enjeksiyon DENETİM kaydına giriyor',
   /auditCheat\(email, 'clamp'/.test(src) && /auditCheat\(email, 'inject'/.test(src))

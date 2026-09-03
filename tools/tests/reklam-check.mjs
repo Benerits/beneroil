@@ -1,18 +1,17 @@
 /**
- * ÖDÜLLÜ REKLAM TESTİ — "ÖDÜL = FIRSAT, nakit değil" ilkesinin bekçisi.
+ * ÖDÜLLÜ REKLAM v2 TESTİ (3 Eyl 2026) — istemci tarafı mekanikler ve "yapılmayacaklar".
  *
- * Kapsanan iki yeni yerleşim:
- *  · ACİL YAKIT TESLİMATI — dolum sırasında tank boşalınca teklif çıkar; ödül 300 L MAL,
- *    nakit değil. Tank kapasitesini ASLA aşmaz (sunucu zaten kapasiteye kırpıyor,
- *    aşan litre sessizce buharlaşırdı).
- *  · ÜCRETSİZ TAMİR — ünite arızalanınca teklif çıkar; ödül üniteyi çalışır yapar.
- *    Oyuncu bu arada kendi parasıyla tamir ettiyse hak HARCANMAZ (fail-closed).
- *
- * Ayrıca korunanlar:
- *  · günlük sınır (2) aşılamıyor — F5 ile sınırsız ödül alınamasın diye sayaç SAVE_FIELDS'ta
- *  · eski kayıt (alanlar yok) yüklenince 0 ve çökme yok
- *  · hiçbir ödül dalı state.money'yi ARTIRMIYOR (ekonomi şişmez)
- *  · teklif yolları TEK KAPIDAN rewardedReady() ile geçiyor (hazır değilken buton yok)
+ * Kapsanan:
+ *  · TAMİR SÜRE ALIR: para başlarken ödenir, ünite 60-120 sn bozuk kalır, süre bitince çalışır;
+ *    "tamiri hızlandır" ödülü yalnız ÖDENMİŞ/süren tamiri bitirir (fail-closed), para iade etmez.
+ *  · Murphy kaynağı: kasa boşken çıkan arıza 'murphy' damgalı → main.ts teklif GÖSTERMEZ.
+ *  · Tanker hızlandır: yoldaki sipariş anında teslim; sipariş yoksa null (bedava litre yok).
+ *  · Trafik artır: EKLEMELİ süre, entryChance ×1.6; event uzat: süren fırsat +60 sn.
+ *  · Kurtarma koşulu: kasa+tank ~0 VE banka vermiyor; tutar dinamik (min. tanker bedeli − kasa).
+ *  · Kayıt: repairs/brokenSource/trafikBoostUntil/adUse SAVE_FIELDS'ta (F5 tamiri bitirmez),
+ *    kurcalanmış kayıt temizlenir, ünite satışında tamir sayacı doğru indekse taşınır.
+ *  · YAPILMAYACAKLAR: interstitial yok, seri/VIP "kaybedersin" teklifleri yok, sabit tutarlı nakit yok,
+ *    sunucu/istemci yerleşim listesi birebir.
  *
  * Kullanım: npx tsx tools/tests/reklam-check.mjs
  */
@@ -22,180 +21,177 @@ globalThis.localStorage = {
 }
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'tr' }, configurable: true })
 import { readFileSync } from 'node:fs'
-const { GameState, hydrateState, serializeState } = await import('../../src/state.ts')
+const { GameState, hydrateState, serializeState, doMaintenance, getMaintenanceItems, applySell } = await import('../../src/state.ts')
+const SAVE_FIELDS = Object.keys(serializeState(new GameState()))
 
 let hata = 0
 const bekle = (k, ad, ek = '') => { console.log(`${k ? '✅' : '❌'} ${ad}${ek ? ' · ' + ek : ''}`); if (!k) hata++ }
 const oku = f => readFileSync(new URL('../../' + f, import.meta.url), 'utf8')
 
 const main_ts = oku('src/main.ts')
-const state_ts = oku('src/state.ts')
-const i18n_ts = oku('src/i18n.ts')
+const ads_ts = oku('src/ads.ts')
+const reklam_ts = oku('src/reklam.ts')
+const reklam_js = oku('server/reklam.js')
 
-console.log('── ACİL YAKIT TESLİMATI: MAL VERİR, NAKİT VERMEZ ──')
+console.log('── TAMİR SÜRE ALIR: para şimdi, ünite sonra ──')
 {
   const s = new GameState()
-  s.tanks.benzin = 0
-  const paraOnce = s.money
-  const gelen = s.adYakitTeslim('benzin')
-  bekle(gelen === GameState.AD_YAKIT_LITRE, 'boş tanka tam teslimat yapılıyor', `${gelen} L`)
-  bekle(s.tanks.benzin === GameState.AD_YAKIT_LITRE, 'yakıt gerçekten tanka giriyor', `${s.tanks.benzin} L`)
-  bekle(s.money === paraOnce, 'ÖDÜL NAKİT DEĞİL: kasa değişmedi', `₺${s.money}`)
-  bekle(s.adYakitUsed === 1, 'hak sayacı işliyor')
+  s.money = 10_000; s.pumps = 3; s.brokenPumps.add(1)
+  const para0 = s.money
+  bekle(doMaintenance(s, 'fix-pump-1'), 'tamir satın alındı')
+  bekle(s.money === para0 - GameState.PUMP_FIX_COST, 'para hemen düştü (₺800)', `₺${para0 - s.money}`)
+  bekle(s.brokenPumps.has(1), 'ünite HÂLÂ bozuk (tamir sürüyor)')
+  const kalan = s.repairLeft('pump', 1)
+  bekle(kalan >= GameState.REPAIR_MIN_SN && kalan <= GameState.REPAIR_MAX_SN, 'süre 60-120 sn arasında', `${Math.round(kalan)} sn`)
+  const satir = getMaintenanceItems(s).find(r => r.id === 'fix-pump-1')
+  bekle(satir && satir.disabled && satir.cost === 0, 'bakım satırı "tamir ediliyor" (kapalı, ikinci ödeme yok)')
+  bekle(!doMaintenance(s, 'fix-pump-1') && s.money === para0 - GameState.PUMP_FIX_COST, 'süren tamire tekrar para alınmıyor')
+  s.tickRepairs(kalan / 2)
+  bekle(s.brokenPumps.has(1), 'yarı sürede hâlâ bozuk')
+  s.tickRepairs(kalan)
+  bekle(!s.brokenPumps.has(1) && s.repairLeft('pump', 1) === 0, 'süre dolunca çalışır, sayaç silindi')
+  bekle(s.events.some(e => /tamir edildi/.test(e)), 'oyuncuya olay yazıldı')
 }
 
-console.log('\n── 300 L TANK KAPASİTESİNİ AŞMIYOR ──')
+console.log('\n── TAMİRİ HIZLANDIR (reklam #3): yalnız ödenmiş tamir, para iadesi yok ──')
 {
   const s = new GameState()
-  const cap = s.fuelCapacity('dizel')
-  // kapasitenin 100 L altı: teslimat 300 değil 100 vermeli
-  s.tanks.dizel = cap - 100
-  const gelen = s.adYakitTeslim('dizel')
-  bekle(gelen === 100, 'kalan boşluk kadar veriliyor (300 değil)', `${gelen} L`)
-  bekle(s.tanks.dizel === cap, 'tank tam kapasitede duruyor, TAŞMIYOR', `${s.tanks.dizel}/${cap} L`)
-  bekle(s.tanks.dizel <= cap, 'kapasite aşımı yok')
-}
-{
-  // DOLU TANK: fayda yok → hak da YANMAMALI ("reklam izledim, hiçbir şey olmadı" olmasın)
-  const s = new GameState()
-  s.tanks.lpg = s.fuelCapacity('lpg')
-  const gelen = s.adYakitTeslim('lpg')
-  bekle(gelen === 0, 'dolu tanka teslimat 0 L')
-  bekle(s.adYakitUsed === 0, 'faydasız teklifte HAK YANMIYOR (fail-closed)')
-  bekle(s.tanks.lpg === s.fuelCapacity('lpg'), 'dolu tank bozulmadı')
+  s.money = 5_000; s.evChargers = 2; s.brokenChargers.add(0)
+  bekle(!s.adTamirHizlandir('charger', 0), 'ÖDENMEMİŞ arızada hızlandırma YOK (fail-closed: reklam bedava tamir değil)')
+  bekle(s.brokenChargers.has(0), 'ünite bozuk kaldı')
+  doMaintenance(s, 'fix-charger-0')
+  const para = s.money
+  bekle(s.adTamirHizlandir('charger', 0), 'ödenmiş tamir anında bitti')
+  bekle(!s.brokenChargers.has(0) && s.repairLeft('charger', 0) === 0, 'ünite çalışıyor, sayaç yok')
+  bekle(s.money === para, 'para İADE edilmedi (ödül = zaman, nakit değil)')
+  bekle(!s.adTamirHizlandir('charger', 0), 'ikinci hızlandırma boş döner')
 }
 
-console.log('\n── GÜNLÜK SINIR (2) AŞILAMIYOR ──')
+console.log('\n── MURPHY KAYNAĞI: kasa boşken çıkan arıza damgalanır ──')
 {
-  const s = new GameState()
-  bekle(GameState.AD_YAKIT_LIMIT === 2, 'AD_YAKIT_LIMIT = 2')
-  bekle(GameState.AD_TAMIR_LIMIT === 2, 'AD_TAMIR_LIMIT = 2')
-  bekle(s.adYakitHak === 2, 'gün başında 2 yakıt hakkı')
-  s.tanks.benzin = 0; s.adYakitTeslim('benzin')
-  s.tanks.benzin = 0; s.adYakitTeslim('benzin')
-  bekle(s.adYakitHak === 0, 'iki kullanımdan sonra hak bitti')
-  s.tanks.benzin = 0
-  const ucuncu = s.adYakitTeslim('benzin')
-  bekle(ucuncu === 0, '3. kez teslimat REDDEDİLİYOR', `${ucuncu} L`)
-  bekle(s.tanks.benzin === 0, 'reddedilen teslimatta tanka yakıt girmedi')
-  bekle(s.adYakitUsed === 2, 'sayaç sınırın üstüne çıkmıyor')
-}
-{
-  const s = new GameState()
-  s.brokenPumps.add(0); s.brokenPumps.add(1); s.brokenPumps.add(2)
-  bekle(s.adTamirYap('pump', 0) === true, '1. ücretsiz tamir kabul')
-  bekle(s.adTamirYap('pump', 1) === true, '2. ücretsiz tamir kabul')
-  bekle(s.adTamirYap('pump', 2) === false, '3. kez tamir REDDEDİLİYOR (günlük sınır)')
-  bekle(s.brokenPumps.has(2), 'reddedilen tamirde ünite BOZUK kaldı')
-  bekle(s.adTamirHak === 0, 'tamir hakkı tükendi')
+  // Murphy: money < 1000 → stress 3; deterministik olsun diye zar sabitlenir
+  const rnd = Math.random
+  const s = new GameState(); s.pumps = 3; s.money = 500; s.day = 5; s.maintCare = 0
+  Math.random = () => 0
+  s.tick(0.5)
+  Math.random = rnd
+  const k = Object.keys(s.brokenSource)
+  bekle(k.length >= 1 && s.brokenSource[k[0]] === 'murphy', 'kasa ₺500 iken arıza → kaynak "murphy"', JSON.stringify(s.brokenSource))
+  const n = new GameState(); n.pumps = 3; n.money = 50_000; n.day = 5; n.maintCare = 0
+  Math.random = () => 0
+  n.tick(0.5)
+  Math.random = rnd
+  const kn = Object.keys(n.brokenSource)
+  bekle(kn.length >= 1 && n.brokenSource[kn[0]] === 'normal', 'kasa doluyken arıza → kaynak "normal"', JSON.stringify(n.brokenSource))
+  bekle(/kaynak === 'murphy'[\s\S]{0,400}continue/.test(main_ts), 'main.ts: Murphy arızasında tamir teklifi ATLANIYOR')
+  bekle(/event: 'skip', network: 'murphy'/.test(main_ts), 'main.ts: atlanan Murphy teklifi telemetriye yazılıyor')
 }
 
-console.log('\n── ÜCRETSİZ TAMİR ÜNİTEYİ GERÇEKTEN ÇALIŞIR YAPIYOR ──')
+console.log('\n── TANKER HIZLANDIR (reklam #4): sipariş yoksa ödül yok ──')
 {
   const s = new GameState()
-  const paraOnce = s.money
-  s.brokenPumps.add(1)
-  bekle(s.adTamirYap('pump', 1) === true, 'bozuk pompa onarılıyor')
-  bekle(!s.brokenPumps.has(1), 'pompa artık bozuk listesinde DEĞİL')
-  bekle(s.money === paraOnce, 'ÖDÜL NAKİT DEĞİL: tamirden para İADESİ yok', `₺${s.money}`)
-
-  s.brokenChargers.add(0)
-  bekle(s.adTamirYap('charger', 0) === true, 'bozuk şarj ünitesi onarılıyor')
-  bekle(!s.brokenChargers.has(0), 'şarj ünitesi artık bozuk listesinde DEĞİL')
-  bekle(s.money === paraOnce, 'şarj tamiri de kasaya dokunmuyor')
+  bekle(s.adTankerHizlandir() === null, 'sipariş yokken null (bedava litre yok)')
+  s.money = 100_000; s.tanks.benzin = 0
+  bekle(s.placeOrder('benzin'), 'sipariş verildi')
+  const amount = s.orders.benzin.amount
+  const f = s.adTankerHizlandir()
+  bekle(f === 'benzin', 'yoldaki sipariş seçildi')
+  bekle(!s.orders.benzin.pending && !s.orders.benzin.arrived && !s.orders.benzin.delivering, 'sipariş kapandı (tanker sahneye çıkmaz)')
+  bekle(Math.abs(s.tanks.benzin - amount) < 1e-6, 'ödenen parti tanka girdi, fazlası yok', `${s.tanks.benzin} / ${amount}`)
 }
+
+console.log('\n── TRAFİK ARTIR (#7) ve EVENT UZAT (#5) ──')
 {
-  // TEKLİF EKRANDAYKEN OYUNCU KENDİ PARASIYLA TAMİR ETTİ → ödül verilmemeli
   const s = new GameState()
-  bekle(s.adTamirYap('pump', 0) === false, 'zaten çalışan üniteye tamir ödülü YOK')
-  bekle(s.adTamirUsed === 0, 'boşa hak yanmıyor (oyuncu kendi tamir ettiyse)')
-  bekle(s.adTamirYap('charger', 7) === false, 'olmayan üniteye ödül YOK')
+  s.reputation = 3; s.day = 5
+  const e0 = s.entryChance()
+  s.adTrafikArtir()
+  bekle(s.trafikBoostActive, 'trafik ödülü aktif')
+  const e1 = s.entryChance()
+  bekle(e1 > e0 && Math.abs(e1 / e0 - GameState.TRAFIK_BOOST_MULT) < 0.05 || e1 >= 0.8, 'giriş şansı ×1.6 (yumuşak tavana kadar)', `${e0.toFixed(3)} → ${e1.toFixed(3)}`)
+  const until1 = s.trafikBoostUntil
+  s.adTrafikArtir()
+  bekle(s.trafikBoostUntil - until1 >= GameState.TRAFIK_BOOST_SN * 1000 - 5, 'ikinci izleme süreyi EKLİYOR (yutmuyor)')
+  bekle(SAVE_FIELDS.includes('trafikBoostUntil'), 'trafik damgası kayda giriyor (F5 yakmaz)')
+  bekle(/kuyrukDoluMu\(\) \? t\('kuyruk dolu/.test(main_ts), 'main.ts: kuyruk doluyken trafik teklifi kapalı')
+
+  const p = new GameState()
+  bekle(p.adEventUzat() === 'basladi' && p.promo && p.promo.until > Date.now() + 55_000, 'fırsat yokken 60 sn fırsat başlar')
+  const u = p.promo.until
+  bekle(p.adEventUzat() === 'uzadi' && p.promo.until === u + 60_000, 'süren fırsat +60 sn uzar')
 }
 
-console.log('\n── SAVE UYUMLULUĞU: YALNIZCA EKLENDİ ──')
-bekle(/'adSeriUsed', 'adVipUsed', 'adYakitUsed', 'adTamirUsed'/.test(state_ts),
-  'adYakitUsed + adTamirUsed SAVE_FIELDS\'ta (sayaç kaydedilmezse F5 = sınırsız ödül)')
+console.log('\n── KURTARMA (#8): koşul sıkı, tutar dinamik ──')
 {
-  // ESKİ KAYIT: yeni alanlar YOK → 0 kabul edilmeli, çökmemeli
-  const eski = { money: 250_000, day: 40, reputation: 4.2, pumps: 4,
-                 adSeriUsed: 1, adVipUsed: 2,
-                 stats: { served: 200, lost: 9, kwh: 0, revenue: 900 } }
   const s = new GameState()
-  hydrateState(s, eski)
-  bekle(s.adYakitUsed === 0, 'ESKİ kayıt: adYakitUsed = 0 (çökmüyor)')
-  bekle(s.adTamirUsed === 0, 'ESKİ kayıt: adTamirUsed = 0')
-  bekle(s.adYakitHak === 2 && s.adTamirHak === 2, 'eski kayıtta haklar tam')
-  bekle(s.adSeriUsed === 1 && s.adVipUsed === 2, 'MEVCUT alanların anlamı değişmedi')
-  bekle(s.money === 250_000 && s.day === 40, 'eski kayıt değerleri korunuyor')
-  // eski kayıt yüklenip yeniden serialize edilince alanlar ARTIK var
-  const tekrar = serializeState(s)
-  bekle('adYakitUsed' in tekrar && 'adTamirUsed' in tekrar, 'tekrar serialize edilince alanlar kaydediliyor')
-  bekle(tekrar.adYakitUsed === 0 && tekrar.adTamirUsed === 0, 'kaydedilen değerler doğru')
-  // gidiş-dönüş: kullanılmış hak kayıtta yaşıyor mu
-  s.tanks.benzin = 0; s.adYakitTeslim('benzin'); s.brokenPumps.add(0); s.adTamirYap('pump', 0)
-  const s2 = new GameState()
-  hydrateState(s2, serializeState(s))
-  bekle(s2.adYakitUsed === 1 && s2.adTamirUsed === 1, 'kullanılan hak yenilemeden SONRA da hatırlanıyor')
+  bekle(s.kurtarmaTutari() === 0, 'başlangıç kasasıyla (₺5.000) kurtarma YOK')
+  s.money = 100; for (const f of Object.keys(s.tanks)) s.tanks[f] = 0
+  bekle(s.kurtarmaTutari() === 0, 'kasa+tank sıfır ama BANKA hâlâ avans veriyor → kurtarma yok')
+  s.loan = { ...s.loan, active: true, principal: 5000, monthly: 600, remaining: 8 }
+  const tutar = s.kurtarmaTutari()
+  bekle(tutar > 0, 'kredi altında + kasa/tank sıfır → kurtarma teklifi', `₺${tutar}`)
+  // en ucuz yakıtın 200 L partisi − kasa
+  let best = Infinity
+  for (const f of Object.keys(s.tanks)) best = Math.min(best, Math.ceil(200 * s.buyPrice(f) * s.supplierMult()))
+  bekle(tutar === Math.max(0, best - 100), 'tutar = en ucuz 200 L parti − kasa (SABİT TUTAR DEĞİL)', `${tutar} vs ${best - 100}`)
+  s.money = 1_600
+  bekle(s.kurtarmaTutari() === 0, 'kasada ₺1.600 varken kurtarma yok')
+  s.money = 100; s.tanks.benzin = 500
+  bekle(s.kurtarmaTutari() === 0, 'tankta 500 L varken kurtarma yok (satacak malı var)')
+  bekle(/placement === 'kurtarma'[\s\S]{0,300}money\) \|\| 0\) > KURTARMA_MAX[\s\S]{0,80}'not-broke'/.test(reklam_js), 'sunucu kurtarmayı kasaya göre ayrıca doğruluyor (not-broke)')
 }
 
-console.log('\n── NAKİT ÖDÜL YOK: ÖDÜL DALLARI KASAYA DOKUNMUYOR ──')
+console.log('\n── KAYIT: tamir F5 ile bitmez, kurcalanmış kayıt temizlenir, ünite satışında taşınır ──')
 {
-  // state tarafındaki iki ödül fonksiyonu money'ye hiç değmemeli (kaynak denetimi)
-  const yakitFn = state_ts.slice(state_ts.indexOf('adYakitTeslim(f: FuelType)'))
-    .slice(0, state_ts.slice(state_ts.indexOf('adYakitTeslim(f: FuelType)')).indexOf('\n  }') + 4)
-  const tamirFn = state_ts.slice(state_ts.indexOf("adTamirYap(kind: 'pump' | 'charger'"))
-    .slice(0, state_ts.slice(state_ts.indexOf("adTamirYap(kind: 'pump' | 'charger'")).indexOf('\n  }') + 4)
-  bekle(!/money/.test(yakitFn), 'adYakitTeslim state.money\'ye DOKUNMUYOR')
-  bekle(!/money/.test(tamirFn), 'adTamirYap state.money\'ye DOKUNMUYOR')
-  bekle(/Math\.min\(GameState\.AD_YAKIT_LITRE, this\.fuelCapacity\(f\) - this\.tanks\[f\]\)/.test(state_ts),
-    'kapasite kırpması kodda TEK NOKTADA')
-  // main.ts: yakit/tamir ödül dallarında para artışı olmamalı
-  const clickBlok = main_ts.slice(main_ts.indexOf("adBtn.addEventListener('click'"))
-  const yakitDal = clickBlok.slice(clickBlok.indexOf("offer.kind === 'yakit'"), clickBlok.indexOf("offer.kind === 'vip'"))
-  bekle(!/state\.money\s*\+=/.test(yakitDal), 'main.ts yakıt/tamir dallarında state.money += YOK')
-  bekle(/state\.adYakitTeslim\(/.test(main_ts), 'main.ts ödülü state kapısından veriyor (yakıt)')
-  bekle(/state\.adTamirYap\(/.test(main_ts), 'main.ts ödülü state kapısından veriyor (tamir)')
+  const s = new GameState()
+  s.money = 10_000; s.pumps = 4; s.brokenPumps.add(2); s.brokenSource['pump-2'] = 'murphy'
+  doMaintenance(s, 'fix-pump-2')
+  const kalan = s.repairLeft('pump', 2)
+  const data = JSON.parse(JSON.stringify(serializeState(s)))
+  const y = new GameState(); hydrateState(y, data)
+  bekle(Math.abs(y.repairLeft('pump', 2) - kalan) < 1e-6 && y.brokenPumps.has(2), 'yüklenen kayıtta tamir sayacı ve arıza korunuyor')
+  bekle(y.brokenSource['pump-2'] === 'murphy', 'arıza kaynağı korunuyor')
+  for (const f of ['repairs', 'brokenSource', 'trafikBoostUntil', 'adUse']) bekle(SAVE_FIELDS.includes(f), `SAVE_FIELDS: ${f}`)
+
+  const k = new GameState()
+  hydrateState(k, { ...data, repairs: { 'pump-2': 99_999, 'hack': 5, 'charger-0': -3 }, brokenSource: { 'pump-2': 'x', 'pump-1': 'normal' }, trafikBoostUntil: 'abc', adUse: 'yok' })
+  bekle(k.repairs['pump-2'] === GameState.REPAIR_MAX_SN && !('hack' in k.repairs) && !('charger-0' in k.repairs), 'kurcalanmış tamir sayaçları kırpıldı/atıldı', JSON.stringify(k.repairs))
+  bekle(!('pump-2' in k.brokenSource) && k.brokenSource['pump-1'] === 'normal', 'bilinmeyen kaynak değeri atıldı')
+  bekle(k.trafikBoostUntil === 0 && k.adUse.day === '' && typeof k.adUse.n === 'object', 'bozuk trafik damgası/adUse varsayılana döndü')
+
+  // eski kayıt: alanlar yok → çökme yok, boş
+  const e = new GameState(); hydrateState(e, { money: 1000, day: 3 })
+  bekle(Object.keys(e.repairs).length === 0 && Object.keys(e.brokenSource).length === 0 && e.trafikBoostUntil === 0, 'eski kayıt (alanlar yok) temiz yükleniyor')
+
+  // ünite satışı: son pompanın sayacı tıklanan indekse taşınır
+  const t = new GameState(); t.money = 50_000; t.pumps = 4
+  t.brokenPumps.add(3); t.brokenSource['pump-3'] = 'normal'; doMaintenance(t, 'fix-pump-3')
+  const k3 = t.repairLeft('pump', 3)
+  const r = applySell(t, 'pump#1')
+  bekle(r !== null && t.pumps === 3, 'pompa satıldı')
+  bekle(Math.abs(t.repairLeft('pump', 1) - k3) < 1e-6 && t.repairLeft('pump', 3) === 0 && t.brokenPumps.has(1) && !t.brokenPumps.has(3), 'tamir sayacı ve arıza son üniteden tıklanan indekse taşındı', JSON.stringify(t.repairs))
 }
 
-console.log('\n── REKLAM HAZIR DEĞİLKEN BUTON ÇIKMIYOR (TEK KAPI) ──')
+console.log('\n── YAPILMAYACAKLAR ve sözleşmeler ──')
 {
-  bekle(/function showAdOffer\([\s\S]{0,400}?if \(!adsEnabled\(\) \|\| !rewardedReady\(\)/.test(main_ts),
-    'showAdOffer rewardedReady() kapısını İÇERİDE uyguluyor')
-  bekle(/if \(showAdOffer\('double', profit\)\) doubleOfferT = 22/.test(main_ts),
-    '2x teklifi: reklam hazır değilse sayaç bile başlamıyor')
-  // 'rush' teklifi artık showAdOffer'ın kapısından geçiyor (ayrı kontrole gerek yok)
-  bekle(/showAdOffer\('rush'\)/.test(main_ts), 'rush teklifi tek kapıdan geçiyor')
-  bekle(/showAdOffer\('seri', mult\)\) \{/.test(main_ts), 'seri teklifi: durum yalnız teklif çıkarsa kuruluyor')
-  bekle(/showAdOffer\('vip', car\.demandAmount\)\) \{/.test(main_ts), 'vip teklifi: durum yalnız teklif çıkarsa kuruluyor')
-  bekle(!/rewardedReady\(\) && adBtn\.style\.display/.test(main_ts),
-    'eski dağınık rewardedReady kontrolleri kaldırıldı (tek kapı)')
+  bekle(!/interstitial\(/.test(main_ts) && !/export function interstitial/.test(ads_ts), 'interstitial/zorunlu reklam YOK')
+  bekle(!/showAdOffer\('seri'|showAdOffer\('vip'|adSeriHak|adVipHak/.test(main_ts), '"seriyi kurtar / VIP\'yi tut" kayıp-tehdidi teklifleri YOK')
+  bekle(!/admob/i.test(ads_ts.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')), 'AdMob kod kalıntısı yok (AppLovin MAX)')
+  bekle(/showRewarded\(id, tk\.ticket\)/.test(reklam_ts), 'bilet id\'si SSV customData olarak videoya gidiyor')
+  bekle(/premium \|\| isPremium\(\)[\s\S]{0,200}claim\(tk\.ticket, 'premium'\)/.test(reklam_ts), 'premium ödülü sunucu claim\'inden geçiyor (tavan korunur)')
+  bekle(/adEtiket[\s\S]*?'gun2x': return t\('Günü 2× yap: \+₺\{0\} · \{1\}', tlx\(o\.amount\)/.test(main_ts), 'etiket ödülü ÖNCE ve NET (sunucunun kestiği tutar) yazıyor')
+  bekle(/amount = ticket\.amount/.test(main_ts), 'etiketteki tutar = sunucu biletinin tutarı (vaat ≠ verilen olmaz)')
+  // sunucu ↔ istemci yerleşim listesi birebir
+  const srvIds = [...reklam_js.matchAll(/^\s{2}(\w+):\s*\{ kind:/gm)].map(m => m[1])
+  const cliIds = [...reklam_ts.matchAll(/^\s{2}(\w+):\s*\{ kind:/gm)].map(m => m[1])
+  bekle(srvIds.length === 8 && JSON.stringify(srvIds) === JSON.stringify(cliIds), 'sunucu/istemci yerleşim listeleri birebir', `${srvIds.join(',')} | ${cliIds.join(',')}`)
+  for (const id of srvIds) {
+    const sv = new RegExp(`^\\s{2}${id}:\\s*\\{ kind:\\s*'(\\w+)',\\s*cap: (\\d+)`, 'm').exec(reklam_js)
+    const cl = new RegExp(`^\\s{2}${id}:\\s*\\{ kind:\\s*'(\\w+)',\\s*cap: (\\d+)`, 'm').exec(reklam_ts)
+    bekle(sv && cl && sv[1] === cl[1] && sv[2] === cl[2], `yerleşim ${id}: tür/tavan aynı`, `${sv?.[1]}/${sv?.[2]} vs ${cl?.[1]}/${cl?.[2]}`)
+  }
+  bekle(/ad_views/.test(reklam_ts), 'izlenen reklam ad_views metriğine yazılıyor')
 }
 
-console.log('\n── TETİKLEYİCİLER VE TEKLİF ÖMRÜ ──')
-bekle(/teklifAcilYakit\(bosYakit\)/.test(main_ts), 'tank boşalınca acil yakıt teklifi çıkıyor')
-bekle(/teklifUcretsizTamir\('pump', bozukPompa\)/.test(main_ts), 'pompa arızasında ücretsiz tamir teklifi çıkıyor')
-bekle(/teklifUcretsizTamir\('charger', bozukSarj\)/.test(main_ts), 'şarj arızasında da teklif çıkıyor')
-bekle(/const bozukPompa = c\.slotIndex/.test(main_ts), 'ünite kimliği finishSale ÖNCESİ yakalanıyor')
-bekle(/if \(showAdOffer\('yakit', 0, \{ fuel: f \}\)\) teklifT = 20/.test(main_ts), 'yakıt teklifi ~20 sn süreli')
-bekle(/if \(showAdOffer\('tamir', 0, \{ unit: \{ kind, i \} \}\)\) teklifT = 18/.test(main_ts), 'tamir teklifi süreli')
-bekle(/const tamirBitti = adOffer\.kind === 'tamir' && \(!adOffer\.unit \|\| !uniteBozukMu\(adOffer\.unit\)\)/.test(main_ts),
-  'oyuncu kendi tamir ederse teklif ANINDA iniyor (tickAdOffer)')
-bekle(/const tankDoldu = adOffer\.kind === 'yakit'/.test(main_ts), 'tank dolduysa yakıt teklifi iniyor')
-bekle(/state\.adYakitUsed = 0[\s\S]{0,60}state\.adTamirUsed = 0/.test(main_ts), 'haklar gün dönüşünde sıfırlanıyor')
-
-console.log('\n── DİL: EN + FR KARŞILIKLARI ──')
-for (const anahtar of [
-  'Reklam İzle: Acil {0} Teslimatı ({1} L)',
-  'Reklam İzle: Ücretsiz Tamir',
-  'Acil teslimat geldi: {0} tankına +{1} L — satışa devam!',
-  'Tank zaten dolu — teslimata gerek kalmadı, hakkın duruyor.',
-  'Pompa #{0} ücretsiz onarıldı — hemen servise hazır!',
-  'Şarj #{0} ücretsiz onarıldı — hemen servise hazır!',
-  'Ünite zaten onarılmış — hakkın duruyor.',
-]) {
-  const kac = i18n_ts.split(`'${anahtar}'`).length - 1
-  bekle(kac >= 2, `çeviri var (EN + FR): "${anahtar.slice(0, 34)}…"`, `${kac} kayıt`)
-}
-
-console.log(hata ? `\n${hata} HATA` : '\nÖDÜLLÜ REKLAM TEMİZ')
+console.log(hata ? `\n❌ ${hata} HATA` : '\n✅ TÜM TESTLER GEÇTİ')
 process.exit(hata ? 1 : 0)

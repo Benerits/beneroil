@@ -1,4 +1,4 @@
-name: iOS build tetikle
+name: iOS + Android build tetikle
 on:
   push:
     branches: [main, dev]
@@ -7,9 +7,19 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      # Aynı token her iki kabuk reposuna da dispatch atar; IOS_DISPATCH_TOKEN'ın
+      # Benerits/beneloil-android için de yetkili (Contents: write) olması şart.
+      - name: iOS
+        run: |
           curl -sS -X POST \
             -H "Authorization: Bearer ${{ secrets.IOS_DISPATCH_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/Benerits/beneloil-ios/dispatches \
+            -d "{\"event_type\":\"web-main-push\",\"client_payload\":{\"ref\":\"${{ github.ref_name }}\"}}"
+      - name: Android
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.IOS_DISPATCH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/Benerits/beneloil-android/dispatches \
             -d "{\"event_type\":\"web-main-push\",\"client_payload\":{\"ref\":\"${{ github.ref_name }}\"}}"

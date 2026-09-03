@@ -33,7 +33,7 @@ let _kicked = false
 export function isKicked(): boolean { return _kicked }
 function triggerKicked() { if (!_kicked) { _kicked = true; _onKicked?.() } }
 
-async function api(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
+export async function api(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(path, {
     method,
     headers: {

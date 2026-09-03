@@ -6,6 +6,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import pg from 'pg'
 import { WebSocketServer } from 'ws'
+import { createReklam } from './reklam.js'
 
 const PORT = Number(process.env.PORT || 80)
 const SECRET = process.env.AUTH_SECRET || 'benzinlik-dev-secret'
@@ -142,7 +143,12 @@ async function initDb() {
   await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS apple_id text`)
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_google ON benzinlik_player (google_id) WHERE google_id IS NOT NULL`)
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS benzinlik_player_apple ON benzinlik_player (apple_id) WHERE apple_id IS NOT NULL`)
-  console.log('DB hazır (benzinlik_player + benzinlik_feedback).')
+  // ÖDÜLLÜ REKLAM KREDİSİ (server/reklam.js): save JSON'unun DIŞINDA tutulur ki uçuştaki
+  // eski bir save ödülü ezmesin. Save handler atomik düşer (GREATEST(0, ad_credit - kullanılan)).
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS ad_credit bigint NOT NULL DEFAULT 0`)
+  await pool.query(`ALTER TABLE benzinlik_player ADD COLUMN IF NOT EXISTS ad_credit_at timestamptz`)
+  if (reklam) await reklam.initDb()
+  console.log('DB hazır (benzinlik_player + benzinlik_feedback + reklam).')
 }
 
 // ---- şifre & token ----
@@ -944,6 +950,14 @@ async function handleApi(req, res, url) {
   }
   try {
     if (url === '/api/healthz') return json(res, 200, { ok: true })
+    // ÖDÜLLÜ REKLAM API'si (server/reklam.js): bilet → SSV → claim. Kendi rate limit'leri var.
+    if (url.startsWith('/api/ads/')) {
+      const handled = await reklam.handle(req, res, url, {
+        require: auth,
+        peek: () => verifyToken(String(req.headers['x-auth'] || '')) || null,
+      })
+      if (handled) return
+    }
     // MİSAFİR canlı varlık: hesapsız oyuncu 60 sn'de bir ping atar (sid = oturum uuid).
     // WS token istediğinden misafirler orada görünmez — bu hafif nabız anlık misafir sayısını verir.
     if (url === '/api/guest-ping' && req.method === 'POST') {
@@ -1139,17 +1153,11 @@ async function handleApi(req, res, url) {
       return json(res, 200, { ok: true })
     }
     if (url === '/api/config') {
-      // AdMob unit'leri env ile gelirse native onları kullanır; yoksa istemci TEST reklamlarını kullanır (public değerler)
-      const admob = {
-        iosInterstitial: process.env.ADMOB_IOS_INTERSTITIAL || null,
-        iosRewarded: process.env.ADMOB_IOS_REWARDED || null,
-        androidInterstitial: process.env.ADMOB_ANDROID_INTERSTITIAL || null,
-        androidRewarded: process.env.ADMOB_ANDROID_REWARDED || null,
-        testMode: process.env.ADMOB_TEST === '1' || undefined,
-      }
+      // REKLAM: AdMob kaldırıldı (3 Eyl 2026) → AppLovin MAX (native) + AdSense H5 (web).
+      // Anahtarlar public: SDK key uygulama paketinde zaten görünür; gizli olan EVENT KEY buraya GİRMEZ.
       return json(res, 200, {
         adsClient: process.env.ADSENSE_PUB || null,
-        admob: (admob.iosInterstitial || admob.androidInterstitial || admob.testMode) ? admob : undefined,
+        ads: reklam ? reklam.publicConfig() : null,
         googleClientId: process.env.GOOGLE_WEB_CLIENT_ID || null, // web GIS için (public)
         appleServicesId: process.env.APPLE_SERVICES_ID || null,   // web Apple JS için (public)
         revenuecatIos: process.env.REVENUECAT_IOS_KEY || null,    // RevenueCat public SDK key (iOS) — IAP
@@ -1350,7 +1358,8 @@ async function handleApi(req, res, url) {
       const { save, baseUpdatedAt } = await readBody(req)
       const clean = sanitizeSave(save)
       if (clean === undefined) return json(res, 400, { error: 'Geçersiz kayıt verisi.' })
-      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at, session_id, save_session FROM benzinlik_player WHERE email=$1', [email])
+      let adCreditUsed = 0 // bu save'de tüketilen reklam kredisi (UPDATE'te atomik düşülür)
+      const prev = await pool.query('SELECT save, updated_at, created_at, banned_at, session_id, save_session, ad_credit, ad_credit_at FROM benzinlik_player WHERE email=$1', [email])
       if (staleToken(req, prev.rows[0]?.created_at)) return json(res, 401, { error: 'Oturum geçersiz, tekrar giriş yap.' })
       if (prev.rows[0]?.banned_at) return json(res, 403, { error: 'Bu hesap askıya alınmış.' })
       // tek-cihaz kilidi: başka cihaz oturumu devraldıysa bu (eski) cihaz YAZMASIN → kicked.
@@ -1428,9 +1437,16 @@ async function handleApi(req, res, url) {
         const nowMs = Date.now()
         const refillSec = abT > 0 ? Math.max(0, (nowMs - abT) / 1000) : elapsed
         let bucket = Math.min(kova, abB + refillSec * rate)
+        // REKLAM KREDİSİ: sunucu onaylı ödül (reklam.js grant) benzinlik_player.ad_credit'te bekler.
+        // Kovanın ÜSTÜNE eklenir ve kazançtan ÖNCE tüketilir; 48 saatte söner (unutulmuş ödül
+        // sonsuza dek hile tamponu olmasın). Kova+kredi tavanı = normal oyunun görebileceği en fazla.
+        const creditAt = prev.rows[0]?.ad_credit_at ? new Date(prev.rows[0].ad_credit_at).getTime() : 0
+        const credit0 = (!firstSave && creditAt > 0 && nowMs - creditAt < 48 * 3600_000)
+          ? clamp(Number(prev.rows[0]?.ad_credit), 0, 50_000_000, 0) : 0
+        let creditUsed = 0
         const allowance = firstSave
           ? (60_000 + gameDays * 40_000) * starMult   // misafirden taşınan ilk save: serbest
-          : bucket
+          : bucket + credit0
         const prevWealth = (prevSave && prevSave.s)
           ? (Number(prevSave.s.money) || 0) + buildingValue(prevSave.s) + snapshotsValue(prevSave.s)
           : START_MONEY
@@ -1485,10 +1501,14 @@ async function handleApi(req, res, url) {
           // HARCANAN JETON: kabul edilen servet artışı kovadan düşülür. Kova bittiğinde
           // oyuncu ancak zamanla dolduğu kadar kazanabilir (push sıklığı işe yaramaz).
           const gain = Math.max(0, (money + bval) - prevWealth)
-          bucket = Math.max(0, bucket - gain)
+          creditUsed = Math.min(credit0, gain)          // önce reklam kredisi, sonra kova
+          bucket = Math.max(0, bucket - (gain - creditUsed))
           if (clamped > 5000) auditCheat(email, 'clamp', { clamped: Math.round(clamped), rate: Math.round(rate) })
+          // REKLAM BÜTÇESİ: aktif kazanç (reklam kredisi HARİÇ) UTC gün sayacına işlenir (reklam.js)
+          if (reklam) reklam.noteGain(email, gain - creditUsed)
         }
         clean.s._ab = { t: nowMs, b: Math.round(bucket) }
+        adCreditUsed = Math.round(creditUsed)
         // day (ilerleme) hız freni: gün ~160sn/oyun-günü hızında ilerler. İlk save'de misafir eşiğine (5+tampon) izin.
         if (typeof clean.s.day === 'number') {
           const prevDay = (prevSave && prevSave.s && typeof prevSave.s.day === 'number') ? prevSave.s.day : 1
@@ -1497,7 +1517,8 @@ async function handleApi(req, res, url) {
         }
       }
       // save yazarken oturumu da bu cihaza sabitle (session_id null'sa claim et)
-      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now(), session_id=COALESCE($3, session_id), save_session=COALESCE($3, save_session) WHERE email=$1 RETURNING updated_at', [email, clean, sess || null])
+      // ad_credit ATOMİK düşülür (GREATEST): SELECT ile UPDATE arasında gelen bir grant ezilmez.
+      const upd = await pool.query('UPDATE benzinlik_player SET save=$2, updated_at=now(), last_seen_at=now(), session_id=COALESCE($3, session_id), save_session=COALESCE($3, save_session), ad_credit=GREATEST(0, ad_credit - $4) WHERE email=$1 RETURNING updated_at', [email, clean, sess || null, adCreditUsed])
       return json(res, 200, { ok: true, updatedAt: upd.rows[0]?.updated_at })
     }
     // IAP efektini SUNUCU-otoriter uygula (hile-freni cap'ini bypass eder; sonraki save tutarlı olur).
@@ -1994,6 +2015,10 @@ async function handleVs(req, res, url) {
         asOf: new Date().toISOString(),
       })
     }
+    // ÖDÜLLÜ REKLAM huni özeti (aggregate-only, e-posta yok): ?days=7
+    if (url.startsWith('/vs/v1/ads') && req.method === 'GET') {
+      return json(res, 200, await reklam.summary(u.searchParams.get('days') || 7))
+    }
     if (url === '/vs/v1/kpi' && req.method === 'GET') {
       // tek KPI kartı için sade değer: {data:{value,label,deltaPct?}}
       const k = u.searchParams.get('k') || ''
@@ -2265,6 +2290,9 @@ setInterval(() => {
 }, 30000)
 
 // dirençli boot: DB geç ayaklanırsa bile sunucu ASLA sessizce ölmez
+// ÖDÜLLÜ REKLAM katmanı — yardımcılar yukarıda tanımlı olduğu için burada kurulur.
+const reklam = pool ? createReklam({ pool, SECRET, json, readBody, rateLimit, clientIp, maxIncomeRate, auditCheat }) : null
+
 async function start() {
   for (let i = 1; i <= 30; i++) {
     try {

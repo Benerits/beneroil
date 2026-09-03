@@ -219,6 +219,8 @@ export interface LocSnapshot {
   autoChargers: number[]
   brokenPumps: number[]
   brokenChargers: number[]
+  repairs?: Record<string, number>
+  brokenSource?: Record<string, 'murphy' | 'normal'>
   placedPos: Record<string, [number, number]>
   placedRot: Record<string, number>
   placedRects: unknown[]
@@ -768,57 +770,108 @@ export class GameState {
   comboBosSn = 0
   /** oyun-içi saat (0-24), main.ts gün döngüsünden her karede tazeler */
   hourOfDay = 6
-  // ── ÖDÜLLÜ REKLAM GÜNLÜK HAKLARI ──
-  // Mobilde gelir reklamdan geldiği için teklifler oyunun KRİZ anlarına bağlı, ama
-  // sınırlı: nadir olan değerli görünür, sınırsız kurtarma mekaniği de anlamsızlaştırır.
-  adSeriUsed = 0        // "seriyi kurtar" — günde en fazla 2
-  adVipUsed = 0         // "VIP'yi elde tut" — günde en fazla 2
-  adYakitUsed = 0       // "acil yakıt teslimatı" — günde en fazla 2
-  adTamirUsed = 0       // "ücretsiz tamir" — günde en fazla 2
-  static readonly AD_SERI_LIMIT = 2
-  static readonly AD_VIP_LIMIT = 2
-  static readonly AD_YAKIT_LIMIT = 2
-  static readonly AD_TAMIR_LIMIT = 2
-  /** acil teslimatın litresi — NAKİT DEĞİL MAL: satmak yine oyuncunun işi */
-  static readonly AD_YAKIT_LITRE = 300
-  get adSeriHak() { return Math.max(0, GameState.AD_SERI_LIMIT - this.adSeriUsed) }
-  get adVipHak() { return Math.max(0, GameState.AD_VIP_LIMIT - this.adVipUsed) }
-  get adYakitHak() { return Math.max(0, GameState.AD_YAKIT_LIMIT - this.adYakitUsed) }
-  get adTamirHak() { return Math.max(0, GameState.AD_TAMIR_LIMIT - this.adTamirUsed) }
-
+  // ── ÖDÜLLÜ REKLAM v2 (3 Eyl 2026): yerleşimler src/reklam.ts, tavanlar SUNUCUDA (UTC günü) ──
+  // Eski "seri/VIP/yakıt/ücretsiz tamir" hakları kaldırıldı (adSeriUsed vb. eski kayıtlarda
+  // durabilir, okunmaz). Burada yalnız OYUN MEKANİĞİNE dokunan parçalar yaşar.
+  /** misafir/Meta YEREL tavan sayacı (sunucu hesabı yokken): UTC günü + yerleşim başına adet */
+  adUse: { day: string; n: Record<string, number> } = { day: '', n: {} }
+  /** "Trafiği artır" ödülü: bu ms damgasına kadar giriş şansı ×TRAFIK_BOOST_MULT (kayda girer, F5 yakmaz) */
+  trafikBoostUntil = 0
+  static readonly TRAFIK_BOOST_SN = 150
+  static readonly TRAFIK_BOOST_MULT = 1.6
+  get trafikBoostActive() { return Date.now() < this.trafikBoostUntil }
   /**
-   * ACİL YAKIT TESLİMATI (ödüllü reklam ödülü). Tanka ANINDA yakıt koyar ama
-   * KAPASİTEYİ ASLA AŞMAZ — sunucu da kaydı fuelCapacity'ye kırpıyor (server/index.js
-   * ~727), aşan litre zaten sessizce buharlaşırdı.
-   *
-   * ÖDÜL = FIRSAT: kasaya tek kuruş girmez, yalnızca sipariş beklemeden satış yapma
-   * şansı verilir. Ekonomi şişmez.
-   *
-   * FAIL-CLOSED: hak yoksa VEYA tank zaten doluysa hiçbir şey harcanmaz (0 döner) —
-   * boşa yanan bir hak oyuncuya "reklam izledim, hiçbir şey olmadı" dedirtir.
+   * TAMİR ARTIK SÜRE ALIR (60-120 sn): 'pump-3' / 'charger-1' → kalan saniye. Para tamir
+   * BAŞLARKEN ödenir (her zaman — reklam parayı geri vermez), ünite süre dolana kadar HÂLÂ
+   * bozuk. "Tamiri hızlandır" reklamı bu sayacı sıfırlar. Kayda girer: F5 tamiri bitirmez.
    */
-  adYakitTeslim(f: FuelType): number {
-    if (this.adYakitHak <= 0) return 0
-    const ekle = Math.max(0, Math.min(GameState.AD_YAKIT_LITRE, this.fuelCapacity(f) - this.tanks[f]))
-    if (ekle <= 0) return 0
-    this.tanks[f] += ekle
-    this.adYakitUsed++
-    return ekle
-  }
-
-  /**
-   * ÜCRETSİZ TAMİR (ödüllü reklam ödülü): bozuk üniteyi parasız onarır.
-   * FAIL-CLOSED: hak yoksa veya ünite ARTIK BOZUK DEĞİLSE (oyuncu bu arada kendi
-   * parasıyla tamir ettiyse) hak harcanmaz, false döner. Para İADESİ DE YOKTUR —
-   * ödül nakde çevrilemez, yalnızca gideri baştan engeller.
-   */
-  adTamirYap(kind: 'pump' | 'charger', i: number): boolean {
-    if (this.adTamirHak <= 0) return false
+  repairs: Record<string, number> = {}
+  /** arıza KAYNAĞI: 'murphy' (kasa boşken artan risk) | 'normal'. Murphy arızasında reklam
+   *  teklifi HİÇ çıkmaz ("battın, reklam izle" çerçevesi yasak) — kaynak telemetriye gider. */
+  brokenSource: Record<string, 'murphy' | 'normal'> = {}
+  static readonly REPAIR_MIN_SN = 60
+  static readonly REPAIR_MAX_SN = 120
+  static readonly PUMP_FIX_COST = 800
+  static readonly CHARGER_FIX_COST = 1000
+  /** bu ünitenin tamiri sürüyorsa kalan saniye, yoksa 0 */
+  repairLeft(kind: 'pump' | 'charger', i: number): number { return this.repairs[`${kind}-${i}`] ?? 0 }
+  /** tamiri BAŞLAT (parayı çağıran öder). Zaten sürüyorsa süreye dokunmaz. Ünite bozuk değilse hiçbir şey yapmaz. */
+  startRepair(kind: 'pump' | 'charger', i: number): boolean {
     const bozuk = kind === 'pump' ? this.brokenPumps : this.brokenChargers
     if (!bozuk.has(i)) return false
-    bozuk.delete(i)
-    this.adTamirUsed++
+    const k = `${kind}-${i}`
+    if (!(this.repairs[k] > 0)) this.repairs[k] = GameState.REPAIR_MIN_SN + Math.random() * (GameState.REPAIR_MAX_SN - GameState.REPAIR_MIN_SN)
     return true
+  }
+  /** tamiri ANINDA bitir — ödüllü reklam #3 "tamiri hızlandır". FAIL-CLOSED: ödenmiş/süren tamir yoksa false. */
+  adTamirHizlandir(kind: 'pump' | 'charger', i: number): boolean {
+    if (!(this.repairLeft(kind, i) > 0)) return false
+    this.finishRepair(kind, i)
+    return true
+  }
+  private finishRepair(kind: 'pump' | 'charger', i: number) {
+    const k = `${kind}-${i}`
+    delete this.repairs[k]; delete this.brokenSource[k]
+    ;(kind === 'pump' ? this.brokenPumps : this.brokenChargers).delete(i)
+    this.events.push(kind === 'pump' ? t('Pompa #{0} tamir edildi — servise hazır.', i + 1) : t('Şarj ünitesi #{0} tamir edildi — servise hazır.', i + 1))
+  }
+  /** süren tamirleri ilerlet (tick'ten). Bozuk listesinden düşmüş ünite (silme/devir) için sayaç da düşer. */
+  tickRepairs(dt: number) {
+    for (const k of Object.keys(this.repairs)) {
+      const m = /^(pump|charger)-(\d+)$/.exec(k)
+      if (!m) { delete this.repairs[k]; continue }
+      const kind = m[1] as 'pump' | 'charger', i = Number(m[2])
+      const bozuk = kind === 'pump' ? this.brokenPumps : this.brokenChargers
+      if (!bozuk.has(i)) { delete this.repairs[k]; delete this.brokenSource[k]; continue }
+      this.repairs[k] -= dt
+      if (this.repairs[k] <= 0) this.finishRepair(kind, i)
+    }
+  }
+  /** ödüllü reklam #5 "event başlat/uzat": süren fırsatı +60 sn uzatır, yoksa rastgele 60 sn başlatır */
+  adEventUzat(): 'uzadi' | 'basladi' {
+    if (this.promo && this.promo.until > Date.now()) { this.promo.until += 60_000; return 'uzadi' }
+    const type = Math.random() < 0.5 ? 'cheapFuel' as const : 'rush' as const
+    this.promo = { type, until: Date.now() + 60_000 }
+    return 'basladi'
+  }
+  /** ödüllü reklam #7 "trafiği artır": süre EKLEMELİ (üst üste izlenen iki reklam ikisini de sayar) */
+  adTrafikArtir() {
+    const base = Math.max(Date.now(), this.trafikBoostUntil)
+    this.trafikBoostUntil = base + GameState.TRAFIK_BOOST_SN * 1000
+  }
+  /** ödüllü reklam #4 "tanker hızlandır": YOLDAKİ (henüz kapıya gelmemiş) siparişi anında
+   *  teslim eder — ödenmiş parti tanka girer, tanker sahneye hiç çıkmaz. Fiziksel olarak
+   *  kapıdan girmiş tankeri main.ts kendisi kapatır. Sipariş yoksa null. */
+  adTankerHizlandir(f?: FuelType): FuelType | null {
+    const list = f ? [f] : FUELS.filter(x => this.orders[x].pending).sort((a, b) => this.orders[a].eta - this.orders[b].eta)
+    for (const x of list) {
+      const o = this.orders[x]
+      if (o.pending) { o.pending = false; o.arrived = false; o.delivering = false; o.eta = 0; this.deliverFuel(x); return x }
+    }
+    return null
+  }
+  /**
+   * ödüllü reklam #8 "battın — acil nakit" KOŞULU: kasa + tanklar ~0 ve kredi teminatı yok.
+   * Tutar DİNAMİK: bu şubedeki en ucuz eksik = minimum tanker siparişinin bedeli.
+   * Sunucu ayrıca money ≤ 12.000 ve haftada 2 sınırını kendisi doğrular.
+   */
+  kurtarmaTutari(): number {
+    if (this.money > 1500) return 0
+    const litre = FUELS.reduce((a, f) => a + this.tanks[f], 0)
+    if (litre > 200) return 0
+    if (FUELS.some(f => this.orders[f].pending)) return 0          // yolda tanker var: kurtarma değil, bekleme
+    // banka hâlâ avans veriyorsa (kredi/ortaklık yok) önce o: kurtarma bankanın YERİNE geçmez
+    if (!this.loan.active && !this.partner.active) return 0
+    // en ucuz eksik: en ucuz yakıtın MİNİMUM partisi (200 L, piyasa fiyatı × tedarikçi çarpanı)
+    const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
+    let best = Infinity
+    for (const f of FUELS) {
+      if (this.fuelCapacity(f) - this.tanks[f] < ORDER_STEP) continue
+      const c = Math.ceil(ORDER_STEP * this.buyPrice(f) * disc * this.supplierMult())
+      if (c > 0 && c < best) best = c
+    }
+    if (!Number.isFinite(best)) return 0
+    return Math.max(0, Math.ceil(best - this.money))
   }
 
   /** seri çarpanı: 3 servis → ×1.1, 6 → ×1.25, 10+ → ×1.5 */
@@ -1219,6 +1272,8 @@ export class GameState {
     const units = this.pumps + this.evChargers + this.solarCount + this.windCount + (this.hasSMR ? 3 : 0)
     this.wear = Math.min(1, this.wear + dt * 0.000055 * Math.max(1, units))
 
+    // süren tamirler (60-120 sn) ilerler; biten ünite bozuk listesinden düşer
+    this.tickRepairs(dt)
     // rastgele arızalar — seyrek; para azken (Murphy) artar, bakım özeni yüksekken düşer
     const stress = this.graceActive ? 1 : this.money < 1000 ? 3 : this.money < 3000 ? 2 : 1
     // eğitimli personel arıza riskini düşürür (rapor §7 #7: hata oranı iyileşir)
@@ -1236,6 +1291,7 @@ export class GameState {
       for (let i = 0; i < this.pumps; i++) {
         if (!this.brokenPumps.has(i) && Math.random() < (dt / 3600) * stress * care) {
           this.brokenPumps.add(i)
+          this.brokenSource[`pump-${i}`] = stress > 1 ? 'murphy' : 'normal'
           this.events.push(t('Pompa #{0} arıza yaptı! Üstüne tıklayıp karttan tamir et.', i + 1))
           break
         }
@@ -1243,6 +1299,7 @@ export class GameState {
       for (let i = 0; i < this.evChargers; i++) {
         if (!this.brokenChargers.has(i) && Math.random() < (dt / 4200) * stress * care) {
           this.brokenChargers.add(i)
+          this.brokenSource[`charger-${i}`] = stress > 1 ? 'murphy' : 'normal'
           this.events.push(t('Şarj ünitesi #{0} arızalandı!', i + 1))
           break
         }
@@ -1277,7 +1334,7 @@ export class GameState {
     // ışık çarpanı: kırmızıda sıkışan sürücü istasyona giriyor (çevre yolu/metropol imzası)
     // sezon çarpanı (Katman 4c): yaz tatili trafiği, kış düşüşü — tekrarlanabilir döngü
     const priceF = this.priceDemandFactor()
-    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * priceF * this.lightBoost() * this.season().traffic
+    const boost = (this.promo?.type === 'rush' ? 1.5 : 1) * (this.trafikBoostActive ? GameState.TRAFIK_BOOST_MULT : 1) * priceF * this.lightBoost() * this.season().traffic
     // Şube kısıtları temadan: taban çekicilik, tabela ve itibar AĞIRLIĞI şubeye göre değişir
     // (kasabada itibar belirleyici, otoyolda tabela; kasaba değerleri 1.0 → denge değişmez).
     const th = this.theme()
@@ -1347,6 +1404,7 @@ export class GameState {
       ownedParcels: [...this.ownedParcels], pavedParcels: [...this.pavedParcels],
       autoPumps: [...this.autoPumps], autoChargers: [...this.autoChargers],
       brokenPumps: [...this.brokenPumps], brokenChargers: [...this.brokenChargers],
+      repairs: { ...this.repairs }, brokenSource: { ...this.brokenSource },
       placedPos: JSON.parse(JSON.stringify(layout?.placedPos ?? {})),
       placedRot: { ...(layout?.placedRot ?? {}) },
       placedRects: JSON.parse(JSON.stringify(layout?.placedRects ?? [])),
@@ -1383,6 +1441,8 @@ export class GameState {
     this.autoChargers = new Set(sn?.autoChargers ?? [])
     this.brokenPumps = new Set(sn?.brokenPumps ?? [])
     this.brokenChargers = new Set(sn?.brokenChargers ?? [])
+    this.repairs = { ...(sn?.repairs ?? {}) }
+    this.brokenSource = { ...(sn?.brokenSource ?? {}) }
     return {
       placedPos: sn?.placedPos ? JSON.parse(JSON.stringify(sn.placedPos)) : {},
       placedRot: sn?.placedRot ? { ...sn.placedRot } : {},
@@ -1919,7 +1979,7 @@ export class GameState {
     this.hasRestaurant2 = false; this.hasTruckPark2 = false
     this.wideGates = false; this.uranium = 0; this.smrWear = 0; this.solarDirt = 0; this.windWear = 0
     for (const f of FUELS) { this.tankCounts[f] = 1; this.tanks[f] = 0 }
-    this.brokenPumps.clear(); this.brokenChargers.clear()
+    this.brokenPumps.clear(); this.brokenChargers.clear(); this.repairs = {}; this.brokenSource = {}
     for (const f of FUELS) this.orders[f] = { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
     this.uraniumPending = false; this.uraniumEta = 0
     this.dayStartMoney = this.money + cash + seed // gün sonu raporu uydurma sayı göstermesin
@@ -2695,13 +2755,16 @@ export class GameState {
     }
     if (this.managerLevel >= 3 && pol.fixBroken) {
       let parasiz = false
+      // TAMİR SÜRE ALIR: müdür parayı öder ve tamiri BAŞLATIR (60-120 sn); süren tamire tekrar ödemez
       for (const i of [...this.brokenPumps]) {
-        if (this.money < 800) { parasiz = true; break }
-        this.money -= 800; this.brokenPumps.delete(i); fixed++
+        if (this.repairLeft('pump', i) > 0) continue
+        if (this.money < GameState.PUMP_FIX_COST) { parasiz = true; break }
+        this.money -= GameState.PUMP_FIX_COST; this.startRepair('pump', i); fixed++
       }
       for (const i of [...this.brokenChargers]) {
-        if (this.money < 1000) { parasiz = true; break }
-        this.money -= 1000; this.brokenChargers.delete(i); fixed++
+        if (this.repairLeft('charger', i) > 0) continue
+        if (this.money < GameState.CHARGER_FIX_COST) { parasiz = true; break }
+        this.money -= GameState.CHARGER_FIX_COST; this.startRepair('charger', i); fixed++
       }
       // sessiz kalma (reaktörle aynı gerekçe): "müdür tamir etmiyor" okunmasın
       if (parasiz) this.events.push(t('Müdür arızayı tamir edemedi — kasada tamir parası (₺800/₺1.000) yok!'))
@@ -3414,11 +3477,18 @@ export function getMaintenanceItems(s: GameState): MaintRow[] {
       disabled: s.uraniumPending || s.uranium > 60,
     })
   }
+  // TAMİR SÜRE ALIR: ödendiyse satır "tamir sürüyor (Xs)" olarak kalır (kapalı) — ünite bitene kadar bozuk
   for (const i of s.brokenPumps) {
-    rows.push({ id: `fix-pump-${i}`, icon: 'i-wrench', title: t('Pompa #{0} Tamiri', i + 1), cost: 800, urgent: true, disabled: false })
+    const kalan = s.repairLeft('pump', i)
+    rows.push(kalan > 0
+      ? { id: `fix-pump-${i}`, icon: 'i-wrench', title: t('Pompa #{0} tamir ediliyor ({1} sn)', i + 1, Math.ceil(kalan)), cost: 0, urgent: false, disabled: true }
+      : { id: `fix-pump-${i}`, icon: 'i-wrench', title: t('Pompa #{0} Tamiri', i + 1), cost: GameState.PUMP_FIX_COST, urgent: true, disabled: false })
   }
   for (const i of s.brokenChargers) {
-    rows.push({ id: `fix-charger-${i}`, icon: 'i-wrench', title: t('Şarj #{0} Tamiri', i + 1), cost: 1000, urgent: true, disabled: false })
+    const kalan = s.repairLeft('charger', i)
+    rows.push(kalan > 0
+      ? { id: `fix-charger-${i}`, icon: 'i-wrench', title: t('Şarj #{0} tamir ediliyor ({1} sn)', i + 1, Math.ceil(kalan)), cost: 0, urgent: false, disabled: true }
+      : { id: `fix-charger-${i}`, icon: 'i-wrench', title: t('Şarj #{0} Tamiri', i + 1), cost: GameState.CHARGER_FIX_COST, urgent: true, disabled: false })
   }
   return rows
 }
@@ -3573,7 +3643,9 @@ const SAVE_FIELDS = [
   'promo',
   // ödüllü reklam günlük hakları (ADDITIVE; eski kayıtta yok → 0'dan başlar).
   // BU SATIRI UNUTMA: hak sayacı kaydedilmezse F5 ile sınırsız ödül alınır.
-  'adSeriUsed', 'adVipUsed', 'adYakitUsed', 'adTamirUsed',
+  // REKLAM v2 (ADDITIVE): süren tamirler + arıza kaynağı (F5 tamiri bitirmesin), trafik ödülü
+  // damgası, misafir yerel tavan sayacı. Eski adSeriUsed vb. anahtarlar artık OKUNMAZ.
+  'repairs', 'brokenSource', 'trafikBoostUntil', 'adUse',
   // GÜN GİDER DÖKÜMÜ (ADDITIVE): "kasadan para eriyor" sorusu çoğu zaman oyun yeniden
   // AÇILDIKTAN sonra soruluyor. Döküm kaydedilmezse Ofis paneli boş kalır ve soru
   // yine cevapsız. Yalnız GÖSTERİM verisi — hiçbir para hesabına girmez.
@@ -3777,6 +3849,20 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])
   if (Array.isArray(data.brokenPumps)) s.brokenPumps = new Set((data.brokenPumps as number[]).filter(n => Number.isInteger(n)))
   if (Array.isArray(data.brokenChargers)) s.brokenChargers = new Set((data.brokenChargers as number[]).filter(n => Number.isInteger(n)))
+  // kurcalanmış/eski kayıt: tamir sayaçları sayı ve pozitif olsun; tanınmayan anahtar düşer
+  {
+    const r = (data.repairs && typeof data.repairs === 'object') ? data.repairs as Record<string, unknown> : {}
+    const out: Record<string, number> = {}
+    for (const [k, v] of Object.entries(r)) if (/^(pump|charger)-\d+$/.test(k) && typeof v === 'number' && v > 0) out[k] = Math.min(v, GameState.REPAIR_MAX_SN)
+    s.repairs = out
+    const src = (data.brokenSource && typeof data.brokenSource === 'object') ? data.brokenSource as Record<string, unknown> : {}
+    const so: Record<string, 'murphy' | 'normal'> = {}
+    for (const [k, v] of Object.entries(src)) if (/^(pump|charger)-\d+$/.test(k) && (v === 'murphy' || v === 'normal')) so[k] = v
+    s.brokenSource = so
+    if (typeof s.trafikBoostUntil !== 'number' || !Number.isFinite(s.trafikBoostUntil)) s.trafikBoostUntil = 0
+    const u = data.adUse as { day?: unknown; n?: unknown } | undefined
+    s.adUse = (u && typeof u.day === 'string' && u.n && typeof u.n === 'object') ? { day: u.day, n: { ...(u.n as Record<string, number>) } } : { day: '', n: {} }
+  }
   // kurcalanmış/eski kayıt: bilinmeyen tedarikçi standarda düşer (fiyat çarpanı NaN olmasın)
   if (!(s.supplier in SUPPLIERS)) s.supplier = 'standart'
   // MÜDÜR TALİMATLARI: eski kayıtta yok, kurcalanmışta bozuk olabilir → alan alan doğrula.
@@ -3834,8 +3920,9 @@ export function doMaintenance(s: GameState, id: string): boolean {
   else if (id === 'service-wind') s.windWear = 0
   else if (id === 'maint-smr') s.smrWear = 0
   else if (id === 'order-uranium') { s.uraniumPending = true; s.uraniumEta = URANIUM_ETA }
-  else if (id.startsWith('fix-pump-')) s.brokenPumps.delete(Number(id.slice(9)))
-  else if (id.startsWith('fix-charger-')) s.brokenChargers.delete(Number(id.slice(12)))
+  // TAMİR SÜRE ALIR (reklam v2 #3): para şimdi ödenir, ünite 60-120 sn sonra çalışır
+  else if (id.startsWith('fix-pump-')) s.startRepair('pump', Number(id.slice(9)))
+  else if (id.startsWith('fix-charger-')) s.startRepair('charger', Number(id.slice(12)))
   return true
 }
 
@@ -4000,9 +4087,17 @@ export function applySell(s: GameState, id: string): number | null {
     if (i !== son) { if (kume.has(son)) kume.add(i); else kume.delete(i) }
     kume.delete(son)
   }
+  // tamir sayacı/arıza kaynağı da indeksle yaşar → aynı taşıma (anahtar: 'pump-3')
+  const tasiKayit = (kind: 'pump' | 'charger', i: number, son: number) => {
+    for (const rec of [s.repairs, s.brokenSource] as Record<string, unknown>[]) {
+      const ki = `${kind}-${i}`, ks = `${kind}-${son}`
+      if (i !== son) { if (ks in rec) rec[ki] = rec[ks]; else delete rec[ki] }
+      delete rec[ks]
+    }
+  }
   const pi = unitIndex(id, 'pump'), ci = unitIndex(id, 'charger')
-  if (pi !== null) { const son = s.pumps - 1; s.pumps--; tasi(s.brokenPumps, pi, son); tasi(s.autoPumps, pi, son) }
-  else if (ci !== null) { const son = s.evChargers - 1; s.evChargers--; tasi(s.brokenChargers, ci, son); tasi(s.autoChargers, ci, son) }
+  if (pi !== null) { const son = s.pumps - 1; s.pumps--; tasi(s.brokenPumps, pi, son); tasi(s.autoPumps, pi, son); tasiKayit('pump', pi, son) }
+  else if (ci !== null) { const son = s.evChargers - 1; s.evChargers--; tasi(s.brokenChargers, ci, son); tasi(s.autoChargers, ci, son); tasiKayit('charger', ci, son) }
   else switch (base) {
     case 'market': s.marketLevel = 0; break
     case 'market2': s.market2Level = 0; break

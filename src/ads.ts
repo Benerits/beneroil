@@ -1,24 +1,25 @@
 /**
- * Reklam katmanı — ÜÇ hedef:
- *  - META (Facebook Instant Games): FBInstant interstitial + rewarded (bkz. fbinstant.ts).
- *    Placement ID'ler App Dashboard'dan alınıp .env.meta'ya girilir.
- *  - NATIVE (iOS/Android, Capacitor): Google AdMob (@capacitor-community/admob plugin).
- *    Gerçek ad-unit ID'leri /api/config → ads.admob ile gelir; yoksa Google resmi TEST
- *    reklamları kullanılır (demo çalışır, sen sonra gerçek key'leri girersin).
- *  - WEB: Google AdSense H5 Games Ads (Ad Placement API), ADSENSE_PUB verilirse.
+ * Reklam SAĞLAYICI katmanı (3 Eyl 2026, reklam stratejisi v2) — yalnız REWARDED.
  *
- * Interstitial pacing (game-ads-pacing skill): grace (gün 3+), oturum ısınması (90 sn),
- * min ara (150 sn), oturum başına cap, KAYIP günde gösterme, premium'da hiç gösterme.
- * Rewarded (fırsatlar): opt-in, sınırsız, gün 1'den — "reklam = değer" hissi.
+ * Interstitial/zorunlu reklam YOK (ürün kararı): oyuncunun önüne aniden reklam çıkmaz,
+ * her reklam "izle → kazan" teklifidir. Bu dosya SADECE "videoyu göster, sonucu söyle" işini
+ * yapar; yerleşimler, tavanlar, bilet/SSV akışı src/reklam.ts'te.
+ *
+ * Üç hedef:
+ *  - NATIVE (iOS/Android, Capacitor): AppLovin MAX — uygulama içi `AppLovinMax` plugin'i
+ *    (beneloil-ios / beneloil-android repolarında Swift/Kotlin). SDK anahtarı ve ad unit
+ *    id'leri sunucudan gelir (/api/config → ads.applovin). AdMob KALDIRILDI.
+ *  - WEB: Google AdSense H5 Games Ads (Ad Placement API), ADSENSE_PUB verilirse.
+ *    Sunucu-taraflı doğrulama (SSV) yoktur; sunucu web ödüllerini ayrı damgayla sayar.
+ *  - META (Facebook Instant Games): FBInstant rewarded (bkz. fbinstant.ts).
  */
 import { isNativePlatform, isInstantGames } from './platform'
-import { instantAdsEnabled, instantRewardedReady, showInstantInterstitial, showInstantRewarded } from './fbinstant'
+import { instantAdsEnabled, instantRewardedReady, showInstantRewarded } from './fbinstant'
 
-// --- Google resmi TEST ad unit'leri (gerçek key'ler gelene dek demo) ---
-const TEST_UNITS = {
-  ios: { interstitial: 'ca-app-pub-3940256099942544/4411468910', rewarded: 'ca-app-pub-3940256099942544/1712485313' },
-  android: { interstitial: 'ca-app-pub-3940256099942544/1033173712', rewarded: 'ca-app-pub-3940256099942544/5224354917' },
-}
+/** Bir gösterim denemesinin sonucu. 'nofill' = reklam yoktu (ödül yine verilir, sunucu sınırlı). */
+export type AdResult = 'reward' | 'dismiss' | 'nofill' | 'error' | 'none'
+export type AdProvider = 'applovin' | 'adsense' | 'fbinstant' | null
+export type AdPlatform = 'ios' | 'android' | 'web' | 'fb'
 
 type AdBreakFn = (opts: Record<string, unknown>) => void
 declare global {
@@ -29,45 +30,75 @@ declare global {
   }
 }
 
-interface AdMobCfg { iosInterstitial?: string; iosRewarded?: string; androidInterstitial?: string; androidRewarded?: string; testMode?: boolean }
+export interface AppLovinCfg { sdkKey: string; iosRewarded?: string | null; androidRewarded?: string | null }
+export interface AdsCfg { adsensePub?: string | null; applovin?: AppLovinCfg | null; test?: boolean; userId?: string | null }
+export interface AdRevenue { placement: string; revenue: number; networkName: string; precision: string }
 
 let webClient: string | null = null
 let native = false
-let admob: any = null
-let admobCfg: { interstitial: string; rewarded: string; test: boolean } | null = null
-let premium = false // remove-ads satın alındıysa interstitial gösterilmez
+let plugin: any = null            // window.Capacitor.Plugins.AppLovinMax
+let adUnitId = ''                 // bu platformun rewarded ad unit'i
+let premium = false               // "Reklamları kaldır" satın alındı
+let nativeReady = false           // rewardedLoaded geldi, rewardedHidden/LoadFailed ile düşer
+let nativeNetwork = ''
+let pendingShow: { resolve: (r: AdResult) => void; rewarded: boolean; placement: string } | null = null
+let revenueCb: ((r: AdRevenue) => void) | null = null
+let nativeInitError = ''          // teşhis için (Ayarlar > reklam durumu)
 
 function capPlugin(name: string): any {
   return (window as unknown as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins?.[name] ?? null
 }
 
-export function adsEnabled(): boolean { return !!webClient || !!admob || instantAdsEnabled() }
+export function adsPlatform(): AdPlatform {
+  if (isInstantGames()) return 'fb'
+  if (isNativePlatform()) return ((window as any).Capacitor?.getPlatform?.() ?? 'ios') === 'android' ? 'android' : 'ios'
+  return 'web'
+}
+export function adsProvider(): AdProvider {
+  if (isInstantGames()) return instantAdsEnabled() ? 'fbinstant' : null
+  if (native) return plugin && adUnitId ? 'applovin' : null
+  return webClient ? 'adsense' : null
+}
+export function adsEnabled(): boolean { return adsProvider() !== null }
 export function setPremium(v: boolean) { premium = v }
+export function isPremium(): boolean { return premium }
+/** Gelir telemetrisi (impression-level, MAX'ten): reklam.ts sunucuya iletir. */
+export function onAdRevenue(cb: (r: AdRevenue) => void) { revenueCb = cb }
+export function adsDiagnostic(): string {
+  return `provider=${adsProvider() ?? 'yok'} platform=${adsPlatform()} ready=${rewardedReady()}${nativeInitError ? ' err=' + nativeInitError : ''}`
+}
 
-/** Reklam altyapısını başlat. cfg: sunucu /api/config'ten (adsense pub + admob unit'leri). */
-export async function initAds(cfg: { adsensePub?: string; admob?: AdMobCfg; test?: boolean } = {}) {
-  // META (Instant Games): reklamlar FBInstant SDK'sından gelir, placement ID'ler derleme
-  // zamanı env'iyle girilir → burada yapılacak bir şey yok (önyükleme fbinstant.ts'te).
+/** Reklam altyapısını başlat. cfg: sunucu /api/config'ten (adsense pub + applovin anahtarları). */
+export async function initAds(cfg: AdsCfg = {}) {
+  // META: reklamlar FBInstant SDK'sından, placement id'ler derleme zamanı env'iyle (fbinstant.ts)
   if (isInstantGames()) return
   native = isNativePlatform()
   if (native) {
-    const AdMob = capPlugin('AdMob')
-    if (!AdMob) return // plugin kurulu değil (iOS repo'da @capacitor-community/admob gerekir) → sessiz no-op
-    admob = AdMob
-    const isIos = ((window as any).Capacitor?.getPlatform?.() ?? 'ios') === 'ios'
-    const useTest = cfg.test ?? cfg.admob?.testMode ?? !((isIos ? cfg.admob?.iosInterstitial : cfg.admob?.androidInterstitial))
-    admobCfg = {
-      interstitial: (isIos ? cfg.admob?.iosInterstitial : cfg.admob?.androidInterstitial) || (isIos ? TEST_UNITS.ios.interstitial : TEST_UNITS.android.interstitial),
-      rewarded: (isIos ? cfg.admob?.iosRewarded : cfg.admob?.androidRewarded) || (isIos ? TEST_UNITS.ios.rewarded : TEST_UNITS.android.rewarded),
-      test: useTest,
-    }
+    const P = capPlugin('AppLovinMax')
+    if (!P) { nativeInitError = 'plugin-yok'; return }      // eski kabuk (AdMob dönemi) → reklam yok, sessiz
+    const al = cfg.applovin
+    if (!al?.sdkKey) { nativeInitError = 'sdkkey-yok'; return }
+    adUnitId = (adsPlatform() === 'android' ? al.androidRewarded : al.iosRewarded) || ''
+    if (!adUnitId) { nativeInitError = 'adunit-yok'; return }
+    plugin = P
     try {
-      // ATT YOK (App Store sade yol): izin istemiyoruz, izlemiyoruz → reklamlar npa=1
-      // (non-personalized). App Privacy'de 'Tracking: No' kalır; NSUserTrackingUsageDescription gerekmez.
-      await admob.initialize({ initializeForTesting: useTest, requestTrackingAuthorization: false })
-      await prepareInterstitial()
-      await prepareRewarded()
-    } catch { admob = null }
+      P.addListener('rewardedLoaded', (e: any) => { nativeReady = true; nativeNetwork = String(e?.networkName ?? '') })
+      P.addListener('rewardedLoadFailed', () => { nativeReady = false })
+      P.addListener('rewardedDisplayed', () => { nativeReady = false })
+      P.addListener('rewardedDisplayFailed', () => { nativeReady = false; settle('error') })
+      P.addListener('rewardedReward', () => { if (pendingShow) pendingShow.rewarded = true })
+      P.addListener('rewardedHidden', () => { settle(pendingShow?.rewarded ? 'reward' : 'dismiss') })
+      P.addListener('rewardedRevenue', (e: any) => {
+        revenueCb?.({ placement: String(e?.placement ?? pendingShow?.placement ?? ''), revenue: Number(e?.revenue) || 0,
+          networkName: String(e?.networkName ?? ''), precision: String(e?.revenuePrecision ?? '') })
+      })
+      // ATT YOK: izin istemiyoruz, izlemiyoruz → App Privacy 'Tracking: No', NSUserTrackingUsageDescription gerekmez.
+      await P.initialize({ sdkKey: al.sdkKey, userId: cfg.userId ?? undefined, verbose: !!cfg.test })
+      await P.loadRewarded({ adUnitId })
+    } catch (e) {
+      nativeInitError = String((e as Error)?.message ?? e)
+      plugin = null
+    }
     return
   }
   // WEB: AdSense H5
@@ -86,92 +117,62 @@ export async function initAds(cfg: { adsensePub?: string; admob?: AdMobCfg; test
   window.adConfig({ preloadAdBreaks: 'on', sound: 'on' })
 }
 
-async function prepareInterstitial() {
-  if (!admob || !admobCfg) return
-  try { await admob.prepareInterstitial({ adId: admobCfg.interstitial, isTesting: admobCfg.test, npa: true }) } catch { /* yok say */ }
-}
-async function prepareRewarded() {
-  if (!admob || !admobCfg) return
-  try { await admob.prepareRewardVideoAd({ adId: admobCfg.rewarded, isTesting: admobCfg.test, npa: true }) } catch { /* yok say */ }
+/** SSV {USER_ID} makrosu: sunucunun verdiği takma ad (e-posta DEĞİL). Giriş sonrası çağrılır. */
+export async function setAdUserId(uid: string) {
+  if (!native || !plugin) return
+  try { await plugin.setUserId({ userId: uid }) } catch { /* yok say */ }
 }
 
-// ---- Interstitial pacing policy (pure-ish; game-ads-pacing skill) ----
-const GRACE_DAY = 3        // gün 3'e kadar hiç interstitial (oyuncu bağlanana dek)
-const WARMUP_MS = 90_000   // oturum başı ilk 90 sn interstitial yok
-const MIN_GAP_MS = 150_000 // interstitial'lar arası en az 2.5 dk
-const SESSION_CAP = 4      // oturum başına en fazla
-let sessionStart = Date.now()
-let lastInterstitialAt = 0
-let shownThisSession = 0
-export function beginAdSession() { sessionStart = Date.now(); shownThisSession = 0; lastInterstitialAt = 0 }
-/** interstitial gösterilebilir mi? (gün, kâr mı) — KAYIP günde ve grace/warmup/cap/gap içinde gösterme */
-export function mayShowInterstitial(day: number, won: boolean): boolean {
-  if (premium || !adsEnabled()) return false
-  const now = Date.now()
-  if (day < GRACE_DAY) return false
-  if (!won) return false // frustrasyonu paraya çevirme: zarar günü reklamsız
-  if (now - sessionStart < WARMUP_MS) return false
-  if (now - lastInterstitialAt < MIN_GAP_MS) return false
-  if (shownThisSession >= SESSION_CAP) return false
-  return true
+function settle(r: AdResult) {
+  const p = pendingShow
+  pendingShow = null
+  p?.resolve(r)
 }
 
-/** doğal mola (gün sonu) interstitial — policy'yi uygula, uygunsa göster */
-export function interstitial(name: string, opts: { day: number; won: boolean }, done?: () => void) {
-  // MOBİL POLİTİKA: native'de OTOMATİK interstitial ASLA gösterilmez — oyuncunun önüne
-  // aniden reklam çıkmaz. Mobilde tüm reklamlar OPT-IN'dir (rewarded fırsat teklifleri:
-  // 'reklam izle → müşteri patlaması / 2x kâr'). Web'de pacing'li interstitial sürer.
-  if (native) { done?.(); return }
-  if (!mayShowInterstitial(opts.day, opts.won)) { done?.(); return }
-  lastInterstitialAt = Date.now(); shownThisSession++
-  // META: web ile aynı pacing politikası (gün 3+, ısınma, min ara, oturum cap'i)
-  if (isInstantGames()) { showInstantInterstitial(done); return }
-  if (native && admob) {
-    admob.showInterstitial().catch(() => {}).finally(() => { prepareInterstitial(); done?.() })
-    return
-  }
-  if (webClient && window.adBreak) { window.adBreak({ type: 'next', name, adBreakDone: () => done?.() }); return }
-  done?.()
+/** rewarded reklam hazır mı (buton göstermek için). Native'de plugin yüklemeyi tamamladıysa. */
+export function rewardedReady(): boolean {
+  if (isInstantGames()) return instantRewardedReady()
+  if (native) return !!plugin && nativeReady
+  return !!webClient
 }
 
-/** Ödüllü reklam (fırsatlar): oyuncu isterse izler → ödül. onDone(watched). */
-/** ölçüm (analiz E14): izlenen her rewarded reklam saatlik sayaca yazılır */
-function countAdView() {
-  fetch('/api/metric', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: 'ad_views' }) }).catch(() => {})
-}
-
-export function rewarded(name: string, onReward: () => void, onDone?: (watched: boolean) => void) {
+/**
+ * Ödüllü videoyu göster. customData = sunucu bileti (SSV {CUSTOM_DATA} makrosu).
+ * Reklam yoksa 'nofill' döner — oyuncu cezalandırılmaz, ödül kararı sunucuda (reklam.ts).
+ */
+export function showRewarded(placement: string, customData: string): Promise<AdResult> {
+  if (premium) return Promise.resolve('none')
   if (isInstantGames()) {
-    showInstantRewarded(() => { countAdView(); onReward() }, onDone)
-    return
+    if (!instantRewardedReady()) return Promise.resolve('nofill')
+    return new Promise(resolve => {
+      let got = false
+      showInstantRewarded(() => { got = true }, watched => resolve(got || watched ? 'reward' : 'dismiss'))
+    })
   }
-  if (native && admob) {
-    let ok = false
-    // capacitor-community/admob: rewarded ödülü event ile gelir; basitleştirilmiş akış
-    admob.addListener?.('onRewardedVideoAdReward', () => { ok = true })
-    admob.showRewardVideoAd().then((r: any) => {
-      if (r?.type || ok) { ok = true; countAdView(); onReward() }
-      onDone?.(ok)
-    }).catch(() => onDone?.(false)).finally(() => prepareRewarded())
-    return
+  if (native) {
+    if (!plugin || !adUnitId) return Promise.resolve('none')
+    if (!nativeReady) { plugin.loadRewarded({ adUnitId }).catch(() => {}); return Promise.resolve('nofill') }
+    if (pendingShow) return Promise.resolve('error')
+    return new Promise<AdResult>(resolve => {
+      pendingShow = { resolve, rewarded: false, placement }
+      // 90 sn içinde hidden gelmezse (plugin/SDK takıldı) askıda kalma
+      const timer = setTimeout(() => { if (pendingShow?.resolve === resolve) settle('error') }, 90_000)
+      plugin.showRewarded({ adUnitId, placement, customData }).then((r: any) => {
+        if (r && r.shown === false) { clearTimeout(timer); settle('nofill') }
+      }).catch(() => { clearTimeout(timer); settle('error') })
+    })
   }
   if (webClient && window.adBreak) {
-    let viewed = false
-    window.adBreak({
-      type: 'reward', name,
-      beforeReward: (showAdFn: () => void) => showAdFn(),
-      adViewed: () => { viewed = true; countAdView(); onReward() },
-      adDismissed: () => { viewed = false },
-      adBreakDone: () => onDone?.(viewed),
+    return new Promise(resolve => {
+      let viewed = false, shown = false
+      window.adBreak!({
+        type: 'reward', name: placement,
+        beforeReward: (showAdFn: () => void) => { shown = true; showAdFn() },
+        adViewed: () => { viewed = true },
+        adDismissed: () => { viewed = false },
+        adBreakDone: () => resolve(viewed ? 'reward' : shown ? 'dismiss' : 'nofill'),
+      })
     })
-    return
   }
-  onDone?.(false)
-}
-
-/** rewarded reklam hazır mı (buton göstermek için) — native'de her zaman dene, web'de client varsa */
-export function rewardedReady(): boolean {
-  // META: reklam önden yüklenmemişse buton gösterme (tıklayınca "yok" demek kötü UX)
-  if (isInstantGames()) return instantRewardedReady()
-  return adsEnabled()
+  return Promise.resolve('none')
 }
