@@ -39,7 +39,7 @@ console.log('── TDZ REGRESYONU (canlı çöküş 3 Eyl 2026: "Cannot access 
   // dokunduğu let/const'lar (adOffer, hediyeBekliyor, reklamAktif…) o bloktan ÖNCE tanımlı olmalı.
   const cagri = main_ts.indexOf('  hediyeRituelBaslat()')
   for (const ad of ['let adOffer', 'let hediyeBekliyor', 'let hediyeGecikmeT', 'let offlineTeklifVerildi', 'let askidaTeklif', 'const reklamAktif', 'const tlx', 'const AD_HEDIYE_GECIKME']) {
-    const i = main_ts.indexOf(ad + ' ')
+    const i = main_ts.search(new RegExp('^' + ad + '[ :]', 'm'))
     bekle(i > 0 && i < cagri, `${ad} yükleme bloğundan ÖNCE tanımlı`)
   }
 }
