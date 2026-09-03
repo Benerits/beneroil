@@ -1,0 +1,31 @@
+{
+  "name": "trafik-ic-ice-gecme",
+  "seconds": 28,
+  "trimStart": 3.2,
+  "warmupMs": 6000,
+  "musicSeed": 19,
+  "steps": [
+    { "do": "eval", "js": "const s=window.__dbg.state; s.money=184250; for(const f of ['benzin','dizel','lpg']) s.tanks[f]=s.fuelCapacity(f); for(let i=0;i<s.pumps;i++) s.autoPumps.add(i); for(let i=0;i<s.evChargers;i++) s.autoChargers.add(i); s.battery=s.batteryCapacity;" },
+    { "do": "rush", "sec": 90 },
+    { "do": "zoom", "n": 11, "dy": -240 },
+    { "do": "pan", "from": [330, 700], "to": [330, 460], "ms": 1100 },
+    { "do": "overlay", "kind": "wm", "text": "beneloil.com", "dur": 40 },
+    { "do": "wait", "ms": 2300 },
+    { "do": "overlay", "kind": "hook", "text": "araçlar artık\niç içe geçmiyor ⛽", "dur": 4.0 },
+    { "do": "wait", "ms": 4300 },
+    { "do": "overlay", "kind": "cap", "text": "en çok gelen şikâyet: çıkışta üst üste binen araçlar", "dur": 3.4 },
+    { "do": "wait", "ms": 3800 },
+    { "do": "pan", "from": [400, 500], "to": [250, 540], "ms": 1400 },
+    { "do": "overlay", "kind": "cap", "text": "takip kuralını değiştirdik, tankerler de dahil", "dur": 3.2 },
+    { "do": "wait", "ms": 3600 },
+    { "do": "overlay", "kind": "badge", "text": "iç içe geçme 138 → 60 / saat", "dur": 3.6 },
+    { "do": "wait", "ms": 4000 },
+    { "do": "overlay", "kind": "badge", "text": "kapıda yığılma 50 → 20 / saat", "dur": 3.6 },
+    { "do": "wait", "ms": 4000 },
+    { "do": "pan", "from": [250, 500], "to": [420, 460], "ms": 1400 },
+    { "do": "overlay", "kind": "cap", "text": "49 saat telemetri — tahmin değil, ölçüm 📏", "dur": 3.2 },
+    { "do": "wait", "ms": 3500 },
+    { "do": "endcard", "title": "BENELOIL", "sub": "beneloil.com — tarayıcıda, kurulum yok", "dur": 0 },
+    { "do": "wait", "ms": 3200 }
+  ]
+}
