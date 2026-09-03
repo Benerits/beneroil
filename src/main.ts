@@ -49,6 +49,13 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1) // z yukarı
 // ---- Misafir (hesapsız) HEMEN oynar; kayıt/giriş gate'i yalnız gün-eşiğinde veya "Kaydet"le açılır ----
 let showAuthGate: (headline?: string, hideGuestBtn?: boolean) => void = () => {}
 let guestPaused = false // misafir donması: başlangıç login gate'inde + gün-eşiğinde oyun donar
+/** MİSAFİR ERKEN TIKLADI: kapı düğmesi modülün üst-seviye `await`inden (kit fetch'i, 20 sn'ye
+ *  kadar) ÖNCE bağlanıyor; `maybeGuestGate` ise await'ten SONRA tanımlanan `state`,
+ *  `isFullMode`, `donusumKapisiKapali`'yi okuyor. Yavaş bağlantıda "Misafir olarak devam"a
+ *  erken basan oyuncu TDZ hatası alıyordu ("Cannot access 'Wf' before initialization" —
+ *  canlıda ölçüldü, t≈1.8 sn). Boot bitmeden kontrol ERTELENİR; boot bitince telafi edilir. */
+let bootTamam = false
+let misafirKapiBekliyor = false
 // OTURUM SÜRESİ (analiz E14): oyun gerçekten oynanırken (kapı kapalı + sekme görünür)
 // dakikada 1 sayaç — saatlik toplamı "toplam oynanan dakika"yı verir
 setInterval(() => {
@@ -315,7 +322,9 @@ setInterval(() => {
       guestPaused = false
       gate.style.display = 'none'
       gate.classList.remove('solid')
-      maybeGuestGate() // gün-eşiği zaten dolduysa (yenileyip dönen misafir) gate ANINDA geri açılır (kayıt zorunlu)
+      // gün-eşiği zaten dolduysa (yenileyip dönen misafir) gate ANINDA geri açılır (kayıt zorunlu)
+      if (bootTamam) maybeGuestGate()
+      else misafirKapiBekliyor = true // boot bitince telafi (bkz. bootTamam)
     }
     // A4 (huni analizi): kayıt-avantaj ARA MODALI KALDIRILDI — başlama akışına fazladan
     // tıklama ekliyordu; kayıt teklifi oyun İÇİ kancalarda (₺10k banner, gün-eşiği) sürüyor.
@@ -5764,6 +5773,9 @@ if (saveLoaded && state.activeLoc !== locHintSave && !sessionStorage.getItem('be
 if (saveLoaded && state.activeLoc === locHintSave) sessionStorage.removeItem('beneloil-loc-fixed')
 if (saveLoaded) rebuildFromState()
 else if (!isFullMode && !isPromoMode) ui.toast('Sıfırdan başlıyorsun — hayırlı olsun patron!', 'good', true)
+// Boot bitti: kapıyı await'ten önce geçen misafirin ertelenen gün-eşiği kontrolü şimdi
+bootTamam = true
+if (misafirKapiBekliyor) { misafirKapiBekliyor = false; maybeGuestGate() }
 // C9 (analiz): eski şube-kasası bakiyesi varsa haber ver (ilk gün dönüşünde otomatik devredilir)
 if (saveLoaded && state.branchVaultTotal() >= 100) {
   ui.toast(t('Şube kasalarında ₺{0} birikmiş — gün dönüşünde otomatik kasana aktarılacak.',
