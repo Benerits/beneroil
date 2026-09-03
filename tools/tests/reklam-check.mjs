@@ -33,6 +33,17 @@ const ads_ts = oku('src/ads.ts')
 const reklam_ts = oku('src/reklam.ts')
 const reklam_js = oku('server/reklam.js')
 
+console.log('── TDZ REGRESYONU (canlı çöküş 3 Eyl 2026: "Cannot access before initialization") ──')
+{
+  // Modül üst düzeyindeki yükleme bloğu hediyeRituelBaslat()/offerOffline2x() çağırır; bunların
+  // dokunduğu let/const'lar (adOffer, hediyeBekliyor, reklamAktif…) o bloktan ÖNCE tanımlı olmalı.
+  const cagri = main_ts.indexOf('  hediyeRituelBaslat()')
+  for (const ad of ['let adOffer', 'let hediyeBekliyor', 'let hediyeGecikmeT', 'let offlineTeklifVerildi', 'let askidaTeklif', 'const reklamAktif', 'const tlx', 'const AD_HEDIYE_GECIKME']) {
+    const i = main_ts.indexOf(ad + ' ')
+    bekle(i > 0 && i < cagri, `${ad} yükleme bloğundan ÖNCE tanımlı`)
+  }
+}
+
 console.log('── TAMİR SÜRE ALIR: para şimdi, ünite sonra ──')
 {
   const s = new GameState()

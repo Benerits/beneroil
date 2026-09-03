@@ -6106,6 +6106,46 @@ async function doRegister(email: string, pass: string) {
 
 // authgate yalnız HESAPLIYKEN kaldırılır — misafirde DOM'da KALIR (başta görünür + 'Şimdi Kayıt Ol' yeniden açar).
 // (Eski halt akışından kalma koşulsuz remove(), misafirin gate'ini siliyordu → otomatik-giriş bug'ı.)
+// ---- REKLAM DURUMU (TDZ FİXİ 3 Eyl 2026): bu let/const'lar AŞAĞIDAKİ yükleme bloğundan
+// (offerOffline2x / hediyeRituelBaslat) ÖNCE tanımlı olmalı — modül üst düzeyinde çalışan
+// blok, sonradan tanımlanan `let`e dokununca "Cannot access before initialization" ile
+// TÜM OYUN açılmıyordu (canlı, 26aee8c). Açıklama ve akış: aşağıdaki "ÖDÜLLÜ REKLAM" bölümü.
+const adBtn = document.getElementById('adbtn') as HTMLButtonElement
+const adBtnLabel = adBtn.querySelector('span') as HTMLSpanElement
+type AdUnit = { kind: 'pump' | 'charger'; i: number }
+type AdOffer = {
+  id: PlacementId
+  amount: number                         // para yerleşimlerinde sunucunun kestiği NET tutar
+  meta: Record<string, unknown> | null
+  ticket?: Ticket                        // etiket için önceden alınmış bilet
+  fuel?: FuelType                        // tanker: hangi yakıt
+  unit?: AdUnit                          // tamir: hangi ünite
+}
+let adOffer: AdOffer | null = null
+let teklifT = 0                          // teklifin ekranda kalma süresi (sn)
+let adCooldown = 0                       // teklifler arası nefes (sn) — üst üste buton fırlamasın
+let adBusy = false                       // video/istek sürerken ikinci tık yok
+let adSyncT = 0                          // sunucu durumu periyodik tazeleme
+const tamirTeklifEdildi = new Set<string>()   // 'pump-3' → bu arıza için teklif çıktı (arıza başına 1)
+let offlineTeklifVerildi = false          // dönüş başına 1
+let kurtarmaKontrolT = 0                  // battın-kurtarma koşulu 20 sn'de bir bakılır
+/** Strateji v2.1 (3 Eyl 2026) zamanlama sabitleri — gerekçe: docs/REKLAM-STRATEJI.md */
+const AD_GUN2X_SURE = 90            // gün sonu 2× teklifi ~yarım oyun günü kalır (22 sn kaçırılıyordu); ısrar yok, süresi dolunca iner
+const AD_OFFLINE2X_SURE = 60
+const AD_HEDIYE_SURE = 60
+const AD_IZLEME_NEFESI = 60         // izlenen videodan sonra yeni OTOMATİK teklif için nefes (yorgunluk + eCPM); Ofis paneli bundan muaf
+const AD_HEDIYE_GECIKME = 12        // oturum açılışında hediye teklifi için bekleme (offline raporu/devir önce görünsün)
+const PARA_TEKLIFLERI: ReadonlySet<PlacementId> = new Set<PlacementId>(['gun2x', 'offline2x', 'hediye'])
+const ACIL_TEKLIFLER: ReadonlySet<PlacementId> = new Set<PlacementId>(['tamir', 'tanker', 'kurtarma'])
+/** Ekrandaki uzun ömürlü PARA teklifi, acil bir EFEKT teklifi (tamir/tanker/kurtarma) gelince askıya alınır;
+ *  acil teklif inince kalan süresiyle geri gelir. Bilet 15 dk yaşar, kullanılmayan bilet tavan yemez. */
+let askidaTeklif: { offer: AdOffer; kalan: number } | null = null
+let hediyeBekliyor = false                // oturum açılışında bir kez günlük hediye teklifi
+let hediyeGecikmeT = AD_HEDIYE_GECIKME
+
+const reklamAktif = () => !isFullMode && !isPromoMode
+const tlx = (n: number) => Math.round(n).toLocaleString('tr-TR')
+
 if (auth.loggedIn()) document.getElementById('authgate')?.remove()
 {
   // ---- OPEX rampa başlangıcı: alan yoksa (eski save / yeni oyuncu) bu günden başlat ----
@@ -6839,41 +6879,6 @@ function binaEkranNoktasi(id: string): { x: number; y: number } | null {
 // Sahne butonu (#adbtn) süreli, tek seferlik teklifler içindir: gün 2×, offline 2×,
 // tamiri hızlandır, tankeri hızlandır, battın-kurtarma. Ofis panelindeki "Fırsatlar"
 // bölümü ise oyuncunun kendi tetiklediği güçlendiriciler: event, premium müşteri, trafik.
-const adBtn = document.getElementById('adbtn') as HTMLButtonElement
-const adBtnLabel = adBtn.querySelector('span') as HTMLSpanElement
-type AdUnit = { kind: 'pump' | 'charger'; i: number }
-type AdOffer = {
-  id: PlacementId
-  amount: number                         // para yerleşimlerinde sunucunun kestiği NET tutar
-  meta: Record<string, unknown> | null
-  ticket?: Ticket                        // etiket için önceden alınmış bilet
-  fuel?: FuelType                        // tanker: hangi yakıt
-  unit?: AdUnit                          // tamir: hangi ünite
-}
-let adOffer: AdOffer | null = null
-let teklifT = 0                          // teklifin ekranda kalma süresi (sn)
-let adCooldown = 0                       // teklifler arası nefes (sn) — üst üste buton fırlamasın
-let adBusy = false                       // video/istek sürerken ikinci tık yok
-let adSyncT = 0                          // sunucu durumu periyodik tazeleme
-const tamirTeklifEdildi = new Set<string>()   // 'pump-3' → bu arıza için teklif çıktı (arıza başına 1)
-let offlineTeklifVerildi = false          // dönüş başına 1
-let kurtarmaKontrolT = 0                  // battın-kurtarma koşulu 20 sn'de bir bakılır
-/** Strateji v2.1 (3 Eyl 2026) zamanlama sabitleri — gerekçe: docs/REKLAM-STRATEJI.md */
-const AD_GUN2X_SURE = 90            // gün sonu 2× teklifi ~yarım oyun günü kalır (22 sn kaçırılıyordu); ısrar yok, süresi dolunca iner
-const AD_OFFLINE2X_SURE = 60
-const AD_HEDIYE_SURE = 60
-const AD_IZLEME_NEFESI = 60         // izlenen videodan sonra yeni OTOMATİK teklif için nefes (yorgunluk + eCPM); Ofis paneli bundan muaf
-const AD_HEDIYE_GECIKME = 12        // oturum açılışında hediye teklifi için bekleme (offline raporu/devir önce görünsün)
-const PARA_TEKLIFLERI: ReadonlySet<PlacementId> = new Set<PlacementId>(['gun2x', 'offline2x', 'hediye'])
-const ACIL_TEKLIFLER: ReadonlySet<PlacementId> = new Set<PlacementId>(['tamir', 'tanker', 'kurtarma'])
-/** Ekrandaki uzun ömürlü PARA teklifi, acil bir EFEKT teklifi (tamir/tanker/kurtarma) gelince askıya alınır;
- *  acil teklif inince kalan süresiyle geri gelir. Bilet 15 dk yaşar, kullanılmayan bilet tavan yemez. */
-let askidaTeklif: { offer: AdOffer; kalan: number } | null = null
-let hediyeBekliyor = false                // oturum açılışında bir kez günlük hediye teklifi
-let hediyeGecikmeT = AD_HEDIYE_GECIKME
-
-const reklamAktif = () => !isFullMode && !isPromoMode
-const tlx = (n: number) => Math.round(n).toLocaleString('tr-TR')
 /** etiket: ödül ÖNCE ve NET, sonra bedel ("+₺1.240 · 30 sn video"); premium'da bedel yok */
 function bedel(id: PlacementId): string {
   if (isPremium()) return PLACEMENTS[id].premium === 'auto' ? t('otomatik') : t('ücretsiz')
