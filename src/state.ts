@@ -242,6 +242,44 @@ export interface Contract {
   missedDays: number
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BENERITS ÖZEL MÜŞTERİLER (3 Eyl 2026, Oğuz): üç tanıdık araç ARADA BİR uğrar —
+// normal müşterinin 2 KATI yakıt/şarj alır, ₺8-10k bahşiş bırakır, sahnede etiketli
+// ve bildirimli gelir ("BENERITS Oğuz geldi!"). Patron (Burak) yalnız ŞARJA gelir,
+// şarj bitince molaya çıkar ve GÖNDERİLEMEZ — süresi dolunca kendi gider.
+// ─────────────────────────────────────────────────────────────────────────────
+export type BeneritsId = 'oguz' | 'cagan' | 'burak'
+export interface BeneritsGuest {
+  id: BeneritsId
+  name: string
+  title: string
+  kind: 'fuel' | 'ev'
+  /** Kenney modeli (CAR_FILES adı ya da 'race-future'); kit yoksa prosedürel gövdeye düşer */
+  model: 'sedan' | 'van' | 'race-future'
+  /** gövde boyası (Kenney kartelasındaki boya karesi bu renkle değiştirilir) */
+  color: number
+  /** araç uğurlanırken/bahşişte sahnede düşen replik */
+  quote: string
+  /** yalnız PATRON: şarj sonrası molada kaldığı saniye — o süre içinde gönderilemez */
+  molaSn?: number
+}
+export const BENERITS_GUESTS: Record<BeneritsId, BeneritsGuest> = {
+  oguz:  { id: 'oguz',  name: 'Oğuz',  title: 'BENERITS Şirket Aracı', kind: 'fuel', model: 'sedan',       color: 0xf3f3ee, quote: 'Eline sağlık, istasyon uçmuş!' },
+  cagan: { id: 'cagan', name: 'Çağan', title: 'BENERITS Şirket Aracı', kind: 'fuel', model: 'van',         color: 0x9fd47f, quote: 'Fıstık yeşili yakıyor değil mi?' },
+  burak: { id: 'burak', name: 'Burak', title: 'BENERITS PATRON',       kind: 'ev',   model: 'race-future', color: 0x15171a, quote: 'Beş dakikaya çıkıyorum kardeşim.', molaSn: 45 },
+}
+/** talep çarpanı: "normal arabanın 2 katı" */
+export const BENERITS_TALEP_KAT = 2
+/** bahşiş aralığı (₺) — sunucu anti-cheat kovası 260k, 10k rahat sığar */
+export const BENERITS_BAHSIS_MIN = 8000
+export const BENERITS_BAHSIS_MAX = 10000
+/** ilk ziyaret için asgari gün; günde EN FAZLA bir misafir (ARA_GUN=1 → ertesi gün yine gelebilir) */
+export const BENERITS_ILK_GUN = 2
+export const BENERITS_ARA_GUN = 1
+/** araç başına doğum olasılığı — kullanıcı isteği (3 Eyl 2026): "her gün %50 ihtimalle biri gelsin".
+ *  Gün ~65 yakın-yaka araç → P(en az bir) = 1-(1-p)^65 ≈ %50 için p ≈ 0,0106. */
+export const BENERITS_SANS = 0.0106
+
 /** Müşteri segmenti tanımı (lategame raporu Katman 1c) — activeSegments() üretir, Car kullanır. */
 export interface CarSegment {
   id: string
@@ -780,6 +818,39 @@ export class GameState {
   static readonly TRAFIK_BOOST_SN = 150
   static readonly TRAFIK_BOOST_MULT = 1.6
   get trafikBoostActive() { return Date.now() < this.trafikBoostUntil }
+  /** BENERITS özel müşteri defteri — ŞİRKET alanı (şubeler arası ortak), kayda girer (additive) */
+  benerits: { visits: number; tips: number; lastDay: number; seen: BeneritsId[] } = { visits: 0, tips: 0, lastDay: -99, seen: [] }
+  /** bu doğumda BENERITS aracı gelsin mi? Gün/ara/şans süzgeci; EV misafir yalnız şarj varsa. */
+  beneritsRoll(evOk: boolean, rnd = Math.random()): BeneritsGuest | null {
+    if (this.isMarina) return null
+    if (this.day < BENERITS_ILK_GUN) return null
+    if (this.day - this.benerits.lastDay < BENERITS_ARA_GUN) return null
+    if (rnd >= BENERITS_SANS) return null
+    const havuz = (Object.values(BENERITS_GUESTS) as BeneritsGuest[]).filter(g => g.kind !== 'ev' || evOk)
+    if (!havuz.length) return null
+    // ilk kez görülmeyen misafir öncelikli: üçünü de tanıştır, sonra rastgele
+    const yeni = havuz.filter(g => !this.benerits.seen.includes(g.id))
+    const secim = (yeni.length ? yeni : havuz)[Math.floor(Math.random() * (yeni.length ? yeni : havuz).length)]
+    this.benerits.lastDay = this.day   // doğum anında damgala: aynı gün ikinci gelmesin
+    return secim
+  }
+  /** ₺8-10k arası, yüzlüğe yuvarlı bahşiş */
+  beneritsBahsis(rnd = Math.random()): number {
+    return Math.round((BENERITS_BAHSIS_MIN + rnd * (BENERITS_BAHSIS_MAX - BENERITS_BAHSIS_MIN)) / 100) * 100
+  }
+  /** misafir sahneye vardı: defteri işle (bahşiş ayrıca beneritsBahsisAl ile) */
+  beneritsGeldi(g: BeneritsGuest) {
+    this.benerits.visits++
+    if (!this.benerits.seen.includes(g.id)) this.benerits.seen.push(g.id)
+    // bildirim main.ts'te (toast + arka plan bildirimi); events'e YAZMA → çift toast olmasın
+  }
+  /** bahşişi kasaya + deftere yaz */
+  beneritsBahsisAl(tip: number) {
+    this.money += tip
+    this.benerits.tips += tip
+    this.stats.revenue += tip
+    this.dailyRevenue += tip
+  }
   /**
    * TAMİR ARTIK SÜRE ALIR (60-120 sn): 'pump-3' / 'charger-1' → kalan saniye. Para tamir
    * BAŞLARKEN ödenir (her zaman — reklam parayı geri vermez), ünite süre dolana kadar HÂLÂ
@@ -3506,6 +3577,9 @@ const ACHIEVEMENTS: [string, string, (s: GameState) => boolean][] = [
   ['week-one', t('7. gün — Bir haftadır ayaktasın!'), s => s.day >= 7],
   // D12 (analiz): çoklu şube hedefini görünür kılan başarım
   ['chain', t('Zincir başladı — İkinci şuben açık!'), s => s.unlockedLocs.length >= 2],
+  // BENERITS özel müşteriler (3 Eyl 2026)
+  ['benerits-patron', t('Patron uğradı — BENERITS Burak şarj etti!'), s => s.benerits.seen.includes('burak')],
+  ['benerits-ekip', t('Tam kadro — Oğuz, Çağan ve Burak istasyonunu gördü!'), s => s.benerits.seen.length >= 3],
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3645,7 +3719,7 @@ const SAVE_FIELDS = [
   // BU SATIRI UNUTMA: hak sayacı kaydedilmezse F5 ile sınırsız ödül alınır.
   // REKLAM v2 (ADDITIVE): süren tamirler + arıza kaynağı (F5 tamiri bitirmesin), trafik ödülü
   // damgası, misafir yerel tavan sayacı. Eski adSeriUsed vb. anahtarlar artık OKUNMAZ.
-  'repairs', 'brokenSource', 'trafikBoostUntil', 'adUse',
+  'repairs', 'brokenSource', 'trafikBoostUntil', 'adUse', 'benerits',
   // GÜN GİDER DÖKÜMÜ (ADDITIVE): "kasadan para eriyor" sorusu çoğu zaman oyun yeniden
   // AÇILDIKTAN sonra soruluyor. Döküm kaydedilmezse Ofis paneli boş kalır ve soru
   // yine cevapsız. Yalnız GÖSTERİM verisi — hiçbir para hesabına girmez.
@@ -3862,6 +3936,15 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
     if (typeof s.trafikBoostUntil !== 'number' || !Number.isFinite(s.trafikBoostUntil)) s.trafikBoostUntil = 0
     const u = data.adUse as { day?: unknown; n?: unknown } | undefined
     s.adUse = (u && typeof u.day === 'string' && u.n && typeof u.n === 'object') ? { day: u.day, n: { ...(u.n as Record<string, number>) } } : { day: '', n: {} }
+    // BENERITS defteri: eski kayıtta yok → sıfır; kurcalanmışsa alan alan doğrula
+    const bn = data.benerits as Partial<GameState['benerits']> | undefined
+    const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
+    s.benerits = {
+      visits: Math.max(0, Math.floor(num(bn?.visits, 0))),
+      tips: Math.max(0, Math.floor(num(bn?.tips, 0))),
+      lastDay: num(bn?.lastDay, -99),
+      seen: Array.isArray(bn?.seen) ? (bn!.seen as unknown[]).filter((x): x is BeneritsId => typeof x === 'string' && x in BENERITS_GUESTS) : [],
+    }
   }
   // kurcalanmış/eski kayıt: bilinmeyen tedarikçi standarda düşer (fiyat çarpanı NaN olmasın)
   if (!(s.supplier in SUPPLIERS)) s.supplier = 'standart'

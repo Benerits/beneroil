@@ -22,6 +22,7 @@ import {
   // türetilmiş temadan gelir (bkz. state.ts themeFor / BRANCH_COPIES).
   ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor, SUPPLY_LINE_QUOTA,
   SAYAC_KUMBARA_MAX, TEKIL_KUMBARA,
+  BENERITS_GUESTS, BeneritsId,
 } from './state'
 // ŞUBE AĞI HARİTASI: yatırım tahtası (Ofis › Şubeler + HUD şube menüsünden açılır).
 // Saf DOM modülü — state okur, aksiyonu buradaki MEVCUT akışlara geri çağırır.
@@ -2368,7 +2369,8 @@ const cars = new CarManager(world.scene, modelLib, {
       // (reklam v2: "seriyi kurtar" teklifi KALDIRILDI — "izlemezsen kaybedersin" çerçevesi yasak)
     }
     state.combo = 0
-    ui.toast(t('Müşteri beklemekten sıkıldı ve gitti!'), 'bad', true)
+    if (car.guest) ui.toast(t('BENERITS {0} beklemekten sıkılıp gitti — ayıp oldu!', car.guest.name), 'bad')
+    else ui.toast(t('Müşteri beklemekten sıkıldı ve gitti!'), 'bad', true)
     audio.miss()
     state.addRep(-0.2)
     if (ui.activeCar === car) autoSelect(nextServableCar())
@@ -2381,6 +2383,19 @@ const cars = new CarManager(world.scene, modelLib, {
     ui.toast(t('VIP MÜŞTERİ geldi — büyük sipariş, KISA sabır!'), 'good', true)
     audio.promo()
     // (reklam v2: "VIP'yi elde tut" teklifi KALDIRILDI — kayıp tehdidiyle reklam izletilmez)
+  },
+  // BENERITS ÖZEL MÜŞTERİLER (3 Eyl 2026): zar state'te (gün ≥3, ziyaretler arası ≥2 gün,
+  // ~%1,2/araç). Varışta bildirim — paylaşılası an ("BENERITS Oğuz geldi!").
+  beneritsGuest: evOk => state.beneritsRoll(evOk),
+  onBenerits: car => {
+    const g = car.guest!
+    state.beneritsGeldi(g)
+    const msg = g.kind === 'ev'
+      ? t('BENERITS PATRON Burak geldi! Siyah EQE şarja giriyor — bahşişi sağlam.')
+      : t('BENERITS {0} geldi! Şirket aracı — normalin 2 katı yakıt, sağlam bahşiş.', g.name)
+    ui.toast(msg, 'good', false, true)
+    notifyIfHidden(t('BENERITS {0} geldi!', g.name), 'benerits')
+    audio.promo()
   },
   onTurnedAway: () => {
     // KUYRUK DOLU (Faz 2.3): içeri hiç giremeyen müşteri KAÇANDAN AYRI sayılır —
@@ -3029,6 +3044,20 @@ function finishSale(car: Car) {
     score -= 0.6 // eksik dolum: sessiz, sadece memnuniyet düşer
   }
 
+  // BENERITS BAHŞİŞİ: depo tamsa ₺8-10k, yarıdan fazlaysa yarısı, eksikse yok. Yüzlüğe
+  // yuvarlı; revenue'ya biner (kasa/istatistik/günlük ciro tek kapıdan), deftere ayrıca yazılır.
+  if (car.guest && revenue0 > 0) {
+    const oran = car.filledValue >= car.demandAmount - 10 ? 1 : car.filledValue >= car.demandAmount * 0.5 ? 0.5 : 0
+    const tip = Math.round(state.beneritsBahsis() * oran / 100) * 100
+    if (tip > 0) {
+      revenue += tip
+      state.benerits.tips += tip
+      score += 1
+      ui.toast(t('BENERITS {0} bahşiş bıraktı: +₺{1} — "{2}"', car.guest.name, tip.toLocaleString('tr-TR'), car.guest.quote), 'good', false, true)
+    } else {
+      ui.toast(t('BENERITS {0}: "Depo yarım kaldı ya..." — bahşiş yok.', car.guest.name), 'bad')
+    }
+  }
   // pompacı satışı: gelirin TAMAMI kasaya girer (kesinti yok). Oyuncu yalnızca bahşişten
   // feragat eder. Pozitif toast göster — eskiden sadece kesinti görünüp "hep zarar" sanılıyordu.
   if (car.autoServed && revenue0 > 0) {
@@ -3122,6 +3151,11 @@ function wrongFuel(car: Car) {
 // ---- EV şarj ----
 
 ui.onDismiss = car => {
+  // PATRON GÖNDERİLEMEZ: molası bitince (molaSn) kendi gider; tıklayan repliği yer.
+  if (car.squatting && car.guest) {
+    ui.toast(t('PATRON gönderilemez — "{0}"', car.guest.quote), 'bad')
+    return
+  }
   if (car.squatting) {
     car.squatting = false
     cars.releaseCar(car)
@@ -3184,11 +3218,13 @@ function tickEvCharging(dt: number) {
     if (!c.squatting) continue
     c.squatT += dt
     const hasStaff = c.slotIndex >= 0 && state.autoChargers.has(c.slotIndex)
-    const limit = hasStaff ? 8 : (state.managerLevel >= 3 ? 25 : Infinity)
+    // PATRON'u ne şarjcı ne müdür uğurlar: molaSn dolunca kendi kalkar.
+    const limit = c.guest ? (c.guest.molaSn ?? 45) : hasStaff ? 8 : (state.managerLevel >= 3 ? 25 : Infinity)
     if (c.squatT >= limit) {
       c.squatting = false
       cars.releaseCar(c)
-      ui.toast(hasStaff ? t('Şarjcı molacıyı uğurladı — ünite boşaldı.') : t('Müdür molacıyı uğurladı — ünite boşaldı.'), 'good')
+      ui.toast(c.guest ? t('BENERITS {0} gitti — "Gene gelirim." Ünite boşaldı.', c.guest.name)
+        : hasStaff ? t('Şarjcı molacıyı uğurladı — ünite boşaldı.') : t('Müdür molacıyı uğurladı — ünite boşaldı.'), 'good')
       if (ui.activeCar === c) autoSelect(nextServableCar())
     }
   }
@@ -3220,7 +3256,22 @@ function tickEvCharging(dt: number) {
       if (c.patienceFrac < 0.4) score -= 1.5
       ui.toast(t('{0} kWh şarj tamamlandı: +₺{1}', c.demandKwh, revenue), 'good')
       const anyFacility = state.marketLevel > 0 || state.toiletLevel > 0 || state.hasCoffee || state.hasRestaurant
-      if (anyFacility && Math.random() < 0.12) {
+      if (c.guest) {
+        // PATRON: sağlam bahşiş + ZORUNLU mola. Ünite molaSn boyunca dolu kalır; GÖNDER
+        // çalışmaz (ui.onDismiss), personel de uğurlamaz. Tesis varsa yürüyerek gezer.
+        const tip = state.beneritsBahsis()
+        state.beneritsBahsisAl(tip)
+        comboIlerlet(c, revenue)
+        ui.toast(t('BENERITS PATRON bahşiş bıraktı: +₺{0}', tip.toLocaleString('tr-TR')), 'good', false, true)
+        c.squatting = true
+        c.squatT = 0
+        c.beingServed = true
+        c.setCounter(t('MOLADA · PATRON'))
+        if (anyFacility) spawnWalkerFor(c, { visits: facilityVisits(c), score: score + 1, squat: true })
+        else { trackDaily(score + 1); state.addRep((score + 1 - 3.3) * 0.08) }
+        ui.toast(t('Patron molada — "{0}" Ünite bir süre dolu.', c.guest.quote), '')
+        if (ui.activeCar === c) autoSelect(nextServableCar())
+      } else if (anyFacility && Math.random() < 0.12) {
         // işgalci: aracı ünitede bırakıp tesislere gidiyor — GÖNDER'e basılana dek yer dolu
         c.squatting = true
         c.squatT = 0
@@ -5508,6 +5559,8 @@ if (dbgAcik) (window as unknown as Record<string, unknown>).__dbg = {
   sube(id: string) { subeyeGec(id as LocId) },
   /** Şube kilidini video/test için açar — mağaza akışını atlamaz, state.unlockLoc kullanır. */
   subeAc(id: string) { return state.unlockLoc(id as LocId) },
+  /** BENERITS misafirini çağır (test/tanıtım): 'oguz' | 'cagan' | 'burak'. Şarjsız istasyona Patron gelmez. */
+  benerits(id: string) { const g = BENERITS_GUESTS[id as BeneritsId]; return g ? cars.spawnBenerits(g) : false },
   /** GÜN SAATİNİ AYARLA (tanıtım videosu + test). state.sunFactor'ı elle yazmak
    *  İŞE YARAMIYOR: gün döngüsü her karede üzerine yazıyor. Saatin KENDİSİ
    *  değişmeli. 0..1 arası oran; 0,75 = tam gece, 0,25 = öğle. */
@@ -6142,7 +6195,6 @@ const ACIL_TEKLIFLER: ReadonlySet<PlacementId> = new Set<PlacementId>(['tamir', 
 let askidaTeklif: { offer: AdOffer; kalan: number } | null = null
 let hediyeBekliyor = false                // oturum açılışında bir kez günlük hediye teklifi
 let hediyeGecikmeT = AD_HEDIYE_GECIKME
-
 const reklamAktif = () => !isFullMode && !isPromoMode
 const tlx = (n: number) => Math.round(n).toLocaleString('tr-TR')
 

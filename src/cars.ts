@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { t } from './i18n'
-import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment } from './state'
+import { FuelType, FUEL_LABEL, FUEL_PRICE, CarSegment, BeneritsGuest, BENERITS_TALEP_KAT } from './state'
 import { LaneNetwork, StationGeom, UnitPoint, ParkPoint, ParkLane, Pt, Rect, QUEUE_GATE_CLEAR } from './traffic-graph'
 import { ROAD_X, LANE_NEAR, LANE_FAR, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, TANK_POS, APRON_IN_Y, APRON_OUT_Y, APRON_SOUTH_Y } from './world'
 import { yolBul, engelleriAyarla, segmentDikdortgeniKesiyor } from './yol-bul'
@@ -284,6 +284,58 @@ function liveSprite(text: string, accent: string): { sp: THREE.Sprite; set: (t: 
   return { sp, set: (t: string) => { drawDigital(t); tex.needsUpdate = true } }
 }
 
+/**
+ * KENNEY GÖVDE BOYAMA (BENERITS araçları): kit tek bir 512×512 kartela dokusu kullanır
+ * (8 sütun × 4 satır, 64×128 px boya kareleri); her modelin gövde boyası bir kareye
+ * bakar (UV alan histogramıyla çıkarıldı). O kareyi istenen renkle DEĞİŞTİRİP kopya
+ * dokuyla klon malzeme veriyoruz — cam, lastik, far, tampon kendi karelerinde kalır.
+ * Eski "materyali tonla" yolu (EV tonları) her şeyi boyuyordu; beyaz/siyah da çıkmıyordu.
+ */
+export const KENNEY_PAINT: Record<string, { col: number; row: number }> = {
+  sedan: { col: 6, row: 1 }, van: { col: 7, row: 1 }, 'race-future': { col: 7, row: 1 },
+}
+const repaintCache = new Map<string, THREE.Texture>()
+export function repaintKenney(group: THREE.Group, model: string, color: number): boolean {
+  const cell = KENNEY_PAINT[model]
+  if (!cell) return false
+  let ok = false
+  group.traverse(o => {
+    const m = o as THREE.Mesh
+    if (!m.isMesh || !m.material) return
+    const src = m.material as THREE.MeshStandardMaterial
+    const img = src.map?.image as (CanvasImageSource & { width?: number }) | undefined
+    if (!img || !img.width) return
+    const key = `${model}:${color}`
+    let tex = repaintCache.get(key)
+    if (!tex) {
+      const c = document.createElement('canvas')
+      c.width = 512; c.height = 512
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(img, 0, 0, 512, 512)
+      const base = new THREE.Color(color)
+      const acik = base.clone().lerp(new THREE.Color(0xffffff), 0.10)
+      const koyu = base.clone().lerp(new THREE.Color(0x000000), 0.22)
+      const x = cell.col * 64, y = cell.row * 128
+      const grad = ctx.createLinearGradient(x, 0, x + 64, 0)
+      grad.addColorStop(0, '#' + acik.getHexString())
+      grad.addColorStop(1, '#' + koyu.getHexString())
+      ctx.fillStyle = grad
+      ctx.fillRect(x, y, 64, 128)
+      tex = new THREE.CanvasTexture(c)
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.flipY = false            // glTF UV'leri (v=0 üst) — kaynak dokuyla aynı yön
+      tex.magFilter = src.map!.magFilter
+      tex.minFilter = src.map!.minFilter
+      repaintCache.set(key, tex)
+    }
+    const mat = src.clone()
+    mat.map = tex
+    m.material = mat
+    ok = true
+  })
+  return ok
+}
+
 function textSprite(text: string, accent: string): THREE.Sprite {
   const c = document.createElement('canvas')
   c.width = 512; c.height = 192
@@ -515,6 +567,8 @@ export class Car {
   /** VIP MÜŞTERİ: nadir, yüksek tutarlı, SABRI KISA müşteri. Ödüllü reklamın
    *  bağlandığı kriz anını üretir — oyuncu büyük kazancı gözünün önünde kaybetmek üzeredir. */
   vip = false
+  /** BENERITS özel müşteri (Oğuz/Çağan/Burak) — null: sıradan müşteri */
+  guest: BeneritsGuest | null = null
   /** pompa önceliği: VIP kurtarıldığında kuyrukta öne geçer */
   oncelikli = false
 
@@ -533,9 +587,10 @@ export class Car {
 
   constructor(scene: THREE.Scene, lib: ModelLib | null, kind: CarKind, prices: Record<FuelType, number> = FUEL_PRICE,
               segments: CarSegment[] | null = null, boat: BoatKind | null = null,
-              patienceMult = 1, vip = false) {
+              patienceMult = 1, vip = false, guest: BeneritsGuest | null = null) {
     this.kind = kind
     this.boat = boat
+    this.guest = guest
     this.prices = { ...prices }
     if (boat) {
       // MARİNA: gerçek tekne modeli (Kenney watercraft). Kit inmemişse prosedürel
@@ -546,6 +601,19 @@ export class Car {
       this.hiddenNeedL = Math.round((boat === 'superyat' ? 2200 : boat === 'motoryat' ? 900
         : boat === 'gulet' ? 700 : boat === 'balikci' ? 600 : boat === 'yelkenli' ? 300
         : boat === 'surat' ? 160 : 40) * (0.6 + Math.random() * 0.5))
+      this.isTruck = false
+    } else if (guest) {
+      // BENERITS aracı: Oğuz beyaz sedan (Egea), Çağan fıstık yeşili ticari (Fiorino),
+      // Burak siyah EV sedan (EQE). Kenney modeli + gövde boyası; kit yoksa prosedürel.
+      const idx = CAR_FILES.indexOf(guest.model)
+      const proto = guest.model === 'race-future' ? (lib?.evCar ?? null) : (idx >= 0 ? (lib?.cars[idx] ?? null) : null)
+      if (proto) {
+        this.group = cloneModel(proto)
+        repaintKenney(this.group, guest.model, guest.color)
+      } else {
+        this.group = buildCarMesh(guest.model === 'van' ? 'suv' : 'sedan', guest.color)
+      }
+      this.hiddenNeedL = Math.round((guest.model === 'van' ? 110 : 45) * 0.8)
       this.isTruck = false
     } else if (kind === 'ev') {
       if (lib?.evCar) {
@@ -622,6 +690,15 @@ export class Car {
       this.demandLiters = this.demandAmount / this.prices[this.demandType]
       this.maxPatience *= 0.55
     }
+    // BENERITS: talep 2 KAT (yakıt ₺ ve kWh), sabır BOL (tanıdık, acelesi yok). Fulle yok —
+    // tutar sabit ve büyük; bahşiş main.ts'te (finishSale / tickEvCharging) düşer.
+    if (guest) {
+      this.demandAmount = Math.round(this.demandAmount * BENERITS_TALEP_KAT / 10) * 10
+      this.demandKwh = Math.min(100, this.demandKwh * BENERITS_TALEP_KAT)
+      this.demandLiters = this.demandAmount / this.prices[this.demandType]
+      this.wantsFull = false
+      this.maxPatience *= 1.5
+    }
     this.patience = this.maxPatience
     this.wantsMarket = Math.random() < 0.35
     this.wantsToilet = Math.random() < 0.12
@@ -653,6 +730,14 @@ export class Car {
       tac.position.z = 3.35
       tac.renderOrder = 14
       this.group.add(tac)
+    }
+    // BENERITS etiketi: kalabalıkta bir bakışta seçilsin — "BENERITS · Oğuz" (patron için unvan)
+    if (this.guest) {
+      const et = textSprite(this.guest.kind === 'ev' ? `${this.guest.title} · ${this.guest.name}` : `BENERITS · ${this.guest.name}`, '#d64545')
+      et.scale.set(2.3, 0.86, 1)
+      et.position.z = 3.35
+      et.renderOrder = 14
+      this.group.add(et)
     }
   }
 
@@ -1545,6 +1630,10 @@ export interface CarManagerOpts {
   vipChance?: () => number
   /** VIP sahneye girdi — ödüllü reklam teklifi burada tetiklenir */
   onVip?: (car: Car) => void
+  /** BENERITS özel müşteri zarı (yalnız YAKIN şerit, kara şubesi). evOk: yakın yakada şarj var mı. */
+  beneritsGuest?: (evOk: boolean) => BeneritsGuest | null
+  /** BENERITS aracı yuvasına oturdu — bildirim + defter burada */
+  onBenerits?: (car: Car) => void
   /** kuyruk dolu olduğu için içeri hiç giremeyen müşteri (kaçandan AYRI sayılır) */
   onTurnedAway?: () => void
 }
@@ -2674,7 +2763,15 @@ export class CarManager {
     return true
   }
 
-  private spawnTransit(lane: 'near' | 'far', force?: { premium: boolean; boatSeg: CarSegment | null }) {
+  /** BENERITS misafirini ZORLA çağır (yalnız __dbg / test): şarjsız istasyona Patron gelmez → false. */
+  spawnBenerits(guest: BeneritsGuest): boolean {
+    if (this.opts.waterOnly?.()) return false
+    if (!this.stationHasEquipmentFor(guest.kind, 'near')) return false
+    this.spawnTransit('near', { premium: false, boatSeg: null, guest })
+    return true
+  }
+
+  private spawnTransit(lane: 'near' | 'far', force?: { premium: boolean; boatSeg: CarSegment | null; guest?: BeneritsGuest }) {
     const boatSeg = force ? force.boatSeg : this.pickBoat()
     // MARİNA: denizin ortasına ARABA GELMEZ. Su şubesinde tekne segmenti yoksa
     // (henüz yakıt iskelesi kurulmadıysa) hiçbir şey doğmaz — eskiden pickBoat null
@@ -2685,8 +2782,13 @@ export class CarManager {
     // Tekne varsa TUTAR da o segmentten gelir: tek elemanlı liste veriyoruz ki Car'ın
     // kendi zarı model ile parayı AYRIŞTIRMASIN (jet ski süperyat parası ödemesin).
     const segs = boatSeg ? [{ ...boatSeg, share: 1 }] : (this.opts.segments?.() ?? null)
-    const vipOl = !boat && (force?.premium || Math.random() < (this.opts.vipChance?.() ?? 0))
-    const car = new Car(this.scene, this.lib, isEv ? 'ev' : 'fuel', this.opts.prices(), segs, boat, this.opts.patienceMult?.() ?? 1, vipOl)
+    // BENERITS misafiri: yalnız kendi yakamıza, tekne/premium çağrısı yokken. Patron (EV)
+    // yalnız yakın yakada şarj ünitesi varsa gelir; yoksa zar yakıtlı ikiliden seçer.
+    const guest = force?.guest ?? (lane === 'near' && !boat && !force
+      ? (this.opts.beneritsGuest?.(this.stationHasEquipmentFor('ev', 'near')) ?? null) : null)
+    const vipOl = !boat && !guest && (force?.premium || Math.random() < (this.opts.vipChance?.() ?? 0))
+    const car = new Car(this.scene, this.lib, guest ? guest.kind : (isEv ? 'ev' : 'fuel'), this.opts.prices(), segs, boat,
+      this.opts.patienceMult?.() ?? 1, vipOl, guest)
     car.lane = lane
     car.phase = 'transit'
     // 4 ŞERİTLİ YOL (çevre yolu): giriş kararı şerit seçiminden ÖNCE verilir, çünkü
@@ -2701,7 +2803,7 @@ export class CarManager {
       // önlemek için vardı ve arz eğrisini de sessizce kısıyordu.
       car.wantsEnter = Math.random() < this.opts.entryChance()
       // VIP yoldan geçip gitmez: nadir olduğu için oyuncu teklifi hiç görmezdi.
-      if (car.vip || force?.premium) car.wantsEnter = true
+      if (car.vip || force?.premium || car.guest) car.wantsEnter = true
       car.wantsTruckPark = car.isTruck && Math.random() < 0.4
       // SU ŞUBESİ: transit de SERVİS şeridini kullanır (Oğuz: "yanaşma yerinden
       // tekneler dümdüz geçmesin") — LANE_NEAR (6.95) iskelenin dibinden geçiyordu.
@@ -2964,6 +3066,7 @@ export class CarManager {
     car.cikisYolu = temizRota(car, this.cikisRotasi(car))
     car.cikisImza = this.cikisImzasi(car)
     if (car.vip) this.opts.onVip?.(car)
+    if (car.guest) this.opts.onBenerits?.(car)
     this.opts.onCarReady(car)
   }
 
