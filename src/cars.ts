@@ -336,11 +336,14 @@ export function repaintKenney(group: THREE.Group, model: string, color: number):
   return ok
 }
 
-function textSprite(text: string, accent: string): THREE.Sprite {
+/** BENERITS marka turuncusu (benerits-admin --app-accent) — misafir rozetleri + sayaç balonu. */
+export const BENERITS_TURUNCU = '#c4762a'
+const BENERITS_ROZET_ZEMIN = 'rgba(255,241,226,0.97)'
+function textSprite(text: string, accent: string, fill = 'rgba(255,255,255,0.96)'): THREE.Sprite {
   const c = document.createElement('canvas')
   c.width = 512; c.height = 192
   const ctx = c.getContext('2d')!
-  ctx.fillStyle = 'rgba(255,255,255,0.96)'
+  ctx.fillStyle = fill
   ctx.strokeStyle = accent
   ctx.lineWidth = 14
   ctx.beginPath()
@@ -731,11 +734,14 @@ export class Car {
       tac.renderOrder = 14
       this.group.add(tac)
     }
-    // BENERITS etiketi: kalabalıkta bir bakışta seçilsin — "BENERITS · Oğuz" (patron için unvan)
+    // BENERITS etiketi: kalabalıkta bir bakışta seçilsin — "BENERITS · Oğuz" (patron için unvan).
+    // Marka turuncusu; sayaç balonunun (z 2.85, yükseklik 0.98 → tepe 3.34) ÜSTÜNDE durur —
+    // 3.35'te "MOLADA · PATRON" balonuyla çakışıyordu (Oğuz, 3 Eyl 2026).
     if (this.guest) {
-      const et = textSprite(this.guest.kind === 'ev' ? `${this.guest.title} · ${this.guest.name}` : `BENERITS · ${this.guest.name}`, '#d64545')
+      const et = textSprite(this.guest.kind === 'ev' ? `${this.guest.title} · ${this.guest.name}` : `BENERITS · ${this.guest.name}`,
+        BENERITS_TURUNCU, BENERITS_ROZET_ZEMIN)
       et.scale.set(2.3, 0.86, 1)
-      et.position.z = 3.35
+      et.position.z = 3.85
       et.renderOrder = 14
       this.group.add(et)
     }
@@ -792,9 +798,10 @@ export class Car {
     if (this.bubble) return
     let made: { sp: THREE.Sprite; set: (t: string) => void }
     if (this.kind === 'ev') {
-      made = liveSprite(`⚡ ${this.demandKwh} kWh`, '#35c7d6')
+      made = liveSprite(`⚡ ${this.demandKwh} kWh`, this.guest ? BENERITS_TURUNCU : '#35c7d6')
     } else {
-      const accent = this.demandType === 'benzin' ? '#27a05a' : this.demandType === 'dizel' ? '#e8862e' : '#2f6fed'
+      // BENERITS misafiri: balon da marka turuncusu (rozetle aynı dil)
+      const accent = this.guest ? BENERITS_TURUNCU : this.demandType === 'benzin' ? '#27a05a' : this.demandType === 'dizel' ? '#e8862e' : '#2f6fed'
       made = liveSprite(this.wantsFull
         ? t('FULLE {0}', FUEL_LABEL[this.demandType])
         : `₺${this.demandAmount} ${FUEL_LABEL[this.demandType]}`, accent)
@@ -815,7 +822,9 @@ export class Car {
   showFeedback(emoji: string) {
     if (this.feedback) this.group.remove(this.feedback)
     this.feedback = emojiSprite(emoji)
-    this.feedback.position.z = 2.6
+    // balon hâlâ ekrandaysa (PATRON molası: "MOLADA · PATRON" sayacı kalır) emoji sayacın
+    // ve rozetin ÜSTÜNE çıkar; normal müşteride balon satışla kapandığı için 2.6 yeterli.
+    this.feedback.position.z = this.bubble ? 4.6 : 2.6
     this.feedback.renderOrder = 13
     this.group.add(this.feedback)
     this.feedbackT = 2.5

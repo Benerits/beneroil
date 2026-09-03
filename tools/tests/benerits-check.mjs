@@ -149,7 +149,16 @@ console.log('── ARAÇ (cars.ts) ──')
   bekle(/if \(guest\) \{[\s\S]{0,500}this\.maxPatience \*= 1\.5/.test(cars_ts), 'misafir sabrı bol (tanıdık)')
   bekle(/repaintKenney\(this\.group, guest\.model, guest\.color\)/.test(cars_ts), 'Kenney modeli misafir rengine boyanır')
   bekle(/buildCarMesh\(guest\.model === 'van' \? 'suv' : 'sedan', guest\.color\)/.test(cars_ts), 'kit yoksa prosedürel gövde (renkli)')
-  bekle(/textSprite\([^)]*BENERITS[^)]*'#d64545'\)/.test(cars_ts), 'BENERITS etiketi (marka kırmızısı) aracın üstünde')
+  bekle(/textSprite\([^)]*BENERITS[^)]*,\s*BENERITS_TURUNCU, BENERITS_ROZET_ZEMIN\)/.test(cars_ts), 'BENERITS etiketi marka turuncusu (Oğuz: "benerits turuncusu olsun")')
+  // ÇAKIŞMA REGRESYONU (Oğuz, 3 Eyl 2026): rozet, sayaç balonunun tepesinden (2.85 + 0.98/2 = 3.34) yukarıda olmalı
+  {
+    const balonZ = Number(/this\.bubble\.position\.z = ([\d.]+)/.exec(cars_ts)?.[1]), balonH = 0.98
+    const rozet = /const et = textSprite\([\s\S]*?et\.scale\.set\([\d.]+, ([\d.]+), 1\)[\s\S]*?et\.position\.z = ([\d.]+)/.exec(cars_ts)
+    const rozetH = Number(rozet?.[1]), rozetZ = Number(rozet?.[2])
+    bekle(rozetZ - rozetH / 2 > balonZ + balonH / 2, 'BENERITS rozeti "MOLADA · PATRON" balonuyla çakışmaz', `rozet alt ${(rozetZ - rozetH / 2).toFixed(2)} > balon tepe ${(balonZ + balonH / 2).toFixed(2)}`)
+  }
+  bekle(/this\.feedback\.position\.z = this\.bubble \? 4\.6 : 2\.6/.test(cars_ts), 'satış emojisi molada sayacın üstüne çıkar (çakışmaz)')
+  bekle(/liveSprite\(`⚡ \$\{this\.demandKwh\} kWh`, this\.guest \? BENERITS_TURUNCU/.test(cars_ts) && /const accent = this\.guest \? BENERITS_TURUNCU/.test(cars_ts), 'misafir sayaç balonu da turuncu')
   bekle(/const guest = force\?\.guest \?\? \(lane === 'near' && !boat && !force[\s\S]{0,200}beneritsGuest\?\.\(this\.stationHasEquipmentFor\('ev', 'near'\)\)/.test(cars_ts), 'spawnTransit: yalnız yakın şerit, tekne/premium yok, şarj varlığı zara verilir (zorla çağrı __dbg.benerits)')
   bekle(/spawnBenerits\(guest: BeneritsGuest\): boolean \{[\s\S]{0,300}stationHasEquipmentFor\(guest\.kind, 'near'\)/.test(cars_ts), 'zorla çağrı: ekipman yoksa (şarjsız Patron) false')
   bekle(/if \(car\.vip \|\| force\?\.premium \|\| car\.guest\) car\.wantsEnter = true/.test(cars_ts), 'misafir yoldan geçip gitmez (giriş zorunlu)')
