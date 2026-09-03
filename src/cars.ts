@@ -1062,6 +1062,17 @@ export class Car {
   }
 }
 
+/** Araç olmayan ama trafikte yer kaplayan gövde (tanker, ikmal gemisi). */
+export type TrafikEngel = { pos: THREE.Vector3; dir: THREE.Vector3 | null; hiz: number; len: number }
+
+/** ARALIK KURALI (2 Eyl, araç↔araç ile tek formül): öndekine `sep` mesafesine kadar tam hız,
+ *  son 0.4 birimde `taban`a iner; taban = öndekinin hızı olduğundan aralık orada sabitlenir.
+ *  Tek kopya olması ŞART: tanker↔araç ve araç↔tanker aynı ölçüyle takip etsin. */
+export function aralikOlcegi(forward: number, sep: number, taban: number): number {
+  const bos = sep - 0.4
+  return Math.min(1, Math.max(taban, (forward - bos) / (sep - bos)))
+}
+
 /** Sipariş gelince tank dolduran tanker kamyonu */
 export class Tanker {
   group: THREE.Group
@@ -1071,6 +1082,11 @@ export class Tanker {
   private leaving = false
   done = false
   unloading = false
+  /** Anlık hız oranı (0 duruyor … 1 tam hız) — araçların ARALIK kuralı öndeki tankeri
+   *  takip ederken okur (Car.hizOrani ile aynı anlam). */
+  hizOrani = 0
+  /** Gövde boyu (birim) — kara tankeri 1.5 ölçekli şasi ≈ 5, gemi ≈ 8. */
+  readonly len: number
 
   // Kapı konumları CANLI okunur (snapshot değil): çıkış taşınırsa tanker eski
   // noktaya gidip dönmez — güncel çıkışa yönelir. (Oyuncu "trafik" şikayeti fixi.)
@@ -1082,6 +1098,7 @@ export class Tanker {
     // MARİNA: yakıt GEMİYLE gelir (Oğuz) — kara tankeri denizin üstünde yüzüyordu.
     // Car.waterMinX su şubesinde CarManager tarafından set edilir; tanker de ona bakar.
     const isWater = Car.waterMinX != null
+    this.len = isWater ? 8 : 5
     let g: THREE.Group
     if (isWater) {
       g = new THREE.Group()
@@ -1148,30 +1165,48 @@ export class Tanker {
     ]
   }
 
-  update(dt: number, isBlocked?: (pos: THREE.Vector3, dir: THREE.Vector3) => boolean): boolean {
+  /** Gidiş yönü (birim vektör) — rota bittiyse null. Araçların takip kuralı okur. */
+  headingDir(): THREE.Vector3 | null {
+    if (this.path.length === 0) return null
+    const d = new THREE.Vector3().subVectors(this.path[0], this.group.position)
+    d.z = 0
+    return d.lengthSq() < 1e-6 ? null : d.normalize()
+  }
+
+  /** `hiz(pos, dir)` → 0..1 hız ölçeği (3 Eyl): 0 = TAM DUR (yola katılım boşluğu, duran
+   *  araç, karşı akış), 0.3..1 = öndeki hareket eden aracı ARALIK kuralıyla takip.
+   *  Eski `isBlocked` ikiliydi: tanker ya tam duruyor ya tam gaz öndekinin üstüne
+   *  biniyordu. 7 sn tam-dur kilidi (zorlama) aynen duruyor — kilitlenmezlik sigortası. */
+  update(dt: number, hiz?: (pos: THREE.Vector3, dir: THREE.Vector3) => number): boolean {
     let delivered = false
     if (this.path.length > 0) {
       const pos = this.group.position
       const target = this.path[0]
       const d = new THREE.Vector3().subVectors(target, pos)
       const dist = d.length()
-      const step = 8 * dt
+      d.normalize()
+      const olcek = hiz ? Math.max(0, Math.min(1, hiz(pos, d))) : 1
+      // trafik nezaketi: önü kapalıysa tanker bekler (7 sn'den fazla sıkışırsa zorlar)
+      if (this.blockedTime < 7 && olcek <= 0) {
+        this.blockedTime += dt
+        this.hizOrani = 0
+        return delivered
+      }
+      const zorla = this.blockedTime >= 7
+      if (zorla) this.blockedTime = Math.max(0, this.blockedTime - dt * 3)
+      else this.blockedTime = 0
+      const oran = zorla ? 1 : olcek
+      const step = 8 * dt * oran
+      this.hizOrani = oran
       if (dist <= step) {
         pos.copy(target)
         this.path.shift()
         if (this.path.length === 0 && !this.leaving) {
           this.stayTimer = 4
           this.unloading = true
+          this.hizOrani = 0
         }
       } else {
-        d.normalize()
-        // trafik nezaketi: önünde araç varsa tanker bekler (7 sn'den fazla sıkışırsa zorlar)
-        if (this.blockedTime < 7 && isBlocked?.(pos, d)) {
-          this.blockedTime += dt
-          return delivered
-        }
-        if (this.blockedTime >= 7) this.blockedTime = Math.max(0, this.blockedTime - dt * 3)
-        else this.blockedTime = 0
         pos.addScaledVector(d, step)
         this.group.rotation.z = Math.atan2(d.y, d.x)
       }
@@ -1181,6 +1216,7 @@ export class Tanker {
         delivered = true
         this.unloading = false
         this.leaving = true
+        this.hizOrani = 0
         const outY = this.gateOutYFn() // canlı çıkış konumu (taşınmış olabilir)
         this.path = Car.waterMinX != null
           // MARİNA: gemi arka rıhtımdan geldiği yöne (kuzey açık deniz) döner
@@ -1437,8 +1473,9 @@ export interface CarManagerOpts {
   isChargerBroken: (i: number) => boolean
   /** yerleştirilmiş otoparkın park noktaları (yoksa boş) */
   parkSpots: () => { id: string; pos: THREE.Vector3; stage: THREE.Vector3; rot: number }[]
-  /** araçların kaçınacağı ek engeller (ör. tanker) */
-  extraObstacles: () => THREE.Vector3[]
+  /** Sahnedeki ek araçlar (tanker/ikmal gemisi): araçlar bunları ARALIK kuralıyla öndeki
+   *  gibi takip eder (3 Eyl). `dir` null ve `hiz` 0 ise duran engeldir. */
+  extraObstacles: () => TrafikEngel[]
   /** geniş giriş/çıkış satın alındı mı — kapılardan ikili sıra geçilir */
   wideGates: () => boolean
   /** güncel satış fiyatları (oyuncu belirler) */
@@ -1878,18 +1915,27 @@ export class CarManager {
       }
     }
     this.yolaKatilimBoslugu()
-    // Sahnedeki fiziksel engeller (tanker vb.) YAVAŞLATIR ama DURDURMAZ.
-    for (const c of this.cars) {
+    // Sahnedeki ek araçlar (tanker vb.): YAVAŞLATIR ama DURDURMAZ (taban 0.3 — kilit yok).
+    // 3 Eyl: sabit 0.35 yerine araç↔araç ile AYNI ARALIK kuralı — hareket eden tankerin
+    // arkasındaki araç onun hızını kopyalayıp aralığı korur (eskiden 0.35'le üstüne
+    // biniyordu); duran tanker için taban 0.3 eski davranışla aynı.
+    const engeller = this.opts.extraObstacles()
+    if (engeller.length > 0) for (const c of this.cars) {
       if (c.phase === 'gone' || c.phase === 'atPump' || c.phase === 'parked') continue
       if (c.hayalet) continue // kurtarılan araç engelin de içinden geçer (ghostSolid)
       const dir = c.headingDir()
       if (!dir) continue
-      for (const ob of this.opts.extraObstacles()) {
-        const dx = ob.x - c.group.position.x, dy = ob.y - c.group.position.y
+      const lenC = c.boat ? BOAT_LEN[c.boat] : 2.2
+      for (const ob of engeller) {
+        const dx = ob.pos.x - c.group.position.x, dy = ob.pos.y - c.group.position.y
         const forward = dx * dir.x + dy * dir.y
-        if (forward < 0.2 || forward > 3.8) continue
+        const sep = (lenC + ob.len) / 2 + 0.4
+        if (forward < 0.2 || forward > sep * 1.6) continue
         const lx = dx - dir.x * forward, ly = dy - dir.y * forward
-        if (lx * lx + ly * ly < 2.25) { c.speedScale = Math.min(c.speedScale, 0.35); break }
+        if (lx * lx + ly * ly > 2.25) continue // başka şeritte
+        const ayniYon = ob.dir ? ob.dir.x * dir.x + ob.dir.y * dir.y > 0.5 : false
+        const taban = ayniYon && ob.hiz >= 0.15 ? Math.min(0.3, ob.hiz) : 0.3
+        c.speedScale = Math.min(c.speedScale, aralikOlcegi(forward, sep, taban))
       }
     }
 

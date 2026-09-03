@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { World, ROAD_X, FAR_GATE_X, PUMP_SLOTS_POS, EV_SLOTS_POS, MARINA_PUMP_X, MARINA_PUMP_Y, TANK_POS, SLOT_MIN_ARA, PARK_YER,
   PUMP_SLOT_OFF, EV_SLOT_OFF } from './world'
-import { Car, CarManager, Tanker } from './cars'
+import { Car, CarManager, Tanker, aralikOlcegi } from './cars'
 import { uniteKolu } from './traffic-graph'
 import { UI, BuildingCard } from './ui'
 import { injectNewsStyle, mountNewsButtons, maybeShowNews, pushLog } from './news'
@@ -2252,7 +2252,7 @@ const cars = new CarManager(world.scene, modelLib, {
   isPumpBroken: i => state.brokenPumps.has(i),
   isChargerBroken: i => state.brokenChargers.has(i),
   parkSpots: () => world.getParkingSpots(),
-  extraObstacles: () => tankers.map(x => x.t.group.position),
+  extraObstacles: () => tankers.map(x => ({ pos: x.t.group.position, dir: x.t.headingDir(), hiz: x.t.hizOrani, len: x.t.len })),
   wideGates: () => state.wideGates,
   prices: () => state.prices,
   pumpSlot: i => world.pumpSlots[i],
@@ -7723,35 +7723,56 @@ function frame() {
       tankers.push({ t: new Tanker(world.scene, modelLib, f, slot, new THREE.Vector3(world.tankAnchor.x, world.tankAnchor.y, 0), () => world.gateIn.y, () => world.gateOut.y), fuel: f, slot })
     }
   }
-  const blockedFor = (self: Tanker) => (pos: THREE.Vector3, dir: THREE.Vector3) => {
-    const check = (p: THREE.Vector3, maxF: number, maxL: number) => {
+  // TANKER HIZ ÖLÇEĞİ (3 Eyl — tanker yeni trafik algoritmasına dahil): 0 = tam dur,
+  // 0.3..1 = öndekini ARALIK kuralıyla takip. Eskiden ikiliydi (dur / tam gaz): tanker
+  // 7 sn bekleyip sonra öndeki aracın üstünden geçiyordu.
+  const hizFor = (self: Tanker) => (pos: THREE.Vector3, dir: THREE.Vector3) => {
+    let olcek = 1
+    // öndeki: ileri mesafe + yanal sapma (tanker geniş: yanal 1.6 / tanker↔tanker 2.0)
+    const onde = (p: THREE.Vector3, maxF: number, maxL: number): number | null => {
       const rel = new THREE.Vector3().subVectors(p, pos)
       rel.z = 0
       const forward = rel.dot(dir)
-      if (forward < 0.5 || forward > maxF) return false
-      return rel.addScaledVector(dir, -forward).length() < maxL
+      if (forward < 0.5 || forward > maxF) return null
+      return rel.addScaledVector(dir, -forward).length() < maxL ? forward : null
     }
+    const sepArac = (self.len + 2.2) / 2 + 0.4 // ≈ 4.0 kara, 5.5 deniz
     for (const c of cars.cars) {
-      if (c.phase !== 'gone' && check(c.group.position, 3.8, 1.6)) return true
+      if (c.phase === 'gone') continue
+      const f = onde(c.group.position, sepArac * 1.6, 1.6)
+      if (f == null) continue
+      const cd = c.headingDir()
+      const ayniYon = cd ? cd.x * dir.x + cd.y * dir.y > 0.5 : false
+      // DURAN ya da KARŞI akıştaki araç için tanker TAM DURUR (eski davranış); aynı yönde
+      // hareket eden aracı ise onun hızıyla, aralığı koruyarak takip eder.
+      if (!ayniYon || !c.moving || c.hizOrani < 0.15) return 0
+      olcek = Math.min(olcek, aralikOlcegi(f, sepArac, Math.min(0.3, c.hizOrani)))
     }
-    // tanker de şeride çıkarken yaklaşan trafiğe yol verir
+    // tanker de şeride çıkarken yaklaşan trafiğe yol verir (yola katılım boşluğu)
     if (pos.x > 3.8 && pos.x < 6.7 && dir.x > 0.3) {
       for (const c of cars.cars) {
         if (c.phase === 'transit' && c.lane === 'near'
-          && c.group.position.y > pos.y - 12 && c.group.position.y < pos.y + 2) return true
+          && c.group.position.y > pos.y - 12 && c.group.position.y < pos.y + 2) return 0
       }
     }
-    // tankerler birbirinin içinden GEÇMEZ: öndeki tanker varsa kuyrukta bekle
+    // tankerler birbirinin içinden GEÇMEZ: öndeki tanker duruyorsa bekle, gidiyorsa takip
     for (const x of tankers) {
-      if (x.t !== self && check(x.t.group.position, 5.2, 2.0)) return true
+      if (x.t === self) continue
+      const sepT = self.len + 0.4
+      const f = onde(x.t.group.position, sepT * 1.6, 2.0)
+      if (f == null) continue
+      const od = x.t.headingDir()
+      const ayniYon = od ? od.x * dir.x + od.y * dir.y > 0.5 : false
+      if (!ayniYon || x.t.hizOrani < 0.15) return 0
+      olcek = Math.min(olcek, aralikOlcegi(f, sepT, Math.min(0.3, x.t.hizOrani)))
     }
-    return false
+    return olcek
   }
   for (let i = tankers.length - 1; i >= 0; i--) {
     const tk = tankers[i]
     const { t: tnk, fuel } = tk
     tk.age = (tk.age ?? 0) + dt
-    if (tnk.update(dt, blockedFor(tnk)) && !tk.credited) {
+    if (tnk.update(dt, hizFor(tnk)) && !tk.credited) {
       tk.credited = true
       state.orders[fuel].delivering = false
       state.deliverFuel(fuel)
