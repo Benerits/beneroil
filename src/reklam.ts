@@ -91,6 +91,7 @@ export function adState(): AdState | null { return cache }
 /** Bu yerleşim ŞU AN teklif edilebilir mi (buton çıkmadan önce ucuz kontrol; para/tavan kararı sunucuda). */
 export function canOffer(id: PlacementId, adUse?: AdUse | null): boolean {
   const def = PLACEMENTS[id]
+  if (adsPlatform() === 'web' && !isPremium()) return false     // WEB'DE REKLAM YOK (4 Eyl 2026): yalnız Android/iOS
   if (localMode()) {
     if (def.kind === 'money') return false                       // para ödülü hesap ister
     if (!adsEnabled() || !rewardedReady()) return false

@@ -224,6 +224,9 @@ export function createReklam({ pool, SECRET, json, readBody, rateLimit, clientIp
       if (amount <= 0) return { code: 200, data: { ok: false, reason: 'zero' } }
     }
     const premium = !!s.noAds
+    // WEB'DE REKLAM YOK (4 Eyl 2026): tarayıcı istemcisi teklif göstermez; eski sekme/hile
+    // yine de bilet isterse premium değilse reddedilir — ödül yalnız Android/iOS videosuyla.
+    if (String(body.platform || '') === 'web' && !premium) return { code: 200, data: { ok: false, reason: 'platform' } }
     const id = crypto.randomBytes(12).toString('base64url')
     const meta = body.meta && typeof body.meta === 'object' ? JSON.parse(JSON.stringify(body.meta).slice(0, 2000)) : null
     const platform = String(body.platform || '').slice(0, 16) || null

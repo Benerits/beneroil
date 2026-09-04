@@ -36,7 +36,7 @@ import { guardContextLoss } from './fbinstant'
 import { t, lang, setLang, translateDom } from './i18n'
 import { audio } from './audio'
 import * as auth from './auth'
-import { initAds, setPremium, isPremium, adsDiagnostic } from './ads'
+import { initAds, setPremium, isPremium, adsDiagnostic, adsPlatform } from './ads'
 import { PLACEMENTS, canOffer, requestTicket, runPlacement, syncAdState, onLateGrant, localMode as adLocalMode, type PlacementId, type Ticket } from './reklam'
 import { PRODUCTS, initStore, purchase, restore, storeAvailable } from './store'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
@@ -6202,7 +6202,10 @@ const ACIL_TEKLIFLER: ReadonlySet<PlacementId> = new Set<PlacementId>(['tamir', 
 let askidaTeklif: { offer: AdOffer; kalan: number } | null = null
 let hediyeBekliyor = false                // oturum açılışında bir kez günlük hediye teklifi
 let hediyeGecikmeT = AD_HEDIYE_GECIKME
-const reklamAktif = () => !isFullMode && !isPromoMode
+/** REKLAM YALNIZ ANDROID/iOS (Oğuz, 4 Eyl 2026): "reklam izle" teklifleri, sahne butonu ve
+ *  Ofis › Fırsatlar tarayıcıda HİÇ görünmez — web'de AdSense H5 akışı kapalı. Premium
+ *  ("Reklamları kaldır") oyuncu istisna: onun yerleşimleri zaten videosuz/otomatik, web'de de sürer. */
+const reklamAktif = () => !isFullMode && !isPromoMode && (adsPlatform() !== 'web' || isPremium())
 const tlx = (n: number) => Math.round(n).toLocaleString('tr-TR')
 
 if (auth.loggedIn()) document.getElementById('authgate')?.remove()
@@ -7199,7 +7202,9 @@ function tickAdOffer(dt: number) {
 // ---- Ofis › Fırsatlar: oyuncunun kendi tetiklediği güçlendiriciler (#5 event, #6 premium müşteri, #7 trafik) ----
 function renderReklamPaneli() {
   const el = document.getElementById('of-reklam'); if (!el) return
-  if (!reklamAktif()) { el.innerHTML = ''; return }
+  const baslik = el.previousElementSibling as HTMLElement | null   // "Fırsatlar" ofsec başlığı
+  if (!reklamAktif()) { el.innerHTML = ''; if (baslik) baslik.style.display = 'none'; return }
+  if (baslik) baslik.style.display = ''
   const satir = (id: PlacementId, ikon: string, baslik: string, aciklama: string, gizle: string | null) => {
     const acik = !gizle && canOffer(id, state.adUse)
     const alt = gizle ?? (acik ? bedel(id) : t('bugünlük hakkın doldu'))

@@ -235,5 +235,21 @@ console.log('\n── STRATEJİ v2.1 (3 Eyl 2026): zamanlama, askıya alma, gün
   bekle(capToplam <= 30, 'yerleşim tavanları toplamı ≤ 30/gün (sert üst sınır)', `${capToplam}`)
 }
 
+console.log('\n── WEB\'DE REKLAM YOK (4 Eyl 2026): teklifler yalnız Android/iOS ──')
+{
+  // Tek kapı: her yüzey (sahne butonu, askıda teklif, günlük hediye, Ofis › Fırsatlar) reklamAktif()'ten geçer;
+  // o da tarayıcıda (adsPlatform()==='web') premium değilse false. Boş panelin "Fırsatlar" başlığı da gizlenir.
+  bekle(/const reklamAktif = \(\) => !isFullMode && !isPromoMode && \(adsPlatform\(\) !== 'web' \|\| isPremium\(\)\)/.test(main_ts), 'reklamAktif web\'de kapalı (premium hariç)')
+  bekle(/import \{[^}]*adsPlatform[^}]*\} from '\.\/ads'/.test(main_ts), 'main.ts adsPlatform\'u ./ads\'ten alıyor')
+  for (const fn of ['teklifGoster', 'tickAdOffer', 'renderReklamPaneli']) {
+    const i = main_ts.indexOf(`function ${fn}(`); const govde = main_ts.slice(i, i + 400)
+    bekle(i > 0 && /reklamAktif\(\)/.test(govde), `${fn} reklamAktif() kapısından geçiyor`)
+  }
+  bekle(/if \(!reklamAktif\(\)\) \{ el\.innerHTML = ''; if \(baslik\) baslik\.style\.display = 'none'; return \}/.test(main_ts), 'Fırsatlar başlığı panel boşken gizli')
+  bekle(/if \(adsPlatform\(\) === 'web' && !isPremium\(\)\) return false/.test(reklam_ts), 'reklam.ts canOffer web\'de false')
+  bekle(/const WEB_ADSENSE = false/.test(ads_ts) && /if \(!WEB_ADSENSE \|\| !cfg\.adsensePub/.test(ads_ts), 'ads.ts tarayıcıda AdSense scriptini yüklemiyor')
+  bekle(/body\.platform \|\| ''\) === 'web' && !premium\) return \{ code: 200, data: \{ ok: false, reason: 'platform' \} \}/.test(reklam_js), 'sunucu web biletini reddediyor (premium hariç)')
+}
+
 console.log(hata ? `\n❌ ${hata} HATA` : '\n✅ TÜM TESTLER GEÇTİ')
 process.exit(hata ? 1 : 0)

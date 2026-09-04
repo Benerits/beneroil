@@ -68,6 +68,8 @@ export function adsDiagnostic(): string {
   return `provider=${adsProvider() ?? 'yok'} platform=${adsPlatform()} ready=${rewardedReady()}${nativeInitError ? ' err=' + nativeInitError : ''}`
 }
 
+const WEB_ADSENSE = false
+
 /** Reklam altyapısını başlat. cfg: sunucu /api/config'ten (adsense pub + applovin anahtarları). */
 export async function initAds(cfg: AdsCfg = {}) {
   // META: reklamlar FBInstant SDK'sından, placement id'ler derleme zamanı env'iyle (fbinstant.ts)
@@ -101,8 +103,9 @@ export async function initAds(cfg: AdsCfg = {}) {
     }
     return
   }
-  // WEB: AdSense H5
-  if (!cfg.adsensePub || webClient) return
+  // WEB: AdSense H5 — KAPALI (4 Eyl 2026): tarayıcıda hiçbir reklam yüzeyi yok (reklam.ts canOffer /
+  // main.ts reklamAktif web'de false), o yüzden script de yüklenmez. Geri açmak için WEB_ADSENSE=true.
+  if (!WEB_ADSENSE || !cfg.adsensePub || webClient) return
   webClient = cfg.adsensePub
   const s = document.createElement('script')
   s.async = true
