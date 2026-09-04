@@ -1,4 +1,5 @@
 import { t } from './i18n'
+import type { BoatKind } from './cars' // yalnız tip — çalışma zamanı döngüsü yok
 import {
   BOAT_SEGMENTS, BERTH_KINDS, MARINA_FACILITIES, berthIncome, winterStorageIncome,
   blueFlagStatus, pickMarinaEvent, membershipIncome, refitDemand, pickRefitJob,
@@ -240,6 +241,8 @@ export interface Contract {
   penalty: number       // eksik teslim edilen her gün için
   deliveredToday: number
   missedDays: number
+  /** DENİZ İHALESİ (4 Eyl 2026): marinada filo aracı olarak gelen tekne türü — kara ihalesinde yok (ADDITIVE) */
+  boat?: BoatKind
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,6 +297,9 @@ export interface CarSegment {
   marginMult: number // satış marjı çarpanı (premium = daha yüksek kâr)
   fuel?: FuelType    // segment belirli yakıt istiyorsa
   truckOnly?: boolean
+  /** TEKNE DEBİSİ (4 Eyl 2026): teknenin tasarlanan servis süresi (sn). Büyük tekne büyük
+   *  hortumla dolar — dolum hızı bu süreye göre ölçeklenir (bkz. main.ts tekneDebisi). */
+  serviceSec?: number
   label: string
 }
 
@@ -571,6 +577,40 @@ export type Rehber = {
   acilabilir: RehberSube[]
   hedef: RehberSube | null
   yildizAcar: RehberSube[]
+}
+
+/** İhale şablonu — `theme` ile konuma bağlı liste (kara/deniz). `boat`: deniz filosunun tekne türü. */
+export interface ContractTemplate { id: string; name: string; fuel: FuelType; days: number; lit: number; disc: number; boat?: BoatKind }
+export const CONTRACT_TEMPLATES_KARA: ContractTemplate[] = [
+  { id: 'kargo', name: t('Kargo Filosu'), fuel: 'dizel', days: 7, lit: 900, disc: 0.90 },
+  { id: 'belediye', name: t('Belediye Otobüs Filosu'), fuel: 'dizel', days: 15, lit: 1800, disc: 0.88 },
+  { id: 'taksi', name: t('Taksi Durağı'), fuel: 'benzin', days: 10, lit: 700, disc: 0.92 },
+  { id: 'santiye', name: t('İnşaat Şantiyesi'), fuel: 'lpg', days: 8, lit: 500, disc: 0.90 },
+  { id: 'kooperatif', name: t('Tarım Kooperatifi'), fuel: 'dizel', days: 12, lit: 1300, disc: 0.89 },
+]
+/** MARİNA: deniz ihaleleri — tekne segmentleriyle aynı yakıt mantığı (balıkçı/gulet/motoryat dizel, sürat/yelkenli benzin). */
+export const CONTRACT_TEMPLATES_DENIZ: ContractTemplate[] = [
+  { id: 'balikci-koop', name: t('Balıkçı Kooperatifi'), fuel: 'dizel', days: 12, lit: 1300, disc: 0.89, boat: 'balikci' },
+  { id: 'yat-kulubu', name: t('Yat Kulübü'), fuel: 'benzin', days: 10, lit: 900, disc: 0.92, boat: 'surat' },
+  { id: 'tur-tekneleri', name: t('Günübirlik Tur Tekneleri'), fuel: 'dizel', days: 8, lit: 1100, disc: 0.90, boat: 'gulet' },
+  { id: 'sahil-guvenlik', name: t('Sahil Güvenlik Botları'), fuel: 'dizel', days: 15, lit: 1800, disc: 0.88, boat: 'motoryat' },
+  { id: 'yelken-okulu', name: t('Yelken Okulu'), fuel: 'benzin', days: 7, lit: 600, disc: 0.91, boat: 'yelkenli' },
+]
+/**
+ * TEKNE DEBİSİ (4 Eyl 2026; #729 #909 #934 #1302 "büyük gemi dakikalarca doluyor, bekleyenler
+ * kaçıyor, itibar eriyor"): marina kara pompasının 7 L/sn'siyle çalışıyordu — süperyat
+ * 2.500-6.000 L → 6-14 dk, o sırada 45 sn sabırlı tekneler gidiyordu. BOAT_SEGMENTS.serviceSec
+ * tasarlanmış ama hiç kullanılmamıştı. Debi artık "hedef litre / servis süresi" tabanının altına
+ * düşmez: süperyat ~150 sn, motoryat ~70 sn, gulet ~60 sn; küçük tekne yine 7 L/sn (hızlı).
+ */
+export function tekneDebisi(hedefL: number, serviceSec: number | undefined, taban = FILL_RATE): number {
+  if (!serviceSec || serviceSec <= 0 || !(hedefL > 0)) return taban
+  return Math.max(taban, hedefL / serviceSec)
+}
+
+/** Tamamlama primi oranı: indirim derinleştikçe prim büyür (disc 0.92 → %9, 0.88 → %15). */
+export function contractBonusRate(disc: number): number {
+  return Math.round(Math.max(0.06, Math.min(0.18, 0.09 + (0.92 - disc) * 1.5)) * 1000) / 1000
 }
 
 export class GameState {
@@ -2129,14 +2169,19 @@ export class GameState {
     const out: Contract[] = []
     const seedBase = this.day * 7919
     const rnd = (i: number) => { const x = Math.sin(seedBase + i * 1.37) * 10000; return x - Math.floor(x) }
-    const TEMPLATES: { id: string; name: string; fuel: FuelType; days: number; lit: number; disc: number }[] = [
-      { id: 'kargo', name: t('Kargo Filosu'), fuel: 'dizel', days: 7, lit: 900, disc: 0.90 },
-      { id: 'belediye', name: t('Belediye Otobüs Filosu'), fuel: 'dizel', days: 15, lit: 1800, disc: 0.88 },
-      { id: 'taksi', name: t('Taksi Durağı'), fuel: 'benzin', days: 10, lit: 700, disc: 0.92 },
-      { id: 'santiye', name: t('İnşaat Şantiyesi'), fuel: 'lpg', days: 8, lit: 500, disc: 0.90 },
-      { id: 'kooperatif', name: t('Tarım Kooperatifi'), fuel: 'dizel', days: 12, lit: 1300, disc: 0.89 },
-    ]
+    // MARİNADA DENİZ İHALESİ (Oğuz, 4 Eyl 2026 + #1252): şablonlar konuma bakmıyordu — marinada
+    // "Belediye Otobüs Filosu" / "Taksi Durağı" / "İnşaat Şantiyesi" çıkıyordu. Kara şubeleri
+    // KARA listesini, marina DENİZ listesini alır; deniz ihalesinin filosu tekne olarak gelir (boat).
+    // Marinada LPG satılmaz → deniz şablonlarında LPG yok.
+    const TEMPLATES: ContractTemplate[] = this.isMarina ? CONTRACT_TEMPLATES_DENIZ : CONTRACT_TEMPLATES_KARA
+    // "HEP OTOBÜS AVANTAJLI, DİNAMİK DEĞİL" (#1252, #719): günde 5 şablondan 3'ü sunulur (gün
+    // tohumlu rotasyon) ve prim oranı şablona göre değişir (indirimi derin olanın primi yüksek —
+    // risk/ödül). Eskiden liste sabitti ve en uzun+en büyük şablon primde hep önde bitiyordu.
+    const sunulan = new Set<number>()
+    const baslangic = Math.floor(rnd(11) * TEMPLATES.length)
+    for (let k = 0; k < 3; k++) sunulan.add((baslangic + k * 2) % TEMPLATES.length)
     for (let i = 0; i < TEMPLATES.length; i++) {
+      if (!sunulan.has(i)) continue
       const tpl = TEMPLATES[i]
       const cap = this.fuelCapacity(tpl.fuel)
       // DENGE FİXİ (2 oyuncu raporu: "ihale aldım, kimse almıyor, ceza yiyorum"):
@@ -2154,9 +2199,10 @@ export class GameState {
       out.push({
         id: `${tpl.id}-${this.day}`, name: tpl.name, fuel: tpl.fuel,
         daysTotal: tpl.days, daysLeft: tpl.days, dailyLiters: daily, pricePerL,
-        bonus: Math.round(gross * 0.12 / 100) * 100,   // tamamlama primi ≈ cironun %12'si
+        bonus: Math.round(gross * contractBonusRate(tpl.disc) / 100) * 100, // tamamlama primi: indirim derinse prim yüksek
         penalty: Math.round(daily * pricePerL * 0.9 / 100) * 100, // eksik gün cezası ≈ günlük ciro
         deliveredToday: 0, missedDays: 0,
+        ...(tpl.boat ? { boat: tpl.boat } : {}),
       })
     }
     return out
@@ -2618,9 +2664,12 @@ export class GameState {
       min: b.min,
       max: b.max,
       marginMult: Math.round((b.margin / 0.30) * 100) / 100,
-      // Deniz motorini: balıkçı ÖTV defteri dizel üzerinden işliyor
-      ...(b.id === 'balikci' || b.id === 'gulet' || b.id === 'motoryat' || b.id === 'superyat'
-          ? { fuel: 'dizel' as FuelType } : {}),
+      serviceSec: b.serviceSec,
+      // Deniz motorini: balıkçı/gulet/motoryat/süperyat dizel; jetski/sürat/yelkenli BENZİN.
+      // fuel boş bırakılınca cars.ts rastgele benzin/dizel/LPG atıyordu → marinada LPG
+      // satılmadığı için yelkenli/sürat teknesi "0 L" alıp gidiyordu (headless e2e'de yakalandı).
+      fuel: (b.id === 'balikci' || b.id === 'gulet' || b.id === 'motoryat' || b.id === 'superyat'
+          ? 'dizel' : 'benzin') as FuelType,
       label: b.label,
     }))
   }
@@ -3879,6 +3928,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       penalty: Math.max(0, Math.min(500_000, Math.round(Number(ct.penalty) || 0))),
       deliveredToday: Math.max(0, Number(ct.deliveredToday) || 0),
       missedDays: Math.max(0, Math.round(Number(ct.missedDays) || 0)),
+      ...(BOAT_SEGMENTS.some(b => b.id === ct.boat) ? { boat: ct.boat as BoatKind } : {}),
     }
   } else s.contract = null
   // ÇOKLU ŞUBE: bilinmeyen/bozuk id'ler atılır, aktif şube her zaman AÇIK listede olur.

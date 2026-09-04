@@ -9,9 +9,9 @@ import { TrafficDebug, trafficDebugOn } from './traffic-debug'
 import { trafikOlayKur, trafikOlayTick, type TrafikOlay } from './trafik-olay'
 import { shareLabel } from './rival'
 import { openLogbook } from './logbook-ui'
-import { makeLogbook, resolveLogbook, logbookFlags, REFIT_KINDS, type MarinaFacId } from './marina'
+import { makeLogbook, resolveLogbook, logbookFlags, REFIT_KINDS, BOAT_SEGMENTS, type MarinaFacId } from './marina'
 import {
-  FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
+  FuelType, FUELS, FUEL_LABEL, FUEL_PRICE, GameState, FILL_RATE, tekneDebisi, SPILL_PENALTY_PER_L, WRONG_FUEL_PENALTY, GRID_COST_PER_KWH,
   EV_PRICE_PER_KWH, TANK_CAPACITY, URANIUM_COST, PARCEL_COLS, PARCEL_ROWS, PAVE_COST, FUEL_COST, priceBounds,
   parcelKey, parcelCost, buyItem, doMaintenance, getShopItems, serializeState, hydrateState, checkAchievements, SUPPLIERS,
   dailyQuests, claimDailyQuests, careerGoals,
@@ -1540,6 +1540,8 @@ function openOfficePanel() {
           `<div class="prow" style="flex-wrap:wrap">`
           + `<span class="pl" style="flex:1 1 100%;font-weight:800">${o.name} · ${FUEL_LABEL[o.fuel]}</span>`
           + `<span class="pc" style="flex:1 1 100%">${t('{0} gün · günde {1}L · ₺{2}/L · prim ₺{3} · ceza ₺{4}', o.daysTotal, o.dailyLiters, o.pricePerL, tl(o.bonus), tl(o.penalty))}</span>`
+          // DENİZ İHALESİ: marinada filo iskeleye TEKNE olarak gelir (otobüs değil) — hangi tekne, yaz
+          + (o.boat ? `<span class="pc" style="flex:1 1 100%;color:var(--muted)">${t('Filo: {0} — iskeleye tekne olarak gelir', BOAT_SEGMENTS.find(b => b.id === o.boat)?.label ?? o.boat)}</span>` : '')
           + `<span class="pc" style="flex:1 1 100%;color:var(--muted)">${t('Normal müşteri satışların taahhüde sayılır — tahmini günlük {0} satışın: ~{1}L', FUEL_LABEL[o.fuel], state.estDailySales(o.fuel))}</span>`
           + `<button class="btn sbuy good" data-sign="${o.id}" style="margin-top:4px">${t('İmzala')}</button></div>`).join('')
       }
@@ -2322,7 +2324,7 @@ const cars = new CarManager(world.scene, modelLib, {
   farActive: () => world.farStationOn,
   isWater: () => world.theme.lane.kind === 'water', // sahne teması (save gecikmesine dayanıklı)
   // FİLO: aktif ihale varsa garantili sözleşme araçları gelir
-  contract: () => state.contract ? { fuel: state.contract.fuel, dailyLiters: state.contract.dailyLiters } : null,
+  contract: () => state.contract ? { fuel: state.contract.fuel, dailyLiters: state.contract.dailyLiters, boat: state.contract.boat } : null,
   farGateInY: () => world.gateIn2.y,
   farGateOutY: () => world.gateOut2.y,
   truckSpots: () => world.getTruckSpots(),
@@ -8042,7 +8044,9 @@ function frame() {
       continue
     }
     // personel eğitimi hızlandırır, EKİPMAN YIPRANMASI yavaşlatır (Katman 2b)
-    const amount = Math.min(FILL_RATE * state.pumpSpeedMult() * state.staffFillMult() * state.wearEfficiency() * dt, state.tanks[c.nozzle])
+    // TEKNE DEBİSİ: büyük tekne büyük hortumla dolar (state.tekneDebisi) — arabada FILL_RATE birebir
+    const taban = c.boat ? tekneDebisi(c.fullMode ? c.hiddenNeedL : c.demandLiters, c.serviceSec) : FILL_RATE
+    const amount = Math.min(taban * state.pumpSpeedMult() * state.staffFillMult() * state.wearEfficiency() * dt, state.tanks[c.nozzle])
     c.filled += amount
     state.tanks[c.nozzle] -= amount
     c.bubbleT -= dt // sayaç ~9/sn güncellensin (her frame değil) — okunur, çok hızlı akmaz

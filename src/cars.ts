@@ -440,6 +440,8 @@ export class Car {
   /** müşteri segmenti ('standart' = klasik) ve satış marjı çarpanı (premium yakıt) */
   segment = 'standart'
   marginMult = 1
+  /** tekne segmentinin tasarlanan servis süresi (sn) — dolum debisi buna ölçeklenir; arabada 0 */
+  serviceSec = 0
   demandKwh: number
   maxPatience: number
   patience: number
@@ -669,6 +671,7 @@ export class Car {
     }
     this.segment = picked?.id ?? 'standart'
     this.marginMult = picked?.marginMult ?? 1
+    this.serviceSec = picked?.serviceSec ?? 0
     if (picked) {
       this.demandAmount = Math.round((picked.min + Math.random() * (picked.max - picked.min)) / 10) * 10
       if (picked.fuel) this.demandType = picked.fuel
@@ -684,6 +687,12 @@ export class Car {
     // veriyordu. Taban indirildi; yeni oyuncu boğulmasın diye state.patienceMult()
     // ilk günlerde (gün ≤2 ×1.6, ≤5 ×1.3) süreyi uzatıyor.
     this.maxPatience = (kind === 'ev' ? 32 : 45) * patienceMult
+    // TEKNE SABRI: deniz servisi kara servisinin 3–30 katı sürer (jet ski 15 sn … süperyat
+    // 150 sn). 45 sn'lik kara sabrı iskelede TEK bir dolumdan kısaydı → önündeki tekne
+    // dolarken süperyat ₺40k'lık yakıtı almadan 1 dk'da çekip gidiyordu (headless e2e'de
+    // yakalandı). Sabır kendi servis süresiyle büyür: jet ski ≈ aynı kalır (57 sn),
+    // motor yat ~100 sn, süperyat ~165 sn. Kuyruk baskısı (sabirHizi) yine uygulanır.
+    if (boat) this.maxPatience += 0.8 * this.serviceSec
     // VIP: tutar 4 KAT ama sabır YARI. Reklamsız da kazanılabilir (hızlı davranırsan) —
     // reklam yalnız kurtarmayı KOLAYLAŞTIRIR, tek yol olmaz.
     if (vip) {
@@ -1586,7 +1595,7 @@ export interface CarManagerOpts {
   isWater?: () => boolean
   /** aktif B2B sözleşmesi — FİLO ARAÇLARI garantili gelir (oyuncu raporu:
    *  "ihale aldım, kimse gelmiyor") */
-  contract?: () => { fuel: FuelType; dailyLiters: number } | null
+  contract?: () => { fuel: FuelType; dailyLiters: number; boat?: BoatKind } | null
   /** ünitenin oyuncu açısı (rad) — araç slotta bu açıyla hizalanır */
   pumpAngle?: (i: number) => number
   evAngle?: (i: number) => number
@@ -1926,12 +1935,15 @@ export class CarManager {
     // ---- FİLO ARAÇLARI (ihale fixi 2. adım): sözleşme aktifken müşteri GARANTİLİ gelir.
     // Gün ~160 sn → ~20 sn'de bir filo aracı; her biri taahhüdün ~1/8'ini alır.
     // Organik satış üstüne biner → taahhüt dolabilir; oyuncu filoyu GÖZLE görür.
+    // DENİZ İHALESİ (4 Eyl 2026): marinada filo da gelir — ama TEKNE olarak (ct.boat). Tekne türü
+    // yoksa (eski kara ihalesi marinada devam ediyorsa) su şubesine araba sokulmaz: filo yok.
     const ct = this.opts.contract?.()
-    if (ct && !this.opts.waterOnly?.()) {
+    const suda = !!this.opts.waterOnly?.()
+    if (ct && (!suda || ct.boat)) {
       this.fleetTimer -= dt
       const fleetOn = this.cars.filter(c => c.segment === 'filo' && c.phase !== 'gone').length
-      if (this.fleetTimer <= 0 && fleetOn < 3 && spawnClear('near')) {
-        this.fleetTimer = 20
+      if (this.fleetTimer <= 0 && fleetOn < (suda ? 2 : 3) && spawnClear('near')) {
+        this.fleetTimer = suda ? 30 : 20
         this.spawnFleet(ct)
       }
     }
@@ -2743,12 +2755,16 @@ export class CarManager {
 
   private fleetTimer = 6
   /** Sözleşme filosu: girişi ZORUNLU (entryChance zarı yok), yakıt/tutar sözleşmeden */
-  private spawnFleet(ct: { fuel: FuelType; dailyLiters: number }) {
+  private spawnFleet(ct: { fuel: FuelType; dailyLiters: number; boat?: BoatKind }) {
     const price = this.opts.prices()[ct.fuel]
-    const L = Math.max(40, Math.ceil(ct.dailyLiters / 7)) // 8 araç × 1/7 ≈ %114 — yuvarlama asla eksik bırakmaz
+    const suda = !!this.opts.waterOnly?.()
+    // Marinada filo teknesi: günde ~5 tekne (30 sn aralık), her biri taahhüdün ~1/4'ü; kara: 8 araç × 1/7.
+    const L = Math.max(40, Math.ceil(ct.dailyLiters / (suda ? 4 : 7)))
+    const tekne = suda ? ct.boat ?? null : null
     const seg: CarSegment[] = [{ id: 'filo', share: 1, min: L * price * 0.9, max: L * price * 1.1,
-      marginMult: 1, fuel: ct.fuel, label: 'Filo' }]
-    const car = new Car(this.scene, this.lib, 'fuel', this.opts.prices(), seg, null, this.opts.patienceMult?.() ?? 1)
+      marginMult: 1, fuel: ct.fuel, label: 'Filo',
+      ...(tekne ? { serviceSec: this.opts.boats?.().find(b => b.id === tekne)?.serviceSec ?? 60 } : {}) }]
+    const car = new Car(this.scene, this.lib, 'fuel', this.opts.prices(), seg, tekne, this.opts.patienceMult?.() ?? 1)
     car.lane = 'near'; car.station = 'near'; car.phase = 'transit'
     car.wantsEnter = true
     const svc = this.opts.serviceLane?.()
