@@ -199,9 +199,9 @@ console.log('T6 nofill tavanı + web sahteciliği')
   const t = (await call(h, 'POST', '/api/ads/ticket', { placement: 'offline2x', amount: 100, platform: 'ios' })).data
   const c = await call(h, 'POST', '/api/ads/claim', { ticket: t.ticket, result: 'web' })
   ok(c.code === 403 && h.audits.some(a => a.kind === 'ad-web-fake'), 'ios bileti web yoluyla alınamaz + audit')
-  const tw = (await call(h, 'POST', '/api/ads/ticket', { placement: 'offline2x', amount: 100, platform: 'web' })).data
-  const cw = (await call(h, 'POST', '/api/ads/claim', { ticket: tw.ticket, result: 'web' })).data
-  ok(cw.granted, 'web bileti web yoluyla alınır (SSV yok, tavan var)')
+  // 4 Eyl 2026 (08d1d2c): tarayıcıda reklam YOK — web bileti premium değilse daha bilet aşamasında reddedilir
+  const tw = await call(h, 'POST', '/api/ads/ticket', { placement: 'offline2x', amount: 100, platform: 'web' })
+  ok(tw.code === 403 || !tw.data?.ticket, 'web bileti (premium dışı) sunucuda REDDEDİLİR — tarayıcıda reklam yok')
 }
 
 console.log('T7 premium sahteciliği')
