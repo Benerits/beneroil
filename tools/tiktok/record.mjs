@@ -82,9 +82,11 @@ await ctx.addInitScript(() => {
       .ov-hook { top:72px; background:linear-gradient(180deg,#e05656,#d64545); color:#fff;
         font-weight:800; font-size:30px; padding:14px 20px; border-radius:20px;
         border-bottom:5px solid #a83636; box-shadow:0 10px 30px rgba(0,0,0,.35); max-width:86% }
-      .ov-cap { bottom:200px; color:#fff; font-weight:800; font-size:31px;
-        -webkit-text-stroke:1.2px #14203a;
-        text-shadow:0 3px 0 #14203a,0 0 18px rgba(0,0,0,.45); max-width:90% }
+      /* Altyazı: DÜZ beyaz yazı, kırmızı tabela kutusu. Eski hâli stroke+gölge idi —
+         video sıkıştırmasında kenarlar kesik kesik (tırtıklı) çıkıyordu (Oğuz, 4 Eyl). */
+      .ov-cap { bottom:200px; color:#fff; font-weight:800; font-size:29px;
+        background:linear-gradient(180deg,#e05656,#d64545); padding:12px 20px; border-radius:18px;
+        border-bottom:5px solid #a83636; box-shadow:0 10px 30px rgba(0,0,0,.35); max-width:88% }
       .ov-badge { top:44%; background:#ffd93b; color:#7a1d1d; font-weight:800; font-size:34px;
         padding:12px 24px; border-radius:999px; border-bottom:5px solid #d9a916;
         box-shadow:0 12px 34px rgba(0,0,0,.4) }
