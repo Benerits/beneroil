@@ -827,12 +827,10 @@ export class UI {
         // varken üç yakıtta birden "para yok" görmek oyuncuyu deli ediyor; gerçek
         // sebep kotaydı ve EKRANDA HİÇ görünmüyordu. Öncelik sırası: kota > para > dolu
         // (kota, para kontrolünden ÖNCE — ikisi birden sıfırsa asıl kilit kotadır).
+        // (Kota dalı silindi: ortak hat kotası artık siparişi KİLİTLEMEZ — aşım kardeş
+        //  şubenin netinden düşer; bkz. state.supplyQuota(). "Kota Doldu" duvarı bitti.)
         const space = cap - lvl
-        const hatKalan = state.supplyRemaining()
-        if (hatKalan < 100 && space >= 100) {
-          this.setText(info, t('Ortak hat kotası bugün doldu — yarın tazelenir'))
-          this.setText(btn, t('Kota Doldu'))
-        } else if (space >= 100) {
+        if (space >= 100) {
           this.setText(info, t('Para yetersiz — alış ₺{0}/L', state.buyPrice(f).toFixed(1)))
           this.setText(btn, t('Para Yok'))
         } else {
@@ -846,7 +844,8 @@ export class UI {
         const hatK = state.supplyRemaining()
         this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap,
           need, (state.buyPrice(f) * state.supplierMult()).toFixed(1))
-          + (isFinite(hatK) ? t(' · hat kotası: {0}L', Math.round(hatK).toLocaleString('tr-TR')) : ''))
+          + (!isFinite(hatK) ? '' : hatK >= 100 ? t(' · hat kotası: {0}L', Math.round(hatK).toLocaleString('tr-TR'))
+            : t(' · hat kotası aşıldı — kardeş şubenin neti yarın düşer')))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
       }

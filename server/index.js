@@ -555,11 +555,12 @@ function clampBranchVault(s) {
   s.branchVault = out
 }
 
-/** PAYLAŞILAN TEDARİK HATTI (istemci state.ts SUPPLY_LINE_QUOTA ile BİREBİR).
- *  Kopya şube ile tabanı aynı günlük kotadan çeker. Kurcalanmış negatif/NaN değer
- *  kotayı sonsuz yakıta çevirmesin diye 0..kota aralığına kırpılır; anahtarlar yalnız
- *  TABAN şube id'leri olabilir. Servet hesabına GİRMEZ (para değil, gün içi sayaç). */
-const SUPPLY_LINE_QUOTA = 9_000
+/** PAYLAŞILAN TEDARİK HATTI (istemci state.ts SUPPLY_USED_MAX ile BİREBİR).
+ *  Kopya şube ile tabanı aynı günlük kotadan çeker; kota artık şubenin tank kapasitesi
+ *  kadar (istemci supplyQuota) ve AŞILABİLİR — bu yüzden kırpma tavanı sabit 9.000 değil,
+ *  en büyük marinanın toplam kapasitesinin üstü (400k). Kurcalanmış negatif/NaN değer
+ *  atılır; anahtarlar yalnız TABAN şube id'leri olabilir. Servet hesabına GİRMEZ. */
+const SUPPLY_USED_MAX = 400_000
 function clampSupplyUsed(s) {
   if (!s || !('supplyUsed' in s)) return
   if (typeof s.supplyUsed !== 'object' || !s.supplyUsed || Array.isArray(s.supplyUsed)) {
@@ -571,7 +572,7 @@ function clampSupplyUsed(s) {
     if (!BASE_LOCS_SRV.includes(k)) continue
     const v = Number(s.supplyUsed[k])
     if (!isFinite(v) || v <= 0) continue
-    out[k] = Math.min(SUPPLY_LINE_QUOTA, Math.round(v))
+    out[k] = Math.min(SUPPLY_USED_MAX, Math.round(v))
   }
   s.supplyUsed = out
 }

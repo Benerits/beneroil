@@ -14,7 +14,7 @@ const fs = await import('node:fs')
 const {
   GameState, serializeState, hydrateState,
   ALL_LOCS, BASE_LOCS, COPY_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor,
-  SUPPLY_LINE_QUOTA,
+  SUPPLY_LINE_QUOTA, SUPPLY_USED_MAX,
 } = await import('../../src/state.ts')
 
 // Sunucu servet fonksiyonlarını server/index.js'ten CANLI çıkar (kopya sürüklenmesi olmasın)
@@ -178,7 +178,15 @@ console.log('\n── 5) EKSEN 3 — YENİ KARAR: PAYLAŞILAN TEDARİK HATTI ─
   s.locSnapshots['metropol'] = { f: { managerLevel: 3, staffLevel: 1, pumps: 10, marketLevel: 3, evChargers: 4, equipVal: 900_000 },
     autoPumps: [0, 1], autoChargers: [], equipVal: 900_000 }
   check('kopya + tabanı açık → ORTAK tedarik hattı kuruldu', s.supplyLine() === 'metropol')
-  check(`hattın günlük kotası ${SUPPLY_LINE_QUOTA}L ve başlangıçta dolu`, s.supplyRemaining() === SUPPLY_LINE_QUOTA)
+  // KOTA TANK KAPASİTESİYLE BÜYÜR (canlı: 14 pompalı Çevre Yolu 5 gün üst üste tam 9.000 L'ye
+  // yaslanmıştı — "ortak havuzdan yakıt bitince sıkıntı"). Burada tankLevel 3 ama sayaç 1 → 15.000 L.
+  s.tankCounts = { benzin: 1, dizel: 1, lpg: 1 }
+  check(`kota tank kapasitesi kadar (3×5.000 = 15.000 L ≥ taban ${SUPPLY_LINE_QUOTA})`, s.supplyQuota() === 15_000 && s.supplyRemaining() === 15_000)
+  s.tankCounts = { benzin: 4, dizel: 4, lpg: 4 }
+  check('tank ekleyince kota büyür (4 tank × 3 yakıt = 60.000 L)', s.supplyQuota() === 60_000)
+  const kucuk = new GameState(); kucuk.unlockedLocs = ['kasaba', 'metropol', 'metropol-2']; kucuk.activeLoc = 'metropol-2'
+  check(`küçük istasyonda taban kota ${SUPPLY_LINE_QUOTA} L korunur (2.400 L kapasite → taban)`, kucuk.supplyQuota() === SUPPLY_LINE_QUOTA)
+  check('hattın kotası başlangıçta dolu', s.supplyRemaining() === s.supplyQuota())
 
   const kardesTam = s.branchNetPerDay('metropol').net
   // aktif şubede tankları doldur → hattı tüket
@@ -190,21 +198,24 @@ console.log('\n── 5) EKSEN 3 — YENİ KARAR: PAYLAŞILAN TEDARİK HATTI ─
     if (s.placeOrder(f)) cekilen += need
     s.orders[f] = { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
   }
-  check(`aktif şube hattan ${cekilen}L çekti (kota ${SUPPLY_LINE_QUOTA}L)`, cekilen > 0)
-  check(`hattan kalan düştü: ${s.supplyRemaining()}L`, s.supplyRemaining() < SUPPLY_LINE_QUOTA)
-  check('sipariş kotayı AŞAMIYOR (dağıtımcı fazlasını vermiyor)', s.supplyUsed['metropol'] <= SUPPLY_LINE_QUOTA)
+  check(`aktif şube hattan ${cekilen}L çekti (kota ${s.supplyQuota()}L)`, cekilen > 0)
+  check(`hattan kalan düştü: ${s.supplyRemaining()}L`, s.supplyRemaining() < s.supplyQuota())
 
-  // hattı tamamen tüket → kardeş şube AÇ KALIR
-  s.supplyUsed['metropol'] = SUPPLY_LINE_QUOTA
+  // hattı tamamen tüket → kardeş şube AÇ KALIR ama SİPARİŞ KİLİTLENMEZ ("Kota Doldu" duvarı bitti)
+  s.supplyUsed['metropol'] = s.supplyQuota()
   s.tanks.benzin = 0
-  check('hat bitince aktif şube de sipariş VEREMEZ', s.canOrder('benzin') === false && s.orderNeed('benzin') === 0)
+  check('kota bitince aktif şube YİNE sipariş verebilir (duvar yok)', s.canOrder('benzin') === true && s.orderNeed('benzin') > 0)
+  check('kota aşıldı: kalan 0, doluluk 1 (arayüz "aşıldı" der)', s.supplyRemaining() === 0 && s.supplyFill() === 1)
+  const asimOnce = s.supplyUsed['metropol']
+  check('aşım siparişi kayda geçer (bedel kardeşe yansır)', s.placeOrder('benzin') && s.supplyUsed['metropol'] > asimOnce)
+  s.orders.benzin = { pending: false, eta: 0, arrived: false, delivering: false, amount: 0 }
   const paraOnce = s.money
   const sonuc = s.accrueBranchVaults()
   const kardesGercek = s.money - paraOnce
   check(`kardeş şube AÇ KALDI: potansiyel ₺${tl(kardesTam)} → gerçekleşen ₺${tl(kardesGercek)}`,
     kardesGercek > 0 && kardesGercek < kardesTam * 0.8)
   check('gün raporu "yakıtsız kaldı" bilgisini taşıyor', sonuc.some(x => x.loc === 'metropol' && x.starved === true))
-  check('gün dönüşünde kota SIFIRLANDI (ertesi gün yeni karar)', s.supplyRemaining() === SUPPLY_LINE_QUOTA)
+  check('gün dönüşünde kota SIFIRLANDI (ertesi gün yeni karar)', s.supplyRemaining() === s.supplyQuota())
 
   // hattı hiç kullanmayan oyuncu tam geliri alır (ceza YOK)
   const t2 = new GameState()
@@ -219,9 +230,13 @@ console.log('\n── 5) EKSEN 3 — YENİ KARAR: PAYLAŞILAN TEDARİK HATTI ─
   const iki = new GameState()
   iki.unlockedLocs = ['kasaba', 'metropol', 'metropol-2', 'otoyol', 'otoyol-2']
   iki.activeLoc = 'metropol-2'
-  iki.supplyUsed['metropol'] = SUPPLY_LINE_QUOTA
+  iki.supplyUsed['metropol'] = iki.supplyQuota()
   check('hatlar bağımsız: metropol hattı bitse de otoyol hattı dolu',
-    iki.supplyRemaining('otoyol-2') === SUPPLY_LINE_QUOTA)
+    iki.supplyRemaining('otoyol-2') === iki.supplyQuota('otoyol-2'))
+  // sunucu kırpma tavanı istemciyle BİREBİR (eski 9.000 kırpması büyüyen kotayı sessizce sıfırlardı)
+  const srvMax = Number((src.match(/const SUPPLY_USED_MAX = ([\d_]+)/) ?? [])[1]?.replace(/_/g, ''))
+  check(`sunucu SUPPLY_USED_MAX (${srvMax}) istemciyle aynı`, srvMax === SUPPLY_USED_MAX)
+  check('sunucu supplyUsed kırpması SUPPLY_USED_MAX kullanıyor', /Math\.min\(SUPPLY_USED_MAX, Math\.round\(v\)\)/.test(src))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

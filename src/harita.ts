@@ -189,7 +189,7 @@ export function haritaHatlari(s: GameState): HaritaHat[] {
       kopya: kopya as CopyLocId,
       aktif,
       doluluk: aktif ? s.supplyFill(b) : 0,
-      kalan: aktif ? Math.round(s.supplyRemaining(b)) : SUPPLY_LINE_QUOTA,
+      kalan: aktif ? Math.round(s.supplyRemaining(b)) : SUPPLY_LINE_QUOTA, // kurulu değilken taban kota gösterilir
     })
   }
   return out
@@ -407,7 +407,7 @@ function detayKarti(n: HaritaDugum, s: GameState, hat: HaritaHat | undefined): s
         <div class="pz-bar" style="margin:6px 0 0"><div class="pz-fill${pct >= 50 ? ' hot' : ''}" style="width:${Math.min(100, pct)}%"></div></div>
       </div>`
     } else {
-      s1 += `<div class="hnote">${t('Bu şube açılırsa {0} ile ORTAK tedarik hattına girer: günlük {1} L kota ikiye bölünür.',
+      s1 += `<div class="hnote">${t('Bu şube açılırsa {0} ile ORTAK tedarik hattına girer: günlük kota (en az {1} L, tank kapasiten kadar) ikiye bölünür.',
         esc(themeFor(kardes).name), tl(SUPPLY_LINE_QUOTA))}</div>`
     }
   }
@@ -496,7 +496,7 @@ export function haritaCiz(): void {
   let yanHtml = detayKarti(n, s, hat)
 
   // ── HATLAR KARTI: 4 taban↔kopya çifti, gerçek durumlarıyla ──
-  yanHtml += `<div class="hcard"><h4>${t('ORTAK TEDARİK HATLARI')}<span>${t('{0} L/gün · hat başına', tl(SUPPLY_LINE_QUOTA))}</span></h4>`
+  yanHtml += `<div class="hcard"><h4>${t('ORTAK TEDARİK HATLARI')}<span>${t('en az {0} L/gün · tank kapasitesi kadar', tl(SUPPLY_LINE_QUOTA))}</span></h4>`
   for (const h of hatlar) {
     const pct = Math.round(h.doluluk * 100)
     const ad = `${kisaAd(themeFor(h.taban).name)} + ${kisaAd(themeFor(h.kopya).name)}`

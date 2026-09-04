@@ -143,7 +143,7 @@ console.log('\n── 5) KENARLAR = GERÇEK ORTAK TEDARİK HATLARI ──')
   const oto = h5.find(h => h.taban === 'otoyol')
   check('taban+kopya açılınca hat KURULU görünür', oto.aktif && h5.filter(h => h.aktif).length === 1)
   check('kurulu hatta kota state.supplyRemaining ile birebir',
-    oto.kalan === Math.round(s4.supplyRemaining('otoyol')) && oto.kalan === SUPPLY_LINE_QUOTA)
+    oto.kalan === Math.round(s4.supplyRemaining('otoyol')) && oto.kalan === s4.supplyQuota('otoyol') && oto.kalan === SUPPLY_LINE_QUOTA)
   s4.supplyUsed = { otoyol: 4_500 }
   const h6 = haritaHatlari(s4).find(h => h.taban === 'otoyol')
   check('kota kullanımı state.supplyFill ile birebir', Math.abs(h6.doluluk - 0.5) < 1e-9 && h6.kalan === 4_500,

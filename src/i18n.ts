@@ -73,8 +73,8 @@ const EN: Record<string, string> = {
   "Ortak tedarik hattı kurulu": "Shared supply line is live",
   "{0} ile {1} AYNI bölge deposundan çekiyor. Bugün kotanın %{2}’si kullanıldı — kalan {3} L. Hepsini bir şubede harcarsan kardeş şube yarın aç kalır.":
     "{0} and {1} draw from the SAME regional depot. {2}% of today's quota is used — {3} L left. Spend it all at one branch and its sibling goes hungry tomorrow.",
-  "Bu şube açılırsa {0} ile ORTAK tedarik hattına girer: günlük {1} L kota ikiye bölünür.":
-    "Opening this branch puts it on a SHARED supply line with {0}: the daily {1} L quota gets split in two.",
+  "Bu şube açılırsa {0} ile ORTAK tedarik hattına girer: günlük kota (en az {1} L, tank kapasiten kadar) ikiye bölünür.":
+    "Opening this branch puts it on a SHARED supply line with {0}: the daily quota (at least {1} L, as much as your tank capacity) gets split in two.",
   "Şube Aç · ₺{0}": "Open Branch · ₺{0}",
   "Şu an buradasın": "You're here",
   "Kasa yetmiyor · ₺{0}": "Not enough cash · ₺{0}",
@@ -90,7 +90,8 @@ const EN: Record<string, string> = {
   "soluk yollar dekordur — veri taşıyan tek çizgi kırmızı hattır":
     "faded roads are scenery — the red line is the only one carrying data",
   "ORTAK TEDARİK HATLARI": "SHARED SUPPLY LINES",
-  "{0} L/gün · hat başına": "{0} L/day · per line",
+  "en az {0} L/gün · tank kapasitesi kadar": "at least {0} L/day · up to tank capacity",
+  "kota aşıldı ({0}L)": "quota exceeded ({0}L)",
   "kurulu · %{0} kullanıldı": "live · {0}% used",
   "henüz kurulmadı": "not established yet",
   "Kasabanın kopyası yoktur — hatsız çalışır, kotayı kimseyle paylaşmaz.":
@@ -1437,9 +1438,8 @@ const EN: Record<string, string> = {
   'Devraldığın kadro': 'Crew you inherited',
   'Sen yokken istasyon ÇALIŞMADI — offline kazanç hesaplı oyuncularda açılır. Kaydol: +₺2.500 bonus.':
     'Your station did NOT run while you were away — offline earnings unlock with an account. Sign up: +₺2,500 bonus.',
-  'Ortak hat kotası bugün doldu — yarın tazelenir': 'Shared supply line quota is used up for today — it refreshes tomorrow',
-  'Kota Doldu': 'Quota Used',
   ' · hat kotası: {0}L': ' · line quota left: {0}L',
+  ' · hat kotası aşıldı — kardeş şubenin neti yarın düşer': ' · line quota exceeded — the sister branch earns less tomorrow',
   '· pompacı': '· pump attendant',
   'Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.':
     'The pump attendant you lost in the handover has been rehired — with nobody on the pump, your shop, cafe, restaurant, car wash and oil change boxes were never filling up.',
@@ -1500,8 +1500,8 @@ const EN: Record<string, string> = {
   // --- Şube çiftleme: ortak tedarik hattı kotası ---
   'Ortak tedarik hattı': 'Shared supply line',
   '{0}L / {1}L kaldı': '{0}L / {1}L left',
-  "{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota her gün dönüşünde tazelenir.":
-    '{0} and {1} draw from the SAME distributor depot. You have used {2}% of today’s quota — burn it all here and the sister branch runs dry tomorrow, and its daily net drops. The quota refills at every day change.',
+  "{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota tank kapasitenle büyür, aşılabilir, her gün dönüşünde tazelenir.":
+    '{0} and {1} draw from the SAME distributor depot. You have used {2}% of today’s quota — burn it all here and the sister branch runs dry tomorrow, and its daily net drops. The quota grows with your tank capacity, can be exceeded, and refills at every day change.',
   '{0}: ortak tedarik hattını dün sen tükettin — şube yakıtsız kaldı, günlük neti düştü.':
     '{0}: you drained the shared supply line yesterday — the branch ran dry and its daily net fell.',
   'Önce {0} şubesini aç': 'Open the {0} branch first',
@@ -1689,8 +1689,8 @@ const FR: Record<string, string> = {
   "Ortak tedarik hattı kurulu": "Ligne d’approvisionnement partagée active",
   "{0} ile {1} AYNI bölge deposundan çekiyor. Bugün kotanın %{2}’si kullanıldı — kalan {3} L. Hepsini bir şubede harcarsan kardeş şube yarın aç kalır.":
     "{0} et {1} puisent dans le MÊME dépôt régional. {2}% du quota du jour est consommé — il reste {3} L. Tout dépenser d’un côté prive l’autre dès demain.",
-  "Bu şube açılırsa {0} ile ORTAK tedarik hattına girer: günlük {1} L kota ikiye bölünür.":
-    "Ouvrir cette succursale la met sur une ligne PARTAGÉE avec {0} : le quota de {1} L/jour est coupé en deux.",
+  "Bu şube açılırsa {0} ile ORTAK tedarik hattına girer: günlük kota (en az {1} L, tank kapasiten kadar) ikiye bölünür.":
+    "Ouvrir cette succursale la met sur une ligne PARTAGÉE avec {0} : le quota quotidien (au moins {1} L, jusqu'à ta capacité de cuves) est coupé en deux.",
   "Şube Aç · ₺{0}": "Ouvrir · ₺{0}",
   "Şu an buradasın": "Vous êtes ici",
   "Kasa yetmiyor · ₺{0}": "Fonds insuffisants · ₺{0}",
@@ -1706,7 +1706,8 @@ const FR: Record<string, string> = {
   "soluk yollar dekordur — veri taşıyan tek çizgi kırmızı hattır":
     "les routes pâles sont décoratives — seule la ligne rouge porte des données",
   "ORTAK TEDARİK HATLARI": "LIGNES D’APPROVISIONNEMENT PARTAGÉES",
-  "{0} L/gün · hat başına": "{0} L/jour · par ligne",
+  "en az {0} L/gün · tank kapasitesi kadar": "au moins {0} L/jour · jusqu'à la capacité des cuves",
+  "kota aşıldı ({0}L)": "quota dépassé ({0} L)",
   "kurulu · %{0} kullanıldı": "active · {0}% consommé",
   "henüz kurulmadı": "pas encore établie",
   "Kasabanın kopyası yoktur — hatsız çalışır, kotayı kimseyle paylaşmaz.":
@@ -3323,9 +3324,8 @@ const FR: Record<string, string> = {
   'Devraldığın kadro': 'Équipe héritée',
   'Sen yokken istasyon ÇALIŞMADI — offline kazanç hesaplı oyuncularda açılır. Kaydol: +₺2.500 bonus.':
     'Votre station n\'a PAS tourné en votre absence — les gains hors ligne se débloquent avec un compte. Inscrivez-vous : bonus de 2 500 ₺.',
-  'Ortak hat kotası bugün doldu — yarın tazelenir': 'Le quota de la ligne partagée est épuisé pour aujourd\'hui — il se renouvelle demain',
-  'Kota Doldu': 'Quota épuisé',
   ' · hat kotası: {0}L': ' · quota de ligne restant : {0} L',
+  ' · hat kotası aşıldı — kardeş şubenin neti yarın düşer': ' · quota de ligne dépassé — la succursale sœur gagnera moins demain',
   '· pompacı': '· pompiste',
   'Devirde kaybolan pompacın işe geri alındı — pompada kimse olmadığı için market, kahveci, restoran, oto yıkama ve yağ kumbaraların hiç dolmuyordu.':
     'Le pompiste perdu lors de la cession a été réembauché — sans personne à la pompe, les tirelires de ta supérette, ton café, ton restaurant, ton lavage auto et ta vidange ne se remplissaient jamais.',
@@ -3386,8 +3386,8 @@ const FR: Record<string, string> = {
   // --- Şube çiftleme: ortak tedarik hattı kotası ---
   'Ortak tedarik hattı': 'Approvisionnement partagé',
   '{0}L / {1}L kaldı': '{0} L / {1} L restants',
-  "{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota her gün dönüşünde tazelenir.":
-    '{0} et {1} puisent dans le MÊME dépôt régional du distributeur. Tu as utilisé {2} % du quota du jour — si tu brûles tout ici, la succursale sœur sera à sec demain et son net quotidien chutera. Le quota se recharge à chaque changement de jour.',
+  "{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota tank kapasitenle büyür, aşılabilir, her gün dönüşünde tazelenir.":
+    '{0} et {1} puisent dans le MÊME dépôt régional du distributeur. Tu as utilisé {2} % du quota du jour — si tu brûles tout ici, la succursale sœur sera à sec demain et son net quotidien chutera. Le quota grandit avec ta capacité de cuves, peut être dépassé et se recharge à chaque changement de jour.',
   '{0}: ortak tedarik hattını dün sen tükettin — şube yakıtsız kaldı, günlük neti düştü.':
     '{0} : tu as vidé l’approvisionnement partagé hier — la succursale est restée à sec et son net quotidien a chuté.',
   'Önce {0} şubesini aç': 'Ouvre d’abord la succursale {0}',

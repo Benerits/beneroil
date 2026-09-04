@@ -20,7 +20,7 @@ import {
   LocId, MANAGER_COSTS, MANAGER_WAGES, TANK_COSTS, PUMPSPEED_COSTS,
   // ŞUBE ÇİFTLEME: kopya şubeler (otoyol-2 vb.) — tema/sahne TABAN id'den, ekonomi
   // türetilmiş temadan gelir (bkz. state.ts themeFor / BRANCH_COPIES).
-  ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor, SUPPLY_LINE_QUOTA,
+  ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor,
   SAYAC_KUMBARA_MAX, TEKIL_KUMBARA,
   BENERITS_GUESTS, BeneritsId,
 } from './state'
@@ -1392,9 +1392,9 @@ function openOfficePanel() {
       const dolu = Math.round(state.supplyFill() * 100)
       const kardes = state.unlockedLocs.find(l => l !== state.activeLoc && baseLoc(l) === state.supplyLine())
       head += `<div class="prow" style="flex-wrap:wrap"><span class="pl"><b>${t('Ortak tedarik hattı')}</b></span>`
-        + `<span class="pc${dolu >= 50 ? ' bad' : ''}">${t('{0}L / {1}L kaldı', tl(kalan), tl(SUPPLY_LINE_QUOTA))}</span>`
+        + `<span class="pc${dolu >= 50 ? ' bad' : ''}">${kalan > 0 ? t('{0}L / {1}L kaldı', tl(kalan), tl(state.supplyQuota())) : t('kota aşıldı ({0}L)', tl(state.supplyQuota()))}</span>`
         + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">`
-        + t('{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}\'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota her gün dönüşünde tazelenir.',
+        + t('{0} ile {1} AYNI dağıtımcının bölge deposundan çekiyor. Bugün kotanın %{2}\'sini kullandın — hepsini burada harcarsan kardeş şube yarın aç kalır ve günlük neti düşer. Kota tank kapasitenle büyür, aşılabilir, her gün dönüşünde tazelenir.',
             themeFor(state.activeLoc).name, kardes ? themeFor(kardes).name : themeFor(state.supplyLine()!).name, String(dolu))
         + `</div></div>`
     }

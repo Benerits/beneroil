@@ -182,6 +182,9 @@ export function themeFor(id: string): LocationTheme {
 export const SUPPLY_LINE_QUOTA = 9_000
 /** Hat tamamen tükendiğinde kardeş şubenin gününden silinen pay (kalan %40) */
 export const SUPPLY_STARVE_MAX = 0.6
+/** supplyUsed kayıt kırpma tavanı (marina: 8 tank × 5.000 L × 3 çarpan × 3 yakıt = 360k).
+ *  Sunucu server/index.js SUPPLY_USED_MAX ile BİREBİR. */
+export const SUPPLY_USED_MAX = 400_000
 
 /** Şubeye AİT (lokasyon-bazlı) alanlar. Bunun dışındaki her şey şirket seviyesidir:
  *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
@@ -1649,17 +1652,36 @@ export class GameState {
     if (!isCopyLoc(copy)) return null                       // kasabanın kopyası yok
     return this.unlockedLocs.includes(b) && this.unlockedLocs.includes(copy) ? b : null
   }
-  /** Hattan bugün kalan litre. Hat yoksa Infinity (sipariş hiç sınırlanmaz). */
+  /**
+   * Hattın GÜNLÜK KOTASI (litre). Hat yoksa Infinity.
+   * ESKİDEN sabit 9.000 L'ydi ve sipariş için SERT duvardı: 14 pompalı, 4'er tanklı
+   * Çevre Yolu oyuncusu günde 18–20k L satarken kota 9k'da kesiyor, tank yarım günde
+   * boşalıyor, sipariş ekranı "Kota Doldu" diyordu (canlı kayıtta 5 gün üst üste tam
+   * 9.000 L sipariş görüldü — duvara yaslanmış). Oyun sahibi: "ortak havuzdan yakıt
+   * bitince sıkıntı yaşıyoruz". Kota artık şubenin TOPLAM TANK KAPASİTESİ kadar
+   * (taban 9.000 L korunur): büyüyen istasyonun kotası birlikte büyür. Kota AŞILABİLİR —
+   * sipariş asla kilitlenmez; aşımın bedeli kardeş şubenin günlük netinden (accrueBranchVaults)
+   * kesilir. Yani mekanik bir "bekleme duvarı" değil, görünür bir bedel: KARAR kalır, GRIND gider.
+   * Kapasite AKTİF şubeden okunur; supplyUsed'u yalnız aktif şube yazdığı ve gün dönüşünde
+   * sıfırlandığı için hattın kotası bugün siparişi veren şubeninkidir.
+   */
+  supplyQuota(loc: LocId = this.activeLoc): number {
+    if (!this.supplyLine(loc)) return Infinity
+    let kap = 0
+    for (const f of FUELS) kap += this.fuelCapacity(f)
+    return Math.max(SUPPLY_LINE_QUOTA, Math.round(kap))
+  }
+  /** Hattan bugün kalan litre. Hat yoksa Infinity. Sıfır = kota aşıldı (sipariş yine verilebilir). */
   supplyRemaining(loc: LocId = this.activeLoc): number {
     const line = this.supplyLine(loc)
     if (!line) return Infinity
-    return Math.max(0, SUPPLY_LINE_QUOTA - (this.supplyUsed[line] ?? 0))
+    return Math.max(0, this.supplyQuota(loc) - (this.supplyUsed[line] ?? 0))
   }
   /** Hattın bugün ne kadarı tüketildi (0..1) — arayüzde uyarı çubuğu */
   supplyFill(loc: LocId = this.activeLoc): number {
     const line = this.supplyLine(loc)
     if (!line) return 0
-    return Math.max(0, Math.min(1, (this.supplyUsed[line] ?? 0) / SUPPLY_LINE_QUOTA))
+    return Math.max(0, Math.min(1, (this.supplyUsed[line] ?? 0) / this.supplyQuota(loc)))
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1785,7 +1807,7 @@ export class GameState {
       // SUPPLY_STARVE_MAX kadarını kaybeder. Hat yoksa (tek nüsha) çarpan 1 → hiçbir
       // eski oyuncu bundan etkilenmez.
       const line = this.supplyLine(loc)
-      const kullanim = line ? Math.min(1, (this.supplyUsed[line] ?? 0) / SUPPLY_LINE_QUOTA) : 0
+      const kullanim = line ? Math.min(1, (this.supplyUsed[line] ?? 0) / this.supplyQuota(loc)) : 0
       const factor = 1 - SUPPLY_STARVE_MAX * kullanim
       const added = Math.round(d.net * factor)
       if (added <= 0) continue
@@ -2438,10 +2460,10 @@ export class GameState {
   orderNeed(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     const affordable = Math.max(0, Math.floor(this.money / (this.buyPrice(f) * disc * this.supplierMult())) - 1) // -1: ceil yuvarlaması para üstüne çıkmasın
-    // PAYLAŞILAN HAT: dağıtımcının bu bölgeye ayırdığı günlük kotadan fazlası verilmez.
-    // Hat yoksa Infinity döner → Math.min üzerinde hiçbir etkisi olmaz (eski davranış).
+    // PAYLAŞILAN HAT artık siparişi KISMAZ (eski sert kota 9.000 L'de "Kota Doldu" duvarı
+    // kuruyordu). Aşımın bedeli kardeş şubenin netinden düşer — bkz. supplyQuota().
     return Math.floor(Math.max(0, Math.min(this.orderQty[f] * ORDER_STEP, this.fuelCapacity(f) - this.tanks[f],
-      affordable, this.supplyRemaining())))
+      affordable)))
   }
   /** seçili tedarikçinin litre çarpanı (#1067) */
   supplierMult() { return SUPPLIERS[this.supplier]?.priceMult ?? 1 }
@@ -2473,7 +2495,7 @@ export class GameState {
     // (accrueBranchVaults) kardeş şubenin geliri bu kullanıma göre kırpılır — "iki şube
     // aynı depodan çekiyor" kararı burada gerçek bir bedele dönüşüyor.
     const line = this.supplyLine()
-    if (line) this.supplyUsed[line] = Math.min(SUPPLY_LINE_QUOTA, (this.supplyUsed[line] ?? 0) + need)
+    if (line) this.supplyUsed[line] = Math.min(SUPPLY_USED_MAX, (this.supplyUsed[line] ?? 0) + need)
     return true
   }
 
@@ -3961,7 +3983,7 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
       if (!(BASE_LOCS as readonly string[]).includes(k)) continue
       const n = Number(v)
       if (!isFinite(n) || n <= 0) continue
-      su[k as BaseLocId] = Math.min(SUPPLY_LINE_QUOTA, Math.round(n))
+      su[k as BaseLocId] = Math.min(SUPPLY_USED_MAX, Math.round(n))
     }
     s.supplyUsed = su
   }
