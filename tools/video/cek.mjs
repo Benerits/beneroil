@@ -760,6 +760,102 @@ const SENARYOLAR = {
       await bekle(p, 2100)
     },
   },
+  // 8) RAFİNERİ — YATAY 1920×1080 (5 Eyl). Dikey format tutmadı (izleme %4-10), oyuncu
+  //    "yatay + oyunun kendi sesleri" istedi. Soğuk açılış (gece, alev, duman) → sert
+  //    kesmelerle 6 günlük büyüme: boş arsa → vinç → kolonlar → tank çiftliği → tankerler.
+  //    Sonda "nasıl gidilir" (şube menüsü → Rafineri) — özellik görünmez kalmasın.
+  //    Ses katmanları uret'te KESME ZAMANLARINA hizalı eklenir (tamamla.swift sn=ses).
+  rafineri: {
+    ad: '08-rafineri-yatay',
+    boyut: { width: 1920, height: 1080 },
+    save: { money: 48_000_000, day: 142, reputation: 4.9, activeLoc: 'kasaba', unlockedLocs: ['kasaba'],
+            tanks: { benzin: 5000, dizel: 5000, lpg: 5000 } },
+    isinma: 6000,
+    async oyna(p) {
+      await p.evaluate(() => {
+        const s = document.createElement('style')
+        s.id = 'vo-sahne'
+        // sinematik: HUD/paneller yok; yatay kadraj için bant konumları
+        s.textContent = `.hud,#navbar,#sheettabs,#panel,#infocard,#toasts,#rafbar,#zonecostwrap,#rushhour,#promobadge,#eventbadge{display:none !important}
+          #vo h1{white-space:pre-line;font-size:66px} #vo h2{font-size:32px} #vo .tag{font-size:24px}
+          #vo .top{top:0;padding:56px 72px 40px} #vo .bot{bottom:0;padding:40px 72px 64px} #vo .bot h1{font-size:56px}
+          #locmenu{z-index:2147483000 !important;transform:scale(1.9);transform-origin:top left;top:28px !important;left:28px !important}`
+        document.head.appendChild(s)
+        const d = window.__dbg
+        const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+        window.__rf = {
+          /** kademe/inşaat durumunu dayat ve sahneye gir (kamera hemen ardından verilir) */
+          kur(lvl, days, saat) {
+            d.state.refineryLevel = lvl; d.state.refineryDaysLeft = days
+            d.saat(saat); d.rafineri.git()
+          },
+          kes(x, y, z) { d.cine.setCam(x, y, z) },
+          git(x, y, z, ms) {
+            const c = d.cine.getCam(), t0 = performance.now()
+            const tik = () => {
+              const f = ease(Math.min(1, (performance.now() - t0) / ms))
+              d.cine.setCam(c.x + (x - c.x) * f, c.y + (y - c.y) * f, c.zoom + (z - c.zoom) * f)
+              if (f < 1) requestAnimationFrame(tik)
+            }
+            tik()
+          },
+        }
+      })
+      // 0,0 → 3,0  SOĞUK AÇILIŞ: gece, kademe 3, kolonlar + alev yakın; yavaş geri çekilme
+      await p.evaluate(() => { window.__rf.kur(3, 0, 0.8); window.__rf.kes(-12, -8, 1.55); window.__rf.git(-10, -6, 1.3, 3000) })
+      await bekle(p, 500)
+      await p.evaluate(() => window.__vo.yazAlt('Bu senin rafinerin.', ''))
+      await bekle(p, 2500)
+
+      // 3,0 → 5,5  SERT KESME: gündüz, boş arsa
+      await p.evaluate(() => { window.__vo.sil(); window.__rf.kur(0, 0, 0.35); window.__rf.kes(4, 5, 0.74) })
+      await bekle(p, 200)
+      await p.evaluate(() => window.__vo.yaz('6 GÜN ÖNCE', 'Boş bir arsaydı.', ''))
+      await bekle(p, 2300)
+
+      // 5,5 → 9,5  İNŞAAT: vinç döner, parçalar yükselir
+      await p.evaluate(() => { window.__vo.sil(); window.__rf.kur(0, 3, 0.4); window.__rf.kes(-7, -5, 1.25); window.__rf.git(-5, -4, 1.1, 4000) })
+      await bekle(p, 200)
+      await p.evaluate(() => window.__vo.yaz('KADEME 1', 'Damıtma Ünitesi\ninşa ediliyor', '6 gün · bedel peşin'))
+      await bekle(p, 3800)
+
+      // 9,5 → 13,5  ÇALIŞIYOR: duman, alev, fener
+      await p.evaluate(() => { window.__vo.sil(); window.__rf.kur(1, 0, 0.45); window.__rf.kes(-9, -5, 1.2); window.__rf.git(-4, -3, 0.98, 4000) })
+      await bekle(p, 200)
+      await p.evaluate(() => window.__vo.yaz('ÇALIŞIYOR', 'Damıtma Ünitesi', 'yakıt alışı −%12'))
+      await bekle(p, 3800)
+
+      // 13,5 → 17,5  TANK ÇİFTLİĞİ + su kulesi
+      await p.evaluate(() => { window.__vo.sil(); window.__rf.kur(2, 0, 0.5); window.__rf.kes(10, -6, 1.2); window.__rf.git(6, -4, 1.0, 4000) })
+      await bekle(p, 200)
+      await p.evaluate(() => window.__vo.yaz('KADEME 2', 'Depolama Terminali', 'ortak hat kotası kalktı'))
+      await bekle(p, 3800)
+
+      // 17,5 → 22,5  FİLO: dolum rampası, konteynerler, yoldan geçen tankerler
+      await p.evaluate(() => { window.__vo.sil(); window.__rf.kur(3, 0, 0.55); window.__rf.kes(8, 10, 1.15); window.__rf.git(0, 8, 0.92, 5000) })
+      await bekle(p, 200)
+      await p.evaluate(() => window.__vo.yaz('KADEME 3', 'Kendi Tanker Filon', 'ham petrol fiyatından alım'))
+      await bekle(p, 4800)
+
+      // 22,5 → 25,5  NASIL GİDİLİR: istasyona dön, şube menüsünde Rafineri satırı
+      await p.evaluate(() => { window.__vo.sil(); window.__dbg.rafineri.don(); window.__dbg.saat(0.4) })
+      await bekle(p, 400)
+      await p.evaluate(() => { document.getElementById('locbtn')?.click() })
+      await bekle(p, 350)
+      await p.evaluate(() => { window.__vo.isaret('#locmenu [data-qloc="__rafineri"]'); window.__vo.yazAlt('Şube menüsü → Rafineri', 'tek dokunuş') })
+      await bekle(p, 2500)
+
+      // 25,5 → 28,5  GECE GENİŞ: tesis ışıl ışıl
+      await p.evaluate(() => { window.__vo.isaretSil(); window.__vo.sil(); document.getElementById('locmenu')?.classList.remove('show'); window.__rf.kur(3, 0, 0.82); window.__rf.kes(2, 0, 0.78); window.__rf.git(0, -1, 0.86, 3000) })
+      await bekle(p, 200)
+      await p.evaluate(() => window.__vo.yazAlt('Gezilebilir. Büyüdüğünü görürsün.', ''))
+      await bekle(p, 2800)
+
+      // 28,5 → 31,5  MARKA
+      await p.evaluate(() => { window.__vo.sil(); window.__vo.yaz('BENELOIL', 'Rafineri', 'beneloil.com') })
+      await bekle(p, 3000)
+    },
+  },
 }
 
 // ─────────────────────────── ÇEKİM ───────────────────────────
@@ -772,7 +868,7 @@ for (const ad of liste) {
   const klasor = join(OUT, ad)
   mkdirSync(klasor, { recursive: true })
   const ctx = await b.newContext({
-    viewport: { width: 1080, height: 1350 },       // Twitter dikey-kare: akışta en çok yer kaplar
+    viewport: s.boyut ?? { width: 1080, height: 1350 },  // varsayılan dikey-kare; senaryo `boyut` ile yatay (1920×1080) seçebilir
     deviceScaleFactor: 1,
   })
   const p = await ctx.newPage()

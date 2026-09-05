@@ -3,6 +3,7 @@
 ## 5 Eylül 2026
 - **Rafineri artık gezilebilir bir yer**: şube menüsünde ve haritanın rafineri kartında "Rafineriye Git" — tesis 3B sahnede açılır (Kenney industrial kitleri). Boş arsa → inşaat sahası (vinç, iskele, parçalar sırayla yükselir) → Kademe 1 damıtma kolonları + soğutma kulesi + flare → Kademe 2 tank çiftliği + su kulesi → Kademe 3 dolum rampası, konteyner sahası ve yola çıkan kendi tankerlerin. Duman, alev, ikaz fenerleri ve vinç çalışır; gece aydınlatması var. Ziyaret sırasında istasyon arkada çalışmaya devam eder; "Şubeye dön" tek tuş.
 - Teknik: rafineri bir şube (LocId) DEĞİL — sahne modu. Şube sayacı, devir eşiği, başarımlar ve kayıt formatı dokunulmadan kaldı. EN/FR çevirileri tam; `npm run test:rafineri-ziyaret` (headless Chrome) büyümeyi, animasyonu ve dönüşü kanıtlıyor.
+- **Rafineri ziyareti telefonda düzeldi:** 390px'te "Şubeye dön" şeridi sağdan taşıyor, buton kesiliyordu; şerit artık ekrana sığıyor ve HUD çiplerinin altına iniyor. Dikey ekranda kamera geri çekiliyor (tabela + kolonlar kadrajda). Tankerler artık ziyarete girildiği anda yolda (eskiden 9 sn boş yol).
 
 ## 17 Ağustos 2026
 - **Kasa tek** (oyuncu talebi): müdürlü pasif şubelerin günlük net geliri artık şube kasasında birikmek yerine her gün dönüşünde DOĞRUDAN ortak kasaya yazılıyor — "2. şubedeyken 1. şube AFK kalıyor" derdi bitti. Eski şube-kasası bakiyeleri ilk gün dönüşünde otomatik devredilir. (Müdürsüz şube üretmez — tasarım.)

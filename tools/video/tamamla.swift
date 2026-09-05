@@ -1,9 +1,13 @@
 // TANITIM VİDEOSU TAMAMLAYICI — webm'e müzik + hook sesi ekler, mp4 yazar.
 // ffmpeg gerekmez: macOS'un kendi AVFoundation'ı kullanılır.
 //
-// Kullanım: swift tamamla.swift <video.webm|mp4> <muzik.wav> <hook.wav> <cikti.mp4>
+// Kullanım: swift tamamla.swift <video.webm|mp4> <muzik.wav> <hook.wav> <cikti.mp4> [sn=ses.wav[:ses] ...]
 //   hook sesi 0. saniyede tek atış çalar (dikkat çekici giriş), müzik altta döner,
 //   sonda 1.2 sn yumuşak kısılma olur.
+//   EK KATMANLAR (5 Eyl): "3.0=insaat.wav" gibi argümanlar o saniyede tek atış OYUN SESİ
+//   çalar (kesmelere sert vuruş, inşaat/başarım anlarına gerçek efekt). İsteğe bağlı
+//   ":0.6" ses seviyesi. Video zaten oyunun sesi kısık kaydedildiği için efektler
+//   sonradan, KESME ZAMANLARIYLA HİZALI eklenir.
 
 import AVFoundation
 import Foundation
@@ -15,6 +19,14 @@ let muzikURL = URL(fileURLWithPath: a[2])
 let hookURL  = URL(fileURLWithPath: a[3])
 let ciktiURL = URL(fileURLWithPath: a[4])
 try? FileManager.default.removeItem(at: ciktiURL)
+// ek katmanlar: "sn=dosya[:ses]"
+struct Katman { let sn: Double; let url: URL; let ses: Float }
+let katmanlar: [Katman] = a.dropFirst(5).compactMap { arg in
+    let e = arg.split(separator: "=", maxSplits: 1).map(String.init)
+    guard e.count == 2, let sn = Double(e[0]) else { return nil }
+    let f = e[1].split(separator: ":", maxSplits: 1).map(String.init)
+    return Katman(sn: sn, url: URL(fileURLWithPath: f[0]), ses: f.count > 1 ? Float(f[1]) ?? 0.8 : 0.8)
+}
 
 let sem = DispatchSemaphore(value: 0)
 var hata: String?
@@ -63,7 +75,23 @@ Task {
                          timeRange: CMTimeRange(start: CMTimeSubtract(vSure, fade), duration: fade))
         let ph = AVMutableAudioMixInputParameters(track: compH)
         ph.setVolume(0.9, at: .zero)
-        mix.inputParameters = [pm, ph]
+        var params = [pm, ph]
+        // ── ek katmanlar: her biri kendi izinde, verilen saniyede tek atış ──
+        for k in katmanlar {
+            let kAsset = AVURLAsset(url: k.url)
+            guard let kTrack = try await kAsset.loadTracks(withMediaType: .audio).first else { continue }
+            let kSure = try await kAsset.load(.duration)
+            let bas = CMTime(seconds: k.sn, preferredTimescale: 600)
+            guard CMTimeCompare(bas, vSure) < 0 else { continue }
+            let kalan = CMTimeSubtract(vSure, bas)
+            let parca = CMTimeCompare(kSure, kalan) < 0 ? kSure : kalan
+            let compK = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)!
+            try compK.insertTimeRange(CMTimeRange(start: .zero, duration: parca), of: kTrack, at: bas)
+            let pk = AVMutableAudioMixInputParameters(track: compK)
+            pk.setVolume(k.ses, at: .zero)
+            params.append(pk)
+        }
+        mix.inputParameters = params
 
         guard let disa = AVAssetExportSession(asset: comp, presetName: AVAssetExportPreset1920x1080) else {
             hata = "dışa aktarıcı kurulamadı"; sem.signal(); return

@@ -440,13 +440,16 @@ export class RafineriSahnesi {
     this.parcaAc(parcalar, p)
     if (p < 1) return
     this.pencereler(y, [[-11.95, 5.2, 1.4], [-11.95, 6.8, 1.4]])
-    // TANKERLER: iki araç, ters fazda — doğudan gelir, rampada durur, batıdan çıkar
+    // TANKERLER: iki araç, ters fazda — doğudan gelir, rampada durur, batıdan çıkar.
+    // Başlangıç konumları GÖRÜNÜR bölgede (biri 4 sn içinde rampaya varır, biri çıkışta):
+    // uzakta (x=48/108) doğsalar oyuncu sahneye girip 9 sn boyunca boş yol görüyordu.
     for (let i = 0; i < 2; i++) {
       const g = this.tankerMesh(i === 0 ? 0xa8d6b8 : 0xe3c49b)
       g.rotation.z = Math.PI // batıya (−x) gider; model +x ileri
-      g.position.set(48 + i * 60, RAF_YOL_Y, 0)
+      const x0 = i === 0 ? 22 : -14
+      g.position.set(x0, RAF_YOL_Y, 0)
       y.add(g)
-      this.tankerler.push({ g, x: 48 + i * 60, bekle: 0, durdu: false, hiz: 5.5 })
+      this.tankerler.push({ g, x: x0, bekle: 0, durdu: i === 1, hiz: 5.5 })
     }
   }
 
@@ -569,7 +572,7 @@ export class RafineriSahnesi {
         tk.x = RAF_RAMPA_X; tk.durdu = true; tk.bekle = 4.5
       } else {
         tk.x -= tk.hiz * dt
-        if (tk.x < -60) { tk.x = 60; tk.durdu = false; tk.bekle = 3 + Math.random() * 4 }
+        if (tk.x < -42) { tk.x = 42; tk.durdu = false; tk.bekle = 2 + Math.random() * 3 }
       }
       tk.g.position.x = tk.x
     }

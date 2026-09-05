@@ -18,7 +18,8 @@
  *          ziyarette istasyon panelleri gizli, don() sahneyi/etiketi/kamerayı geri alır,
  *          activeLoc ziyaret boyunca sabit, sayfa hatası yok.
  *
- * Kullanım: node tools/tests/rafineri-ziyaret-check.mjs   (kendi vite'ını açar; PORT env ile hazır sunucu da verilebilir)
+ * Kullanım: node tools/tests/rafineri-ziyaret-check.mjs   (kendi vite'ını açar; PORT env ile hazır sunucu,
+ *           BASE=https://petrol.benerits.com ile canlı doğrulama)
  */
 import { readFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
@@ -57,21 +58,23 @@ for (const k of ['Rafineriye Git', 'Şubeye dön', 'istasyona dön', 'boş arsa 
 
 // ── E2E ──
 console.log('\n── E2E (headless Chrome) ──')
-let PORT = process.env.PORT, vite = null
+// BASE=https://petrol.benerits.com → canlıya karşı koşar (deploy sonrası doğrulama); yoksa lokal vite
+let PORT = process.env.PORT, vite = null, BASE = process.env.BASE
 const canli = async port => { try { const r = await fetch(`http://localhost:${port}/`); return r.ok } catch { return false } }
-if (!PORT || !(await canli(PORT))) {
+if (!BASE && (!PORT || !(await canli(PORT)))) {
   PORT = '5391'
   vite = spawn('npx', ['vite', '--port', PORT, '--strictPort'], { cwd: new URL('../../', import.meta.url), stdio: 'ignore' })
   for (let i = 0; i < 40 && !(await canli(PORT)); i++) await new Promise(r => setTimeout(r, 500))
 }
-bekle(await canli(PORT), `dev sunucu :${PORT}`)
+if (!BASE) BASE = `http://localhost:${PORT}`
+bekle(BASE.startsWith('https') || await canli(PORT), `sunucu ${BASE}`)
 
 const b = await chromium.launch({ channel: 'chrome' })
 const p = await (await b.newContext({ viewport: { width: 1280, height: 800 } })).newPage()
 const hatalar = []
 p.on('pageerror', e => hatalar.push(String(e).slice(0, 200)))
 await p.addInitScript(() => { localStorage.setItem('benzinlik-music', '0') })
-await p.goto(`http://localhost:${PORT}/?full=1`, { waitUntil: 'domcontentloaded' })
+await p.goto(`${BASE}/?full=1`, { waitUntil: 'domcontentloaded' })
 let hazir = false
 for (let i = 0; i < 30 && !hazir; i++) {
   hazir = await p.evaluate(() => {
@@ -137,6 +140,24 @@ bekle(!don.ziyaret && !don.barGorunur && !don.ziyaretSinifi && don.lbl !== 'Rafi
 const sahneDogru = await p.evaluate(() => { const d = window.__dbg; const c = document.querySelector('canvas'); return !!c && d.state.activeLoc === 'kasaba' })
 bekle(sahneDogru, 'dönüşte istasyon sahnesi (kasaba) ve canvas yerinde')
 bekle(hatalar.length === 0, 'sayfa hatası yok', hatalar.join(' | '))
+
+// MOBİL: 390px'te şerit sağdan taşıyor, "Şubeye dön" kesiliyordu; kamera da tabelayı kesiyordu
+console.log('── MOBİL (390×844) ──')
+const m = await (await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage()
+await m.addInitScript(() => { localStorage.setItem('benzinlik-music', '0') })
+await m.goto(`${BASE}/?full=1`, { waitUntil: 'domcontentloaded' })
+for (let i = 0; i < 30; i++) {
+  const ok = await m.evaluate(() => { document.getElementById('gguest')?.click(); const g = document.getElementById('authgate'); if (g) g.style.display = 'none'; return !!window.__dbg?.rafineri }).catch(() => false)
+  if (ok) break; await m.waitForTimeout(500)
+}
+const mob = await m.evaluate(() => {
+  const d = window.__dbg; d.state.refineryLevel = 2; d.state.refineryDaysLeft = 4; d.rafineri.git()
+  const r = document.getElementById('rafbar').getBoundingClientRect(), bt = document.getElementById('rafback').getBoundingClientRect()
+  return { sag: r.right, btSag: bt.right, sol: r.left, barUst: r.top, zoom: d.cine.getCam().zoom }
+})
+bekle(mob.sag <= 390 && mob.btSag <= 390 && mob.sol >= 0, 'rafbar dar ekranda taşmıyor, "Şubeye dön" görünür', `right=${Math.round(mob.sag)} btn=${Math.round(mob.btSag)}`)
+bekle(mob.zoom < 0.7 && mob.barUst >= 150, 'dikey telefonda kamera geri çekiliyor, şerit HUD çiplerinin altında', `zoom=${mob.zoom}`)
+await m.close()
 
 await b.close()
 if (vite) vite.kill()

@@ -2322,7 +2322,9 @@ function rafineriyeGit() {
   rafSahne.kur(state.refineryLevel, state.refineryProgress())
   rafZiyaret = true
   rafKameraYedek = { x: camX, y: camY, zoom: camera.zoom }
-  camX = 0; camY = -1; camera.zoom = 0.9; updateCamera(); camera.updateProjectionMatrix()
+  // dikey telefonda 0.9 tabelayı ve kolonları kesiyordu; dar ekranda geri çekil
+  const dikey = innerWidth < innerHeight
+  camX = dikey ? 1 : 0; camY = dikey ? -9 : -1; camera.zoom = dikey ? 0.55 : 0.9; updateCamera(); camera.updateProjectionMatrix()
   document.body.classList.add('raf-ziyaret') // istasyon panelleri (müşteri isteği, bilgi kartı) burada anlamsız
   if (renderPass) renderPass.scene = rafSahne.scene
   golgeTazele()

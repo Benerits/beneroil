@@ -1560,6 +1560,12 @@ Sorun / Öneri Bildir
     #locmenu.show { display:block }
     /* RAFİNERİ ZİYARETİ: istasyona ait paneller gizli (müşteri isteği, bina kartı) — sahne rafineriyi çiziyor */
     body.raf-ziyaret #panel, body.raf-ziyaret #infocard { display:none !important }
+    /* dar ekranda şerit sağdan taşıyordu (390px'te "Şubeye dön" kesiliyordu): sar, ekrana sığ */
+    @media (max-width: 560px) {
+      #rafbar { white-space:normal !important; width:calc(100vw - 24px); font-size:13px; line-height:1.25; top:calc(196px + env(safe-area-inset-top)) !important }
+      #rafbar-tx { flex:1 1 0; min-width:0 }
+      #rafback { flex:0 0 auto }
+    }
     #locmenu button { display:flex; align-items:center; gap:9px; width:100%; text-align:left;
       background:none; border:0; border-radius:10px; padding:9px 10px; cursor:pointer;
       font:inherit; font-weight:800; font-size:13px; color:var(--ink) }
