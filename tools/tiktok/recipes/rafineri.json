@@ -1,0 +1,177 @@
+{
+  "name": "rafineri-3-kademe",
+  "seconds": 38,
+  "trimStart": 0.4,
+  "warmupMs": 6000,
+  "musicSeed": 41,
+  "steps": [
+    {
+      "do": "eval",
+      "js": "const d=window.__dbg,s=d.state; s.brandStars=40; s.day=300; s.money=400000000; for(const l of ['cevreyolu','otoyol','marina','metropol','otoyol-2']) s.unlockLoc(l); s.money=400000000; for(const f of ['benzin','dizel','lpg']) s.tanks[f]=s.fuelCapacity(f); for(let i=0;i<s.pumps;i++) s.autoPumps.add(i); const st=document.createElement('style'); st.textContent='#toasts,#guestcta,#fbbtn{display:none!important}'; document.head.appendChild(st); const ease=k=>k<.5?2*k*k:-1+(4-2*k)*k; window.__camTo=(x,y,z,ms)=>new Promise(r=>{const c=d.cine.getCam(),t0=performance.now();const f=()=>{const k=Math.min(1,(performance.now()-t0)/ms),e=ease(k);d.cine.setCam(c.x+(x-c.x)*e,c.y+(y-c.y)*e,c.zoom+(z-c.zoom)*e);k<1?requestAnimationFrame(f):r()};f()}); window.__raf=()=>document.querySelector('.hn-raf')?.dispatchEvent(new MouseEvent('click',{bubbles:true})); window.__kur=()=>{const b=document.querySelector('[data-hraf]'); if(!b) return false; b.scrollIntoView({block:'center',behavior:'smooth'}); return new Promise(r=>setTimeout(()=>{b.click(); r(true)},700))}; window.__bitir=()=>{s.refineryDaysLeft=1; d.saat(0.995)}; window.__ust=()=>document.getElementById('map-body')?.scrollTo({top:0,behavior:'smooth'});"
+    },
+    {
+      "do": "overlay",
+      "kind": "wm",
+      "text": "beneloil.com",
+      "dur": 60
+    },
+    {
+      "do": "eval",
+      "js": "return window.__camTo(6.5,-32,1.5,900)"
+    },
+    {
+      "do": "overlay",
+      "kind": "hook",
+      "text": "37 oyuncu 40 yıldız\ntavanına dayandı ⛽",
+      "dur": 3.1
+    },
+    {
+      "do": "wait",
+      "ms": 3000
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "onlar için şube ağına yeni bir düğüm koyduk",
+      "dur": 2.6
+    },
+    {
+      "do": "wait",
+      "ms": 1000
+    },
+    {
+      "do": "eval",
+      "js": "document.getElementById('officebtn')?.click(); return new Promise(r=>setTimeout(()=>{document.querySelector('#oftabs .tab[data-oftab=\"buyume\"]')?.click(); document.getElementById('of-map')?.click(); r()},450))"
+    },
+    {
+      "do": "wait",
+      "ms": 1200
+    },
+    {
+      "do": "eval",
+      "js": "window.__raf()"
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "RAFİNERİ — şube değil, şirket tesisi. 3 kademe.",
+      "dur": 3.0
+    },
+    {
+      "do": "wait",
+      "ms": 1200
+    },
+    {
+      "do": "eval",
+      "js": "return window.__kur()"
+    },
+    {
+      "do": "overlay",
+      "kind": "badge",
+      "text": "−₺60.000.000 · 6 gün",
+      "dur": 2.0
+    },
+    {
+      "do": "wait",
+      "ms": 2000
+    },
+    {
+      "do": "eval",
+      "js": "window.__bitir(); return new Promise(r=>setTimeout(()=>{window.__ust(); r()},1900))"
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "Kademe 1: alış fiyatı −%12, ortak hat kotası ×2",
+      "dur": 2.8
+    },
+    {
+      "do": "wait",
+      "ms": 2800
+    },
+    {
+      "do": "eval",
+      "js": "return window.__kur()"
+    },
+    {
+      "do": "overlay",
+      "kind": "badge",
+      "text": "−₺100.000.000 · 8 gün",
+      "dur": 2.0
+    },
+    {
+      "do": "wait",
+      "ms": 2000
+    },
+    {
+      "do": "eval",
+      "js": "window.__bitir(); return new Promise(r=>setTimeout(()=>{window.__ust(); r()},1900))"
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "Kademe 2: kota kalkıyor, tankerler %25 hızlı",
+      "dur": 2.8
+    },
+    {
+      "do": "wait",
+      "ms": 2800
+    },
+    {
+      "do": "eval",
+      "js": "return window.__kur()"
+    },
+    {
+      "do": "overlay",
+      "kind": "badge",
+      "text": "−₺160.000.000 · 10 gün",
+      "dur": 2.0
+    },
+    {
+      "do": "wait",
+      "ms": 2000
+    },
+    {
+      "do": "eval",
+      "js": "window.__bitir(); return new Promise(r=>setTimeout(()=>{window.__ust(); r()},1900))"
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "Kademe 3: kendi tanker filon. Ham petrol fiyatından.",
+      "dur": 2.8
+    },
+    {
+      "do": "wait",
+      "ms": 2800
+    },
+    {
+      "do": "eval",
+      "js": "document.getElementById('mapwrap')?.classList.remove('show'); document.getElementById('orderbtn')?.click(); return new Promise(r=>setTimeout(()=>{document.querySelector('#supplierrow [data-sup=\"rafineri\"]')?.click(); r()},600))"
+    },
+    {
+      "do": "wait",
+      "ms": 500
+    },
+    {
+      "do": "overlay",
+      "kind": "cap",
+      "text": "işletme gideri ₺220 bin/gün — bedava değil 🙂",
+      "dur": 3.2
+    },
+    {
+      "do": "wait",
+      "ms": 3000
+    },
+    {
+      "do": "endcard",
+      "title": "BENELOIL",
+      "sub": "beneloil.com — tarayıcıda, kurulum yok",
+      "dur": 0
+    },
+    {
+      "do": "wait",
+      "ms": 2800
+    }
+  ]
+}
