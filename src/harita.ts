@@ -39,6 +39,7 @@
 import { t } from './i18n'
 import {
   ALL_LOCS, BASE_LOCS, BRANCH_COPIES, GameState, SUPPLY_LINE_QUOTA,
+  REFINERY_MAX, REFINERY_NAMES, REFINERY_OPEX, REFINERY_DISCOUNT, REFINERY_ETA_MULT,
   baseLoc, isCopyLoc, themeFor,
   type BaseLocId, type CopyLocId, type LocId,
 } from './state'
@@ -63,6 +64,10 @@ export const HARITA_KONUM: Record<LocId, readonly [number, number]> = {
   metropol: [606, 398],
   'metropol-2': [802, 508],
 }
+/** RAFİNERİ: şube değil, ŞİRKET tesisi — tahtanın ortasında, tüm tabanlara eşit uzaklıkta.
+ *  Devirde sıfırlanmaz; konumu da şubeler gibi hikâyeden değil işlevinden gelir. */
+export const RAFINERI_ID = 'rafineri' as const
+export const RAFINERI_KONUM: readonly [number, number] = [470, 300]
 
 /** Taban şube → sprite sembolü (index.html'deki #i-loc-* symbol'leri). */
 const IKON: Record<BaseLocId, string> = {
@@ -162,6 +167,36 @@ export function haritaDugumleri(s: GameState): HaritaDugum[] {
   })
 }
 
+/** Rafineri düğümünün TEK veri kaynağı — test ve çizim aynı fonksiyondan okur. */
+export interface RafineriDugum {
+  x: number; y: number
+  seviye: number          // 0..REFINERY_MAX
+  insaat: boolean         // inşaat sürüyor mu
+  gunKaldi: number
+  ilerleme: number        // 0..1 (inşaat yoksa 0)
+  /** state.canBuildRefinery() — sonraki kademe alınabilir mi, neden değil */
+  sonraki: ReturnType<GameState['canBuildRefinery']>
+  opex: number
+  indirim: number         // aktif alış indirimi (0 veya REFINERY_DISCOUNT)
+  kotasiz: boolean        // kademe 2+: ortak hat kotası kalktı
+  filo: boolean           // kademe 3: Rafineri Filosu tedarikçisi açık
+}
+export function rafineriDugumu(s: GameState): RafineriDugum {
+  const sonraki = s.canBuildRefinery()
+  return {
+    x: RAFINERI_KONUM[0], y: RAFINERI_KONUM[1],
+    seviye: s.refineryLevel,
+    insaat: s.refineryDaysLeft > 0,
+    gunKaldi: s.refineryDaysLeft,
+    ilerleme: s.refineryProgress(),
+    sonraki,
+    opex: s.refineryOpex(),
+    indirim: s.refineryDiscount(),
+    kotasiz: s.refineryLevel >= 2,
+    filo: s.refineryLevel >= REFINERY_MAX,
+  }
+}
+
 export interface HaritaHat {
   taban: BaseLocId
   kopya: CopyLocId
@@ -169,8 +204,10 @@ export interface HaritaHat {
   aktif: boolean
   /** bugün kotanın ne kadarı kullanıldı (0..1) — state.supplyFill() */
   doluluk: number
-  /** bugün kalan litre — state.supplyRemaining() */
+  /** bugün kalan litre — state.supplyRemaining(); rafineri kademe 2+ ile Infinity */
   kalan: number
+  /** kota kalktı (rafineri kademe 2+) — metinlerde "sınırsız" yazılır */
+  kotasiz: boolean
 }
 
 /**
@@ -189,7 +226,8 @@ export function haritaHatlari(s: GameState): HaritaHat[] {
       kopya: kopya as CopyLocId,
       aktif,
       doluluk: aktif ? s.supplyFill(b) : 0,
-      kalan: aktif ? Math.round(s.supplyRemaining(b)) : SUPPLY_LINE_QUOTA, // kurulu değilken taban kota gösterilir
+      kalan: aktif ? Math.round(s.supplyRemaining(b)) : s.supplyQuota(b), // kurulu değilken taban kota gösterilir
+      kotasiz: s.refineryLevel >= 2,
     })
   }
   return out
@@ -199,6 +237,8 @@ export function haritaHatlari(s: GameState): HaritaHat[] {
    3) BİÇİMLEME
    ══════════════════════════════════════════════════════════════════════════ */
 const tl = (n: number) => Math.round(n).toLocaleString('tr-TR')
+/** litre metni — rafineri kademe 2+ kotayı kaldırır (Infinity) → "∞" */
+const lt = (n: number) => Number.isFinite(n) ? tl(n) : '∞'
 /** kompakt para — düğüm altındaki iki satırlık alana ₺22.000.000 sığmaz */
 function para(v: number): string {
   const a = Math.abs(v), im = v < 0 ? '−' : ''
@@ -291,6 +331,53 @@ function hatCiz(h: HaritaHat, dg: Map<LocId, HaritaDugum>): string {
   }
   const dolu = h.doluluk >= 0.5 ? ' hl-hot' : ''
   return `<path class="hl hl-base${dolu}" d="${d}"/><path class="hl hl-flow${dolu}" d="${d}"/>`
+}
+
+/** Rafineri → açık TABAN şubeler: kademe 1+ iken ince turuncu besleme hatları.
+ *  Kademe 0'da hiç çizilmez (tesis yokken hat da yok). */
+function rafineriHatlariCiz(r: RafineriDugum, s: GameState, dg: Map<LocId, HaritaDugum>): string {
+  if (r.seviye < 1) return ''
+  let out = ''
+  for (const b of BASE_LOCS) {
+    if (!s.unlockedLocs.includes(b)) continue
+    const n = dg.get(b); if (!n) continue
+    const d = `M${r.x} ${r.y} L${n.x} ${n.y}`
+    out += `<path class="hl hl-raf-base" d="${d}"/><path class="hl hl-raf" d="${d}"/>`
+  }
+  return out
+}
+
+function rafineriCiz(r: RafineriDugum, secili: boolean): string {
+  const alt = r.insaat ? t('{0} gün kaldı', String(r.gunKaldi))
+    : r.seviye >= REFINERY_MAX ? t('Kademe {0} · FİLO', String(r.seviye))
+    : r.seviye > 0 ? t('Kademe {0}', String(r.seviye))
+    : r.sonraki.ok ? para(r.sonraki.cost)
+    : r.sonraki.reason === 'yildiz' ? `${r.sonraki.stars}★`
+    : r.sonraki.reason === 'sube' ? t('{0} şube', String(r.sonraki.locs))
+    : para(r.sonraki.cost)
+  const durum = r.seviye > 0 ? 'raf-on' : r.sonraki.ok ? 'firsat' : 'kilit'
+  const RR = R + 4
+  const halka = secili
+    ? `<rect class="hn-ring" x="${r.x - RR - 9}" y="${r.y - RR - 9}" width="${(RR + 9) * 2}" height="${(RR + 9) * 2}" rx="26"/>`
+      + `<rect class="hn-ring hn-ring-pulse" x="${r.x - RR - 9}" y="${r.y - RR - 9}" width="${(RR + 9) * 2}" height="${(RR + 9) * 2}" rx="26"/>`
+    : ''
+  // inşaat ilerlemesi: plakanın altında ince turuncu şerit
+  const bar = r.insaat
+    ? `<rect class="hn-raf-track" x="${r.x - RR + 6}" y="${r.y + RR - 9}" width="${(RR - 6) * 2}" height="4" rx="2"/>`
+      + `<rect class="hn-raf-fill" x="${r.x - RR + 6}" y="${r.y + RR - 9}" width="${Math.max(2, (RR - 6) * 2 * r.ilerleme)}" height="4" rx="2"/>`
+    : ''
+  return `<g class="hn hn-raf hn-${durum}${secili ? ' is-sel' : ''}" data-hloc="${RAFINERI_ID}" tabindex="0"
+    role="button" aria-label="${t('Rafineri')}">
+    ${halka}
+    <rect class="hn-lip" x="${r.x - RR}" y="${r.y - RR + 5}" width="${RR * 2}" height="${RR * 2}" rx="20"/>
+    <rect class="hn-plate" x="${r.x - RR}" y="${r.y - RR}" width="${RR * 2}" height="${RR * 2}" rx="20" filter="url(#hz-soft)"/>
+    <use class="hn-icon" href="#i-loc-rafineri" x="${r.x - 16}" y="${r.y - 17}" width="32" height="32"/>
+    ${bar}
+    ${r.seviye > 0 ? `<text class="hn-tag hn-raf-tag" x="${r.x + RR - 13}" y="${r.y - RR + 13}">${r.seviye}</text>` : ''}
+    <text class="hn-label" x="${r.x}" y="${r.y + RR + 19}" text-anchor="middle">${t('Rafineri')}</text>
+    <text class="hn-sub" x="${r.x}" y="${r.y + RR + 34}" text-anchor="middle">${esc(alt)}</text>
+    <rect class="hn-hit" x="${r.x - RR - 8}" y="${r.y - RR - 8}" width="${(RR + 8) * 2}" height="${(RR + 8) * 2 + 32}" rx="24"/>
+  </g>`
 }
 
 function dugumCiz(n: HaritaDugum, secili: boolean): string {
@@ -398,14 +485,19 @@ function detayKarti(n: HaritaDugum, s: GameState, hat: HaritaHat | undefined): s
   // — ortak tedarik hattı: GERÇEK mekanik, bu düğümün kararına doğrudan giriyor —
   if (hat) {
     const kardes = hat.taban === n.id ? hat.kopya : hat.taban
-    if (hat.aktif) {
+    if (hat.aktif && hat.kotasiz) {
+      s1 += `<div class="hnote hnote-line"><b>${t('Ortak tedarik hattı kurulu')}</b><br>
+        ${t('Rafineri Depolama Terminali sayesinde kota yok: {0} ile {1} sınırsız çekiyor.', esc(themeFor(hat.taban).name), esc(themeFor(hat.kopya).name))}</div>`
+    } else if (hat.aktif) {
       const pct = Math.round(hat.doluluk * 100)
       s1 += `<div class="hnote hnote-line">
         <b>${t('Ortak tedarik hattı kurulu')}</b><br>
         ${t('{0} ile {1} AYNI bölge deposundan çekiyor. Bugün kotanın %{2}’si kullanıldı — kalan {3} L. Hepsini bir şubede harcarsan kardeş şube yarın aç kalır.',
-          esc(themeFor(hat.taban).name), esc(themeFor(hat.kopya).name), String(pct), tl(hat.kalan))}
+          esc(themeFor(hat.taban).name), esc(themeFor(hat.kopya).name), String(pct), lt(hat.kalan))}
         <div class="pz-bar" style="margin:6px 0 0"><div class="pz-fill${pct >= 50 ? ' hot' : ''}" style="width:${Math.min(100, pct)}%"></div></div>
       </div>`
+    } else if (hat.kotasiz) {
+      s1 += `<div class="hnote">${t('Bu şube açılırsa {0} ile ORTAK tedarik hattına girer — rafineri sayesinde kota yok.', esc(themeFor(kardes).name))}</div>`
     } else {
       s1 += `<div class="hnote">${t('Bu şube açılırsa {0} ile ORTAK tedarik hattına girer: günlük kota (en az {1} L, tank kapasiten kadar) ikiye bölünür.',
         esc(themeFor(kardes).name), tl(SUPPLY_LINE_QUOTA))}</div>`
@@ -428,6 +520,71 @@ function detayKarti(n: HaritaDugum, s: GameState, hat: HaritaHat | undefined): s
   return s1 + `</div>`
 }
 
+/** RAFİNERİ KARTI: kademe merdiveni + etkisi + inşaat + satın alma. Şube kartından
+ *  farkı: burada müdür/kasa yok, bu bir ŞİRKET tesisidir — devirde de kalır. */
+function rafineriKarti(r: RafineriDugum, s: GameState): string {
+  const c = r.sonraki
+  const etiket = r.insaat ? t('İNŞAAT') : r.seviye >= REFINERY_MAX ? t('TAM KAPASİTE')
+    : r.seviye > 0 ? t('KADEME {0}', String(r.seviye)) : c.ok ? t('KURULABİLİR') : t('KİLİTLİ')
+  const pill = r.insaat ? 'hd-insaat' : r.seviye > 0 ? 'hd-aktif' : c.ok ? 'hd-firsat' : ''
+
+  let h = `<div class="hcard hdetail hdetail-raf">
+    <div class="hd-head">
+      <span class="hd-icon" style="color:var(--orange)"><svg class="ic"><use href="#i-loc-rafineri"/></svg></span>
+      <span class="hd-t"><b>${t('Rafineri')}</b>
+        <span class="hd-meta">${t('ŞİRKET TESİSİ · DEVİRDE KALIR')}</span></span>
+      <span class="hd-pill ${pill}">${etiket}</span>
+    </div>`
+
+  // — kademe merdiveni: her satır ne verdiğini söyler; alınmış olan işaretli —
+  const etki = [
+    t('alış −%{0} · ortak hat kotası ×2', String(Math.round(REFINERY_DISCOUNT * 100))),
+    t('kota kalkar · tanker {0}× hızlı', vir(REFINERY_ETA_MULT, 2)),
+    t('“Rafineri Filosu” tedarikçisi: ham petrol fiyatından'),
+  ]
+  h += `<div class="hraf-lad">`
+  for (let i = 0; i < REFINERY_MAX; i++) {
+    const st = i < r.seviye ? 'on' : (i === r.seviye && r.insaat) ? 'wip' : (i === r.seviye) ? 'next' : ''
+    h += `<div class="hraf-step ${st}"><i>${i < r.seviye ? '✓' : i + 1}</i>
+      <span><b>${esc(REFINERY_NAMES[i])}</b><small>${etki[i]}</small></span>
+      <em>₺${tl(REFINERY_OPEX[i + 1])}/${t('gün')}</em></div>`
+  }
+  h += `</div>`
+
+  // — şu anki etki —
+  if (r.seviye > 0) {
+    if (r.indirim > 0) h += satir(t('Alış fiyatı'), t('−%{0}', String(Math.round(r.indirim * 100))), 'good')
+    if (r.filo) h += satir(t('Tedarikçi'), t('Rafineri Filosu açık'), 'good')
+    h += satir(t('Ortak hat kotası'), r.kotasiz ? t('sınırsız') : t('×2'), 'good')
+    h += satir(t('İşletme gideri'), `₺${tl(r.opex)}/${t('gün')}`, 'bad')
+  }
+
+  // — inşaat —
+  if (r.insaat) {
+    const pct = Math.round(r.ilerleme * 100)
+    h += `<div class="hnote hnote-line"><b>${t('{0} inşa ediliyor', esc(REFINERY_NAMES[r.seviye]))}</b><br>
+      ${t('{0} gün kaldı · para peşin ödendi, bedel bugün varlığına yazıldı.', String(r.gunKaldi))}
+      <div class="pz-bar" style="margin:6px 0 0"><div class="pz-fill" style="width:${Math.max(3, pct)}%"></div></div></div>`
+  }
+
+  // — aksiyon —
+  if (c.ok) {
+    h += `<div class="hd-src">${t('İnşaat {0} gün sürer; kademe tamamlanınca etkisi anında başlar.', String(c.days))}</div>`
+    h += `<button class="btn good hact" data-hraf="1">${t('Kademe {0} Kur · ₺{1}', String(c.level), tl(c.cost))}</button>`
+  } else if (c.reason === 'insaat') {
+    h += `<button class="btn hact" disabled>${t('İnşaat sürüyor · {0} gün', String(r.gunKaldi))}</button>`
+  } else if (c.reason === 'max') {
+    h += `<button class="btn hact" disabled>${t('Tam kapasite')}</button>`
+  } else {
+    const neden = c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', String(c.stars))
+      : c.reason === 'sube' ? t('{0} açık şube gerekir', String(c.locs))
+      : t('Kasa yetmiyor · ₺{0}', tl(c.cost))
+    h += `<div class="hd-src">${t('Kademe {0} · ₺{1} · {2}★ · {3} şube', String(c.level), tl(c.cost), String(c.stars), String(c.locs))}</div>`
+    h += `<button class="btn hact" disabled>${neden}</button>`
+  }
+  return h + `</div>`
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    7) BAĞLAMA — main.ts buradan kurar
    ══════════════════════════════════════════════════════════════════════════ */
@@ -437,10 +594,12 @@ export interface HaritaCtx {
   onAc: (id: LocId) => void
   /** MEVCUT şube geçiş akışı (main.ts subeyeGec) */
   onGit: (id: LocId) => void
+  /** Rafineri kademesi satın al — state.startRefinery + toast main.ts'te */
+  onRafineri?: () => void
 }
 
 let ctx: HaritaCtx | null = null
-let secili: LocId | null = null
+let secili: LocId | typeof RAFINERI_ID | null = null
 let kuruldu = false
 
 /** Modalın açık olup olmadığı — main.ts döngüsü canlı tazeleme için sorar */
@@ -460,12 +619,14 @@ export function haritaCiz(): void {
   const list = haritaDugumleri(s)
   const dg = new Map(list.map(n => [n.id, n]))
   const hatlar = haritaHatlari(s)
+  const raf = rafineriDugumu(s)
   // seçili düğüm hep geçerli kalsın (şube açıldı/değişti → aktif şubeye düş)
-  if (!secili || !dg.has(secili)) secili = s.activeLoc
+  if (!secili || (secili !== RAFINERI_ID && !dg.has(secili))) secili = s.activeLoc
+  const rafSecili = secili === RAFINERI_ID
 
   svg.innerHTML = tanimlar() + zemin()
-    + `<g class="hlines">${hatlar.map(h => hatCiz(h, dg)).join('')}</g>`
-    + `<g class="hnodes">${list.map(n => dugumCiz(n, n.id === secili)).join('')}</g>`
+    + `<g class="hlines">${rafineriHatlariCiz(raf, s, dg)}${hatlar.map(h => hatCiz(h, dg)).join('')}</g>`
+    + `<g class="hnodes">${rafineriCiz(raf, rafSecili)}${list.map(n => dugumCiz(n, n.id === secili)).join('')}</g>`
 
   // ── üst şerit: kasa · şube · yıldız · aktif hat ──
   const acikSayi = s.unlockedLocs.length
@@ -476,12 +637,14 @@ export function haritaCiz(): void {
     `<div class="hchip acc"><span class="hcl">${t('KASA')}</span><span class="hcv">${para(s.money)}</span></div>`
     + `<div class="hchip"><span class="hcl">${t('ŞUBE')}</span><span class="hcv">${acikSayi}<i>/${ALL_LOCS.length}</i></span></div>`
     + `<div class="hchip"><span class="hcl">${t('MARKA')}</span><span class="hcv">${s.brandStars}★</span></div>`
-    + `<div class="hchip"><span class="hcl">${t('ORTAK HAT')}</span><span class="hcv${aktifHat && aktifHat.doluluk >= 0.5 ? ' bad' : ''}">`
-    + (aktifHat ? `${tl(aktifHat.kalan)}<i> L</i>` : `<i>${t('yok')}</i>`) + `</span></div>`
+    + `<div class="hchip"><span class="hcl">${t('ORTAK HAT')}</span><span class="hcv${aktifHat && aktifHat.doluluk >= 0.5 && !aktifHat.kotasiz ? ' bad' : ''}">`
+    + (aktifHat ? (aktifHat.kotasiz ? `∞<i> ${t('rafineri')}</i>` : `${tl(aktifHat.kalan)}<i> L</i>`) : `<i>${t('yok')}</i>`) + `</span></div>`
+    + `<div class="hchip${raf.seviye > 0 ? ' acc-raf' : ''}"><span class="hcl">${t('RAFİNERİ')}</span><span class="hcv">`
+    + (raf.insaat ? `${raf.gunKaldi}<i> ${t('gün')}</i>` : raf.seviye > 0 ? `${t('Kd.')}${raf.seviye}` : `<i>${t('yok')}</i>`) + `</span></div>`
 
   // ── yan panel: açıklama + detay + hat listesi ──
-  const n = dg.get(secili)!
-  const hat = hatlar.find(h => h.taban === n.id || h.kopya === n.id)
+  const n = rafSecili ? undefined : dg.get(secili as LocId)!
+  const hat = n ? hatlar.find(h => h.taban === n.id || h.kopya === n.id) : undefined
 
   // Efsane tahtanın ALTINDA durur (açıkladığı şeyin yanında). Son madde kritik:
   // haritadaki soluk yol izleri DEKORDUR, veri taşıyan tek çizgi kırmızı hattır.
@@ -491,16 +654,17 @@ export function haritaCiz(): void {
     <span><i class="hk hk-firsat"></i>${t('açılabilir')}</span>
     <span><i class="hk hk-kilit"></i>${t('kilitli')}</span>
     <span><i class="hk hk-hat"></i>${t('ortak tedarik hattı')}</span>
+    <span><i class="hk hk-raf"></i>${t('rafineri beslemesi')}</span>
     <span class="hlg-note">${t('soluk yollar dekordur — veri taşıyan tek çizgi kırmızı hattır')}</span>`
 
-  let yanHtml = detayKarti(n, s, hat)
+  let yanHtml = n ? detayKarti(n, s, hat) : rafineriKarti(raf, s)
 
   // ── HATLAR KARTI: 4 taban↔kopya çifti, gerçek durumlarıyla ──
-  yanHtml += `<div class="hcard"><h4>${t('ORTAK TEDARİK HATLARI')}<span>${t('en az {0} L/gün · tank kapasitesi kadar', tl(SUPPLY_LINE_QUOTA))}</span></h4>`
+  yanHtml += `<div class="hcard"><h4>${t('ORTAK TEDARİK HATLARI')}<span>${raf.kotasiz ? t('kota kalktı · rafineri kademe {0}', String(raf.seviye)) : t('en az {0} L/gün · tank kapasitesi kadar', tl(SUPPLY_LINE_QUOTA))}</span></h4>`
   for (const h of hatlar) {
     const pct = Math.round(h.doluluk * 100)
     const ad = `${kisaAd(themeFor(h.taban).name)} + ${kisaAd(themeFor(h.kopya).name)}`
-    const durum = h.aktif ? t('kurulu · %{0} kullanıldı', String(pct)) : t('henüz kurulmadı')
+    const durum = h.aktif ? (h.kotasiz ? t('kurulu · sınırsız') : t('kurulu · %{0} kullanıldı', String(pct))) : t('henüz kurulmadı')
     yanHtml += `<button class="hline${h.aktif ? ' on' : ''}" data-hsel="${h.aktif || dg.get(h.kopya)?.durum !== 'kilit' ? h.kopya : h.taban}">
       <span class="hline-t">${esc(ad)}</span><span class="hline-s">${durum}</span>
       <span class="pz-bar"><span class="pz-fill${pct >= 50 ? ' hot' : ''}" style="width:${h.aktif ? Math.min(100, pct) : 0}%"></span></span>
@@ -519,8 +683,9 @@ export function haritaKur(c: HaritaCtx): void {
   const yan = document.getElementById('h-side')
 
   const sec = (id: string | undefined) => {
-    if (!id || !ALL_LOCS.includes(id as LocId)) return
-    secili = id as LocId
+    if (!id) return
+    if (id !== RAFINERI_ID && !ALL_LOCS.includes(id as LocId)) return
+    secili = id as LocId | typeof RAFINERI_ID
     haritaCiz()
   }
   svg?.addEventListener('click', e => sec((e.target as Element).closest('.hn')?.getAttribute('data-hloc') ?? undefined))
@@ -537,6 +702,7 @@ export function haritaKur(c: HaritaCtx): void {
     if (ac) { ctx?.onAc(ac.dataset.hunlock as LocId); return }
     const git = el.closest('[data-hgo]') as HTMLElement | null
     if (git) { ctx?.onGit(git.dataset.hgo as LocId); return }
+    if (el.closest('[data-hraf]')) { ctx?.onRafineri?.(); return }
   })
   wrap?.addEventListener('pointerdown', e => {
     if (e.target === wrap) wrap.classList.remove('show')

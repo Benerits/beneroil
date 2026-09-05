@@ -186,6 +186,42 @@ export const SUPPLY_STARVE_MAX = 0.6
  *  Sunucu server/index.js SUPPLY_USED_MAX ile BİREBİR. */
 export const SUPPLY_USED_MAX = 400_000
 
+/**
+ * RAFİNERİ — ŞİRKET SEVİYESİ MEGA YAPI (40★ tavanı raporu, 4 Eyl 2026).
+ *
+ * SORUN (canlı DB, yalnız toplamlar): 36 oyuncu 40★ tavanında oturuyor, 30–39★ arasında
+ * yalnız 4 kişi var; tavandakilerin medyan kasası ₺117M ve harcanacak yer yok. Devirin üç
+ * ekseni de (gelir ×, akış, kuruluş sermayesi) doymuş; feedback: "oyun bitti, yapılacak bir
+ * şey kalmadı". Rafineri bu paraya bir BATAK ve 20→30→40★ basamağına yeni HEDEF verir.
+ *
+ * TASARIM: şube değil şirket varlığı (LOC_FIELDS dışında → şube geçişinde taşınmaz,
+ * devirde SİLİNMEZ — marka yıldızı gibi). Haritada düğüm olarak durur, kademe kademe ve
+ * GÜN GÜN inşa edilir. Her kademenin bir bedeli var (günlük işletme gideri) — türün tuzu.
+ *   1 Damıtma Ünitesi    : şirket geneli alış −%12, ortak hat kotası ×2
+ *   2 Depolama Terminali : ortak hat kotası KALKAR, tanker ETA ×0,75
+ *   3 Kendi Tanker Filosu: yeni tedarikçi "Rafineri Filosu" (0,70×, ETA 0,55×) — fiyatı
+ *                          piyasa yerine HAM PETROL endeksini izler (oynak: ucuz ama şoklu)
+ * DEVİR EŞİĞİNE SAYILMAZ (companyEquipmentValue dışı): ₺60M rafineri eşiği tek hamlede
+ * geçirirse yıldız farmı geri döner. Sunucu server/index.js REFINERY_COSTS ile BİREBİR
+ * (buildingValue servete sayar; sanitize 0..3 kırpar). Eski kayıtta alanlar yok → 0.
+ */
+export const REFINERY_MAX = 3
+/** kademe bedeli (index = hedef kademe − 1) — server/index.js REFINERY_COSTS ile BİREBİR */
+export const REFINERY_COSTS = [60_000_000, 100_000_000, 160_000_000]
+/** kademe → günlük işletme gideri (index = kurulu kademe) */
+export const REFINERY_OPEX = [0, 40_000, 70_000, 110_000]
+/** kademe inşaat süresi (oyun günü; index = hedef kademe − 1) */
+export const REFINERY_DAYS = [6, 8, 10]
+/** kademe 1+ : piyasa tedarikçilerinde şirket geneli alış indirimi */
+export const REFINERY_DISCOUNT = 0.12
+/** kademe 2+ : tanker ETA çarpanı */
+export const REFINERY_ETA_MULT = 0.75
+/** kademe şartı (index = hedef kademe − 1): marka yıldızı + açık şube sayısı */
+export const REFINERY_REQ: readonly { stars: number; locs: number }[] = [
+  { stars: 20, locs: 3 }, { stars: 30, locs: 5 }, { stars: 40, locs: 5 },
+]
+export const REFINERY_NAMES = [t('Damıtma Ünitesi'), t('Depolama Terminali'), t('Kendi Tanker Filosu')]
+
 /** Şubeye AİT (lokasyon-bazlı) alanlar. Bunun dışındaki her şey şirket seviyesidir:
  *  money, day, reputation, stats, loan, partner, brandStars, contract, marketingBudget… */
 export const LOC_FIELDS = [
@@ -530,6 +566,10 @@ export const SUPPLIERS = {
               desc: t('Piyasa fiyatı, normal teslimat süresi.') },
   hizli:    { label: t('Hızlı Lojistik'), priceMult: 1.07, etaMult: 0.55,
               desc: t('Pahalı ama tanker yarı sürede kapıda — tank kurutmadan doldurur.') },
+  // RAFİNERİ FİLOSU (kademe 3): yalnız refineryLevel >= 3 iken listelenir/geçerlidir.
+  // Fiyatı piyasa endeksi değil HAM PETROL endeksi belirler (bkz. GameState.crudeIndex).
+  rafineri: { label: t('Rafineri Filosu'), priceMult: 0.70, etaMult: 0.55,
+              desc: t('Kendi tankerlerin, kendi rafinerin: en ucuz litre — ama fiyat ham petrolü izler, şoklu günlerde piyasayı aşabilir.') },
 } as const
 export type SupplierId = keyof typeof SUPPLIERS
 
@@ -722,6 +762,10 @@ export class GameState {
    *  save silinme travması tazeyken reset kelimesi kullanılmaz (rapor uyarısı). ADDITIVE. */
   brandStars = 0
   handoverCount = 0 // kaç kez devredildi (ADDITIVE)
+  /** RAFİNERİ kademesi 0..3 — şirket varlığı, devirde korunur (ADDITIVE; eski kayıt → 0) */
+  refineryLevel = 0
+  /** >0 = bir sonraki kademe inşaatta, kalan gün (gün dönüşünde düşer; ADDITIVE) */
+  refineryDaysLeft = 0
   /** #1250 ONARIM İŞARETİ (ADDITIVE): devir eskiden pompacıyı KOŞULSUZ siliyordu ve
    *  müşteri kaynaklı kumbaralar (market/kahve/restoran/yıkama/yağ/hava-su) bir daha
    *  hiç dolmuyordu. Onarım TEK SEFER uygulanır; sonra oyuncu pompacısını kendi
@@ -766,13 +810,29 @@ export class GameState {
     const slow = Math.sin(day / 9 + k)             // yavaş trend
     return 1 + 0.15 * (0.6 * (r * 2 - 1) + 0.4 * slow)  // ~0.85..1.15
   }
-  /** güncel alış fiyatı (piyasa dalgalanmalı) */
-  buyPrice(f: FuelType): number {
-    return Math.round(FUEL_COST[f] * this.marketIndex(this.day, f) * 100) / 100
+  /** HAM PETROL ENDEKSİ (rafineri filosu, kademe 3): piyasadan daha oynak (±%30) ve
+   *  ~%12 günde ŞOK (+0,6) — filo ortalamada ucuz ama bazı günler piyasayı aşar.
+   *  Determinist (gün-seed) → 7 günlük tahmin gösterilebilir; stok planlamak karar olur. */
+  crudeIndex(day = this.day, f: FuelType = 'benzin'): number {
+    const k = { benzin: 0, dizel: 1, lpg: 2 }[f]
+    const x = Math.sin((day + 7) * 31.7 + k * 12.3) * 24691.1357
+    const r = x - Math.floor(x)
+    const y = Math.sin((day + 3) * 7.13) * 8642.97
+    const spike = (y - Math.floor(y)) < 0.12 ? 0.6 : 0
+    return 1 + 0.30 * (r * 2 - 1) + spike
   }
+  /** Filo tedarikçisi GEÇERLİ mi (seçili + kademe 3 kurulu). Kademe yoksa 'standart' gibi davranır. */
+  usesRefineryFleet(): boolean { return this.supplier === 'rafineri' && this.refineryLevel >= REFINERY_MAX }
+  /** Belirli bir gün için alış fiyatı — buyPrice ve priceForecast TEK kaynaktan */
+  buyPriceAt(day: number, f: FuelType): number {
+    if (this.usesRefineryFleet()) return Math.round(FUEL_COST[f] * this.crudeIndex(day, f) * 100) / 100
+    return Math.round(FUEL_COST[f] * this.marketIndex(day, f) * (1 - this.refineryDiscount()) * 100) / 100
+  }
+  /** güncel alış fiyatı (piyasa dalgalanmalı; rafineri indirimi dahil) */
+  buyPrice(f: FuelType): number { return this.buyPriceAt(this.day, f) }
   /** 7 günlük tahmin (grafik/karar için) */
   priceForecast(f: FuelType): number[] {
-    return Array.from({ length: 7 }, (_, i) => Math.round(FUEL_COST[f] * this.marketIndex(this.day + i, f) * 100) / 100)
+    return Array.from({ length: 7 }, (_, i) => this.buyPriceAt(this.day + i, f))
   }
   /** SİGORTA: primi ödenirse felaket/arıza maliyeti yarıya iner (ADDITIVE) */
   insurance = false
@@ -1667,9 +1727,12 @@ export class GameState {
    */
   supplyQuota(loc: LocId = this.activeLoc): number {
     if (!this.supplyLine(loc)) return Infinity
+    // RAFİNERİ: Depolama Terminali (kademe 2) hat kotasını KALDIRIR; Damıtma (kademe 1) ikiye katlar.
+    if (this.refineryLevel >= 2) return Infinity
     let kap = 0
     for (const f of FUELS) kap += this.fuelCapacity(f)
-    return Math.max(SUPPLY_LINE_QUOTA, Math.round(kap))
+    const q = Math.max(SUPPLY_LINE_QUOTA, Math.round(kap))
+    return this.refineryLevel >= 1 ? q * 2 : q
   }
   /** Hattan bugün kalan litre. Hat yoksa Infinity. Sıfır = kota aşıldı (sipariş yine verilebilir). */
   supplyRemaining(loc: LocId = this.activeLoc): number {
@@ -1989,6 +2052,47 @@ export class GameState {
   static readonly BRAND_STARS_MAX = 40
   /** yıldız tavanına dayandı mı (devir artık yıldız getirmez) */
   atStarCap(): boolean { return this.brandStars >= GameState.BRAND_STARS_MAX }
+
+  // ──────────────────── RAFİNERİ (şirket seviyesi mega yapı) ────────────────────
+  /** kademe 1+ : piyasa tedarikçilerinde alış indirimi (filo seçiliyken uygulanmaz — çift indirim yok) */
+  refineryDiscount(): number { return this.refineryLevel >= 1 && !this.usesRefineryFleet() ? REFINERY_DISCOUNT : 0 }
+  /** günlük işletme gideri (kurulu kademeye göre; inşaat sürerken henüz yok) */
+  refineryOpex(): number { return REFINERY_OPEX[Math.max(0, Math.min(REFINERY_MAX, this.refineryLevel))] ?? 0 }
+  /** inşaat ilerlemesi 0..1 (inşaat yoksa 0) */
+  refineryProgress(): number {
+    if (this.refineryDaysLeft <= 0 || this.refineryLevel >= REFINERY_MAX) return 0
+    const total = REFINERY_DAYS[this.refineryLevel] ?? 1
+    return Math.max(0, Math.min(1, 1 - this.refineryDaysLeft / total))
+  }
+  /** Sıradaki kademe kurulabilir mi — SEBEPLİ (harita kartı sebebi yazar) */
+  canBuildRefinery(): { ok: boolean; reason: '' | 'max' | 'insaat' | 'yildiz' | 'sube' | 'para'; level: number; cost: number; stars: number; locs: number; days: number } {
+    const level = this.refineryLevel + 1
+    const i = this.refineryLevel
+    if (i >= REFINERY_MAX) return { ok: false, reason: 'max', level: REFINERY_MAX, cost: 0, stars: 0, locs: 0, days: 0 }
+    const req = REFINERY_REQ[i], cost = REFINERY_COSTS[i], days = REFINERY_DAYS[i]
+    const base = { level, cost, stars: req.stars, locs: req.locs, days }
+    if (this.refineryDaysLeft > 0) return { ok: false, reason: 'insaat', ...base }
+    if (this.brandStars < req.stars) return { ok: false, reason: 'yildiz', ...base }
+    if (this.unlockedLocs.length < req.locs) return { ok: false, reason: 'sube', ...base }
+    if (this.money < cost) return { ok: false, reason: 'para', ...base }
+    return { ok: true, reason: '', ...base }
+  }
+  /** İnşaatı başlat: bedel PEŞİN düşer, kademe inşaat bitince gelir (gün dönüşü). */
+  startRefinery(): boolean {
+    const c = this.canBuildRefinery()
+    if (!c.ok) return false
+    this.money -= c.cost
+    this.refineryDaysLeft = c.days
+    return true
+  }
+  /** Gün dönüşü: inşaat bir gün ilerler; biterse kademe yükselir ve YENİ kademe döner (yoksa 0). */
+  refineryDayTurn(): number {
+    if (this.refineryDaysLeft <= 0) return 0
+    this.refineryDaysLeft--
+    if (this.refineryDaysLeft > 0) return 0
+    if (this.refineryLevel < REFINERY_MAX) this.refineryLevel++
+    return this.refineryLevel
+  }
   /** Devir şartı: eşik ekipman + borçsuzluk + yıldız tavanının altı (gönüllü, asla zorunlu değil). */
   canHandover(): boolean {
     return !this.atStarCap() && this.companyEquipmentValue() >= this.handoverThreshold() && !this.loan.active && !this.partner.active
@@ -2466,7 +2570,15 @@ export class GameState {
       affordable)))
   }
   /** seçili tedarikçinin litre çarpanı (#1067) */
-  supplierMult() { return SUPPLIERS[this.supplier]?.priceMult ?? 1 }
+  supplierMult() {
+    if (this.supplier === 'rafineri' && !this.usesRefineryFleet()) return 1 // kademe yoksa filo yok → standart
+    return SUPPLIERS[this.supplier]?.priceMult ?? 1
+  }
+  /** tanker süresi çarpanı: tedarikçi × rafineri terminali (kademe 2+) */
+  supplierEtaMult() {
+    const sup = this.supplier === 'rafineri' && !this.usesRefineryFleet() ? 1 : (SUPPLIERS[this.supplier]?.etaMult ?? 1)
+    return sup * (this.refineryLevel >= 2 ? REFINERY_ETA_MULT : 1)
+  }
   orderCost(f: FuelType) {
     const disc = this.promo?.type === 'cheapFuel' ? 0.5 : 1
     return Math.ceil(this.orderNeed(f) * this.buyPrice(f) * disc * this.supplierMult()) // piyasa fiyatı (Katman 4b)
@@ -2489,7 +2601,7 @@ export class GameState {
     this.fuelLog.push({ day: this.day, f, liters: need, cost })
     if (this.fuelLog.length > 40) this.fuelLog.shift()
     this.orders[f].pending = true
-    this.orders[f].eta = Math.round(ORDER_ETA * (SUPPLIERS[this.supplier]?.etaMult ?? 1))
+    this.orders[f].eta = Math.round(ORDER_ETA * this.supplierEtaMult())
     this.orders[f].amount = need // teslimatta bu kadar eklenecek (parti miktarı)
     // ORTAK HAT DEFTERİ: çekilen litre hattın günlük kotasından düşer. Gün dönüşünde
     // (accrueBranchVaults) kardeş şubenin geliri bu kullanıma göre kırpılır — "iki şube
@@ -3656,6 +3768,8 @@ const ACHIEVEMENTS: [string, string, (s: GameState) => boolean][] = [
   ['full-pumps', '4 pompa — Tam kadro!', s => s.pumps >= 4],
   ['electric-age', t('Elektrik çağı — İlk şarj ünitesi!'), s => s.evChargers >= 1],
   ['atomic', t('Atom karıncası — Reaktör kuruldu!'), s => s.hasSMR],
+  ['refinery', t('Petrol baronu — Rafineri kuruldu!'), s => s.refineryLevel >= 1],
+  ['refinery-fleet', t('Kendi tankerlerin — Rafineri filosu yolda!'), s => s.refineryLevel >= 3],
   ['landlord', t('Toprak ağası — 9 arsanın tamamı!'), s => s.ownedParcels.size >= 9],
   ['week-one', t('7. gün — Bir haftadır ayaktasın!'), s => s.day >= 7],
   // D12 (analiz): çoklu şube hedefini görünür kılan başarım
@@ -3807,6 +3921,8 @@ const SAVE_FIELDS = [
   // AÇILDIKTAN sonra soruluyor. Döküm kaydedilmezse Ofis paneli boş kalır ve soru
   // yine cevapsız. Yalnız GÖSTERİM verisi — hiçbir para hesabına girmez.
   'dayCosts',
+  // RAFİNERİ (ADDITIVE): şirket seviyesi kademe + inşaat sayacı. Eski kayıtta yok → 0.
+  'refineryLevel', 'refineryDaysLeft',
 ] as const
 
 export function serializeState(s: GameState): Record<string, unknown> {
@@ -4002,6 +4118,10 @@ export function hydrateState(s: GameState, data: Record<string, unknown>) {
   // prestij alanları: bozuk save NaN/negatif getirirse tüm ekonomi NaN olur, '★'.repeat crash
   s.brandStars = Math.max(0, Math.min(GameState.BRAND_STARS_MAX, Math.round(Number(s.brandStars) || 0)))
   s.handoverCount = Math.max(0, Math.min(GameState.BRAND_STARS_MAX, Math.round(Number(s.handoverCount) || 0)))
+  // RAFİNERİ: kademe 0..3, inşaat sayacı 0..en uzun kademe süresi (sunucu sanitize ile aynı sınır)
+  s.refineryLevel = Math.max(0, Math.min(REFINERY_MAX, Math.round(Number(s.refineryLevel) || 0)))
+  s.refineryDaysLeft = Math.max(0, Math.min(Math.max(...REFINERY_DAYS), Math.round(Number(s.refineryDaysLeft) || 0)))
+  if (s.refineryLevel >= REFINERY_MAX) s.refineryDaysLeft = 0
   if (Array.isArray(data.ownedParcels)) s.ownedParcels = new Set(data.ownedParcels as string[])
   if (Array.isArray(data.pavedParcels)) s.pavedParcels = new Set(data.pavedParcels as string[])
   if (Array.isArray(data.achievements)) s.achievements = new Set(data.achievements as string[])

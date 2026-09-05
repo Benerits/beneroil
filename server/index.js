@@ -373,6 +373,10 @@ const COST = {
   battery: [5000, 9000, 16000, 34000, 72000, 155000], ev: [6000, 10000, 14000, 18000, 22000, 27000, 32000, 38000, 46000, 56000, 68000, 82000],
 }
 const MANAGER_COSTS = [18000, 34000, 60000]      // istemci state.ts ile BİREBİR
+// RAFİNERİ (src/state.ts REFINERY_COSTS ile BİREBİR): şirket seviyesi mega yapı, 3 kademe.
+// Servete girer (₺60M harcayan oyuncunun serveti "çökmüş" görünmesin); kademe 0..3 kırpılır.
+const REFINERY_COSTS = [60000000, 100000000, 160000000]
+const REFINERY_MAX = 3
 const DECOR_COSTS = [15000, 40000, 90000]
 const STAFF_TRAIN_COSTS = [12000, 26000, 48000]
 // MARİNA (src/marina.ts ile SENKRON — orada değişirse burası da değişmeli)
@@ -638,6 +642,10 @@ function buildingValue(s) {
   v += sumUpto(MANAGER_COSTS, n(s.managerLevel))               // müdür kurulumu servete girer
   v += sumUpto(STAFF_TRAIN_COSTS, Math.max(0, n(s.staffLevel, 1) - 1)) // personel eğitimi
   v += sumUpto(DECOR_COSTS, n(s.decorLevel))                            // dekorasyon
+  // RAFİNERİ: bedel inşaat BAŞLARKEN peşin düşer, kademe 6-10 gün sonra gelir. Servete
+  // ödendiği anda sayılmalı (kademe + inşaattaki kademe) — yoksa tamamlanma günü servet
+  // +₺60M "zıplar", allowance aşılır ve oyuncunun MEŞRU parası kırpılır ("param gitti").
+  v += sumUpto(REFINERY_COSTS, Math.max(0, Math.min(REFINERY_MAX, n(s.refineryLevel) + (n(s.refineryDaysLeft) > 0 ? 1 : 0))))
   if (s.insurance) v += 5000                                            // sigorta kurulumu
   v += sumUpto(COST.toilet, n(s.toiletLevel)) + sumUpto(COST.grid, n(s.gridLevel)) + sumUpto(COST.battery, n(s.batteryLevel))
   v += sumUpto(COST.ev, n(s.evChargers))
@@ -714,6 +722,8 @@ function sanitizeSave(save) {
   if ('marketingBudget' in s) s.marketingBudget = clamp(s.marketingBudget, 0, 8000, 0) // reklam sink'i (additive)
   if ('brandStars' in s) s.brandStars = clamp(s.brandStars, 0, 40, 0)      // prestij (additive)
   if ('handoverCount' in s) s.handoverCount = clamp(s.handoverCount, 0, 40, 0)
+  if ('refineryLevel' in s) s.refineryLevel = clamp(s.refineryLevel, 0, REFINERY_MAX, 0)   // rafineri (additive)
+  if ('refineryDaysLeft' in s) s.refineryDaysLeft = clamp(s.refineryDaysLeft, 0, 10, 0)
   if ('contractsDone' in s) s.contractsDone = clamp(s.contractsDone, 0, 100000, 0)
   if ('contractsFailed' in s) s.contractsFailed = clamp(s.contractsFailed, 0, 100000, 0)
   // aktif B2B sözleşmesi (additive): alanları makul sınırlara kırp, bozuksa düşür

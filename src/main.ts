@@ -23,6 +23,7 @@ import {
   ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor,
   SAYAC_KUMBARA_MAX, TEKIL_KUMBARA,
   BENERITS_GUESTS, BeneritsId,
+  REFINERY_NAMES,
 } from './state'
 // ŞUBE AĞI HARİTASI: yatırım tahtası (Ofis › Şubeler + HUD şube menüsünden açılır).
 // Saf DOM modülü — state okur, aksiyonu buradaki MEVCUT akışlara geri çağırır.
@@ -1004,7 +1005,7 @@ document.getElementById('locmenu')?.addEventListener('click', e => {
 })
 // ŞUBE AĞI HARİTASI — iki giriş noktası: Ofis › Şubeler'in başındaki buton ve HUD şube menüsü.
 // Aksiyonlar MEVCUT akışa bağlı: açma → subeAcIslemi (state.unlockLoc), geçiş → subeyeGec.
-haritaKur({ state, onAc: id => subeAcIslemi(id), onGit: id => subeyeGec(id) })
+haritaKur({ state, onAc: id => subeAcIslemi(id), onGit: id => subeyeGec(id), onRafineri: () => rafineriKurIslemi() })
 document.getElementById('of-map')?.addEventListener('click', () => {
   document.getElementById('officewrap')?.classList.remove('show') // ofis sheet'i kapat (banka kalıbı)
   haritaAc()
@@ -1340,6 +1341,19 @@ function openOfficePanel() {
     // detayı zaten veriyordu ama oyuncu detayı okumadan önce YÖNÜ görmeli (#1264
     // "yapacak bir şey kalmadı" — oysa yol buradaydı, sadece görünmüyordu).
     let head = rehberSeridi()
+    // ---- RAFİNERİ DURUMU: şirket tesisi; kurma butonu haritada (tek giriş) ----
+    {
+      const c = state.canBuildRefinery()
+      const lv = state.refineryLevel
+      const durum = state.refineryDaysLeft > 0 ? t('{0} inşa ediliyor · {1} gün', REFINERY_NAMES[lv], String(state.refineryDaysLeft))
+        : lv > 0 ? t('Kademe {0} · {1} · ₺{2}/gün gider', String(lv), REFINERY_NAMES[lv - 1], tl(state.refineryOpex()))
+        : c.ok ? t('Kurulabilir · ₺{0} — haritadan', tl(c.cost))
+        : c.reason === 'yildiz' ? t('{0}★ ve {1} şube gerekir', String(c.stars), String(c.locs))
+        : c.reason === 'sube' ? t('{0} açık şube gerekir', String(c.locs))
+        : t('Kasa yetmiyor · ₺{0}', tl(c.cost))
+      head += `<div class="prow" id="of-raf"><span class="pl"><b>${t('Rafineri')}</b></span>`
+        + `<span class="pc${lv > 0 || c.ok ? ' good' : ''}">${durum}</span></div>`
+    }
     // ---- MÜDÜR (Oğuz: "müdür tutmayı ofise koyalım") — bu şubenin müdürü buradan ----
     {
       const mL = state.managerLevel
@@ -1387,7 +1401,16 @@ function openOfficePanel() {
     // PAYLAŞILAN TEDARİK HATTI UYARISI: kopya ile tabanı aynı depodan çekiyor. Oyuncu
     // kotayı GÖRMEDEN karar veremez — "neden kardeş şubem az kazandı?" sorusunun cevabı
     // burada, gün içinde, sayıyla duruyor.
-    if (state.supplyLine()) {
+    if (state.supplyLine() && state.refineryLevel >= 2) {
+      // RAFİNERİ KADEME 2+: kota yok. Kısa satır — uyarı metni anlamsızlaşır.
+      const kardes = state.unlockedLocs.find(l => l !== state.activeLoc && baseLoc(l) === state.supplyLine())
+      head += `<div class="prow"><span class="pl"><b>${t('Ortak tedarik hattı')}</b></span>`
+        + `<span class="pc good">${t('kota yok · rafineri')}</span>`
+        + `<div style="flex:1 0 100%;font-size:11.5px;font-weight:650;color:var(--muted);margin-top:3px">`
+        + t('{0} ile {1} aynı depodan çekiyor ama Depolama Terminali sayesinde günlük sınır kalktı.',
+            themeFor(state.activeLoc).name, kardes ? themeFor(kardes).name : themeFor(state.supplyLine()!).name)
+        + `</div></div>`
+    } else if (state.supplyLine()) {
       const kalan = Math.round(state.supplyRemaining())
       const dolu = Math.round(state.supplyFill() * 100)
       const kardes = state.unlockedLocs.find(l => l !== state.activeLoc && baseLoc(l) === state.supplyLine())
@@ -1746,6 +1769,22 @@ function subeAcIslemi(id: LocId) {
   if (isCopyLoc(id)) ui.toast(BRANCH_COPIES[id].note, '', true)
   audio.achieve(); openOfficePanel(); persist()
   if (haritaAcikMi()) haritaCiz()   // harita açıkken açıldıysa tahta anında tazelensin
+}
+
+/** RAFİNERİ KADEMESİ — tek giriş noktası harita kartı (data-hraf). Para peşin düşer,
+ *  inşaat gün dönüşünde ilerler (state.refineryDayTurn, gün sonu bloğu). */
+function rafineriKurIslemi() {
+  const c = state.canBuildRefinery()
+  if (!state.startRefinery()) {
+    const neden = c.reason === 'para' ? t('Kasa yetmiyor · ₺{0}', Math.round(c.cost).toLocaleString('tr-TR'))
+      : c.reason === 'yildiz' ? t('{0} marka yıldızı gerekir', String(c.stars))
+      : c.reason === 'sube' ? t('{0} açık şube gerekir', String(c.locs))
+      : c.reason === 'insaat' ? t('İnşaat zaten sürüyor.') : t('Rafineri tam kapasitede.')
+    ui.toast(neden, 'bad'); return
+  }
+  ui.toast(t('Rafineri {0}. kademe inşaatı başladı: {1} — {2} gün.', String(c.level), REFINERY_NAMES[c.level - 1], String(c.days)), 'good', true)
+  audio.achieve(); persist()
+  if (haritaAcikMi()) haritaCiz()
 }
 
 /** Şube geçişi — hem Ofis › Şubeler butonları hem HUD hızlı geçiş menüsü buradan geçer
@@ -7707,6 +7746,19 @@ function frame() {
     // 10 günlük rampayla devreye girer (enflasyon şoku yok); erken oyunda ~₺10, hissedilmez.
     const opex = state.dailyOpex()
     if (opex > 0) state.spend(t('İşletme gideri (bakım+vergi+kira)'), opex)
+    // ---- RAFİNERİ (şirket seviyesi): inşaat bir gün ilerler, kademe gelirse duyurulur;
+    // kurulu kademenin işletme gideri AYRI kalem olarak düşer (gider dökümünde görünsün).
+    {
+      const yeni = state.refineryDayTurn()
+      if (yeni > 0) {
+        ui.toast(t('Rafineri {0}. kademe tamamlandı: {1}!', yeni, REFINERY_NAMES[yeni - 1]), 'good', true)
+        if (haritaAcikMi()) haritaCiz()
+      } else if (state.refineryDaysLeft > 0) {
+        ui.toast(t('Rafineri inşaatı: {0} gün kaldı', state.refineryDaysLeft), '')
+      }
+      const rOpex = state.refineryOpex()
+      if (rOpex > 0) state.spend(t('Rafineri işletme gideri'), rOpex)
+    }
     // Reklam bütçesi tahsilatı: para yetmiyorsa o günün kampanyası kısılır (bütçe korunur)
     if (state.marketingBudget > 0) {
       const istenen = Math.min(state.marketingBudget, Math.max(0, Math.floor(state.money))) // floor: kesirli kasada eksiye taşma yok (reviewer bulgusu)

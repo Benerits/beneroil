@@ -840,6 +840,8 @@
     <symbol id="i-loc-otoyol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 6v6c0 4.2-3.4 7.2-8 9-4.6-1.8-8-4.8-8-9V6zM12 8.5v7"/></symbol>
     <symbol id="i-loc-marina" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v12M12 8a2.4 2.4 0 1 0 0-4.8A2.4 2.4 0 0 0 12 8M4.6 13a7.4 7.4 0 0 0 14.8 0M9.4 10.4H14.6"/></symbol>
     <symbol id="i-loc-metropol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9.5L9 7v14M14 21V4l6 3v14M3 21h18M6.6 12h.01M6.6 16h.01M17 11h.01M17 15h.01"/></symbol>
+    <!-- RAFİNERİ: damıtma kulesi + depolama tankı + baca alevi — şirket tesisi (şube değil) -->
+    <symbol id="i-loc-rafineri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V9h4v12M9 13h3M14 21v-7a3 3 0 0 1 6 0v7M17 11V6M17 6c-1.3-1.4-1.1-2.7 0-4 1.1 1.3 1.3 2.6 0 4zM6 9V4h2v5"/></symbol>
   </svg>
 
   <div class="hud">
@@ -1595,6 +1597,10 @@ Sorun / Öneri Bildir
     .hl-flow.hl-hot { stroke: var(--orange); }
     @keyframes hflow { to { stroke-dashoffset: -28; } }
     @media (prefers-reduced-motion: reduce) { .hl-flow { animation: none; } }
+    /* RAFİNERİ BESLEMESİ: turuncu, ince, yavaş akan — kırmızı ortak hattan ayrışır (o kota, bu indirim). */
+    .hl-raf-base { stroke: var(--orange); opacity: .18; stroke-width: 8; }
+    .hl-raf { stroke: var(--orange); stroke-width: 2.4; stroke-dasharray: 6 14; opacity: .85; animation: hflow 2.2s linear infinite; }
+    @media (prefers-reduced-motion: reduce) { .hl-raf { animation: none; } }
 
     /* — düğüm plakaları — */
     .hn { cursor: pointer; outline: none; }
@@ -1632,6 +1638,19 @@ Sorun / Öneri Bildir
     .hn-kilit .hn-icon { color: var(--muted); }
     .hn-kilit .hn-accent { opacity: .5; }
     .hn:focus-visible .hn-plate { stroke: var(--blue); stroke-width: 3.2; }
+    /* RAFİNERİ DÜĞÜMÜ: şubelerden büyük plaka, turuncu kimlik. Kademe rozeti sağ üstte,
+       inşaat şeridi plakanın altında. Kilitli/açılabilir durumları şube sınıflarını paylaşır. */
+    .hn-raf .hn-icon { color: var(--orange-dark); }
+    .hn-raf-on .hn-plate { fill: var(--orange); stroke: var(--orange-dark); stroke-width: 2.4; }
+    .hn-raf-on .hn-lip { fill: var(--orange-dark); }
+    .hn-raf-on .hn-icon { color: #fff; }
+    .hn-raf-on .hn-sub { fill: var(--orange-dark); }
+    .hn-raf .hn-raf-tag { fill: #fff; font-size: 13px; paint-order: stroke fill; stroke: var(--orange-dark); stroke-width: 3px; }
+    .hn-raf-track { fill: rgba(0,0,0,.18); }
+    .hn-raf-fill { fill: #fff; }
+    .hn-raf.hn-firsat .hn-raf-fill, .hn-raf.hn-kilit .hn-raf-fill { fill: var(--orange); }
+    .hn-raf.hn-firsat .hn-plate { stroke: var(--orange); }
+    .hn-raf.hn-firsat .hn-icon, .hn-raf.hn-firsat .hn-sub { color: var(--orange-dark); fill: var(--orange-dark); }
 
     /* — yan panel — */
     .hlegend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 11px; font-size: 10.5px;
@@ -1644,6 +1663,25 @@ Sorun / Öneri Bildir
     .hk-firsat { background: var(--paper); border-color: var(--green); border-style: dashed; }
     .hk-kilit { background: var(--paper-2); border-style: dashed; border-color: var(--muted); }
     .hk-hat { background: var(--red); border-radius: 3px; height: 5px; border: 0; }
+    .hk-raf { background: var(--orange); border-radius: 3px; height: 5px; border: 0; }
+    .hchip.acc-raf .hcv { color: var(--orange-dark); }
+    .hd-insaat { background: var(--orange); border-color: var(--orange-dark); color: #fff; }
+    /* rafineri kademe merdiveni: alınan ✓, sıradaki vurgulu, inşaattaki turuncu */
+    .hraf-lad { display: flex; flex-direction: column; gap: 5px; margin: 6px 0 8px; }
+    .hraf-step { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px;
+                 border: 1.5px dashed var(--muted); opacity: .72; }
+    .hraf-step i { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+                   font-style: normal; font-size: 11px; font-weight: 800; background: var(--paper-2); color: var(--muted); }
+    .hraf-step span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .hraf-step b { font-size: 12px; font-weight: 800; color: var(--ink); }
+    .hraf-step small { font-size: 10.5px; font-weight: 650; color: var(--muted); }
+    .hraf-step em { flex: none; font-style: normal; font-size: 10.5px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .hraf-step.on { opacity: 1; border-style: solid; border-color: var(--orange); background: var(--surface); }
+    .hraf-step.on i { background: var(--orange); color: #fff; }
+    .hraf-step.next { opacity: 1; border-style: solid; border-color: var(--green); }
+    .hraf-step.next i { background: var(--green); color: #fff; }
+    .hraf-step.wip { opacity: 1; border-style: solid; border-color: var(--orange); }
+    .hraf-step.wip i { background: var(--paper); color: var(--orange-dark); border: 2px solid var(--orange); }
     .hcard { background: var(--paper); border: 1.5px solid var(--edge); border-bottom-width: 3px;
              border-radius: var(--r-lg); padding: 10px 12px 11px; box-shadow: 0 3px 9px rgba(34,48,60,.10); }
     .hcard h4 { font-size: 10px; font-weight: 800; letter-spacing: .13em; color: var(--muted);

@@ -18,7 +18,9 @@ const oku = f => readFileSync(new URL('../../' + f, import.meta.url), 'utf8')
 
 // ── #1067 tedarikçiler ──
 const idler = Object.keys(SUPPLIERS)
-bekle(idler.length === 3, `üç tedarikçi tanımlı (${idler.join(', ')})`)
+bekle(idler.length === 4, `dört tedarikçi tanımlı: üç piyasa + rafineri filosu (${idler.join(', ')})`)
+bekle(SUPPLIERS.rafineri && SUPPLIERS.rafineri.priceMult < SUPPLIERS.ekonomi.priceMult && SUPPLIERS.rafineri.etaMult <= SUPPLIERS.hizli.etaMult,
+  'rafineri filosu en ucuz ve hızlı lojistik kadar hızlı (kilidi 3. kademe rafineri)')
 const markalar = /aygaz|milangaz|ipragaz|petrol ofisi|opet|shell|bp/i
 bekle(!markalar.test(JSON.stringify(SUPPLIERS)), 'gerçek marka adı kullanılmıyor (ticari marka riski yok)')
 bekle(SUPPLIERS.ekonomi.priceMult < 1 && SUPPLIERS.ekonomi.etaMult > 1, 'ucuz tedarikçi YAVAŞ (takas gerçek)')

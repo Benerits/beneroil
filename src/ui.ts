@@ -1,6 +1,6 @@
 import { Car } from './cars'
 import { t } from './i18n'
-import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems, dailyQuests, SUPPLIERS } from './state'
+import { FuelType, FUELS, FUEL_LABEL, GameState, getShopItems, getMaintenanceItems, dailyQuests, SUPPLIERS, REFINERY_MAX } from './state'
 import { audio } from './audio'
 import * as auth from './auth'
 import { isNativePlatform } from './platform'
@@ -842,9 +842,12 @@ export class UI {
         // oyuncu isteği: sipariş ekranında ALIŞ fiyatı görünsün
         // hat varsa kalan kota da yazılır — oyuncu duvara TOSLAMADAN görsün
         const hatK = state.supplyRemaining()
+        // rafineri indirimi ekranda ayrıca yazılır: oyuncu "fiyat neden düştü" demesin
+        const rafI = state.refineryDiscount()
         this.setText(info, t('{0} / {1}L · +{2}L · alış ₺{3}/L', Math.round(state.tanks[f]), cap,
           need, (state.buyPrice(f) * state.supplierMult()).toFixed(1))
-          + (!isFinite(hatK) ? '' : hatK >= 100 ? t(' · hat kotası: {0}L', Math.round(hatK).toLocaleString('tr-TR'))
+          + (rafI > 0 ? t(' (rafineri −%{0})', String(Math.round(rafI * 100))) : state.usesRefineryFleet() ? t(' (ham petrol)') : '')
+          + (!isFinite(hatK) ? (state.supplyLine() ? t(' · hat kotası: sınırsız') : '') : hatK >= 100 ? t(' · hat kotası: {0}L', Math.round(hatK).toLocaleString('tr-TR'))
             : t(' · hat kotası aşıldı — kardeş şubenin neti yarın düşer')))
         this.setText(btn, `₺${state.orderCost(f).toLocaleString('tr-TR')}`)
         btn.disabled = !state.canOrder(f)
@@ -859,16 +862,21 @@ export class UI {
     {
       const row = document.getElementById('supplierrow')
       if (row) {
-        const html = (Object.keys(SUPPLIERS) as (keyof typeof SUPPLIERS)[]).map(id => {
+        // RAFİNERİ FİLOSU yalnız kademe 3'te listelenir — görünmez seçenek, kilitli satır
+        // olarak bile durmaz (sipariş ekranı zaten dar; rafineri kartı haritada anlatır).
+        const filo = state.refineryLevel >= REFINERY_MAX
+        const html = (Object.keys(SUPPLIERS) as (keyof typeof SUPPLIERS)[]).filter(id => id !== 'rafineri' || filo).map(id => {
           const sp = SUPPLIERS[id]
           const fark = Math.round((sp.priceMult - 1) * 100)
+          const fiyat = id === 'rafineri' ? t('ham petrol %{0}', String(fark)) : fark === 0 ? t('piyasa') : `${fark > 0 ? '+' : ''}%${fark}`
           return `<button class="btn${id === state.supplier ? ' primary' : ''}" data-sup="${id}"`
             + ` style="flex:1; justify-content:center; flex-direction:column; gap:2px; height:auto; padding:7px 4px">`
             + `<span style="font-size:12px">${t(sp.label)}</span>`
-            + `<span style="font-size:11px; opacity:.75">${fark === 0 ? t('piyasa') : `${fark > 0 ? '+' : ''}%${fark}`}`
+            + `<span style="font-size:11px; opacity:.75">${fiyat}`
             + ` · ${sp.etaMult < 1 ? t('hızlı') : sp.etaMult > 1 ? t('yavaş') : t('normal')}</span></button>`
         }).join('')
-        if (row.dataset.sup !== state.supplier) { row.innerHTML = html; row.dataset.sup = state.supplier }
+        const key = `${state.supplier}|${filo ? 1 : 0}`
+        if (row.dataset.sup !== key) { row.innerHTML = html; row.dataset.sup = key }
       }
       const d = document.getElementById('supplierdesc')
       if (d) this.setText(d as HTMLDivElement, t(SUPPLIERS[state.supplier].desc))
