@@ -175,7 +175,8 @@
     #tankfill { background: var(--green); width: 50%; }
     #battfill { background: var(--ev); width: 0%; }
     #battchip { display: none; }
-    #fuelrail { display: contents; } /* masaüstü: chip'ler HUD akışında; mobilde sağ dikey ray */
+    #fuelrail { display: contents; } /* masaüstü: chip'ler HUD akışında; mobilde sol dikey ray */
+    #hudacts { display: contents; }  /* masaüstü: butonlar HUD akışında; mobilde rayın sağında saran ızgara */
     .spacer { flex: 1; }
 
     /* ---------- Mobil: kompakt HUD (buton/chip alanı yer kaplamasın) ---------- */
@@ -196,11 +197,23 @@
          "günlük görev var gözüküyor ama yok gibi" diyordu (#1004); dokununca liste açılır. */
       #onlinechip, #repchip { display: none; }
       #questchip { min-width: 78px !important; }
-      /* aksiyon butonları ikon-only: metni gizle, kare yap */
-      .hud > .btn { width: 42px !important; padding: 8px 0; justify-content: center; }
-      .hud > .btn > span { display: none; }
-      .hud > .btn .ic { margin: 0; }
+      /* aksiyon butonları ikon-only: metni gizle, kare yap (dokunma hedefi ≥ 42px) */
+      #hudacts > .btn { width: 42px !important; min-height: 42px; padding: 0; justify-content: center; }
+      #hudacts > .btn > span { display: none; }
+      #hudacts > .btn .ic { margin: 0; }
       #adbtn { width: 42px !important; }
+      /* ---- İKİNCİ SATIR: sol yakıt rayı + sağda saran buton ızgarası (ÇAKIŞMASIZ) ----
+         .spacer satır kırıcı olur (tam genişlik, sıfır yükseklik): gösterge rozetleri
+         üstte serbest sarar; ray ile butonlar ALTLARINDA aynı satırı paylaşır. Ray artık
+         position:fixed DEĞİL — akışta olduğu için rozetler 2 satıra sarsa da altına iner,
+         üstüne binmez. */
+      .spacer { flex: 1 0 100%; height: 0; order: 1; }
+      /* satır kırıcı 0 yükseklikte bile iki row-gap yiyordu (10px boşluk): satır arası
+         boşluğu row-gap yerine rozetlerin alt marjıyla veriyoruz → tam 5px kalır */
+      .hud { row-gap: 0; }
+      .hud > .chip { margin-bottom: 5px; }
+      #hudacts { display: flex; flex: 1 1 0; min-width: 136px; order: 3; flex-wrap: wrap; gap: 5px;
+        justify-content: flex-end; align-content: flex-start; align-items: flex-start; }
       #shopdot { right: 4px; top: 4px; }
       /* Sorun Bildir (web'de görünür) navbar'ı örtmesin — dar ekranda navbar üstüne al */
       #fbbtn { bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
@@ -214,9 +227,8 @@
 
       /* ---- Sol-üst düzen: takvim+para bir satır; altında benzin/dizel/lpg/kwh alt alta (küçük) ---- */
       #onlinechip { display: none !important; }
-      #fuelrail { display: flex !important; flex-direction: column; position: fixed; z-index: 12;
-        left: calc(8px + env(safe-area-inset-left)); top: calc(48px + env(safe-area-inset-top));
-        gap: 5px; width: 178px; pointer-events: none; }
+      #fuelrail { display: flex !important; flex-direction: column; order: 2; align-self: flex-start;
+        gap: 5px; width: 178px; flex: 0 0 178px; pointer-events: none; }
       /* tek satır: isim + renkli ikon + bar + değer (isimli, biraz büyütüldü) */
       #fuelrail .fuelchip { min-width: 0 !important; flex-direction: row !important; align-items: center; gap: 7px;
         padding: 4px 11px; border-bottom-width: 2px; border-radius: 9px; } /* üst tarih/bakiye chip'leriyle görsel uyum */
@@ -334,9 +346,9 @@
         border-bottom-width: 2px !important; white-space: nowrap; box-shadow: 0 4px 12px rgba(15,22,30,.28) !important; }
       #movectl { bottom: calc(74px + env(safe-area-inset-bottom)) !important; }
       /* ---- Toast bildirimleri: sağ-üstte SABİT dar kolon; kısa toast küçük, uzun toast 2 satıra sarar.
-             Genişlik kolonla sınırlı → uzun yazı sola taşmaz. Üst aksiyon butonlarının altında başlar. ---- */
+             Genişlik kolonla sınırlı → uzun yazı sola taşmaz. Butonlar 2. satırda (rayın sağı, 2 sıra) ve ray 3 rozetle ≈145px'te biter — kolon onların ALTINDA başlar. ---- */
       #toasts { left: auto !important; transform: none !important; right: calc(8px + env(safe-area-inset-right));
-        top: calc(62px + env(safe-area-inset-top)); bottom: auto !important; justify-content: flex-start !important;
+        top: calc(150px + env(safe-area-inset-top)); bottom: auto !important; justify-content: flex-start !important;
         align-items: flex-end !important;
         width: min(220px, 68vw); max-width: min(220px, 68vw); gap: 6px; }
       #toasts > * { max-width: 100% !important; box-sizing: border-box;
@@ -863,6 +875,11 @@
     <div class="chip" id="markachip" data-bilgi="marka" style="min-width:118px; display:none"><span class="cl" data-i18n="MARKA">MARKA</span><span class="cv"><span id="hud-marka-st" style="color:var(--gold-ink); font-weight:850">0★</span> <div class="bar"><div id="hud-marka-fill" style="background:var(--gold-ink)"></div></div> <span id="hud-marka-pct">0%</span></span></div>
     <div class="chip" id="questchip" style="min-width:104px; cursor:pointer" title="Günlük görevler"><span class="cl" data-i18n="GÜNLÜK GÖREV">GÜNLÜK GÖREV</span><span class="cv"><svg class="ic"><use href="#i-cal"/></svg> <span id="quest">0/15</span></span></div>
     <div class="spacer"></div>
+    <!-- EYLEM BUTONLARI TEK KAPSAYICIDA: masaüstünde `display:contents` (kutu ağacında yok,
+         yerleşim birebir aynı). Mobilde yakıt rayının SAĞINDAKİ boşlukta saran ızgara olur —
+         eskiden ray position:fixed olduğu için ikinci satıra sarılan butonlar rayın altına
+         giriyor, "üst üste binen butonlar" şikâyeti buradan çıkıyordu. -->
+    <div id="hudacts">
     <button id="adbtn" class="btn warn" style="display:none; width:200px; justify-content:center"><svg class="ic"><use href="#i-star"/></svg><span data-i18n="Reklam İzle: Müşteri Patlaması">Reklam İzle: Müşteri Patlaması</span></button>
     <button id="editbtn" class="btn" title="Düzenleme modu" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-move"/></svg></button>
     <button id="anglebtn" class="btn" title="Kamera açısı" style="width:52px; justify-content:center"><svg class="ic" style="margin:0"><use href="#i-angle"/></svg></button>
@@ -874,6 +891,7 @@
     <button id="officebtn" class="btn" style="width:118px; justify-content:center"><svg class="ic"><use href="#i-office"/></svg><span data-i18n="Ofis">Ofis</span></button>
     <button id="accbtn" class="btn" title="Hesabım"><svg class="ic" style="margin:0"><use href="#i-user"/></svg></button>
     <button id="setbtn" class="btn" title="Ayarlar"><svg class="ic" style="margin:0"><use href="#i-sliders"/></svg></button>
+    </div>
   </div>
 
   <nav class="navbar" id="navbar">
