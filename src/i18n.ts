@@ -32,6 +32,17 @@ export function setLang(l: Lang) {
 
 // TR metin → EN karşılığı. Anahtar = kaynak koddaki TR string.
 const EN: Record<string, string> = {
+  // RAFİNERİ ZİYARETİ (src/rafineri.ts 3B sahne + main.ts rafbar/locmenu + harita.ts)
+  "Rafineriye Git": "Visit Refinery",
+  "Şubeye dön": "Back to station",
+  "istasyona dön": "back to station",
+  "boş arsa · haritadan kur": "empty lot · build from the map",
+  "Kademe {0} · {1} çalışıyor": "Tier {0} · {1} running",
+  "{0} inşa ediliyor · {1} gün kaldı": "{0} under construction · {1} days left",
+  "BENELOIL RAFİNERİ": "BENELOIL REFINERY",
+  "RAFİNERİ ARSASI": "REFINERY LOT",
+  "BenelOil · haritadan kur": "BenelOil · build from the map",
+  "İNŞAAT SAHASI": "CONSTRUCTION SITE",
   // RAFİNERİ (src/harita.ts rafineriKarti + state.ts + ui.ts sipariş)
   "{0} gün kaldı": "{0} days left",
   "Kademe {0} · FİLO": "Tier {0} · FLEET",
@@ -1713,6 +1724,18 @@ const FR: Record<string, string> = {
   "Kademe {0} · FİLO": "Palier {0} · FLOTTE",
   "Kademe {0}": "Palier {0}",
   "{0} şube": "{0} succursales",
+  // RAFİNERİ ZİYARETİ
+  "Rafineriye Git": "Visiter la raffinerie",
+  "Şubeye dön": "Retour à la station",
+  "istasyona dön": "retour à la station",
+  "boş arsa · haritadan kur": "terrain vide · à construire depuis la carte",
+  "Kademe {0} · {1} çalışıyor": "Palier {0} · {1} en marche",
+  "{0} inşa ediliyor · {1} gün kaldı": "{0} en chantier · {1} jours restants",
+  "BENELOIL RAFİNERİ": "RAFFINERIE BENELOIL",
+  "RAFİNERİ ARSASI": "TERRAIN DE LA RAFFINERIE",
+  "BenelOil · haritadan kur": "BenelOil · à construire depuis la carte",
+  "İNŞAAT SAHASI": "CHANTIER",
+  "şu an buradasın": "tu es ici",
   "Rafineri": "Raffinerie",
   "Rafineri Depolama Terminali sayesinde kota yok: {0} ile {1} sınırsız çekiyor.": "Plus de quota grâce au terminal de stockage : {0} et {1} puisent sans limite.",
   "Bu şube açılırsa {0} ile ORTAK tedarik hattına girer — rafineri sayesinde kota yok.": "Ouvrir cette succursale la place sur une ligne PARTAGÉE avec {0} — sans quota grâce à la raffinerie.",
@@ -1909,7 +1932,6 @@ const FR: Record<string, string> = {
   "{0} dk önce": "il y a {0} min",
   "{0} sa önce": "il y a {0} h",
   "Henüz mesaj yok.": "Aucun message pour l'instant.",
-  "şu an buradasın": "tu es ici",
   "kasada ₺{0} birikti": "₺{0} en attente dans le coffre",
   "müdür kasası boş": "le coffre du gérant est vide",
   "Yeni şube aç…": "Ouvrir une nouvelle station…",

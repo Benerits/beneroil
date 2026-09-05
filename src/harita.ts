@@ -567,6 +567,8 @@ function rafineriKarti(r: RafineriDugum, s: GameState): string {
       <div class="pz-bar" style="margin:6px 0 0"><div class="pz-fill" style="width:${Math.max(3, pct)}%"></div></div></div>`
   }
 
+  // — ziyaret: tesis 3B sahnede gezilir (boş arsa dahil — "geliştikçe geliştiğini görelim") —
+  h += `<button class="btn hact" data-hrafgo="1">${t('Rafineriye Git')}</button>`
   // — aksiyon —
   if (c.ok) {
     h += `<div class="hd-src">${t('İnşaat {0} gün sürer; kademe tamamlanınca etkisi anında başlar.', String(c.days))}</div>`
@@ -596,6 +598,8 @@ export interface HaritaCtx {
   onGit: (id: LocId) => void
   /** Rafineri kademesi satın al — state.startRefinery + toast main.ts'te */
   onRafineri?: () => void
+  /** Rafineri sahnesine git (ziyaret modu, main.ts rafineriyeGit) — arsa boşken de gidilir */
+  onRafineriGit?: () => void
 }
 
 let ctx: HaritaCtx | null = null
@@ -702,6 +706,7 @@ export function haritaKur(c: HaritaCtx): void {
     if (ac) { ctx?.onAc(ac.dataset.hunlock as LocId); return }
     const git = el.closest('[data-hgo]') as HTMLElement | null
     if (git) { ctx?.onGit(git.dataset.hgo as LocId); return }
+    if (el.closest('[data-hrafgo]')) { ctx?.onRafineriGit?.(); return }
     if (el.closest('[data-hraf]')) { ctx?.onRafineri?.(); return }
   })
   wrap?.addEventListener('pointerdown', e => {

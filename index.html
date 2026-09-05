@@ -1492,6 +1492,13 @@ Sorun / Öneri Bildir
 
   <!-- Mobil taşıma: yön butonlarıyla ince ayar (sürükleme zor) -->
   <!-- pointer-events:auto — içindeki İPTAL butonu mobilde tek çıkış yolu (ESC/sağ-tık yok) -->
+  <!-- RAFİNERİ ZİYARETİ ŞERİDİ: sahne rafineriyi çizerken görünür; tek çıkış yolu (mobilde başka yol yok) -->
+  <div id="rafbar" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:calc(120px + env(safe-area-inset-top)); z-index:41;
+       background:var(--paper); border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:12px; padding:6px 8px 6px 14px; font-weight:800; font-size:14px; box-shadow:var(--shadow); white-space:nowrap; align-items:center; gap:10px">
+    <svg class="ic" style="color:var(--orange)"><use href="#i-loc-rafineri"/></svg>
+    <span id="rafbar-tx"></span>
+    <button id="rafback" class="btn" style="padding:6px 12px; font-size:12.5px; font-weight:800" data-i18n="Şubeye dön">Şubeye dön</button>
+  </div>
   <div id="zonecostwrap" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:calc(120px + env(safe-area-inset-top)); z-index:41;
        background:var(--paper); border:1.5px solid var(--edge); border-bottom-width:3px; border-radius:12px; padding:6px 8px 6px 16px; font-weight:800; font-size:14px; box-shadow:var(--shadow); white-space:nowrap; display:none; align-items:center; gap:10px">
     <span id="zonecost"></span>
@@ -1551,6 +1558,8 @@ Sorun / Öneri Bildir
          yapıyordu — menü artık kendi içinde kayar. */
       max-height:min(62vh, 520px); overflow-y:auto; -webkit-overflow-scrolling:touch }
     #locmenu.show { display:block }
+    /* RAFİNERİ ZİYARETİ: istasyona ait paneller gizli (müşteri isteği, bina kartı) — sahne rafineriyi çiziyor */
+    body.raf-ziyaret #panel, body.raf-ziyaret #infocard { display:none !important }
     #locmenu button { display:flex; align-items:center; gap:9px; width:100%; text-align:left;
       background:none; border:0; border-radius:10px; padding:9px 10px; cursor:pointer;
       font:inherit; font-weight:800; font-size:13px; color:var(--ink) }

@@ -23,13 +23,14 @@ import {
   ALL_LOCS, BRANCH_COPIES, baseLoc, isCopyLoc, themeFor,
   SAYAC_KUMBARA_MAX, TEKIL_KUMBARA,
   BENERITS_GUESTS, BeneritsId,
-  REFINERY_NAMES,
+  REFINERY_NAMES, REFINERY_MAX,
 } from './state'
 // ŞUBE AĞI HARİTASI: yatırım tahtası (Ofis › Şubeler + HUD şube menüsünden açılır).
 // Saf DOM modülü — state okur, aksiyonu buradaki MEVCUT akışlara geri çağırır.
 import { haritaKur, haritaAc, haritaCiz, haritaAcikMi } from './harita'
 import { loadModels, loadStatics, loadCharacters, fitCharacter } from './models'
 import { loadKit, kitNeeded, kitReady, kitSize } from './kits'
+import { RafineriSahnesi } from './rafineri'
 import { isNativePlatform, isInstantGames, isLightMode, asset } from './platform'
 import { guardContextLoss } from './fbinstant'
 // NOT: tema artık doğrudan THEMES'ten değil state.themeFor()'dan okunur — kopya şubede
@@ -443,6 +444,10 @@ let camDir = CAM_ANGLES[camAngleIdx].clone()
 let camX = 0
 let camY = 0
 let pinching = false // iki parmak zoom sırasında sürükle-kaydırma devre dışı
+// RAFİNERİ ZİYARETİ durumu — modül başında tanımlı (subeEtiketiniTazele() modül yüklenirken çağrılır, TDZ'ye düşmesin)
+let rafSahne: RafineriSahnesi | null = null
+let rafZiyaret = false
+let rafKameraYedek: { x: number; y: number; zoom: number } | null = null
 
 function updateCamera() {
   camera.position.set(camDir.x + camX, camDir.y + camY, camDir.z)
@@ -947,15 +952,21 @@ function subeMenusunuCiz() {
   const kasa = state.branchVaultTotal()
   m.innerHTML = state.unlockedLocs.map(id => {
     const th = themeFor(id)
-    const aktif = id === state.activeLoc
-    const kasaTutar = aktif ? 0 : Math.round(state.branchVault[id] ?? 0)
+    // rafineri ziyaretindeyken aktif şube "dön" satırıdır (tıklanır), rafineri satırı 'cur'
+    const aktif = id === state.activeLoc && !rafZiyaret
+    const kasaTutar = id === state.activeLoc ? 0 : Math.round(state.branchVault[id] ?? 0)
     const alt = aktif ? t('şu an buradasın')
+      : id === state.activeLoc ? t('istasyona dön')
       : kasaTutar > 0 ? t('kasada ₺{0} birikti', kasaTutar.toLocaleString('tr-TR'))
       : t('müdür kasası boş')
     return `<button data-qloc="${id}" class="${aktif ? 'cur' : ''}"${aktif ? ' disabled' : ''}>`
       + `<svg class="ic"><use href="#i-map"/></svg>`
       + `<span class="lm-tx">${th?.name ?? id}<span class="lm-sub">${alt}</span></span></button>`
   }).join('')
+    // RAFİNERİ ZİYARETİ: şirket tesisi, şube değil — ama oyuncu için bir KONUM (gidilir, gezilir).
+    + `<button data-qloc="__rafineri" class="${rafZiyaret ? 'cur' : ''}"${rafZiyaret ? ' disabled' : ''}>`
+      + `<svg class="ic" style="color:var(--orange)"><use href="#i-loc-rafineri"/></svg>`
+      + `<span class="lm-tx">${t('Rafineri')}<span class="lm-sub">${rafZiyaret ? t('şu an buradasın') : rafineriDurumMetni()}</span></span></button>`
     // ŞUBE AĞI HARİTASI: bu menü "hangi şubedeyim"i çözüyor, harita "sıradaki para nereye"yi.
     + `<button data-qloc="__harita"><svg class="ic"><use href="#i-map"/></svg>`
       + `<span class="lm-tx">${t('Şube ağı haritası')}<span class="lm-sub">${t('bedeller, kişilikler, ortak hatlar')}</span></span></button>`
@@ -982,7 +993,7 @@ function subeMenusunuCiz() {
  */
 function subeEtiketiniTazele() {
   const lbl = document.getElementById('loclabel')
-  const ad = themeFor(state.activeLoc).name ?? state.activeLoc
+  const ad = rafZiyaret ? t('Rafineri') : (themeFor(state.activeLoc).name ?? state.activeLoc)
   if (lbl && lbl.textContent !== ad) lbl.textContent = ad
 }
 subeEtiketiniTazele()
@@ -1000,12 +1011,15 @@ document.getElementById('locmenu')?.addEventListener('click', e => {
   const id = b.dataset.qloc!
   document.getElementById('locmenu')?.classList.remove('show')
   if (id === '__harita') { haritaAc(); return }
+  if (id === '__rafineri') { rafineriyeGit(); return }
+  if (id === state.activeLoc) { rafineridenDon(); return }
   if (id === '__ofis') { openSection('office'); document.querySelector<HTMLButtonElement>('#oftabs .tab[data-oftab="buyume"]')?.click(); return }
   subeyeGec(id as LocId)
 })
 // ŞUBE AĞI HARİTASI — iki giriş noktası: Ofis › Şubeler'in başındaki buton ve HUD şube menüsü.
 // Aksiyonlar MEVCUT akışa bağlı: açma → subeAcIslemi (state.unlockLoc), geçiş → subeyeGec.
-haritaKur({ state, onAc: id => subeAcIslemi(id), onGit: id => subeyeGec(id), onRafineri: () => rafineriKurIslemi() })
+haritaKur({ state, onAc: id => subeAcIslemi(id), onGit: id => subeyeGec(id), onRafineri: () => rafineriKurIslemi(),
+  onRafineriGit: () => { document.getElementById('mapwrap')?.classList.remove('show'); rafineriyeGit() } })
 document.getElementById('of-map')?.addEventListener('click', () => {
   document.getElementById('officewrap')?.classList.remove('show') // ofis sheet'i kapat (banka kalıbı)
   haritaAc()
@@ -1790,6 +1804,7 @@ function rafineriKurIslemi() {
 /** Şube geçişi — hem Ofis › Şubeler butonları hem HUD hızlı geçiş menüsü buradan geçer
  *  (#1038 "anasayfada mapler arasında hızlı geçiş olsa süper olur"). */
 function subeyeGec(id: LocId, go?: HTMLButtonElement) {
+  if (rafZiyaret) rafineridenDon() // şube geçişi istasyon sahnesinden başlar (reload sonrası da istasyon açılır)
   // ÇİFT TIKLAMA KİLİDİ ("şubeye gidilemedi" raporu): push-confirmed reload 1.6-6 sn
   // (kit inişinde 12 sn) sürebiliyor; bu pencerede ikinci tıklama switchLoc'u
   // "zaten o şubedesin" durumuna düşürüp yanlış hata gösteriyordu.
@@ -2267,9 +2282,11 @@ let selectedBuilding: string | null = null
 let cardRefreshT = 0
 
 // LIGHT MOD'da composer HİÇ kurulmaz → bloom pass'i yok, ara render target'ları yok.
+let renderPass: RenderPass | null = null
 if (!LIGHT) {
   composer = new EffectComposer(renderer)
-  composer.addPass(new RenderPass(world.scene, camera))
+  renderPass = new RenderPass(world.scene, camera)
+  composer.addPass(renderPass)
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.24, 0.4, 0.93)) // yarı çözünürlük bloom: gözle fark yok, kat kat hızlı
   composer.addPass(new OutputPass())
   composer.setSize(window.innerWidth, window.innerHeight)
@@ -2285,8 +2302,49 @@ function renderFrame() {
   if (now - sonCizim < 15.5) return
   sonCizim = now
   if (composer) composer.render()
-  else renderer.render(world.scene, camera)
+  else renderer.render(rafZiyaret && rafSahne ? rafSahne.scene : world.scene, camera)
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RAFİNERİ ZİYARETİ (5 Eyl 2026) — bkz. src/rafineri.ts baş notu: neden LocId değil.
+// Aynı canvas/kamera/HUD; yalnız çizilen sahne değişir. İstasyon arkada çalışır.
+// ══════════════════════════════════════════════════════════════════════════════
+function rafineriDurumMetni(): string {
+  if (state.refineryDaysLeft > 0 && state.refineryLevel < REFINERY_MAX)
+    return t('{0} inşa ediliyor · {1} gün kaldı', REFINERY_NAMES[state.refineryLevel], String(state.refineryDaysLeft))
+  if (state.refineryLevel <= 0) return t('boş arsa · haritadan kur')
+  return t('Kademe {0} · {1} çalışıyor', String(state.refineryLevel), REFINERY_NAMES[state.refineryLevel - 1])
+}
+function rafineriyeGit() {
+  if (rafZiyaret) return
+  if (placing || zoneMode) cancelPlacement()
+  if (!rafSahne) rafSahne = new RafineriSahnesi(modelLib)
+  rafSahne.kur(state.refineryLevel, state.refineryProgress())
+  rafZiyaret = true
+  rafKameraYedek = { x: camX, y: camY, zoom: camera.zoom }
+  camX = 0; camY = -1; camera.zoom = 0.9; updateCamera(); camera.updateProjectionMatrix()
+  document.body.classList.add('raf-ziyaret') // istasyon panelleri (müşteri isteği, bilgi kartı) burada anlamsız
+  if (renderPass) renderPass.scene = rafSahne.scene
+  golgeTazele()
+  ui.hideBuildingCard()
+  selectedBuilding = null
+  const bar = document.getElementById('rafbar'); const tx = document.getElementById('rafbar-tx')
+  if (bar) bar.style.display = 'flex'
+  if (tx) tx.textContent = rafineriDurumMetni()
+  subeEtiketiniTazele()
+  audio.click()
+}
+function rafineridenDon() {
+  if (!rafZiyaret) return
+  rafZiyaret = false
+  document.body.classList.remove('raf-ziyaret')
+  if (renderPass) renderPass.scene = world.scene
+  if (rafKameraYedek) { camX = rafKameraYedek.x; camY = rafKameraYedek.y; camera.zoom = rafKameraYedek.zoom; updateCamera(); camera.updateProjectionMatrix() }
+  golgeTazele()
+  const bar = document.getElementById('rafbar'); if (bar) bar.style.display = 'none'
+  subeEtiketiniTazele()
+}
+document.getElementById('rafback')?.addEventListener('click', () => { rafineridenDon(); audio.click() })
 
 const cars = new CarManager(world.scene, modelLib, {
   // SAHNEYLE SINIRLI SAYIM: state.pumps sahnedeki pompa sayısını AŞARSA pumpSlot(i)
@@ -5000,6 +5058,7 @@ function startPlacement(id: string, move = false) {
   // hiç taşınmamış yapıların (tabela, ofis…) kaydı BOŞTUR. O hâlde hayalet yine (0,0)'a,
   // istasyonun tam ortasına düşüyordu: yapı yerinden kalkıyor, hayalet kırmızı yanıyor →
   // "tabela/ofis taşınamıyor". Kayıt boşsa SAHNEDEKİ gerçek konumu esas al.
+  if (rafZiyaret) rafineridenDon() // yerleştirme İSTASYON sahnesinde olur
   const mevcut = placedPos[id] ?? sahnedekiKonum(id)
   const bx = move && mevcut ? mevcut[0] : 0
   const by = move && mevcut ? mevcut[1] : 0
@@ -5021,6 +5080,7 @@ function startPlacement(id: string, move = false) {
 }
 
 function startZoneMode(kind: 'land' | 'pave') {
+  if (rafZiyaret) rafineridenDon()
   cancelPlacement()
   zoneMode = { kind, ghost: makeGhost(1, 1), c: -1, r: -1, valid: false }
   world.showGrid(true)
@@ -5747,6 +5807,13 @@ if (dbgAcik) (window as unknown as Record<string, unknown>).__dbg = {
       if (beton) { state.pavedParcels.add(parcelKey(c, r)); world.paveParcel(c, r) }
       persist()
     },
+  },
+  // RAFİNERİ ZİYARETİ (test + video): git/dön + sahne erişimi
+  rafineri: {
+    git() { rafineriyeGit() },
+    don() { rafineridenDon() },
+    get ziyaret() { return rafZiyaret },
+    get sahne() { return rafSahne },
   },
   // SİNEMATİK KAMERA (video stüdyosu için — yalnız vitrin modunda): pürüzsüz zoom/pan
   cine: {
@@ -7441,6 +7508,7 @@ window.addEventListener('pointerup', e => {
 })
 
 function handleClick(e: PointerEvent) {
+  if (rafZiyaret) return // rafineri sahnesinde seçilecek pompa/araç yok; sürükle-kaydır zaten çalışıyor
   toNDC(e.clientX, e.clientY)
   raycaster.setFromCamera(pointer, camera)
 
@@ -8175,6 +8243,15 @@ function frame() {
   }
 
   world.update(dt)
+  if (rafZiyaret && rafSahne) {
+    rafSahne.setNight(nightNow)
+    rafSahne.update(dt)
+    // gün döndü / kademe bitti → tesis büyür; şerit metni de aynı anda tazelenir
+    if (rafSahne.kur(state.refineryLevel, state.refineryProgress())) {
+      golgeTazele()
+      const tx = document.getElementById('rafbar-tx'); if (tx) tx.textContent = rafineriDurumMetni()
+    }
+  }
   // trafik ışığı: görsel lamba + HUD sayacı (yalnız ışıklı şubelerde)
   if (state.theme().features?.trafficLight) {
     world.setTrafficLight(state.lightRed())

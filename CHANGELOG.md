@@ -1,5 +1,9 @@
 # BenelOil — Değişiklik Günlüğü
 
+## 5 Eylül 2026
+- **Rafineri artık gezilebilir bir yer**: şube menüsünde ve haritanın rafineri kartında "Rafineriye Git" — tesis 3B sahnede açılır (Kenney industrial kitleri). Boş arsa → inşaat sahası (vinç, iskele, parçalar sırayla yükselir) → Kademe 1 damıtma kolonları + soğutma kulesi + flare → Kademe 2 tank çiftliği + su kulesi → Kademe 3 dolum rampası, konteyner sahası ve yola çıkan kendi tankerlerin. Duman, alev, ikaz fenerleri ve vinç çalışır; gece aydınlatması var. Ziyaret sırasında istasyon arkada çalışmaya devam eder; "Şubeye dön" tek tuş.
+- Teknik: rafineri bir şube (LocId) DEĞİL — sahne modu. Şube sayacı, devir eşiği, başarımlar ve kayıt formatı dokunulmadan kaldı. EN/FR çevirileri tam; `npm run test:rafineri-ziyaret` (headless Chrome) büyümeyi, animasyonu ve dönüşü kanıtlıyor.
+
 ## 17 Ağustos 2026
 - **Kasa tek** (oyuncu talebi): müdürlü pasif şubelerin günlük net geliri artık şube kasasında birikmek yerine her gün dönüşünde DOĞRUDAN ortak kasaya yazılıyor — "2. şubedeyken 1. şube AFK kalıyor" derdi bitti. Eski şube-kasası bakiyeleri ilk gün dönüşünde otomatik devredilir. (Müdürsüz şube üretmez — tasarım.)
 - **Steam anketi**: girişte hesap başına ömürde 1 kez "Steam kullanıyor musun?" modalı — cevaplar saatlik metriklere yazılıyor (steam_yes/no/skip), Steam lansman kararına veri.
